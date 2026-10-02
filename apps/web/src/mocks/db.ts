@@ -1,4 +1,5 @@
-import type { Chair, Patient, Procedure, StaffMember, Visit } from "@pedia/shared";
+import type { Appointment, Chair, ClinicalPhoto, Patient, Procedure, StaffMember, Visit } from "@pedia/shared";
+import { clearBlobs } from "./blob-store";
 import { seed } from "./seed";
 
 /**
@@ -11,9 +12,11 @@ export type Db = {
   chairs: Chair[];
   procedures: Procedure[];
   visits: Visit[];
+  appointments: Appointment[];
+  photos: ClinicalPhoto[]; // metadata only; the files live in blob-store.ts
 };
 
-const KEY = "pedia-dental:mock-db:v2";
+const KEY = "pedia-dental:mock-db:v4";
 
 function load(): Db {
   if (typeof window === "undefined") return seed();
@@ -33,5 +36,5 @@ export function persist() {
 
 export function resetDb() {
   window.localStorage.removeItem(KEY);
-  window.location.reload();
+  void clearBlobs().finally(() => window.location.reload());
 }

@@ -1,5 +1,6 @@
 import { faker } from "@faker-js/faker";
-import { pesos, type Chair, type Patient, type Procedure, type StaffMember, type Visit } from "@pedia/shared";
+import { addDays, addMinutes, setHours, startOfDay } from "date-fns";
+import { pesos, type Appointment, type Chair, type Patient, type Procedure, type StaffMember, type Visit } from "@pedia/shared";
 import type { Db } from "./db";
 
 export const CLINIC_ID = "clinic_demo";
@@ -96,5 +97,46 @@ export function seed(): Db {
       })),
   );
 
-  return { patients, staff: STAFF, chairs: CHAIRS, procedures: PROCEDURES, visits };
+  return { patients, staff: STAFF, chairs: CHAIRS, procedures: PROCEDURES, visits, appointments: seedAppointments(patients), photos: [] };
+}
+
+/**
+ * Two weeks either side of today. Each dentist keeps one chair and one appointment
+ * per hour, so the seed never double-books. Chair 3 is left free for new bookings.
+ */
+function seedAppointments(patients: Patient[]): Appointment[] {
+  const now = new Date();
+  const fitsInAnHour = PROCEDURES.filter((p) => p.defaultDurationMin <= 60);
+  const rows: Appointment[] = [];
+  for (let offset = -14; offset <= 14; offset++) {
+    const day = addDays(startOfDay(now), offset);
+    if (day.getDay() === 0) continue; // closed on Sundays
+    for (const hour of [9, 10, 11, 13, 14, 15, 16]) {
+      for (const [chairId, dentistId] of [["chair_1", "staff_reyes"], ["chair_2", "staff_santos"]]) {
+        if (!faker.datatype.boolean({ probability: 0.55 })) continue;
+        const procedure = faker.helpers.arrayElement(fitsInAnHour);
+        const start = setHours(day, hour);
+        const end = addMinutes(start, procedure.defaultDurationMin);
+        const past = faker.helpers.weightedArrayElement([
+          { weight: 85, value: "done" as const },
+          { weight: 10, value: "no_show" as const },
+          { weight: 5, value: "cancelled" as const },
+        ]);
+        const status = end <= now ? past : start <= now ? "arrived" : faker.helpers.arrayElement(["booked", "confirmed"] as const);
+        rows.push({
+          id: faker.string.uuid(),
+          clinicId: CLINIC_ID,
+          patientId: faker.helpers.arrayElement(patients).id,
+          dentistId,
+          chairId,
+          startsAt: start.toISOString(),
+          durationMin: procedure.defaultDurationMin,
+          reason: procedure.name,
+          status,
+          ...(status === "cancelled" && { cancelReason: "Child is sick" }),
+        });
+      }
+    }
+  }
+  return rows;
 }

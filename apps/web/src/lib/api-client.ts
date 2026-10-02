@@ -18,7 +18,8 @@ export async function api<T extends z.ZodType>(
 ): Promise<z.infer<T>> {
   const res = await fetch(`${env.apiUrl}${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    // A FormData body (file upload) sets its own multipart Content-Type and boundary.
+    headers: init?.body instanceof FormData ? init.headers : { "Content-Type": "application/json", ...init?.headers },
     credentials: "include",
   });
   if (!res.ok) throw new ApiError(res.status, await res.text());

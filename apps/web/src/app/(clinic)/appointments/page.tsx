@@ -1,5 +1,5 @@
-import { ComingSoon } from "@/components/coming-soon";
+import { AppointmentCalendar } from "@/features/appointments/components/appointment-calendar";
 
 export default function Page() {
-  return <ComingSoon title="Appointments" covers={["Day, week and month calendar by chair", "Book, reschedule, cancel", "Status and no-show tracking", "Dentist and chair assignment"]} />;
+  return <AppointmentCalendar />;
 }
