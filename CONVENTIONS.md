@@ -57,6 +57,14 @@ MSW handler (now) or NestJS (later).
 - Every response is parsed with a shared schema. If parsing fails, fix the mock or schema; don't loosen it.
 - MSW handlers ARE the API contract. Same paths and shapes the NestJS controllers must serve.
 
+## UI and UX
+
+- Before changing the look, layout, flow or copy of any screen, load the `ui-ux-design` skill
+  (`.claude/skills/ui-ux-design/`). It is binding for visual system, accessibility (WCAG 2.2 AA) and
+  clinical-safety patterns.
+- Palette, type and radius changes go in `apps/web/src/app/globals.css` tokens, never as raw values in
+  components.
+
 ## Domain rules
 
 - Teeth use FDI numbering (11–48 permanent, 51–85 primary). Use `domain/teeth.ts`, never hard-code lists.
