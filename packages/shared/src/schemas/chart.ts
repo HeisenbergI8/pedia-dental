@@ -17,6 +17,16 @@ export const ToothCondition = z.enum([
 ]);
 export type ToothCondition = z.infer<typeof ToothCondition>;
 
+/** Conditions of the whole tooth; they never apply to a single surface. */
+export const WHOLE_TOOTH_CONDITIONS: ToothCondition[] = [
+  "pulpotomy",
+  "pulpectomy",
+  "extracted",
+  "missing",
+  "unerupted",
+  "erupting",
+];
+
 /**
  * Chart entries are append-only. The current chart is derived from them
  * (see domain/chart.ts). Corrections are new entries with `supersedes`.
@@ -34,3 +44,17 @@ export const ChartEntry = ClinicScoped.extend({
   supersedes: Id.optional(),
 });
 export type ChartEntry = z.infer<typeof ChartEntry>;
+
+/** What the client sends. The server sets who recorded it and when, from the visit. */
+export const CreateChartEntryInput = ChartEntry.pick({
+  visitId: true,
+  tooth: true,
+  surfaces: true,
+  condition: true,
+  note: true,
+  supersedes: true,
+}).refine((e) => e.surfaces.length === 0 || !WHOLE_TOOTH_CONDITIONS.includes(e.condition), {
+  message: "This condition applies to the whole tooth",
+  path: ["surfaces"],
+});
+export type CreateChartEntryInput = z.infer<typeof CreateChartEntryInput>;

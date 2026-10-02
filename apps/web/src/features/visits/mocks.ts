@@ -1,4 +1,5 @@
 import { http, HttpResponse, delay } from "msw";
+import { format } from "date-fns";
 import { StartVisitInput, type Visit } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { db, persist } from "@/mocks/db";
@@ -34,7 +35,7 @@ export const visitHandlers = [
       id: crypto.randomUUID(),
       clinicId: CLINIC_ID,
       patientId: String(params.id),
-      date: now.toISOString().slice(0, 10),
+      date: format(now, "yyyy-MM-dd"), // the clinic's calendar day, not UTC's
       status: "in_progress",
       startedAt: now.toISOString(),
     };

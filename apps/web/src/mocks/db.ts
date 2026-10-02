@@ -1,4 +1,4 @@
-import type { Chair, Patient, Procedure, StaffMember, Visit } from "@pedia/shared";
+import type { Chair, ChartEntry, ClinicalNote, GrowthRecord, NoteTemplate, Patient, PlanItem, Procedure, StaffMember, Visit } from "@pedia/shared";
 import { seed } from "./seed";
 
 /**
@@ -11,9 +11,14 @@ export type Db = {
   chairs: Chair[];
   procedures: Procedure[];
   visits: Visit[];
+  chartEntries: ChartEntry[];
+  noteTemplates: NoteTemplate[];
+  notes: ClinicalNote[];
+  growth: GrowthRecord[];
+  planItems: PlanItem[];
 };
 
-const KEY = "pedia-dental:mock-db:v2";
+const KEY = "pedia-dental:mock-db:v7";
 
 function load(): Db {
   if (typeof window === "undefined") return seed();

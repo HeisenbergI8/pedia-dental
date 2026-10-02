@@ -21,6 +21,17 @@ export async function api<T extends z.ZodType>(
     headers: { "Content-Type": "application/json", ...init?.headers },
     credentials: "include",
   });
-  if (!res.ok) throw new ApiError(res.status, await res.text());
+  if (!res.ok) throw new ApiError(res.status, readableError(await res.text()));
   return schema.parse(await res.json());
+}
+
+/** A 400 carries Zod issues as JSON; show their messages, not the raw JSON. */
+function readableError(body: string): string {
+  try {
+    const issues: unknown = JSON.parse(body);
+    if (Array.isArray(issues)) return issues.map((i: { message?: string }) => i.message).filter(Boolean).join(". ") || body;
+  } catch {
+    // plain-text error
+  }
+  return body;
 }
