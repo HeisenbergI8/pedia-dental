@@ -1,0 +1,11 @@
+node_modules
+.next
+out
+dist
+coverage
+.env*.local
+*.tsbuildinfo
+.DS_Store
+
+# provenly runtime state (the config at the root is tracked, this is not)
+.claude/.harness/

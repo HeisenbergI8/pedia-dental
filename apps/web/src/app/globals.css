@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+/* Design tokens. Change the palette here, not in components. */
+@theme {
+  --color-ground: #f4f8f7;
+  --color-ink: #12302f;
+  --color-ink-muted: #4a6261;
+  --color-line: #d5e2e0;
+  --color-brand: #0e6b66;
+  --color-brand-ink: #ffffff;
+  --color-alert: #8a3b00;
+  --color-alert-bg: #fdecd9;
+  --color-danger: #a12622;
+  --font-sans: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  background: var(--color-ground);
+  color: var(--color-ink);
+}

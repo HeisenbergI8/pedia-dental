@@ -1,0 +1,18 @@
+{
+  "$schema": "https://raw.githubusercontent.com/HeisenbergI8/provenly/main/harness.schema.json",
+  "commands": {
+    "verify": "pnpm run check",
+    "verifyFast": "pnpm run typecheck"
+  },
+  "source": {
+    "include": [
+      "apps/*/src/**",
+      "packages/*/src/**",
+      "apps/*/next.config.ts"
+    ],
+    "exclude": [
+      "**/*.md",
+      "**/__snapshots__/**"
+    ]
+  }
+}
