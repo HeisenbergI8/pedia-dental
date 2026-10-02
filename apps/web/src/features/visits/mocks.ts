@@ -29,6 +29,17 @@ export const visitHandlers = [
     if (db.visits.some((v) => v.patientId === params.id && v.status === "in_progress")) {
       return new HttpResponse("This patient already has a visit in progress", { status: 409 });
     }
+    // Starting from an appointment seats the child: arrived → in chair.
+    if (parsed.data.appointmentId) {
+      const appointment = db.appointments.find((a) => a.id === parsed.data.appointmentId);
+      if (!appointment || appointment.patientId !== params.id) {
+        return new HttpResponse("Appointment not found", { status: 404 });
+      }
+      if (appointment.status !== "arrived") {
+        return new HttpResponse("Check the patient in before starting the visit", { status: 409 });
+      }
+      appointment.status = "in_chair";
+    }
     const now = new Date();
     const visit: Visit = {
       ...parsed.data,
@@ -50,6 +61,8 @@ export const visitHandlers = [
     if (visit.status !== "in_progress") return new HttpResponse("Visit is already completed", { status: 409 });
     visit.status = "completed";
     visit.completedAt = new Date().toISOString();
+    const appointment = db.appointments.find((a) => a.id === visit.appointmentId);
+    if (appointment?.status === "in_chair") appointment.status = "done";
     persist();
     return HttpResponse.json(visit);
   }),

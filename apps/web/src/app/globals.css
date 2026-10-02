@@ -45,3 +45,11 @@ body {
   background: var(--color-ground);
   color: var(--color-ink);
 }
+
+/* react-big-calendar shades today blue, which floods the whole day view. */
+.rbc-today {
+  background: var(--color-ground);
+}
+.rbc-time-view .rbc-today {
+  background: transparent;
+}

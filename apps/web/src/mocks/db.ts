@@ -1,4 +1,18 @@
-import type { Chair, ChartEntry, ClinicalNote, GrowthRecord, NoteTemplate, Patient, PlanItem, Procedure, StaffMember, Visit } from "@pedia/shared";
+import type {
+  Appointment,
+  Chair,
+  ChartEntry,
+  ClinicalNote,
+  ClinicalPhoto,
+  GrowthRecord,
+  NoteTemplate,
+  Patient,
+  PlanItem,
+  Procedure,
+  StaffMember,
+  Visit,
+} from "@pedia/shared";
+import { clearBlobs } from "./blob-store";
 import { seed } from "./seed";
 
 /**
@@ -16,9 +30,12 @@ export type Db = {
   notes: ClinicalNote[];
   growth: GrowthRecord[];
   planItems: PlanItem[];
+  appointments: Appointment[];
+  photos: ClinicalPhoto[]; // metadata only; the files live in blob-store.ts
 };
 
-const KEY = "pedia-dental:mock-db:v7";
+// Bumped past both parallel tracks (v7 chunks 5-9, v4 chunks 10-15) so either shape reseeds.
+const KEY = "pedia-dental:mock-db:v8";
 
 function load(): Db {
   if (typeof window === "undefined") return seed();
@@ -38,5 +55,5 @@ export function persist() {
 
 export function resetDb() {
   window.localStorage.removeItem(KEY);
-  window.location.reload();
+  void clearBlobs().finally(() => window.location.reload());
 }

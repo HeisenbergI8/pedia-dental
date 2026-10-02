@@ -1,7 +1,24 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { setupServer } from "msw/node";
 import { z } from "zod";
-import { ChartEntry, ClinicalNote, GrowthRecord, NoteTemplate, PlanItem, habitTimeline, planProgress, Patient, Procedure, Visit, deriveChart, surfacesFor, type CreatePatientInput } from "@pedia/shared";
+import {
+  Appointment,
+  ChartEntry,
+  ClinicalNote,
+  ClinicalPhoto,
+  GrowthRecord,
+  NoteTemplate,
+  Patient,
+  PlanItem,
+  Procedure,
+  Visit,
+  deriveChart,
+  findConflict,
+  habitTimeline,
+  planProgress,
+  surfacesFor,
+  type CreatePatientInput,
+} from "@pedia/shared";
 import { api, ApiError } from "@/lib/api-client";
 import { handlers } from "./handlers";
 
@@ -295,5 +312,93 @@ describe("treatment plan", () => {
     await api(`/notes/${note.id}/sign`, ClinicalNote, { method: "POST" });
     const [done] = await api(`/patients/${patient.id}/plan`, z.array(PlanItem));
     expect(done).toMatchObject({ id: item.id, status: "done", completedNoteId: note.id });
+  });
+});
+
+describe("appointments", () => {
+  // Far from the seeded fortnight around today, so only this test's bookings can clash.
+  const slot = { dentistId: "staff_reyes", chairId: "chair_3", startsAt: "2030-01-07T01:00:00.000Z", durationMin: 30, reason: "Check-up" };
+  const status = (id: string, body: unknown) => api(`/appointments/${id}/status`, Appointment, send("POST", body));
+
+  it("books, refuses a double-booking, moves, checks in, and finishes through the visit", async () => {
+    const patient = await api("/patients", Patient, send("POST", newPatient));
+    const booked = await api("/appointments", Appointment, send("POST", { ...slot, patientId: patient.id }));
+    expect(booked.status).toBe("booked");
+
+    const clash = { ...slot, patientId: patient.id, chairId: "chair_1", startsAt: "2030-01-07T01:15:00.000Z" };
+    await expect(api("/appointments", Appointment, send("POST", clash))).rejects.toMatchObject({ status: 409 });
+
+    const moved = await api(`/appointments/${booked.id}`, Appointment, send("PUT", { ...slot, startsAt: "2030-01-07T02:00:00.000Z" }));
+    expect(moved.startsAt).toBe("2030-01-07T02:00:00.000Z");
+    await api("/appointments", Appointment, send("POST", clash)); // the old slot is free now
+
+    await status(booked.id, { status: "confirmed" });
+    await status(booked.id, { status: "arrived" });
+    const visit = await api(`/patients/${patient.id}/visits`, Visit, send("POST", { dentistId: "staff_reyes", appointmentId: booked.id }));
+    const seated = await api(`/patients/${patient.id}/appointments`, z.array(Appointment));
+    expect(seated.find((a) => a.id === booked.id)?.status).toBe("in_chair");
+
+    await api(`/visits/${visit.id}/complete`, Visit, { method: "POST" });
+    const finished = await api(`/patients/${patient.id}/appointments`, z.array(Appointment));
+    expect(finished.find((a) => a.id === booked.id)?.status).toBe("done");
+  });
+
+  it("records a no-show, needs a reason to cancel, and frees both slots", async () => {
+    const patient = await api("/patients", Patient, send("POST", newPatient));
+    const first = await api("/appointments", Appointment, send("POST", { ...slot, patientId: patient.id, startsAt: "2030-02-04T01:00:00.000Z" }));
+    expect((await status(first.id, { status: "no_show" })).status).toBe("no_show");
+    await expect(status(first.id, { status: "arrived" })).rejects.toMatchObject({ status: 409 });
+
+    const second = await api("/appointments", Appointment, send("POST", { ...slot, patientId: patient.id, startsAt: "2030-02-04T01:00:00.000Z" }));
+    await expect(status(second.id, { status: "cancelled" })).rejects.toMatchObject({ status: 400 });
+    expect((await status(second.id, { status: "cancelled", cancelReason: "Fever" })).cancelReason).toBe("Fever");
+  });
+
+  it("won't start a visit from an appointment that hasn't checked in", async () => {
+    const patient = await api("/patients", Patient, send("POST", newPatient));
+    const booked = await api("/appointments", Appointment, send("POST", { ...slot, patientId: patient.id, startsAt: "2030-03-04T01:00:00.000Z" }));
+    await expect(
+      api(`/patients/${patient.id}/visits`, Visit, send("POST", { dentistId: "staff_reyes", appointmentId: booked.id })),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("seeds a schedule with no double-bookings", async () => {
+    const all = await api("/appointments", z.array(Appointment));
+    const seeded = all.filter((a) => !a.startsAt.startsWith("2030"));
+    expect(seeded.length).toBeGreaterThan(50);
+    expect(seeded.filter((a) => findConflict(a, seeded))).toEqual([]);
+  });
+});
+
+describe("photos", () => {
+  const upload = (patientId: string, meta: unknown, file: Blob = new Blob(["fake-jpeg"], { type: "image/jpeg" })) => {
+    const body = new FormData();
+    body.set("file", file);
+    body.set("meta", JSON.stringify(meta));
+    return api(`/patients/${patientId}/photos`, ClinicalPhoto, { method: "POST", body });
+  };
+  const meta = { type: "intraoral", tooth: 74, takenOn: "2026-10-02", caption: "" };
+
+  it("stores before and after photos of a tooth and serves the files back", async () => {
+    const patient = await api("/patients", Patient, send("POST", newPatient));
+    const before = await upload(patient.id, { ...meta, stage: "before" });
+    const after = await upload(patient.id, { ...meta, stage: "after", takenOn: "2026-10-09" });
+
+    const listed = await api(`/patients/${patient.id}/photos`, z.array(ClinicalPhoto));
+    expect(listed.map((p) => p.id)).toEqual([after.id, before.id]);
+
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/photos/${before.id}/file`);
+    expect(res.headers.get("content-type")).toBe("image/jpeg");
+    expect(await res.text()).toBe("fake-jpeg");
+  });
+
+  it("rejects non-images, invalid teeth and another patient's visit", async () => {
+    const patient = await api("/patients", Patient, send("POST", newPatient));
+    const other = await api("/patients", Patient, send("POST", newPatient));
+    const otherVisit = await api(`/patients/${other.id}/visits`, Visit, send("POST", { dentistId: "staff_reyes" }));
+
+    await expect(upload(patient.id, meta, new Blob(["x"], { type: "text/plain" }))).rejects.toMatchObject({ status: 400 });
+    await expect(upload(patient.id, { ...meta, tooth: 19 })).rejects.toMatchObject({ status: 400 });
+    await expect(upload(patient.id, { ...meta, visitId: otherVisit.id })).rejects.toMatchObject({ status: 400 });
   });
 });

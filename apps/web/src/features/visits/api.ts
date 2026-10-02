@@ -2,6 +2,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { StartVisitInput, Visit } from "@pedia/shared";
+import { appointmentKeys } from "@/features/appointments/api";
 import { api } from "@/lib/api-client";
 
 export const visitKeys = {
@@ -22,19 +23,29 @@ export function useCurrentVisit(patientId: string) {
   return data?.find((v) => v.status === "in_progress");
 }
 
-export function useStartVisit(patientId: string) {
+/** Starting and finishing a visit moves its appointment to in chair and done. */
+function useInvalidateVisits(patientId: string) {
   const qc = useQueryClient();
+  return () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: visitKeys.forPatient(patientId) }),
+      qc.invalidateQueries({ queryKey: appointmentKeys.all }),
+    ]);
+}
+
+export function useStartVisit(patientId: string) {
+  const invalidate = useInvalidateVisits(patientId);
   return useMutation({
     mutationFn: (input: StartVisitInput) =>
       api(`/patients/${patientId}/visits`, Visit, { method: "POST", body: JSON.stringify(input) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: visitKeys.forPatient(patientId) }),
+    onSuccess: invalidate,
   });
 }
 
 export function useCompleteVisit(patientId: string) {
-  const qc = useQueryClient();
+  const invalidate = useInvalidateVisits(patientId);
   return useMutation({
     mutationFn: (visitId: string) => api(`/visits/${visitId}/complete`, Visit, { method: "POST" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: visitKeys.forPatient(patientId) }),
+    onSuccess: invalidate,
   });
 }
