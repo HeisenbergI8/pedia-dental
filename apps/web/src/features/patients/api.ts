@@ -1,7 +1,7 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
-import { CreatePatientInput, Patient } from "@pedia/shared";
+import { AddConsentInput, CreatePatientInput, Patient } from "@pedia/shared";
 import { api } from "@/lib/api-client";
 
 export const patientKeys = {
@@ -30,5 +30,23 @@ export function useCreatePatient() {
     mutationFn: (input: CreatePatientInput) =>
       api("/patients", Patient, { method: "POST", body: JSON.stringify(input) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: patientKeys.all }),
+  });
+}
+
+export function useUpdatePatient(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreatePatientInput) =>
+      api(`/patients/${id}`, Patient, { method: "PUT", body: JSON.stringify(input) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: patientKeys.all }),
+  });
+}
+
+export function useAddConsent(patientId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: AddConsentInput) =>
+      api(`/patients/${patientId}/consents`, Patient, { method: "POST", body: JSON.stringify(input) }),
+    onSuccess: (patient) => qc.setQueryData(patientKeys.detail(patientId), patient),
   });
 }

@@ -1,6 +1,9 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { usePatients } from "../api";
 import { formatAge } from "../age";
 
@@ -11,15 +14,21 @@ export function PatientList() {
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Patients</h1>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-ink-muted">Search by name</span>
-          <input
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-semibold">Patients</h1>
+          <Button asChild>
+            <Link href="/patients/new">New patient</Link>
+          </Button>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="patient-search" className="text-ink-muted">Search by name</Label>
+          <Input
+            id="patient-search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-11 w-72 rounded-md border border-line bg-white px-3 outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            className="w-72 bg-white"
           />
-        </label>
+        </div>
       </div>
 
       {error && <p className="text-danger">Couldn&apos;t load patients. Refresh to try again.</p>}

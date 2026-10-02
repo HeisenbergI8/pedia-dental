@@ -1,5 +1,7 @@
 export * from "./schemas/common";
+export * from "./schemas/clinic";
 export * from "./schemas/patient";
+export * from "./schemas/visit";
 export * from "./schemas/appointment";
 export * from "./schemas/chart";
 export * from "./schemas/billing";

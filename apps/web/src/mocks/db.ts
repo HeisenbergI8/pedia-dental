@@ -1,4 +1,4 @@
-import type { Patient } from "@pedia/shared";
+import type { Chair, Patient, Procedure, StaffMember, Visit } from "@pedia/shared";
 import { seed } from "./seed";
 
 /**
@@ -7,9 +7,13 @@ import { seed } from "./seed";
  */
 export type Db = {
   patients: Patient[];
+  staff: StaffMember[];
+  chairs: Chair[];
+  procedures: Procedure[];
+  visits: Visit[];
 };
 
-const KEY = "pedia-dental:mock-db:v1";
+const KEY = "pedia-dental:mock-db:v2";
 
 function load(): Db {
   if (typeof window === "undefined") return seed();
@@ -23,6 +27,7 @@ function load(): Db {
 export const db: Db = load();
 
 export function persist() {
+  if (typeof window === "undefined") return; // handler tests run in Node
   window.localStorage.setItem(KEY, JSON.stringify(db));
 }
 

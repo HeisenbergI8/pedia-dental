@@ -1,6 +1,7 @@
 "use client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState, type ReactNode } from "react";
+import { Toaster } from "@/components/ui/sonner";
 import { env } from "@/lib/env";
 
 /** Holds rendering until MSW is ready, so the first request isn't missed. */
@@ -22,6 +23,7 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={client}>
       <MockGate>{children}</MockGate>
+      <Toaster />
     </QueryClientProvider>
   );
 }
