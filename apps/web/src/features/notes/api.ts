@@ -5,6 +5,7 @@ import { ClinicalNote, CreateNoteInput, NoteTemplate, UpdateNoteInput } from "@p
 import { api } from "@/lib/api-client";
 import { planKeys } from "@/features/plan/api";
 import { dueKeys } from "@/features/recalls/api";
+import { messageKeys } from "@/features/messages/api";
 
 export const noteKeys = {
   forPatient: (patientId: string) => ["notes", "patient", patientId] as const,
@@ -46,6 +47,7 @@ export function useSignNote(patientId: string) {
       qc.invalidateQueries({ queryKey: noteKeys.forPatient(patientId) });
       qc.invalidateQueries({ queryKey: planKeys.forPatient(patientId) }); // signing completes plan items
       qc.invalidateQueries({ queryKey: dueKeys.all }); // and can make a follow-up or recall due
+      qc.invalidateQueries({ queryKey: messageKeys.all }); // and queues care instructions
     },
   });
 }

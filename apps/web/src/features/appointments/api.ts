@@ -10,6 +10,7 @@ import {
 } from "@pedia/shared";
 import { api } from "@/lib/api-client";
 import { dueKeys } from "@/features/recalls/api";
+import { messageKeys } from "@/features/messages/api";
 
 export const appointmentKeys = {
   all: ["appointments"] as const,
@@ -50,6 +51,7 @@ function useAppointmentMutation<T>(mutationFn: (input: T) => Promise<Appointment
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: appointmentKeys.all });
       qc.invalidateQueries({ queryKey: dueKeys.all }); // booking closes a due item; cancelling reopens it
+      qc.invalidateQueries({ queryKey: messageKeys.all }); // and queues or withdraws parent messages
     },
   });
 }

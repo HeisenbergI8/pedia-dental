@@ -17,6 +17,8 @@ export const Invoice = ClinicScoped.extend({
   id: Id,
   patientId: Id,
   visitId: Id.optional(),
+  /** The appointment these treatments were done in, when there was one: links "unpaid appointments". */
+  appointmentId: Id.optional(),
   lines: z.array(InvoiceLine).min(1),
   discount: Centavos.default(0),
   issuedAt: IsoDateTime,

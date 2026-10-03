@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { toast } from "sonner";
 import Link from "next/link";
 import { format, parseISO, setHours } from "date-fns";
 import { BellRingIcon } from "lucide-react";
@@ -10,6 +11,7 @@ import { SectionCard } from "@/components/section-card";
 import { Button } from "@/components/ui/button";
 import { AppointmentForm, type AppointmentDraft } from "@/features/appointments/components/appointment-form";
 import { useProcedures } from "@/features/clinic/api";
+import { useQueueDueMessage } from "@/features/messages/api";
 import { usePatients } from "@/features/patients/api";
 import { formatDate, formatPhone } from "@/lib/format";
 import { useDueItems } from "../api";
@@ -26,6 +28,7 @@ export function RecallList() {
   const patients = usePatients().data ?? [];
   const procedures = useProcedures().data ?? [];
   const [draft, setDraft] = useState<AppointmentDraft | null>(null);
+  const remind = useQueueDueMessage();
   const today = format(new Date(), "yyyy-MM-dd");
 
   const procedureName = (code: string) => procedures.find((p) => p.code === code)?.name ?? code;
@@ -83,9 +86,25 @@ export function RecallList() {
                             {phone && <> · {formatPhone(phone)}</>}
                           </p>
                         </div>
-                        <Button size="sm" onClick={() => book(i)} aria-label={`Book ${what(i).toLowerCase()} for ${name}`}>
-                          Book
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={remind.isPending && remind.variables === i.id}
+                            onClick={() =>
+                              remind.mutate(i.id, {
+                                onSuccess: (m) => toast.success(`Reminder queued for ${m.recipientName}`),
+                                onError: (e) => toast.error(e.message),
+                              })
+                            }
+                            aria-label={`Send reminder about ${what(i).toLowerCase()} for ${name}`}
+                          >
+                            Send reminder
+                          </Button>
+                          <Button size="sm" onClick={() => book(i)} aria-label={`Book ${what(i).toLowerCase()} for ${name}`}>
+                            Book
+                          </Button>
+                        </div>
                       </li>
                     );
                   })}

@@ -1,18 +1,22 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { setupServer } from "msw/node";
 import { z } from "zod";
-import { addDays, format } from "date-fns";
+import { addDays, format, setHours, startOfDay, startOfMonth, subDays, subYears } from "date-fns";
 import {
   Appointment,
   ChartEntry,
   ClinicalNote,
   ClinicalPhoto,
   DueItem,
+  FinanceSummary,
   GrowthRecord,
   Invoice,
+  Message,
+  MessageTemplate,
   NoteTemplate,
   Patient,
   Payment,
+  PatientDocument,
   PlanItem,
   Procedure,
   Visit,
@@ -25,10 +29,12 @@ import {
   invoiceTotal,
   pesos,
   planProgress,
+  reminderSendAt,
   surfacesFor,
   type CreatePatientInput,
 } from "@pedia/shared";
 import { api, ApiError } from "@/lib/api-client";
+import { db } from "./db";
 import { handlers } from "./handlers";
 
 /** Exercises the handlers through the real api() client, so every response passes its shared schema. */
@@ -455,6 +461,138 @@ describe("follow-ups and recalls", () => {
   });
 });
 
+describe("parent messages", () => {
+  const booking = { dentistId: "staff_reyes", chairId: "chair_3", startsAt: "2030-04-01T01:00:00.000Z", durationMin: 30, reason: "Check-up" };
+  const messagesFor = (patientId: string) => api(`/messages?patientId=${patientId}`, z.array(Message));
+  const byKind = (rows: Message[], kind: Message["kind"]) => rows.filter((m) => m.kind === kind);
+
+  it("queues a confirmation and a reminder with the child's name filled in when an appointment is booked", async () => {
+    const patient = await api("/patients", Patient, send("POST", newPatient));
+    const appt = await api("/appointments", Appointment, send("POST", { ...booking, patientId: patient.id }));
+    const rows = await messagesFor(patient.id);
+
+    const [confirmation] = byKind(rows, "appointment_confirmation");
+    const [reminder] = byKind(rows, "appointment_reminder");
+    for (const m of [confirmation, reminder]) {
+      expect(m).toMatchObject({ status: "queued", appointmentId: appt.id, to: "09171234567", recipientName: "Rosa Mendoza" });
+      expect(m!.body).toContain("Bea");
+      expect(m!.body).not.toMatch(/\{\w+\}/); // every placeholder filled
+    }
+    expect(reminder!.sendAt).toBe(reminderSendAt(appt.startsAt)); // 9 AM the day before
+  });
+
+  it("withdraws the old reminder on a reschedule, and on a no-show queues a missed-appointment message", async () => {
+    const patient = await api("/patients", Patient, send("POST", newPatient));
+    const appt = await api("/appointments", Appointment, send("POST", { ...booking, patientId: patient.id, startsAt: "2030-04-02T01:00:00.000Z" }));
+    await api(`/appointments/${appt.id}`, Appointment, send("PUT", { ...booking, startsAt: "2030-04-02T03:00:00.000Z" }));
+    let reminders = byKind(await messagesFor(patient.id), "appointment_reminder");
+    expect(reminders.map((m) => m.status).sort()).toEqual(["cancelled", "queued"]);
+
+    await api(`/appointments/${appt.id}/status`, Appointment, send("POST", { status: "no_show" }));
+    const rows = await messagesFor(patient.id);
+    reminders = byKind(rows, "appointment_reminder");
+    expect(reminders.every((m) => m.status === "cancelled")).toBe(true);
+    expect(byKind(rows, "missed_appointment")).toHaveLength(1);
+  });
+
+  it("queues post-extraction instructions when the note is signed, and a recall message from the due list once", async () => {
+    const patient = await api("/patients", Patient, send("POST", newPatient));
+    const visit = await api(`/patients/${patient.id}/visits`, Visit, send("POST", { dentistId: "staff_reyes" }));
+    const body = { visitId: visit.id, templateId: "tpl_extraction", values: { teeth: [75], reason: "Abscess" }, behavior: [] };
+    const note = await api(`/patients/${patient.id}/notes`, ClinicalNote, send("POST", body));
+    expect(byKind(await messagesFor(patient.id), "post_extraction")).toEqual([]); // a draft sends nothing
+
+    await api(`/notes/${note.id}/sign`, ClinicalNote, { method: "POST" });
+    const [instructions] = byKind(await messagesFor(patient.id), "post_extraction");
+    expect(instructions).toMatchObject({ noteId: note.id, status: "queued" });
+    expect(instructions!.body).toContain("Bea");
+
+    const [due] = (await api("/due-items", z.array(DueItem))).filter((i) => i.patientId === patient.id);
+    const reminder = await api(`/due-items/${due!.id}/message`, Message, { method: "POST" });
+    expect(reminder).toMatchObject({ kind: "follow_up_reminder", dueItemId: due!.id });
+    await expect(api(`/due-items/${due!.id}/message`, Message, { method: "POST" })).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("greets a child on their birthday once", async () => {
+    const birthDate = format(subYears(new Date(), 5), "yyyy-MM-dd");
+    const patient = await api("/patients", Patient, send("POST", { ...newPatient, birthDate }));
+    await messagesFor(patient.id); // opening the log runs the daily job
+    expect(byKind(await messagesFor(patient.id), "birthday")).toHaveLength(1);
+  });
+
+  it("refuses an unknown placeholder, and later messages use the edited template", async () => {
+    const path = "/message-templates/appointment_confirmation";
+    const original = (await api("/message-templates", z.array(MessageTemplate))).find((t) => t.kind === "appointment_confirmation")!;
+    await expect(api(path, MessageTemplate, send("PUT", { body: "See you, {child_nmae}!" }))).rejects.toMatchObject({ status: 400 });
+    await api(path, MessageTemplate, send("PUT", { body: "See you {date}, {child_first_name}!" }));
+
+    const patient = await api("/patients", Patient, send("POST", newPatient));
+    await api("/appointments", Appointment, send("POST", { ...booking, patientId: patient.id, startsAt: "2030-04-03T01:00:00.000Z" }));
+    const [confirmation] = byKind(await messagesFor(patient.id), "appointment_confirmation");
+    expect(confirmation!.body).toMatch(/^See you .+, Bea!$/);
+    await api(path, MessageTemplate, send("PUT", { body: original.body })); // leave the default for later tests
+  });
+
+  it("seeds a log whose messages are all filled in", async () => {
+    const rows = await api("/messages", z.array(Message));
+    const seeded = rows.filter((m) => m.id.startsWith("msg_"));
+    expect(seeded.length).toBeGreaterThan(0);
+    expect(seeded.every((m) => !/\{\w+\}/.test(m.body))).toBe(true);
+  });
+});
+
+describe("financial dashboard", () => {
+  // Runs before describe("billing"), so every payment in the db is still a seeded one.
+  const today = format(new Date(), "yyyy-MM-dd");
+  const day = (iso: string) => format(new Date(iso), "yyyy-MM-dd");
+  const total = (rows: { amount: number }[]) => rows.reduce((s, r) => s + r.amount, 0);
+  const report = () => api(`/reports/finance?today=${today}`, FinanceSummary);
+
+  it("totals match the sum of seeded payments", async () => {
+    expect(db.payments.length).toBeGreaterThan(0);
+    expect(db.payments.every((p) => p.id.startsWith("pay_seed_"))).toBe(true); // nothing but the seed yet
+    const s = await report();
+    const since = (from: string) => total(db.payments.filter((p) => day(p.receivedAt) >= from && day(p.receivedAt) <= today));
+
+    expect(total(s.byMonth)).toBe(total(db.payments)); // every seeded payment is within the last 6 months
+    expect(s.collected.today).toBe(since(today));
+    expect(s.collected.month).toBe(since(format(startOfMonth(new Date()), "yyyy-MM-dd")));
+    expect(total(s.byDay)).toBe(since(format(subDays(new Date(), 13), "yyyy-MM-dd")));
+    expect(total(s.byMethod)).toBe(s.collected.month);
+
+    const balances = [...new Set(db.invoices.map((i) => i.patientId))].map((id) =>
+      accountSummary(db.invoices.filter((i) => i.patientId === id), db.payments).balance,
+    );
+    expect(s.outstandingTotal).toBe(balances.filter((b) => b > 0).reduce((a, b) => a + b, 0));
+    expect(s.outstandingTotal).toBeGreaterThan(0); // every fifth seeded invoice is half-paid
+  });
+
+  it("lists an appointment as unpaid until its invoice is paid", async () => {
+    const patient = await api("/patients", Patient, send("POST", newPatient));
+    const startsAt = setHours(startOfDay(new Date()), 7).toISOString();
+    const appt = await api("/appointments", Appointment, send("POST", { patientId: patient.id, dentistId: "staff_reyes", chairId: "chair_3", startsAt, durationMin: 15, reason: "Fluoride application" }));
+    await api(`/appointments/${appt.id}/status`, Appointment, send("POST", { status: "confirmed" }));
+    await api(`/appointments/${appt.id}/status`, Appointment, send("POST", { status: "arrived" }));
+    await api(`/patients/${patient.id}/plan`, PlanItem, send("POST", { procedureCode: "fluoride", fee: pesos(800) }));
+    const visit = await api(`/patients/${patient.id}/visits`, Visit, send("POST", { dentistId: "staff_reyes", appointmentId: appt.id }));
+    const note = await api(`/patients/${patient.id}/notes`, ClinicalNote, send("POST", { visitId: visit.id, templateId: "tpl_fluoride", values: { agent: "5% NaF varnish", teeth: [] }, behavior: [] }));
+    await api(`/notes/${note.id}/sign`, ClinicalNote, { method: "POST" });
+    await api(`/visits/${visit.id}/complete`, Visit, { method: "POST" });
+
+    const unpaid = async () => (await report()).unpaidAppointments.find((a) => a.appointmentId === appt.id);
+    expect(await unpaid()).toMatchObject({ appointmentId: appt.id }); // done, not billed
+    expect((await unpaid())?.invoiceId).toBeUndefined();
+
+    const [item] = await api(`/patients/${patient.id}/plan`, z.array(PlanItem));
+    const invoice = await api(`/patients/${patient.id}/invoices`, Invoice, send("POST", { planItemIds: [item.id] }));
+    expect(invoice.appointmentId).toBe(appt.id); // derived from the visit, not sent by the client
+    expect(await unpaid()).toMatchObject({ invoiceId: invoice.id, balance: pesos(800) });
+
+    await api(`/invoices/${invoice.id}/payments`, Payment, send("POST", { amount: pesos(800), method: "cash", receivedBy: "staff_cruz" }));
+    expect(await unpaid()).toBeUndefined();
+  });
+});
+
 describe("billing", () => {
   /** A patient whose plan items are all done, completed by signing notes in one visit. */
   async function patientWithDoneItems(plan: [string, number?][], notes: [string, Record<string, unknown>][]) {
@@ -519,5 +657,52 @@ describe("billing", () => {
     expect(invoiceBalance(invoice, payments)).toBe(pesos(200));
     const today = await api(`/payments?date=${format(new Date(), "yyyy-MM-dd")}`, z.array(Payment));
     expect(today.map((p) => p.id)).toContain(refund.id);
+  });
+});
+
+describe("documents", () => {
+  /** A child with a completed visit (a signed fluoride note) and a paid ₱800 invoice. */
+  async function treatedAndPaid(extra: Partial<CreatePatientInput> = {}) {
+    const patient = await api("/patients", Patient, send("POST", { ...newPatient, ...extra }));
+    await api(`/patients/${patient.id}/plan`, PlanItem, send("POST", { procedureCode: "fluoride", fee: pesos(800) }));
+    const visit = await api(`/patients/${patient.id}/visits`, Visit, send("POST", { dentistId: "staff_reyes" }));
+    const body = { visitId: visit.id, templateId: "tpl_fluoride", values: { agent: "5% NaF varnish", teeth: [] }, behavior: [] };
+    const note = await api(`/patients/${patient.id}/notes`, ClinicalNote, send("POST", body));
+    await api(`/notes/${note.id}/sign`, ClinicalNote, { method: "POST" });
+    await api(`/visits/${visit.id}/complete`, Visit, { method: "POST" });
+    const [item] = await api(`/patients/${patient.id}/plan`, z.array(PlanItem));
+    const invoice = await api(`/patients/${patient.id}/invoices`, Invoice, send("POST", { planItemIds: [item.id] }));
+    const payment = await api(`/invoices/${invoice.id}/payments`, Payment, send("POST", { amount: pesos(800), method: "cash", receivedBy: "staff_cruz" }));
+    return { patient, visit, note, payment };
+  }
+  const generate = (patientId: string, body: object) => api(`/patients/${patientId}/documents`, PatientDocument, send("POST", body));
+
+  it("logs a dental certificate and a receipt on the patient record", async () => {
+    const { patient, visit, payment } = await treatedAndPaid();
+    const certificate = await generate(patient.id, { type: "dental_certificate", sourceId: visit.id, issuedBy: "staff_reyes" });
+    const receipt = await generate(patient.id, { type: "receipt", sourceId: payment.id, issuedBy: "staff_cruz" });
+    expect(certificate.title).toBe("Dental certificate · Bea Mendoza");
+
+    const logged = await api(`/patients/${patient.id}/documents`, z.array(PatientDocument));
+    expect(logged.map((d) => d.id).sort()).toEqual([certificate.id, receipt.id].sort());
+    expect((await api("/documents", z.array(PatientDocument))).map((d) => d.id)).toContain(receipt.id);
+  });
+
+  it("refuses a front-desk certificate, another child's payment and an unsigned or wrong source", async () => {
+    const a = await treatedAndPaid();
+    const b = await treatedAndPaid();
+    await expect(generate(a.patient.id, { type: "dental_certificate", sourceId: a.visit.id, issuedBy: "staff_cruz" })).rejects.toMatchObject({ status: 400 });
+    await expect(generate(a.patient.id, { type: "receipt", sourceId: b.payment.id, issuedBy: "staff_cruz" })).rejects.toMatchObject({ status: 400 });
+    await expect(generate(a.patient.id, { type: "post_op_instructions", sourceId: a.visit.id, issuedBy: "staff_reyes" })).rejects.toMatchObject({ status: 400 });
+    expect(await generate(a.patient.id, { type: "post_op_instructions", sourceId: a.note.id, issuedBy: "staff_reyes" })).toMatchObject({ sourceId: a.note.id });
+  });
+
+  it("never prescribes an S2 drug, and stops a prescription that clashes with a recorded allergy", async () => {
+    const { patient } = await treatedAndPaid({ allergies: ["Penicillin"] });
+    const rx = (drugId: string) => ({ type: "prescription", issuedBy: "staff_reyes", items: [{ drugId, sig: "Give 5 mL by mouth every 8 hours for 7 days.", quantity: "1 bottle" }] });
+    await expect(generate(patient.id, rx("midazolam_2_syr"))).rejects.toMatchObject({ status: 400 });
+    await expect(generate(patient.id, rx("amoxicillin_250_susp"))).rejects.toMatchObject({ status: 409 });
+    const ok = await generate(patient.id, rx("paracetamol_120_syr"));
+    expect(ok.items?.[0].drugId).toBe("paracetamol_120_syr");
   });
 });

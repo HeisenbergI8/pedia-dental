@@ -12,6 +12,7 @@ import {
 } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { db, persist } from "@/mocks/db";
+import { cancelQueued, queueBookingMessages, queueMessage } from "@/mocks/outbox";
 import { CLINIC_ID } from "@/mocks/seed";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
@@ -70,6 +71,7 @@ export const appointmentHandlers = [
         .sort((a, b) => a.dueOn.localeCompare(b.dueOn))[0];
       if (due) due.appointmentId = appointment.id;
     }
+    queueBookingMessages(appointment); // a confirmation now, a reminder the day before
     persist();
     return HttpResponse.json(appointment, { status: 201 });
   }),
@@ -86,6 +88,8 @@ export const appointmentHandlers = [
     const rejected = rejectSlot(moved);
     if (rejected) return rejected;
     Object.assign(appointment, parsed.data);
+    cancelQueued(appointment.id); // the old time's reminder must not go out
+    queueBookingMessages(appointment);
     persist();
     return HttpResponse.json(appointment);
   }),
@@ -99,6 +103,10 @@ export const appointmentHandlers = [
       return new HttpResponse(`Can't go from ${appointment.status} to ${parsed.data.status}`, { status: 409 });
     }
     Object.assign(appointment, parsed.data);
+    if (appointment.status === "cancelled" || appointment.status === "no_show") cancelQueued(appointment.id);
+    if (appointment.status === "no_show") {
+      queueMessage({ kind: "missed_appointment", patientId: appointment.patientId, appointmentId: appointment.id, startsAt: appointment.startsAt, dentistId: appointment.dentistId, sendAt: new Date().toISOString() });
+    }
     persist();
     return HttpResponse.json(appointment);
   }),

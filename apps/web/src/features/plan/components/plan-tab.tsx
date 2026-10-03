@@ -20,14 +20,7 @@ import { useProcedures } from "@/features/clinic/api";
 import { useNoteTemplates, useNotes } from "@/features/notes/api";
 import { useVisits } from "@/features/visits/api";
 import { cn } from "@/lib/utils";
-import { useAddPlanItem, usePlan, useSetPlanItemStatus } from "../api";
-
-export const PLAN_STATUS_LABEL: Record<PlanItemStatus, string> = {
-  planned: "Planned",
-  in_progress: "In progress",
-  done: "Done",
-  declined: "Declined",
-};
+import { PLAN_STATUS_LABEL, useAddPlanItem, usePlan, useSetPlanItemStatus } from "../api";
 
 export function PlanTab({ patientId }: { patientId: string }) {
   const { data: items, isLoading, error } = usePlan(patientId);

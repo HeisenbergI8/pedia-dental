@@ -6,7 +6,8 @@ import { SectionCard } from "@/components/section-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatPhone } from "@/lib/format";
-import { CONSENT_LABEL, ConsentDialog } from "./consent-dialog";
+import { CONSENT_LABEL } from "../api";
+import { ConsentDialog } from "./consent-dialog";
 
 /** Label above value: the label is secondary, the value is what staff read. */
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

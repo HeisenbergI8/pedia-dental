@@ -84,7 +84,16 @@ MSW handler (now) or NestJS (later).
   and only import `@/mocks/browser` dynamically from `app/providers.tsx`.
 - `NEXT_PUBLIC_*` env vars are inlined at build time. Changing `.env.local` needs a dev-server restart.
 - Mock data lives in `localStorage`. After changing `seed()` or `Db`, bump the key in `mocks/db.ts`
-  or clear storage, or you'll keep seeing old data.
+  or clear storage, or you'll keep seeing old data. The key is `pedia-dental:mock-db:v13`; each bump gets a
+  one-line comment above it saying why.
+- `describe` order in `mocks/handlers.test.ts` matters: the tests share one seeded db.
+  `describe("financial dashboard")` must stay before `describe("billing")`, because its totals only hold while
+  every payment is a seeded one (the `pay_seed_` guard fails loudly if moved).
+- PDFs (`@react-pdf/renderer`) must use Noto Sans from `apps/web/public/fonts/`. The built-in PDF fonts have no
+  `₱` glyph. Keep the library behind the dynamic import in `features/documents/download.ts` so it stays out of
+  page bundles.
+- Documents are logged first, then the PDF is built: the server checks (issuer, source, allergy) run on the
+  log request, so a refused document never produces a file.
 - `@pedia/shared` ships TypeScript source (`transpilePackages`). Don't add a build step for it.
 - react-big-calendar's stylesheet loads after `globals.css`, so an unscoped `.rbc-*` override silently loses.
   Scope calendar overrides under `.calendar` (the wrapper in `appointment-calendar.tsx`).

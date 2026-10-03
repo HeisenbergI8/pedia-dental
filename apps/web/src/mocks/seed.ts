@@ -3,22 +3,28 @@ import { addDays, addMinutes, differenceInYears, parseISO, setHours, startOfDay 
 import {
   PERMANENT_TEETH,
   PRIMARY_TEETH,
+  PaymentMethod,
   dueItemFor,
   isAnterior,
   pesos,
+  reminderSendAt,
   surfacesFor,
   type Appointment,
   type Chair,
   type ChartEntry,
   type ClinicalNote,
   type DueItem,
+  type Invoice,
+  type Message,
   type Patient,
+  type Payment,
   type PlanItem,
   type Procedure,
   type StaffMember,
   type Visit,
 } from "@pedia/shared";
 import type { Db } from "./db";
+import { composeMessage, defaultMessageTemplates, type MessageEvent, type MessageRefs } from "./message-templates";
 import { NOTE_TEMPLATES } from "./note-templates";
 
 export const CLINIC_ID = "clinic_demo";
@@ -145,6 +151,10 @@ export function seed(): Db {
   });
 
   const example = seedExamplePlan(patients, visits);
+  // Hoisted, not reordered: still the last faker consumer, so every seeded record stays the same.
+  const appointments = seedAppointments(patients);
+  const billing = seedBilling(appointments, example.planItems[0]?.patientId);
+  const messageTemplates = defaultMessageTemplates(CLINIC_ID, new Date().toISOString());
 
   return {
     patients,
@@ -157,11 +167,14 @@ export function seed(): Db {
     notes: [...notes, ...example.notes],
     growth: [],
     planItems: example.planItems,
-    appointments: seedAppointments(patients),
+    appointments,
     photos: [],
     dueItems: seedDueItems(visits, [...notes, ...example.notes]),
-    invoices: [],
-    payments: [],
+    invoices: billing.invoices,
+    payments: billing.payments,
+    messageTemplates,
+    messages: seedMessages(appointments, { templates: messageTemplates, patients, staff: STAFF }),
+    documents: [],
   };
 }
 
@@ -345,4 +358,78 @@ function seedAppointments(patients: Patient[]): Appointment[] {
     }
   }
   return rows;
+}
+
+/**
+ * A believable log for the appointments three days either side of today: confirmations sent a week before,
+ * reminders the day before, and a missed-appointment message after a no-show. A no-show's reminder is shown
+ * as failed (simulated) so the log has every status. No faker calls.
+ */
+function seedMessages(appointments: Appointment[], refs: MessageRefs): Message[] {
+  const now = new Date().toISOString();
+  const window = 3 * 86_400_000;
+  return appointments
+    .filter((a) => Math.abs(parseISO(a.startsAt).getTime() - Date.now()) <= window)
+    .flatMap((a) => {
+      const base = { patientId: a.patientId, appointmentId: a.id, startsAt: a.startsAt, dentistId: a.dentistId };
+      const bookedAt = addDays(parseISO(a.startsAt), -7).toISOString();
+      const events: MessageEvent[] = [
+        { ...base, kind: "appointment_confirmation", sendAt: bookedAt },
+        { ...base, kind: "appointment_reminder", sendAt: reminderSendAt(a.startsAt, new Date(0)) },
+      ];
+      if (a.status === "no_show") {
+        events.push({ ...base, kind: "missed_appointment", sendAt: addMinutes(parseISO(a.startsAt), a.durationMin + 60).toISOString() });
+      }
+      return events.flatMap((e, i): Message[] => {
+        const m = composeMessage(e, refs, { id: `msg_${a.id}_${i}`, clinicId: CLINIC_ID, createdAt: bookedAt });
+        if (!m) return [];
+        if (m.sendAt > now) return [{ ...m, status: a.status === "cancelled" ? "cancelled" : "queued" }];
+        if (a.status === "no_show" && e.kind === "appointment_reminder") {
+          return [{ ...m, status: "failed", failureReason: "Number unreachable (simulated)" }];
+        }
+        return [{ ...m, status: "sent" }];
+      });
+    });
+}
+
+/**
+ * Bills the seeded appointments that are done, one invoice each, for the procedure in the reason. Most are
+ * paid at the counter, every fifth is half-paid and every seventh isn't billed yet, so the dashboard has
+ * collections, balances and unpaid appointments to show. No faker calls: the rest of the seed is unchanged.
+ */
+function seedBilling(appointments: Appointment[], skipPatientId?: string) {
+  const invoices: Invoice[] = [];
+  const payments: Payment[] = [];
+  const done = appointments.filter((a) => a.status === "done" && a.patientId !== skipPatientId);
+  done.forEach((a, i) => {
+    if (i % 7 === 6) return; // done but not billed yet
+    const procedure = PROCEDURES.find((p) => p.name === a.reason);
+    if (!procedure) return;
+    const end = addMinutes(parseISO(a.startsAt), a.durationMin);
+    const invoice: Invoice = {
+      id: `inv_seed_${invoices.length + 1}`,
+      clinicId: CLINIC_ID,
+      patientId: a.patientId,
+      appointmentId: a.id,
+      lines: [{ procedureCode: procedure.code, description: procedure.name, amount: procedure.fee }],
+      discount: 0,
+      issuedAt: end.toISOString(),
+    };
+    invoices.push(invoice);
+    const method = PaymentMethod.options[i % PaymentMethod.options.length];
+    const n = payments.length + 1;
+    payments.push({
+      id: `pay_seed_${n}`,
+      clinicId: CLINIC_ID,
+      patientId: a.patientId,
+      invoiceId: invoice.id,
+      amount: i % 5 === 4 ? Math.round(procedure.fee / 200) * 100 : procedure.fee, // half, in whole pesos
+      method,
+      ...(method !== "cash" && { referenceNo: String(4_100_000 + n) }),
+      receiptNo: `AR-${String(n).padStart(6, "0")}`,
+      receivedBy: "staff_cruz",
+      receivedAt: addMinutes(end, 5).toISOString(),
+    });
+  });
+  return { invoices, payments };
 }

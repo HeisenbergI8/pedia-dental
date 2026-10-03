@@ -47,8 +47,11 @@ export const billingHandlers = [
     }));
     const subtotal = lines.reduce((s, l) => s + l.amount, 0);
     if (discount > subtotal) return new HttpResponse(`The discount can't be more than ${formatPeso(subtotal)}`, { status: 400 });
+    // The appointment these treatments were done in, when they all share one: links "unpaid appointments".
+    const fromAppointments = new Set(items.map((i) => db.visits.find((v) => v.id === i.completedVisitId)?.appointmentId));
+    const appointmentId = fromAppointments.size === 1 ? [...fromAppointments][0] : undefined;
 
-    const invoice: Invoice = { id: crypto.randomUUID(), clinicId: CLINIC_ID, patientId: String(params.id), lines, discount, issuedAt: new Date().toISOString() };
+    const invoice: Invoice = { id: crypto.randomUUID(), clinicId: CLINIC_ID, patientId: String(params.id), appointmentId, lines, discount, issuedAt: new Date().toISOString() };
     db.invoices.push(invoice);
     persist();
     return HttpResponse.json(invoice, { status: 201 });

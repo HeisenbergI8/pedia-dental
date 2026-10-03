@@ -1,8 +1,17 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
-import { AddConsentInput, CreatePatientInput, Patient } from "@pedia/shared";
+import { AddConsentInput, CreatePatientInput, Patient, type ConsentScope } from "@pedia/shared";
 import { api } from "@/lib/api-client";
+
+export const CONSENT_LABEL: Record<ConsentScope, string> = {
+  general_treatment: "General treatment",
+  local_anesthesia: "Local anesthesia",
+  extraction: "Extraction",
+  radiographs: "X-rays",
+  clinical_photos: "Clinical photos",
+  sedation: "Sedation",
+};
 
 export const patientKeys = {
   all: ["patients"] as const,

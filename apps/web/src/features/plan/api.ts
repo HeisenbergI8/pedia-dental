@@ -1,8 +1,15 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
-import { AddPlanItemInput, PlanItem, type SetPlanItemStatusInput } from "@pedia/shared";
+import { AddPlanItemInput, PlanItem, type PlanItemStatus, type SetPlanItemStatusInput } from "@pedia/shared";
 import { api } from "@/lib/api-client";
+
+export const PLAN_STATUS_LABEL: Record<PlanItemStatus, string> = {
+  planned: "Planned",
+  in_progress: "In progress",
+  done: "Done",
+  declined: "Declined",
+};
 
 export const planKeys = {
   forPatient: (patientId: string) => ["plan", "patient", patientId] as const,

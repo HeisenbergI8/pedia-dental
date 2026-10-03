@@ -18,16 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useAddConsent } from "../api";
-
-export const CONSENT_LABEL: Record<ConsentScope, string> = {
-  general_treatment: "General treatment",
-  local_anesthesia: "Local anesthesia",
-  extraction: "Extraction",
-  radiographs: "X-rays",
-  clinical_photos: "Clinical photos",
-  sedation: "Sedation",
-};
+import { CONSENT_LABEL, useAddConsent } from "../api";
 
 export function ConsentDialog({ patient }: { patient: Patient }) {
   const [open, setOpen] = useState(false);

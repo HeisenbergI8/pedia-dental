@@ -1,8 +1,7 @@
 "use client";
-import { HammerIcon } from "lucide-react";
-import { EmptyState } from "@/components/empty-state";
 import { BillingTab } from "@/features/billing/components/billing-tab";
 import { ChartTab } from "@/features/chart/components/chart-tab";
+import { DocumentsTab } from "@/features/documents/components/documents-tab";
 import { GrowthCard } from "@/features/growth/components/growth-card";
 import { PlanTab } from "@/features/plan/components/plan-tab";
 import { BehaviorTrend } from "@/features/notes/components/behavior-trend";
@@ -14,9 +13,6 @@ import { VisitBanner } from "@/features/visits/components/visit-banner";
 import { VisitList } from "@/features/visits/components/visit-list";
 import { usePatient } from "../api";
 import { PatientOverview } from "./patient-overview";
-
-/** Filled in by later chunks: documents (16). */
-const LATER_TABS = ["Documents"];
 
 const TAB_TRIGGER = "h-11 flex-none rounded-none px-3 data-[state=active]:text-brand group-data-[variant=line]/tabs-list:data-[state=active]:after:bg-brand";
 
@@ -38,11 +34,7 @@ export function PatientRecord({ patientId }: { patientId: string }) {
             <TabsTrigger value="plan" className={TAB_TRIGGER}>Plan</TabsTrigger>
             <TabsTrigger value="photos" className={TAB_TRIGGER}>Photos</TabsTrigger>
             <TabsTrigger value="billing" className={TAB_TRIGGER}>Billing</TabsTrigger>
-            {LATER_TABS.map((t) => (
-              <TabsTrigger key={t} value={t} className={TAB_TRIGGER}>
-                {t} <span className="text-xs font-normal text-ink-muted">Soon</span>
-              </TabsTrigger>
-            ))}
+            <TabsTrigger value="documents" className={TAB_TRIGGER}>Documents</TabsTrigger>
           </TabsList>
         </div>
         <TabsContent value="overview" className="pt-5">
@@ -72,11 +64,9 @@ export function PatientRecord({ patientId }: { patientId: string }) {
         <TabsContent value="billing" className="pt-5">
           <BillingTab patientId={patientId} />
         </TabsContent>
-        {LATER_TABS.map((t) => (
-          <TabsContent key={t} value={t} className="pt-5">
-            <EmptyState icon={HammerIcon} title={`${t} is coming in a later release`} />
-          </TabsContent>
-        ))}
+        <TabsContent value="documents" className="pt-5">
+          <DocumentsTab patientId={patientId} />
+        </TabsContent>
       </Tabs>
     </div>
   );

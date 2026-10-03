@@ -28,13 +28,13 @@ type NavItem = { href: string; label: string; icon: LucideIcon; roles: readonly 
 
 /** `soon` marks screens that still render ComingSoon, so staff aren't surprised by an empty page. */
 const NAV: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboardIcon, roles: ["admin"], soon: true },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboardIcon, roles: ["admin"] },
   { href: "/appointments", label: "Appointments", icon: CalendarDaysIcon, roles: ["admin", "dentist", "front_desk"] },
   { href: "/patients", label: "Patients", icon: UsersIcon, roles: ["admin", "dentist", "front_desk"] },
   { href: "/billing", label: "Billing", icon: ReceiptIcon, roles: ["admin", "front_desk"] },
   { href: "/recall", label: "Recalls", icon: BellRingIcon, roles: ["admin", "front_desk"] },
-  { href: "/messages", label: "Messages", icon: MessageSquareIcon, roles: ["admin", "front_desk"], soon: true },
-  { href: "/documents", label: "Documents", icon: FileTextIcon, roles: ["admin", "dentist"], soon: true },
+  { href: "/messages", label: "Messages", icon: MessageSquareIcon, roles: ["admin", "front_desk"] },
+  { href: "/documents", label: "Documents", icon: FileTextIcon, roles: ["admin", "dentist", "front_desk"] },
   { href: "/settings", label: "Settings", icon: SettingsIcon, roles: ["admin", "dentist", "front_desk"] },
 ];
 

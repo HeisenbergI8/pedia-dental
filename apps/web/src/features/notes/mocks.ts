@@ -1,7 +1,8 @@
 import { http, HttpResponse, delay } from "msw";
-import { CreateNoteInput, UpdateNoteInput, dueItemFor, itemsCompletedBy, noteValuesSchema, type ClinicalNote } from "@pedia/shared";
+import { CreateNoteInput, NOTE_MESSAGES, UpdateNoteInput, dueItemFor, itemsCompletedBy, noteValuesSchema, type ClinicalNote } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { db, persist } from "@/mocks/db";
+import { queueMessage } from "@/mocks/outbox";
 import { CLINIC_ID } from "@/mocks/seed";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
@@ -97,6 +98,9 @@ export const noteHandlers = [
         createdAt: signedAt,
       });
     }
+    // And it queues the parent's care instructions for that procedure (NOTE_MESSAGES).
+    const instructions = NOTE_MESSAGES[procedure];
+    if (instructions) queueMessage({ kind: instructions, patientId: note.patientId, noteId: note.id, sendAt: signedAt });
     persist();
     return HttpResponse.json(note);
   }),

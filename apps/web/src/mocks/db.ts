@@ -7,7 +7,10 @@ import type {
   DueItem,
   GrowthRecord,
   Invoice,
+  Message,
+  MessageTemplate,
   NoteTemplate,
+  PatientDocument,
   Patient,
   Payment,
   PlanItem,
@@ -38,10 +41,13 @@ export type Db = {
   dueItems: DueItem[];
   invoices: Invoice[];
   payments: Payment[]; // append-only; refunds are negative rows
+  messageTemplates: MessageTemplate[]; // one per MessageKind
+  messages: Message[]; // the outbox log; the prototype never sends
+  documents: PatientDocument[]; // the generated-documents log; append-only, PDFs aren't stored
 };
 
-// v10: Chunk 12 added invoices and payments.
-const KEY = "pedia-dental:mock-db:v10";
+// v13: Chunk 13 seeded invoices and payments (with Invoice.appointmentId) for the dashboard.
+const KEY = "pedia-dental:mock-db:v13";
 
 function load(): Db {
   if (typeof window === "undefined") return seed();

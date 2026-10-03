@@ -1,0 +1,34 @@
+import { describe, expect, it } from "vitest";
+import { MessageTemplate } from "../schemas/message";
+import { messageVars, renderMessage, reminderSendAt, unknownPlaceholders } from "./messages";
+
+const bea = { firstName: "Bea", lastName: "Mendoza", guardians: [{ id: "g1", fullName: "Rosa Mendoza", relationship: "Mother", phone: "09171234567", isPrimary: true }] };
+const startsAt = new Date(2030, 0, 8, 10, 30).toISOString(); // Tue Jan 8 2030, 10:30 AM local
+
+describe("parent messages", () => {
+  it("fills the child's name, date and time for a booking", () => {
+    const body = "Hi {guardian_name}, {child_first_name} is booked {date} at {time} with {dentist_name}.";
+    expect(renderMessage(body, messageVars(bea, { startsAt, dentistName: "Dr. Ana Reyes" }))).toBe(
+      "Hi Rosa Mendoza, Bea is booked Tue, Jan 8 at 10:30 AM with Dr. Ana Reyes.",
+    );
+  });
+
+  it("leaves a placeholder with no value visible, rather than dropping it", () => {
+    expect(renderMessage("{child_first_name} is due {date} at {time}", messageVars(bea, { dueOn: "2030-01-08" }))).toBe(
+      "Bea is due Tue, Jan 8 at {time}",
+    );
+  });
+
+  it("refuses a template with a misspelled placeholder", () => {
+    expect(unknownPlaceholders("Hi {child_nmae}, see you {date}")).toEqual(["child_nmae"]);
+    const template = { clinicId: "c", kind: "recall", name: "Recall", body: "Hi {child_nmae}", updatedAt: new Date().toISOString() };
+    expect(MessageTemplate.safeParse(template).success).toBe(false);
+    expect(MessageTemplate.safeParse({ ...template, body: "Hi {child_first_name}" }).success).toBe(true);
+  });
+
+  it("sends the reminder at 9 AM the day before, or now when booked later than that", () => {
+    expect(reminderSendAt(startsAt, new Date(2030, 0, 1))).toBe(new Date(2030, 0, 7, 9, 0).toISOString());
+    const late = new Date(2030, 0, 7, 15, 0);
+    expect(reminderSendAt(startsAt, late)).toBe(late.toISOString());
+  });
+});

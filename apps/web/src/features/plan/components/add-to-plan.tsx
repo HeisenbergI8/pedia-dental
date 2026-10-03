@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useProcedures } from "@/features/clinic/api";
 import { useAddPlanItem, usePlan } from "../api";
-import { PLAN_STATUS_LABEL } from "./plan-tab";
+import { PLAN_STATUS_LABEL } from "../api";
 
 /** What a finding usually leads to. Only a starting suggestion; staff pick any per-tooth procedure. */
 const SUGGESTED: Partial<Record<ToothCondition, string>> = {
