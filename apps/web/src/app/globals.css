@@ -16,6 +16,13 @@
   --color-brand-ink: #ffffff;
   --color-brand-subtle: #e3f3f3; /* selected nav, active rows */
   --color-brand-soft: #7ec4c6; /* the logo teal itself: fills and accents, never text */
+  --color-surface-raised: #ffffff; /* cards that sit above surface (popovers, sticky bars); paired with --shadow-raised */
+
+  /* Secondary brand: the logo's purple "i". Secondary emphasis and kid moments, never status. */
+  --color-plum: #694ab4; /* 6.5:1 on white */
+  --color-plum-bg: #f0ebfa; /* plum text 5.6:1 */
+  /* Warm surface for celebrations, empty states and the portal welcome. Never status. */
+  --color-sunny: #fff6dc; /* ink 14.2:1, ink-muted 6.0:1 */
 
   /* Logo crayons. Decorative only (logo, loader, brand strips, portal illustration). Never status:
      orange would compete with the clinical alert colours. */
@@ -30,12 +37,20 @@
   --color-alert: #8a3b00; /* 6.6:1 on alert-bg */
   --color-alert-bg: #fdecd9;
   --color-alert-line: #f3c99b;
-  --color-danger: #a12622;
+  /* Status triples: text/icon (>= 4.5:1 on its bg), background, border. Status is never colour alone. */
+  --color-danger: #a12622; /* 6.4:1 on danger-bg */
   --color-danger-bg: #fbe9e8;
-  --color-success: #1d6b3a;
+  --color-danger-line: #efb8b5;
+  --color-success: #1d6b3a; /* 5.7:1 on success-bg */
   --color-success-bg: #e4f3e9;
-  --color-info: #1f4f86;
+  --color-success-line: #a9d7b8;
+  --color-info: #1f4f86; /* 7.1:1 on info-bg */
   --color-info-bg: #e6eef8;
+  --color-info-line: #b3c9e6;
+  /* Operational warnings (unpaid, overdue, unsaved). Amber, kept apart from the clinical alert brown. */
+  --color-warning: #7a4a00; /* 6.7:1 on warning-bg */
+  --color-warning-bg: #fdf2d0;
+  --color-warning-line: #e9c66f;
 
   /* Dental chart. Conventional colours; every one is also backed by a printed code or pattern. */
   --color-tooth-sound: #ffffff;
@@ -63,6 +78,55 @@
   --font-display: var(--font-fredoka), var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
   --shadow-card: 0 1px 2px 0 rgb(22 40 43 / 0.05), 0 1px 3px 0 rgb(22 40 43 / 0.04);
   --tracking-brand: 0.32em; /* the logo's spaced "PEDIATRIC DENTAL CLINIC" line */
+
+  /* Elevation: flat (page) < raised (cards, sticky bars) < overlay (dialogs, sheets, popovers). */
+  --shadow-raised: 0 2px 8px -2px rgb(22 40 43 / 0.12), 0 1px 2px 0 rgb(22 40 43 / 0.06);
+  --shadow-overlay: 0 16px 40px -12px rgb(22 40 43 / 0.28), 0 2px 6px 0 rgb(22 40 43 / 0.08);
+  /* The logo's hand-drawn offset shadow. Illustrations, empty states and success moments only. */
+  --shadow-crayon: 3px 3px 0 0 var(--color-crayon-teal);
+
+  /* Motion: fast = hover/press, base = overlays in, slow = sheets and pages. Enter ease-out, exit ease-in. */
+  --ease-enter: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+}
+
+/* Tokens that aren't Tailwind theme namespaces: used as h-(--control-h), z-(--z-header), duration-(--duration-base). */
+:root {
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+
+  --z-sticky: 20;
+  --z-header: 40;
+  --z-overlay: 50;
+  --z-toast: 60;
+
+  /* Control heights. Desktop with a mouse keeps a dense 36px; touch screens and anything under lg get
+     44px (WCAG 2.5.5, chairside gloves, the portal). */
+  --control-h: 2.25rem;
+  --control-h-sm: 2rem;
+  --dialog-max-h: 85dvh;
+  --bottom-nav-h: 0px; /* set by the clinic shell while its phone bottom nav shows */
+}
+@media (max-width: 1023px), (pointer: coarse) {
+  :root {
+    --control-h: 2.75rem;
+    --control-h-sm: 2.75rem;
+  }
+}
+/* The phone bottom nav (clinic shell, portal shell) reserves its height for sticky bars and toasts. */
+@media (max-width: 767px) {
+  :root:has([data-bottom-nav]) {
+    --bottom-nav-h: 4.25rem;
+  }
+}
+/* Phones read at 16px: body and data text (text-sm) steps up from 14px, so no screen needs its own
+   mobile type. Labels (text-xs, 12px) stay; nothing goes below 12px. */
+@media (max-width: 767px) {
+  :root {
+    --text-sm: 1rem;
+    --text-sm--line-height: 1.5rem;
+  }
 }
 
 /* shadcn/ui names, mapped onto the tokens above so components/ui stays unedited. */
@@ -146,6 +210,36 @@ body {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* A 44px hit area around a control that is drawn smaller (checkbox, inline link), on touch tiers only. */
+@layer components {
+  @media (max-width: 1023px), (pointer: coarse) {
+    .touch-hit {
+      position: relative;
+    }
+    .touch-hit::after {
+      content: "";
+      position: absolute;
+      inset: -0.875rem; /* 16px control + 2 × 14px = 44px */
+    }
+  }
+}
+
+/* A sideways-scrolling strip (tabs, chips) fades at its edges, so "there is more" is visible. */
+.scroll-fade-x {
+  mask-image: linear-gradient(to right, transparent 0, #000 1rem, #000 calc(100% - 2rem), transparent 100%);
+  scrollbar-width: none;
+}
+@media (min-width: 768px) {
+  .scroll-fade-x {
+    mask-image: none;
+  }
+}
+
+/* Clears the home indicator on notched phones (fixed bottom bars). */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* Page and card titles carry the brand's rounded face. */
@@ -289,6 +383,7 @@ body {
 .calendar .rbc-header,
 .calendar .rbc-time-header-cell .rbc-header {
   padding: 0.5rem 0.25rem;
+  font-size: 0.8125rem; /* the library's 90% made headers 11.7px; labels stay >= 12px */
   font-weight: 600;
   border-color: var(--color-line) !important;
 }
@@ -422,12 +517,32 @@ body {
 
 .calendar .rbc-date-cell {
   padding: 0.25rem 0.5rem;
+  font-size: 0.8125rem;
   font-variant-numeric: tabular-nums;
 }
 
 .calendar .rbc-date-cell.rbc-now {
   color: var(--color-brand);
   font-weight: 700;
+}
+
+/* Other months' dates: the library's #999 is 2.7:1. Muted ink keeps them quieter yet readable. */
+.calendar .rbc-off-range,
+.calendar .rbc-off-range .rbc-button-link {
+  color: var(--color-ink-muted);
+}
+.calendar .rbc-date-cell .rbc-button-link {
+  font-size: inherit;
+}
+
+/* Day numbers open that day: a real target, not a 16px glyph. */
+.calendar .rbc-date-cell .rbc-button-link {
+  min-width: 1.75rem;
+  min-height: 1.75rem;
+  border-radius: 9999px;
+}
+.calendar .rbc-date-cell .rbc-button-link:hover {
+  background: var(--color-brand-subtle);
 }
 
 .calendar .rbc-row-segment {

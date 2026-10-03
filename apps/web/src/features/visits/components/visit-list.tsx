@@ -5,9 +5,10 @@ import { useStaff } from "@/features/clinic/api";
 import { cn } from "@/lib/utils";
 import { useVisits } from "../api";
 import { Loading } from "@/components/brand";
+import { ErrorState } from "@/components/error-state";
 
 export function VisitList({ patientId }: { patientId: string }) {
-  const { data: visits, isLoading, error } = useVisits(patientId);
+  const { data: visits, isLoading, error, refetch, isRefetching } = useVisits(patientId);
   const staff = useStaff();
   const dentistName = (id: string) => staff.data?.find((s) => s.id === id)?.fullName ?? "Unknown dentist";
 
@@ -15,7 +16,7 @@ export function VisitList({ patientId }: { patientId: string }) {
     <section className="space-y-3 rounded-xl border border-line bg-surface p-4 shadow-card sm:p-5">
       <h2 className="text-base font-semibold">Visits</h2>
       {isLoading && <Loading label="Loading visits…" />}
-      {error && <p className="text-danger">Couldn&apos;t load visits.</p>}
+      {error && <ErrorState compact what="the visits" onRetry={() => refetch()} retrying={isRefetching} />}
       {visits?.length === 0 && <p className="text-ink-muted">No visits yet.</p>}
       {!!visits?.length && (
         <ul className="divide-y divide-line">

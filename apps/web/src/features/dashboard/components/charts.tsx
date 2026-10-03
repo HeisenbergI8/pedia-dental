@@ -24,9 +24,9 @@ function DataTable({ caption, rows }: { caption: string; rows: Point[] }) {
 export function TimeBars({ data, caption }: { data: Point[]; caption: string }) {
   return (
     <div>
-      <div className="h-64" aria-hidden>
+      <div className="h-64 overflow-hidden" aria-hidden>
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 8, right: 4, bottom: 0, left: 4 }}>
+          <BarChart data={data} margin={{ top: 8, right: 4, bottom: 0, left: 4 }} accessibilityLayer={false}>
             <CartesianGrid vertical={false} stroke="var(--color-chart-grid)" />
             <XAxis dataKey="label" {...AXIS} interval="preserveStartEnd" minTickGap={12} />
             <YAxis {...AXIS} width={56} tickFormatter={tickPeso} />
@@ -46,9 +46,9 @@ export function TimeBars({ data, caption }: { data: Point[]; caption: string }) 
 export function RankBars({ data, caption }: { data: Point[]; caption: string }) {
   return (
     <div>
-      <div style={{ height: Math.max(120, data.length * 36) }} aria-hidden>
+      <div className="overflow-hidden" style={{ height: Math.max(120, data.length * 36) }} aria-hidden>
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} layout="vertical" margin={{ top: 0, right: 72, bottom: 0, left: 0 }}>
+          <BarChart data={data} layout="vertical" margin={{ top: 0, right: 72, bottom: 0, left: 0 }} accessibilityLayer={false}>
             <XAxis type="number" hide />
             <YAxis type="category" dataKey="label" {...AXIS} width={140} />
             <Bar dataKey="amount" radius={[0, 4, 4, 0]} isAnimationActive={false} barSize={18}>

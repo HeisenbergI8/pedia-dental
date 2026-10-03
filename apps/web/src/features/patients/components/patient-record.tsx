@@ -1,4 +1,7 @@
 "use client";
+import { useEffect, useRef } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { ErrorState } from "@/components/error-state";
 import { BillingTab } from "@/features/billing/components/billing-tab";
 import { ChartTab } from "@/features/chart/components/chart-tab";
 import { DocumentsTab } from "@/features/documents/components/documents-tab";
@@ -16,17 +19,48 @@ import { PatientOverview } from "./patient-overview";
 
 const TAB_TRIGGER = "h-11 flex-none rounded-none px-3 data-[state=active]:text-brand group-data-[variant=line]/tabs-list:data-[state=active]:after:bg-brand";
 
+const TABS = ["overview", "chart", "notes", "plan", "photos", "billing", "documents"] as const;
+type Tab = (typeof TABS)[number];
+
+/** The open tab lives in the URL (?tab=chart), so refresh, back and a shared link land on it. */
+function useTab() {
+  const params = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const raw = params.get("tab");
+  const tab: Tab = TABS.includes(raw as Tab) ? (raw as Tab) : "overview";
+  const setTab = (next: string) => {
+    const q = new URLSearchParams(params);
+    if (next === "overview") q.delete("tab");
+    else q.set("tab", next);
+    router.replace(q.size ? `${pathname}?${q}` : pathname, { scroll: false });
+  };
+  return [tab, setTab] as const;
+}
+
 export function PatientRecord({ patientId }: { patientId: string }) {
-  const { data: patient, error } = usePatient(patientId);
-  if (error) return <p className="text-danger">Couldn&apos;t load this patient. Refresh to try again.</p>;
+  const { data: patient, error, refetch, isRefetching } = usePatient(patientId);
+  const [tab, setTab] = useTab();
+  const strip = useRef<HTMLDivElement>(null);
+  // A tab opened from a link may sit off screen in the phone's scrolling strip: bring it into view.
+  // Only the strip scrolls: scrollIntoView would also move the page.
+  useEffect(() => {
+    const el = strip.current;
+    const active = el?.querySelector<HTMLElement>("[data-state=active]");
+    if (!el || !active) return;
+    const { left, right } = active.getBoundingClientRect();
+    const box = el.getBoundingClientRect();
+    if (left < box.left || right > box.right) el.scrollLeft += left - box.left - 16;
+  }, [tab, patient]);
+  if (error) return <ErrorState what="this patient's record" onRetry={() => refetch()} retrying={isRefetching} />;
   if (!patient) return null; // PatientHeader shows the loading state
 
   return (
     <div className="space-y-5">
       <VisitBanner patientId={patientId} />
-      <Tabs defaultValue="overview" className="gap-0">
-        {/* Scrolls sideways on a phone rather than wrapping into a second row. */}
-        <div className="-mx-4 overflow-x-auto border-b border-line px-4 sm:mx-0 sm:px-0">
+      <Tabs value={tab} onValueChange={setTab} className="gap-0">
+        {/* Scrolls sideways on a phone rather than wrapping; the edge fade says there is more. */}
+        <div ref={strip} className="scroll-fade-x -mx-4 overflow-x-auto border-b border-line px-4 sm:mx-0 sm:px-0">
           <TabsList variant="line" className="h-11 w-max gap-0 p-0">
             <TabsTrigger value="overview" className={TAB_TRIGGER}>Overview</TabsTrigger>
             <TabsTrigger value="chart" className={TAB_TRIGGER}>Chart</TabsTrigger>

@@ -34,6 +34,7 @@ import { formatAge } from "@/features/patients/age";
 import { useCurrentVisit, useVisits } from "@/features/visits/api";
 import { useGrowth, useSaveGrowth } from "../api";
 import { Loading } from "@/components/brand";
+import { ErrorState } from "@/components/error-state";
 
 const HABIT_LABEL: Record<OralHabit, string> = {
   thumb_sucking: "Thumb sucking",
@@ -45,7 +46,7 @@ const STAGE_LABEL = { primary: "Primary dentition", mixed: "Mixed dentition", pe
 const day = (d: string) => format(parseISO(d), "MMM d, yyyy");
 
 export function GrowthCard({ patient }: { patient: Patient }) {
-  const { data: records = [], isLoading, error } = useGrowth(patient.id);
+  const { data: records = [], isLoading, error, refetch, isRefetching } = useGrowth(patient.id);
   const visits = useVisits(patient.id).data ?? [];
   const current = useCurrentVisit(patient.id);
   const canWrite = useCan()("clinical.write");
@@ -83,7 +84,7 @@ export function GrowthCard({ patient }: { patient: Patient }) {
       </div>
 
       {isLoading && <Loading label="Loading…" compact />}
-      {error && <p className="text-danger">Couldn&apos;t load growth records.</p>}
+      {error && <ErrorState compact what="growth records" onRetry={() => refetch()} retrying={isRefetching} />}
       {!isLoading && records.length === 0 && <p className="text-ink-muted">No habits or speech observations recorded.</p>}
 
       {habits.length > 0 && (

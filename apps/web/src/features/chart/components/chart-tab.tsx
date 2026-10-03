@@ -9,18 +9,19 @@ import { useChartEntries } from "../api";
 import { DentalChart, defaultChartMode } from "./dental-chart";
 import { ToothPanel } from "./tooth-panel";
 import { Loading } from "@/components/brand";
+import { ErrorState } from "@/components/error-state";
 
 const LATEST = "latest";
 
 export function ChartTab({ patient }: { patient: Patient }) {
-  const { data: entries, isLoading, error } = useChartEntries(patient.id);
+  const { data: entries, isLoading, error, refetch, isRefetching } = useChartEntries(patient.id);
   const visits = useVisits(patient.id).data ?? [];
   const current = useCurrentVisit(patient.id);
   const [asOf, setAsOf] = useState(LATEST);
   const [open, setOpen] = useState<{ tooth: ToothNumber; surface?: Surface }>();
 
   if (isLoading) return <Loading label="Loading chart…" />;
-  if (error || !entries) return <p className="text-danger">Couldn&apos;t load the chart.</p>;
+  if (error || !entries) return <ErrorState what="the dental chart" onRetry={() => refetch()} retrying={isRefetching} />;
 
   // "As of visit X": only what was recorded up to and including that visit, later corrections excluded.
   const asOfVisit = visits.find((v) => v.id === asOf);

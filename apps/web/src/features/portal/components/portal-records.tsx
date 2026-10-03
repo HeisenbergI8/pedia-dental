@@ -11,6 +11,7 @@ import { usePlan } from "@/features/plan/api";
 import { ClipboardListIcon, HeartPulseIcon, ReceiptIcon } from "lucide-react";
 import { useActiveChild } from "../use-child";
 import { Loading } from "@/components/brand";
+import { ErrorState } from "@/components/error-state";
 
 /** Plain words for parents. The staff labels say "Declined", which reads like a refusal of care. */
 const PLAN_STATUS: Record<PlanItemStatus, string> = {
@@ -19,12 +20,11 @@ const PLAN_STATUS: Record<PlanItemStatus, string> = {
   done: "Done",
   declined: "Not going ahead",
 };
-const loadError = <p role="alert" className="text-danger">We couldn&apos;t load this. Refresh the page to try again.</p>;
 const day = (iso: string) => format(parseISO(iso), "MMMM d, yyyy");
 
 export function PortalPlan() {
   const child = useActiveChild();
-  const { data: items = [], isLoading, error } = usePlan(child.id);
+  const { data: items = [], isLoading, error, refetch, isRefetching } = usePlan(child.id);
   const procedures = useProcedures().data ?? [];
   const { done, total } = planProgress(items);
   const name = (code: string) => procedures.find((p) => p.code === code)?.name ?? code;
@@ -32,7 +32,7 @@ export function PortalPlan() {
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-semibold tracking-tight">{child.firstName}&apos;s treatment plan</h1>
-      {isLoading ? <Loading label="Loading the plan…" /> : error ? loadError : items.length === 0 ? (
+      {isLoading ? <Loading label="Loading the plan…" /> : error ? <ErrorState what="the plan" onRetry={() => refetch()} retrying={isRefetching} /> : items.length === 0 ? (
         <EmptyState icon={ClipboardListIcon} title="Nothing planned right now">
           After a check-up, the dentist&apos;s plan for {child.firstName} will show here.
         </EmptyState>
@@ -70,7 +70,7 @@ export function PortalBilling() {
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-semibold tracking-tight">Bills for {child.firstName}</h1>
-      {invoices.isLoading || payments.isLoading ? <Loading label="Loading bills…" /> : invoices.error || payments.error ? loadError : allInvoices.length === 0 ? (
+      {invoices.isLoading || payments.isLoading ? <Loading label="Loading bills…" /> : invoices.error || payments.error ? <ErrorState what="the bills" onRetry={() => [invoices, payments].forEach((q) => q.refetch())} /> : allInvoices.length === 0 ? (
         <EmptyState icon={ReceiptIcon} title="No bills yet">Bills from {child.firstName}&apos;s visits will show here.</EmptyState>
       ) : (
         <>
@@ -116,13 +116,13 @@ export function PortalBilling() {
 
 export function PortalCare() {
   const child = useActiveChild();
-  const { data = [], isLoading, error } = usePatientMessages(child.id);
+  const { data = [], isLoading, error, refetch, isRefetching } = usePatientMessages(child.id);
   const care = data.filter((m) => CARE_KINDS.includes(m.kind) && m.status !== "cancelled");
 
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-semibold tracking-tight">Care instructions for {child.firstName}</h1>
-      {isLoading ? <Loading label="Loading instructions…" /> : error ? loadError : care.length === 0 ? (
+      {isLoading ? <Loading label="Loading instructions…" /> : error ? <ErrorState what="the care instructions" onRetry={() => refetch()} retrying={isRefetching} /> : care.length === 0 ? (
         <EmptyState icon={HeartPulseIcon} title="No instructions yet">
           After a treatment, the clinic&apos;s instructions for {child.firstName} will show here.
         </EmptyState>

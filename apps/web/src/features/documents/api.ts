@@ -37,7 +37,14 @@ export function useGenerateDocument(patientId: string) {
 }
 
 /** One patient's record for documents, from the same (cached) queries the other tabs use. */
-export function useDocumentSources(patientId: string): { data?: DocSources; isLoading: boolean; error: Error | null } {
+export function useDocumentSources(patientId: string): {
+  data?: DocSources;
+  isLoading: boolean;
+  error: Error | null;
+  /** Retries only the queries that failed. */
+  refetch: () => void;
+  isRefetching: boolean;
+} {
   const patient = usePatient(patientId);
   const staff = useStaff();
   const procedures = useProcedures();
@@ -51,8 +58,10 @@ export function useDocumentSources(patientId: string): { data?: DocSources; isLo
   const messageTemplates = useMessageTemplates();
   const all = [patient, staff, procedures, visits, notes, noteTemplates, chart, plan, invoices, payments, messageTemplates];
   const error = all.find((q) => q.error)?.error ?? null;
+  const refetch = () => all.filter((q) => q.error).forEach((q) => void q.refetch());
+  const isRefetching = all.some((q) => q.isRefetching);
   if (!patient.data || !staff.data || !procedures.data || !visits.data || !notes.data || !noteTemplates.data || !chart.data || !plan.data || !invoices.data || !payments.data || !messageTemplates.data) {
-    return { isLoading: !error, error };
+    return { isLoading: !error, error, refetch, isRefetching };
   }
   return {
     data: {
@@ -70,5 +79,7 @@ export function useDocumentSources(patientId: string): { data?: DocSources; isLo
     },
     isLoading: false,
     error: null,
+    refetch,
+    isRefetching,
   };
 }

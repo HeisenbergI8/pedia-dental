@@ -1,11 +1,11 @@
 "use client";
 import Link from "next/link";
-import { AlertTriangleIcon, ChevronLeftIcon, HeartPulseIcon, InfoIcon, PhoneIcon } from "lucide-react";
+import { AlertTriangleIcon, ChevronLeftIcon, HeartPulseIcon, InfoIcon, PhoneIcon, UsersIcon } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Patient } from "@pedia/shared";
 import { formatDate, formatPhone, initials } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { usePatient } from "../api";
+import { usePatient, usePatients } from "../api";
 import { formatAge } from "../age";
 import { Loading } from "@/components/brand";
 
@@ -31,11 +31,14 @@ function AlertChip({ icon: Icon, label, strong }: { icon: LucideIcon; label: str
  */
 export function PatientHeader({ patientId }: { patientId: string }) {
   const { data: p, isLoading } = usePatient(patientId);
+  // Same guardian phone = sibling: named in the header so the wrong child is hard to chart on.
+  const all = usePatients().data ?? [];
+  const siblings = p ? all.filter((x) => x.id !== p.id && x.guardians.some((g) => p.guardians.some((h) => h.phone === g.phone))) : [];
 
   return (
     <header
       data-patient-header
-      className="sticky top-14 z-30 -mx-4 border-b border-line bg-ground/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:top-0 lg:-mx-8 lg:px-8"
+      className="sticky top-14 z-(--z-sticky) -mx-4 border-b border-line bg-ground/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 md:top-0 lg:-mx-8 lg:px-8"
     >
       <Link
         href="/patients"
@@ -63,6 +66,18 @@ export function PatientHeader({ patientId }: { patientId: string }) {
                 {" · "}
                 {SEX_LABEL[p.sex]} · Born {formatDate(p.birthDate)}
               </p>
+              {siblings.length > 0 && (
+                <p className="mt-1 inline-flex items-center gap-1 rounded-md border border-info-line bg-info-bg px-2 py-0.5 text-xs font-medium text-info">
+                  <UsersIcon className="size-3 shrink-0" aria-hidden />
+                  Sibling of{" "}
+                  {siblings.map((x, i) => (
+                    <span key={x.id}>
+                      {i > 0 && ", "}
+                      <Link href={`/patients/${x.id}`} className="underline underline-offset-2">{x.firstName}</Link>
+                    </span>
+                  ))}
+                </p>
+              )}
             </div>
           </div>
           <PrimaryGuardian guardians={p.guardians} />

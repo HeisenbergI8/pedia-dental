@@ -22,6 +22,7 @@ import {
 import { useStaff } from "@/features/clinic/api";
 import { useActiveChild } from "../use-child";
 import { Loading } from "@/components/brand";
+import { ErrorState } from "@/components/error-state";
 
 export const whenText = (iso: string) => format(parseISO(iso), "EEEE, MMMM d 'at' h:mm a");
 const UPCOMING = ["booked", "confirmed", "arrived", "in_chair"];
@@ -60,7 +61,7 @@ export function ConfirmButton({ appointment: a, childName }: { appointment: Appo
 
 export function PortalAppointments() {
   const child = useActiveChild();
-  const { data: rows = [], isLoading, error } = usePatientAppointments(child.id);
+  const { data: rows = [], isLoading, error, refetch, isRefetching } = usePatientAppointments(child.id);
   const staff = useStaff().data ?? [];
   const dentist = (id: string) => staff.find((s) => s.id === id)?.fullName ?? "your dentist";
   const past = rows.filter((a) => !upcoming(rows).includes(a)).reverse().slice(0, 10);
@@ -69,7 +70,7 @@ export function PortalAppointments() {
     <div className="space-y-5">
       <h1 className="text-2xl font-semibold tracking-tight">{child.firstName}&apos;s appointments</h1>
       {isLoading && <Loading label="Loading appointments…" />}
-      {error && <p role="alert" className="text-danger">We couldn&apos;t load the appointments. Refresh the page to try again.</p>}
+      {error && <ErrorState what="the appointments" onRetry={() => refetch()} retrying={isRefetching} />}
 
       <SectionCard title="Coming up" description="To move or cancel a visit, please call the clinic.">
         {upcoming(rows).length === 0 ? (

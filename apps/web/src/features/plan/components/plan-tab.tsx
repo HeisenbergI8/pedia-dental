@@ -23,9 +23,10 @@ import { useVisits } from "@/features/visits/api";
 import { cn } from "@/lib/utils";
 import { PLAN_STATUS_LABEL, useAddPlanItem, usePlan, useSetPlanItemStatus } from "../api";
 import { Loading } from "@/components/brand";
+import { ErrorState } from "@/components/error-state";
 
 export function PlanTab({ patientId }: { patientId: string }) {
-  const { data: items, isLoading, error } = usePlan(patientId);
+  const { data: items, isLoading, error, refetch, isRefetching } = usePlan(patientId);
   const procedures = useProcedures().data ?? [];
   const visits = useVisits(patientId).data ?? [];
   const notes = useNotes(patientId).data ?? [];
@@ -34,7 +35,7 @@ export function PlanTab({ patientId }: { patientId: string }) {
   const canEdit = useCan()("plan.write");
 
   if (isLoading) return <Loading label="Loading treatment plan…" />;
-  if (error || !items) return <p className="text-danger">Couldn&apos;t load the treatment plan.</p>;
+  if (error || !items) return <ErrorState what="the treatment plan" onRetry={() => refetch()} retrying={isRefetching} />;
 
   const { done, total } = planProgress(items);
   const totalFee = items.filter((i) => i.status !== "declined").reduce((sum, i) => sum + i.fee, 0);

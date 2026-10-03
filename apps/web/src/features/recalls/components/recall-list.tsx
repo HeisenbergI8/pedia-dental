@@ -16,6 +16,7 @@ import { usePatients } from "@/features/patients/api";
 import { formatDate, formatPhone } from "@/lib/format";
 import { useDueItems } from "../api";
 import { Loading } from "@/components/brand";
+import { ErrorState } from "@/components/error-state";
 
 const SECTIONS: { bucket: DueBucket; title: string; empty: string }[] = [
   { bucket: "overdue", title: "Overdue", empty: "Nothing overdue." },
@@ -25,7 +26,7 @@ const SECTIONS: { bucket: DueBucket; title: string; empty: string }[] = [
 
 /** Follow-ups and recalls due within 30 days. Booking one opens the appointment form already filled in. */
 export function RecallList() {
-  const { data: items, isLoading, error } = useDueItems();
+  const { data: items, isLoading, error, refetch, isRefetching } = useDueItems();
   const patients = usePatients().data ?? [];
   const procedures = useProcedures().data ?? [];
   const [draft, setDraft] = useState<AppointmentDraft | null>(null);
@@ -53,7 +54,7 @@ export function RecallList() {
   }
 
   if (isLoading) return <Loading label="Loading recalls…" />;
-  if (error) return <p className="text-danger">Couldn&apos;t load recalls. Refresh to try again.</p>;
+  if (error) return <ErrorState what="the recalls" onRetry={() => refetch()} retrying={isRefetching} />;
   const listed = (items ?? []).filter((i) => dueBucket(i.dueOn, today));
 
   return (
@@ -66,28 +67,42 @@ export function RecallList() {
       ) : (
         SECTIONS.map(({ bucket, title, empty }) => {
           const rows = listed.filter((i) => dueBucket(i.dueOn, today) === bucket);
+          // An empty group is one quiet line, not a whole card: the work queue stays what you see.
+          if (rows.length === 0) {
+            return (
+              <p key={bucket} className="rounded-xl border border-dashed border-line-strong px-4 py-3 text-sm text-ink-muted">
+                <span className="font-medium text-ink">{title}:</span> {empty}
+              </p>
+            );
+          }
           return (
             <SectionCard key={bucket} title={`${title} (${rows.length})`}>
-              {rows.length === 0 ? (
-                <p className="text-sm text-ink-muted">{empty}</p>
-              ) : (
+              {(
                 <ul className="divide-y divide-line">
                   {rows.map((i) => {
                     const p = patients.find((x) => x.id === i.patientId);
                     const name = p ? `${p.lastName}, ${p.firstName}` : "Patient";
                     const phone = p?.guardians.find((g) => g.isPrimary)?.phone;
                     return (
-                      <li key={i.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3">
+                      <li key={i.id} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:gap-4">
                         <div className="min-w-0 flex-1">
                           <Link href={`/patients/${i.patientId}`} className="font-medium text-brand underline-offset-2 hover:underline">
                             {name}
                           </Link>
                           <p className="text-sm text-ink-muted">
-                            {what(i)} · due {formatDate(i.dueOn)}
-                            {phone && <> · {formatPhone(phone)}</>}
+                            {what(i)} · <span className="whitespace-nowrap">due {formatDate(i.dueOn)}</span>
+                            {phone && (
+                              <>
+                                {" · "}
+                                <a href={`tel:${phone}`} className="whitespace-nowrap text-brand underline-offset-2 hover:underline">
+                                  {formatPhone(phone)}
+                                </a>
+                              </>
+                            )}
                           </p>
                         </div>
-                        <div className="flex gap-2">
+                        {/* Full-width, thumb-sized buttons on a phone; inline from sm. */}
+                        <div className="grid grid-cols-2 gap-2 sm:flex">
                           <Button
                             size="sm"
                             variant="outline"

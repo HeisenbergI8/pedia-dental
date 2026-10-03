@@ -13,6 +13,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       theme="light"
+      richColors
       className="toaster group"
       icons={{
         success: <CircleCheckIcon className="size-4" />,
@@ -27,6 +28,19 @@ const Toaster = ({ ...props }: ToasterProps) => {
           "--normal-text": "var(--color-popover-foreground)",
           "--normal-border": "var(--color-border)",
           "--border-radius": "var(--radius)",
+          // Status toasts use the status triples, so a saved toast reads as success in colour and icon.
+          "--success-bg": "var(--color-success-bg)",
+          "--success-text": "var(--color-success)",
+          "--success-border": "var(--color-success-line)",
+          "--error-bg": "var(--color-danger-bg)",
+          "--error-text": "var(--color-danger)",
+          "--error-border": "var(--color-danger-line)",
+          "--warning-bg": "var(--color-warning-bg)",
+          "--warning-text": "var(--color-warning)",
+          "--warning-border": "var(--color-warning-line)",
+          "--info-bg": "var(--color-info-bg)",
+          "--info-text": "var(--color-info)",
+          "--info-border": "var(--color-info-line)",
         } as React.CSSProperties
       }
       {...props}

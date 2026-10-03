@@ -17,6 +17,7 @@ import { useVisits } from "@/features/visits/api";
 import { photoFileUrl, usePhotos } from "../api";
 import { TYPE_LABEL, UploadPhotoDialog } from "./upload-photo-dialog";
 import { Loading } from "@/components/brand";
+import { ErrorState } from "@/components/error-state";
 
 const describe = (p: ClinicalPhoto) =>
   [TYPE_LABEL[p.type], p.stage, p.tooth && `tooth ${p.tooth}`, format(parseISO(p.takenOn), "MMM d, yyyy")]
@@ -77,7 +78,7 @@ function BeforeAfter({ before, after }: { before: ClinicalPhoto; after: Clinical
 }
 
 export function PhotosTab({ patientId }: { patientId: string }) {
-  const { data: photos, isLoading, error } = usePhotos(patientId);
+  const { data: photos, isLoading, error, refetch, isRefetching } = usePhotos(patientId);
   const visits = useVisits(patientId);
   const staff = useStaff();
   const [tooth, setTooth] = useState<string>();
@@ -114,7 +115,7 @@ export function PhotosTab({ patientId }: { patientId: string }) {
         </Can>
       </div>
       {isLoading && <Loading label="Loading photos…" />}
-      {error && <p className="text-danger">Couldn&apos;t load photos.</p>}
+      {error && <ErrorState what="the photos" onRetry={() => refetch()} retrying={isRefetching} />}
       {photos?.length === 0 && (
         <EmptyState icon={CameraIcon} title="No photos yet">
           Intraoral photos and X-rays taken at a visit appear here, grouped by visit.

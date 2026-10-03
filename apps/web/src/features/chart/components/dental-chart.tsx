@@ -3,6 +3,7 @@ import { useState } from "react";
 import { differenceInYears, parseISO } from "date-fns";
 import { ALL_TEETH, ToothCondition, type Surface, type ToothNumber, type ToothState } from "@pedia/shared";
 import { Button } from "@/components/ui/button";
+import { PHONE, useMediaQuery } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 import { CONDITION_STYLE, ChartPatterns, Tooth } from "./tooth";
 
@@ -43,6 +44,11 @@ export function DentalChart({
 }) {
   const [mode, setMode] = useState(defaultMode);
   const rows = ROWS.filter((r) => mode === "mixed" || r.dentition === mode);
+  // Phones show one half of the mouth at a time: 8 teeth across instead of 16, so every tooth is a
+  // full-size target instead of a sideways-scrolling strip. 0 = patient's right (viewer's left).
+  const isPhone = useMediaQuery(PHONE);
+  const [half, setHalf] = useState<0 | 1>(0);
+  const sides: (0 | 1)[] = isPhone ? [half] : [0, 1];
 
   return (
     <div className="space-y-4">
@@ -62,25 +68,47 @@ export function DentalChart({
         ))}
       </div>
 
-      {/* Teeth stay tappable on a phone: the chart scrolls sideways inside its card instead of shrinking. */}
-      <div className="overflow-x-auto">
-        <div className="mx-auto max-w-3xl min-w-[34rem]">
+      {isPhone && (
+        <div role="group" aria-label="Side of the mouth" className="flex rounded-lg bg-line/60 p-1">
+          {(["Patient's right", "Patient's left"] as const).map((label, i) => (
+            <button
+              key={label}
+              type="button"
+              aria-pressed={half === i}
+              onClick={() => setHalf(i as 0 | 1)}
+              className={cn(
+                "h-(--control-h-sm) flex-1 rounded-md text-sm font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                half === i ? "bg-surface text-ink shadow-card" : "text-ink-muted",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+      <div>
+        <div className="mx-auto max-w-4xl">
           {rows.map((row, i) => (
             <div
               key={i}
               className={cn(
-                "grid grid-cols-2",
+                isPhone ? "grid" : "grid grid-cols-2",
                 // The occlusal plane, between the upper and lower jaw.
                 row.jaw === "lower" && rows[i - 1]?.jaw === "upper" && "mt-2 border-t-2 border-line pt-2",
               )}
             >
-              {row.halves.map((teeth, side) => (
+              {sides.map((side) => ({ side, teeth: row.halves[side] })).map(({ side, teeth }) => (
                 <div
                   key={side}
-                  className={cn("grid grid-cols-8 gap-0.5 py-1", side === 0 ? "border-r-2 border-line pr-1" : "pl-1")}
+                  className={cn(
+                    // A phone half shows exactly its teeth (5 primary or 8 permanent) across the full width.
+                    "grid gap-0.5 py-1",
+                    isPhone ? (teeth.length === 5 ? "grid-cols-5" : "grid-cols-8") : "grid-cols-8",
+                    !isPhone && (side === 0 ? "border-r-2 border-line pr-1" : "pl-1"),
+                  )}
                 >
                   {teeth.map((t, j) => (
-                    <div key={t} className={cn(side === 0 && j === 0 && teeth.length === 5 && "col-start-4")}>
+                    <div key={t} className={cn(!isPhone && side === 0 && j === 0 && teeth.length === 5 && "col-start-4")}>
                       <Tooth tooth={t} state={chart.get(t)} selected={selected.includes(t)} onSelect={onSelect} />
                     </div>
                   ))}

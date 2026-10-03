@@ -61,8 +61,11 @@ export function VisitBanner({ patientId }: { patientId: string }) {
   if (!canWrite) return null; // front desk: "visit in progress" is shown above; there's nothing to start
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-line-strong px-4 py-3">
-      <p className="text-sm text-ink-muted">No visit in progress. Start one to chart, write notes or take photos.</p>
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-dashed border-line-strong px-4 py-2.5">
+      {/* One line on a phone: the tabs, not the banner, should own the first screen. */}
+      <p className="text-sm text-ink-muted">
+        No visit in progress.<span className="hidden sm:inline"> Start one to chart, write notes or take photos.</span>
+      </p>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button disabled={start.isPending || dentists.length === 0}>

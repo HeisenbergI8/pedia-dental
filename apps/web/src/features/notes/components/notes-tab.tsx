@@ -9,6 +9,7 @@ import { useCurrentVisit, useVisits } from "@/features/visits/api";
 import { useNoteTemplates, useNotes } from "../api";
 import { BEHAVIOR_LABEL, NoteDialog } from "./note-dialog";
 import { Loading } from "@/components/brand";
+import { ErrorState } from "@/components/error-state";
 
 function display(f: TemplateField, v: unknown): string | undefined {
   if (f.type === "checkbox") return v === true ? "Yes" : undefined;
@@ -17,7 +18,7 @@ function display(f: TemplateField, v: unknown): string | undefined {
 }
 
 export function NotesTab({ patient }: { patient: Patient }) {
-  const { data: notes, isLoading, error } = useNotes(patient.id);
+  const { data: notes, isLoading, error, refetch, isRefetching } = useNotes(patient.id);
   const canWrite = useCan()("clinical.write");
   const templates = useNoteTemplates().data ?? [];
   const visits = useVisits(patient.id).data ?? [];
@@ -25,7 +26,7 @@ export function NotesTab({ patient }: { patient: Patient }) {
   const staff = useStaff().data ?? [];
 
   if (isLoading) return <Loading label="Loading notes…" />;
-  if (error || !notes) return <p className="text-danger">Couldn&apos;t load notes.</p>;
+  if (error || !notes) return <ErrorState what="the notes" onRetry={() => refetch()} retrying={isRefetching} />;
   const withNotes = visits.filter((v) => v.status === "in_progress" || notes.some((n) => n.visitId === v.id));
 
   return (

@@ -120,7 +120,7 @@ export function Tooth({
       )}
     >
       {upper ? number : codeLine}
-      <svg viewBox="0 0 40 40" className="aspect-square w-full max-w-10" aria-hidden>
+      <svg viewBox="0 0 40 40" className="aspect-square w-full max-w-14" aria-hidden>
         {(Object.keys(ZONES) as Zone[]).map((zone) => {
           const condition = state?.surfaces[surfaces[zone]];
           return (

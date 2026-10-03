@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useMessageTemplates, useUpdateMessageTemplate } from "../api";
 import { Loading } from "@/components/brand";
+import { ErrorState } from "@/components/error-state";
 
 /** Sample values for the preview, so staff see a real-looking message, never the raw placeholders. */
 const SAMPLE: Record<Placeholder, string> = {
@@ -21,10 +22,10 @@ const SAMPLE: Record<Placeholder, string> = {
 };
 
 export function TemplateEditor() {
-  const { data: templates = [], isLoading, error } = useMessageTemplates();
+  const { data: templates = [], isLoading, error, refetch, isRefetching } = useMessageTemplates();
   const [kind, setKind] = useState<MessageTemplate["kind"]>("appointment_confirmation");
   if (isLoading) return <Loading label="Loading templates…" />;
-  if (error) return <p className="text-danger">Couldn&apos;t load templates. Refresh to try again.</p>;
+  if (error) return <ErrorState what="the templates" onRetry={() => refetch()} retrying={isRefetching} />;
   const current = templates.find((t) => t.kind === kind);
 
   return (

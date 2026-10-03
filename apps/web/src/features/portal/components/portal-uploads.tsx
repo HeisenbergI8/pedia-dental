@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { photoFileUrl, usePhotos, useUploadPhoto } from "@/features/photos/api";
 import { useActiveChild } from "../use-child";
 import { Loading } from "@/components/brand";
+import { ErrorState } from "@/components/error-state";
 
 const KIND = { document: "Medical document (clearance, lab result)", intraoral: "Photo of teeth or mouth" } as const;
 const UploadForm = z.object({
@@ -25,7 +26,7 @@ type UploadForm = z.infer<typeof UploadForm>;
 
 export function PortalUploads() {
   const child = useActiveChild();
-  const { data: files = [], isLoading, error } = usePhotos(child.id);
+  const { data: files = [], isLoading, error, refetch, isRefetching } = usePhotos(child.id);
   const upload = useUploadPhoto(child.id);
   const form = useForm<UploadForm>({ resolver: zodResolver(UploadForm), defaultValues: { type: "document", caption: "" } });
 
@@ -83,7 +84,7 @@ export function PortalUploads() {
       </SectionCard>
 
       {isLoading ? <Loading label="Loading uploads…" /> : error ? (
-        <p role="alert" className="text-danger">We couldn&apos;t load your uploads. Refresh the page to try again.</p>
+        <ErrorState what="your uploads" onRetry={() => refetch()} retrying={isRefetching} />
       ) : files.length === 0 ? (
         <EmptyState icon={UploadIcon} title="Nothing uploaded yet">Photos and documents you send will show here.</EmptyState>
       ) : (

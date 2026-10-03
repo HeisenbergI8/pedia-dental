@@ -1,38 +1,26 @@
 "use client";
 import type { ReactNode } from "react";
 import { findRule, formatPeso, type FollowUpRule } from "@pedia/shared";
+import { DataList } from "@/components/data-list";
 import { PageHeader } from "@/components/page-header";
 import { useChairs, useProcedures, useStaff } from "../api";
 import { Loading } from "@/components/brand";
+import { ErrorState } from "@/components/error-state";
 
 const ROLE_LABEL = { admin: "Admin", dentist: "Dentist", front_desk: "Front desk" } as const;
 
 function describeRule(rule: FollowUpRule | undefined) {
-  if (!rule) return "—";
+  if (!rule) return "No follow-up";
   const { days, months } = rule.interval;
   const after = months ? `${months} months` : `${days} days`;
   return rule.kind === "recall" ? `Recall in ${after}` : `Follow-up in ${after}`;
 }
 
-/** Columns named in `numeric` are right-aligned, so amounts line up. */
-function Table({ title, head, numeric = [], children }: { title: string; head: string[]; numeric?: string[]; children: ReactNode }) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="space-y-3">
       <h2 className="text-base font-semibold">{title}</h2>
-      <div className="overflow-x-auto rounded-xl border border-line bg-surface shadow-card">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-line bg-ground/60 text-ink-muted">
-            <tr>
-              {head.map((h) => (
-                <th key={h} scope="col" className={`px-4 py-2.5 font-medium ${numeric.includes(h) ? "text-right" : ""}`}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="[&_td]:px-4 [&_td]:py-2.5 [&_tr]:border-b [&_tr]:border-line [&_tr:last-child]:border-0">
-            {children}
-          </tbody>
-        </table>
-      </div>
+      {children}
     </section>
   );
 }
@@ -47,48 +35,65 @@ export function ClinicSettings() {
     return <Loading label="Loading settings…" />;
   }
   if (procedures.error || staff.error || chairs.error) {
-    return <p className="text-danger">Couldn&apos;t load settings. Refresh to try again.</p>;
+    return <ErrorState what="the settings" onRetry={() => [procedures, staff, chairs].forEach((q) => q.refetch())} />;
   }
 
   return (
     <div className="space-y-6">
       <PageHeader title="Settings" description="The clinic's procedures, staff and chairs. Read-only in this prototype." />
 
-      <Table title="Procedure catalog" head={["Procedure", "Duration", "Fee", "Follow-up"]} numeric={["Duration", "Fee"]}>
-        {procedures.data?.map((p) => (
-          <tr key={p.code}>
-            <td>
-              {p.name}
-              <span className="block font-mono text-xs text-ink-muted">{p.code}</span>
-            </td>
-            <td className="text-right whitespace-nowrap tabular-nums">{p.defaultDurationMin} min</td>
-            <td className="text-right whitespace-nowrap tabular-nums">
-              {formatPeso(p.fee)}
-              {p.perTooth && <span className="block text-xs text-ink-muted">per tooth</span>}
-            </td>
-            <td>{describeRule(findRule(p.code))}</td>
-          </tr>
-        ))}
-      </Table>
+      <Section title="Procedure catalog">
+        <DataList
+          caption="Procedure catalog"
+          rows={procedures.data ?? []}
+          rowKey={(p) => p.code}
+          columns={[
+            {
+              key: "name",
+              header: "Procedure",
+              mobile: "title",
+              cell: (p) => (
+                <>
+                  {p.name}
+                  <span className="block font-mono text-xs font-normal text-ink-muted">{p.code}</span>
+                </>
+              ),
+            },
+            {
+              key: "fee",
+              header: "Fee",
+              mobile: "trailing",
+              numeric: true,
+              cell: (p) => (
+                <>
+                  {formatPeso(p.fee)}
+                  {p.perTooth && <span className="block text-xs text-ink-muted">per tooth</span>}
+                </>
+              ),
+            },
+            { key: "duration", header: "Duration", mobile: "meta", numeric: true, cell: (p) => `${p.defaultDurationMin} min` },
+            { key: "followUp", header: "Follow-up", mobile: "meta", cell: (p) => describeRule(findRule(p.code)) },
+          ]}
+        />
+      </Section>
 
-      <div className="grid gap-8 md:grid-cols-[2fr_1fr]">
-        <Table title="Dentists and staff" head={["Name", "Role", "PRC license"]}>
-          {staff.data?.map((s) => (
-            <tr key={s.id}>
-              <td>{s.fullName}</td>
-              <td>{ROLE_LABEL[s.role]}</td>
-              <td>{s.licenseNo ?? "—"}</td>
-            </tr>
-          ))}
-        </Table>
+      <div className="grid gap-8 lg:grid-cols-[2fr_1fr]">
+        <Section title="Dentists and staff">
+          <DataList
+            caption="Dentists and staff"
+            rows={staff.data ?? []}
+            rowKey={(s) => s.id}
+            columns={[
+              { key: "name", header: "Name", mobile: "title", cell: (s) => s.fullName },
+              { key: "role", header: "Role", mobile: "meta", cell: (s) => ROLE_LABEL[s.role] },
+              { key: "license", header: "PRC license", mobile: "meta", cell: (s) => (s.licenseNo ? `PRC ${s.licenseNo}` : "No license on file") },
+            ]}
+          />
+        </Section>
 
-        <Table title="Chairs" head={["Name"]}>
-          {chairs.data?.map((c) => (
-            <tr key={c.id}>
-              <td>{c.name}</td>
-            </tr>
-          ))}
-        </Table>
+        <Section title="Chairs">
+          <DataList caption="Chairs" rows={chairs.data ?? []} rowKey={(c) => c.id} columns={[{ key: "name", header: "Name", mobile: "title", cell: (c) => c.name }]} />
+        </Section>
       </div>
     </div>
   );

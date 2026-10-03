@@ -12,6 +12,7 @@ import { formatPhone, initials } from "@/lib/format";
 import { usePatients } from "../api";
 import { formatAge } from "../age";
 import { Loading } from "@/components/brand";
+import { ErrorState } from "@/components/error-state";
 
 const primaryGuardian = (p: Patient) => p.guardians.find((g) => g.isPrimary) ?? p.guardians[0];
 const alertsOf = (p: Patient) => [...p.allergies, ...p.medicalConditions, ...p.alerts];
@@ -35,9 +36,30 @@ function Alerts({ p }: { p: Patient }) {
   );
 }
 
+/**
+ * Siblings share a guardian (by phone) and usually a surname: the classic wrong-patient mix-up. Each
+ * patient maps to their siblings' first names, so rows can say so.
+ */
+function useSiblings(all: Patient[]) {
+  const byPhone = new Map<string, Patient[]>();
+  for (const p of all) for (const g of p.guardians) byPhone.set(g.phone, [...(byPhone.get(g.phone) ?? []), p]);
+  return (p: Patient) => [...new Set(p.guardians.flatMap((g) => byPhone.get(g.phone) ?? []))].filter((x) => x.id !== p.id).map((x) => x.firstName);
+}
+
+function SiblingChip({ names }: { names: string[] }) {
+  if (!names.length) return null;
+  return (
+    <span className="inline-flex items-center gap-1 rounded-md border border-info-line bg-info-bg px-2 py-0.5 text-xs font-medium text-info">
+      <UsersIcon className="size-3 shrink-0" aria-hidden />
+      Sibling of {names.join(", ")}
+    </span>
+  );
+}
+
 export function PatientList() {
   const [search, setSearch] = useState("");
-  const { data, isLoading, error } = usePatients(search);
+  const { data, isLoading, error, refetch, isRefetching } = usePatients(search);
+  const siblingsOf = useSiblings(usePatients().data ?? []);
 
   return (
     <div className="space-y-5">
@@ -71,7 +93,7 @@ export function PatientList() {
         {data && search ? `${data.length} ${data.length === 1 ? "patient matches" : "patients match"}` : ""}
       </p>
 
-      {error && <p className="text-danger">Couldn&apos;t load patients. Refresh to try again.</p>}
+      {error && <ErrorState what="the patients" onRetry={() => refetch()} retrying={isRefetching} />}
       {isLoading && <Loading label="Loading patients…" />}
 
       {data?.length === 0 &&
@@ -96,7 +118,7 @@ export function PatientList() {
       {!!data?.length && (
         <>
           {/* Phone: one card per patient. */}
-          <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface shadow-card md:hidden">
+          <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface shadow-card lg:hidden">
             {data.map((p) => {
               const g = primaryGuardian(p);
               return (
@@ -104,9 +126,9 @@ export function PatientList() {
                   <Link href={`/patients/${p.id}`} className="flex items-center gap-3 px-4 py-3 active:bg-ground">
                     <Avatar p={p} />
                     <div className="min-w-0 flex-1 space-y-1">
-                      {/* Names may truncate; age and phone never do. */}
-                      <p className="flex gap-1.5 font-medium">
-                        <span className="truncate">{p.lastName}, {p.firstName}</span>
+                      {/* A surname is never cut off (patient identification); age and phone don't wrap. */}
+                      <p className="flex flex-wrap gap-x-1.5 font-medium">
+                        <span className="break-words">{p.lastName}, {p.firstName}</span>
                         <span className="shrink-0 font-normal text-ink-muted tabular-nums">{formatAge(p.birthDate)}</span>
                       </p>
                       {g && (
@@ -115,7 +137,12 @@ export function PatientList() {
                           <span className="shrink-0 tabular-nums">{formatPhone(g.phone)}</span>
                         </p>
                       )}
-                      {alertsOf(p).length > 0 && <Alerts p={p} />}
+                      {(alertsOf(p).length > 0 || siblingsOf(p).length > 0) && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {alertsOf(p).length > 0 && <Alerts p={p} />}
+                          <SiblingChip names={siblingsOf(p)} />
+                        </div>
+                      )}
                     </div>
                     <ChevronRightIcon className="size-4 shrink-0 text-ink-muted" aria-hidden />
                   </Link>
@@ -125,7 +152,7 @@ export function PatientList() {
           </ul>
 
           {/* Tablet and up: a table. The name is the link; the whole row is clickable through it. */}
-          <div className="hidden overflow-hidden rounded-xl border border-line bg-surface shadow-card md:block">
+          <div className="hidden overflow-hidden rounded-xl border border-line bg-surface shadow-card lg:block">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-line bg-ground/60 text-ink-muted">
                 <tr>
@@ -150,6 +177,7 @@ export function PatientList() {
                           >
                             {p.lastName}, {p.firstName}
                           </Link>
+                          <SiblingChip names={siblingsOf(p)} />
                         </div>
                       </td>
                       <td className="px-4 py-2.5 whitespace-nowrap tabular-nums">{formatAge(p.birthDate)}</td>

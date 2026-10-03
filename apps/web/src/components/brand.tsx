@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import logo from "../../public/brand/kidsmile-logo.png";
 
@@ -74,17 +75,36 @@ export function KidsmileMark({ className }: { className?: string }) {
 }
 
 /**
- * A section or panel that is still loading. Fades in after a beat so fast loads don't flash.
- * `compact` sits on one line, for tight spots like the patient header or a side card.
+ * Content inside an open page that is still loading: a skeleton shaped like a list, so the layout
+ * doesn't jump when the rows arrive. Fades in after a beat so fast loads don't flash. `compact` is one
+ * line, for tight spots like the patient header or a side card. The label is for screen readers.
  */
-export function Loading({ label = "Loading…", compact, className }: { label?: string; compact?: boolean; className?: string }) {
+export function Loading({ label = "Loading…", compact, rows = 3, className }: { label?: string; compact?: boolean; rows?: number; className?: string }) {
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className={cn("ks-fade-in flex items-center", compact ? "gap-3 py-3" : "flex-col gap-3 py-10 text-center", className)}
-    >
-      <KidsmileMark className={compact ? "text-base" : "text-3xl"} />
+    <div role="status" aria-live="polite" className={cn("ks-fade-in", compact ? "py-3" : "space-y-3 py-2", className)}>
+      <span className="sr-only">{label}</span>
+      {compact ? (
+        <Skeleton className="h-5 w-48 max-w-full" />
+      ) : (
+        Array.from({ length: rows }, (_, i) => (
+          <div key={i} className="flex items-center gap-3">
+            <Skeleton className="size-10 shrink-0 rounded-full" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-4 w-2/5" />
+              <Skeleton className="h-3.5 w-3/5" />
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+/** A whole page or area on its way (navigation, route loading): the animated logo. */
+export function PageLoading({ label = "Opening…" }: { label?: string }) {
+  return (
+    <div role="status" aria-live="polite" className="ks-fade-in flex flex-col items-center gap-3 py-16 text-center">
+      <KidsmileMark className="text-3xl" />
       <p className="text-sm text-ink-muted">{label}</p>
     </div>
   );

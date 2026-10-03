@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { addMinutes, format, parseISO } from "date-fns";
 import { toast } from "sonner";
 import { canReschedule, canTransition, type Appointment, type ChangeAppointmentStatusInput } from "@pedia/shared";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -15,6 +14,7 @@ import { useChairs, useStaff } from "@/features/clinic/api";
 import { usePatient } from "@/features/patients/api";
 import { useStartVisit } from "@/features/visits/api";
 import { STATUS_LABEL, useChangeAppointmentStatus } from "../api";
+import { StatusChip } from "./status-chip";
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -34,7 +34,10 @@ function Details({ appointment: a, onReschedule }: { appointment: Appointment; o
   const startVisit = useStartVisit(a.patientId);
   const can = useCan();
   const [cancelReason, setCancelReason] = useState<string | null>(null);
+  // No-show is final (no transition leads out of it) and texts the parent, so it gets a confirm step.
+  const [confirmNoShow, setConfirmNoShow] = useState(false);
   const start = parseISO(a.startsAt);
+  const guardian = patient.data?.guardians.find((g) => g.isPrimary) ?? patient.data?.guardians[0];
   const onError = (e: Error) => toast.error(e.message);
   const setStatus = (input: ChangeAppointmentStatusInput) =>
     change.mutate({ id: a.id, ...input }, { onSuccess: () => toast.success(`Marked ${STATUS_LABEL[input.status].toLowerCase()}`), onError });
@@ -50,7 +53,7 @@ function Details({ appointment: a, onReschedule }: { appointment: Appointment; o
       </SheetHeader>
       <dl className="space-y-3 px-4">
         <Row label="Status">
-          <Badge variant={a.status === "no_show" || a.status === "cancelled" ? "destructive" : "default"}>{STATUS_LABEL[a.status]}</Badge>
+          <StatusChip status={a.status} />
         </Row>
         {a.cancelReason && <Row label="Cancel reason">{a.cancelReason}</Row>}
         <Row label="Reason">{a.reason}</Row>
@@ -61,7 +64,20 @@ function Details({ appointment: a, onReschedule }: { appointment: Appointment; o
         </Link>
       </dl>
 
-      {cancelReason !== null ? (
+      {confirmNoShow ? (
+        <div role="group" aria-labelledby="no-show-title" className="space-y-2 px-4">
+          <p id="no-show-title" className="font-semibold">Mark as a no-show?</p>
+          <p className="text-sm text-ink-muted">
+            This can&apos;t be undone, and it sends {guardian ? `${guardian.fullName} ` : "the parent "}a &ldquo;missed appointment&rdquo; text.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="destructive" disabled={busy} onClick={() => setStatus({ status: "no_show" })}>
+              Mark no-show
+            </Button>
+            <Button variant="outline" onClick={() => setConfirmNoShow(false)}>Keep it</Button>
+          </div>
+        </div>
+      ) : cancelReason !== null ? (
         <div className="space-y-2 px-4">
           <Label htmlFor="cancel-reason">Why is it cancelled?</Label>
           <Textarea id="cancel-reason" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} autoFocus />
@@ -106,7 +122,7 @@ function Details({ appointment: a, onReschedule }: { appointment: Appointment; o
             <Button variant="outline" disabled={busy} onClick={onReschedule}>Reschedule</Button>
           )}
           {canTransition(a.status, "no_show") && (
-            <Button variant="outline" disabled={busy} onClick={() => setStatus({ status: "no_show" })}>No-show</Button>
+            <Button variant="outline" disabled={busy} onClick={() => setConfirmNoShow(true)}>No-show…</Button>
           )}
           {canTransition(a.status, "cancelled") && (
             <Button variant="outline" disabled={busy} onClick={() => setCancelReason("")}>Cancel…</Button>

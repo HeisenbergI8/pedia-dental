@@ -14,6 +14,7 @@ import { METHOD_LABEL, useInvoices, usePayments } from "../api";
 import { CreateInvoice } from "./create-invoice";
 import { PaymentDialog } from "./payment-dialog";
 import { Loading } from "@/components/brand";
+import { ErrorState } from "@/components/error-state";
 
 export function BillingTab({ patientId }: { patientId: string }) {
   const invoices = useInvoices(patientId);
@@ -23,7 +24,7 @@ export function BillingTab({ patientId }: { patientId: string }) {
   const canCollect = useCan()("billing.collect");
 
   if (invoices.isLoading || payments.isLoading || plan.isLoading) return <Loading label="Loading billing…" />;
-  if (invoices.error || payments.error || plan.error) return <p className="text-danger">Couldn&apos;t load billing. Refresh to try again.</p>;
+  if (invoices.error || payments.error || plan.error) return <ErrorState what="this patient's billing" onRetry={() => [invoices, payments, plan].forEach((q) => q.refetch())} />;
   const allInvoices = invoices.data ?? [];
   const allPayments = payments.data ?? [];
   const summary = accountSummary(allInvoices, allPayments);
@@ -64,7 +65,7 @@ export function BillingTab({ patientId }: { patientId: string }) {
                 canCollect && (
                   <>
                     {paid > 0 && (
-                      <Button variant="outline" size="sm" onClick={() => setPaying({ invoice: inv, refund: true })}>Refund</Button>
+                      <Button variant="ghost" size="sm" className="text-ink-muted" onClick={() => setPaying({ invoice: inv, refund: true })}>Refund…</Button>
                     )}
                     {balance > 0 && <Button size="sm" onClick={() => setPaying({ invoice: inv, refund: false })}>Record payment</Button>}
                   </>

@@ -12,6 +12,7 @@ import { DocumentOptions, sourceOptions, type Draft } from "./document-options";
 import { DocumentPreview } from "./document-preview";
 import { DownloadDocumentButton } from "./download-document-button";
 import { Loading } from "@/components/brand";
+import { ErrorState } from "@/components/error-state";
 
 const DESCRIPTION: Record<DocumentType, string> = {
   dental_certificate: "Proof of a visit, for school or work",
@@ -53,7 +54,7 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [showErrors, setShowErrors] = useState(false);
 
-  if (sources.error) return <p className="text-danger">Couldn&apos;t load this patient&apos;s record. Refresh to try again.</p>;
+  if (sources.error) return <ErrorState what="this patient's record" onRetry={() => sources.refetch()} retrying={sources.isRefetching} />;
   if (!sources.data) return <Loading label="Loading documents…" />;
   const src = sources.data;
   const current = draft ?? initialDraft(type, src);

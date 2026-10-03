@@ -1,8 +1,8 @@
 "use client";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
-import { LockIcon } from "lucide-react";
+import { LockIcon, ReceiptIcon } from "lucide-react";
 import { formatPeso } from "@pedia/shared";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
@@ -17,6 +17,8 @@ import { formatDate } from "@/lib/format";
 import { useFinanceSummary } from "../api";
 import { RankBars, TimeBars } from "./charts";
 import { Loading } from "@/components/brand";
+import { ErrorState } from "@/components/error-state";
+import { DataList } from "@/components/data-list";
 
 const PERIODS = { day: "Last 14 days", week: "Last 8 weeks", month: "Last 6 months" } as const;
 type Period = keyof typeof PERIODS;
@@ -24,31 +26,20 @@ const tick: Record<Period, string> = { day: "MMM d", week: "'Wk of' MMM d", mont
 
 function Tile({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="rounded-xl border border-line bg-surface p-4 shadow-card">
+    <div className="min-w-0 rounded-xl border border-line bg-surface p-4 shadow-card">
       <dt className="text-sm text-ink-muted">{label}</dt>
-      <dd className="mt-1 text-2xl font-semibold tabular-nums">{value}</dd>
+      {/* Two tiles share a 360px row: the figure steps down a size there so ₱34,550.00 fits. */}
+      <dd className="mt-1 text-xl font-semibold break-words tabular-nums sm:text-2xl">{value}</dd>
       {hint && <dd className="text-xs text-ink-muted">{hint}</dd>}
     </div>
   );
 }
 
-function Table({ head, children }: { head: string[]; children: ReactNode }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm">
-        <thead className="border-b border-line text-ink-muted">
-          <tr>{head.map((h, i) => <th key={h} scope="col" className={i === head.length - 1 ? "py-2 text-right font-medium" : "py-2 pr-3 font-medium"}>{h}</th>)}</tr>
-        </thead>
-        <tbody className="divide-y divide-line">{children}</tbody>
-      </table>
-    </div>
-  );
-}
 
 export function FinanceDashboard() {
   const isAdmin = useCan()("dashboard.view");
   const today = format(new Date(), "yyyy-MM-dd");
-  const { data: s, isLoading, error } = useFinanceSummary(today, isAdmin);
+  const { data: s, isLoading, error, refetch, isRefetching } = useFinanceSummary(today, isAdmin);
   const patients = usePatients().data ?? [];
   const procedures = useProcedures().data ?? [];
   const [period, setPeriod] = useState<Period>("day");
@@ -67,7 +58,7 @@ export function FinanceDashboard() {
     );
   }
   if (isLoading) return <div className="space-y-5">{header}<Loading label="Loading the dashboard…" /></div>;
-  if (error || !s) return <div className="space-y-5">{header}<p className="text-danger">Couldn&apos;t load the dashboard. Refresh to try again.</p></div>;
+  if (error || !s) return <div className="space-y-5">{header}<ErrorState what="the dashboard" onRetry={() => refetch()} retrying={isRefetching} /></div>;
 
   const patientLink = (id: string) => {
     const p = patients.find((x) => x.id === id);
@@ -120,14 +111,16 @@ export function FinanceDashboard() {
           {s.outstanding.length === 0 ? (
             <p className="text-sm text-ink-muted">No one owes a balance.</p>
           ) : (
-            <Table head={["Patient", "Balance"]}>
-              {(allOwing ? s.outstanding : s.outstanding.slice(0, 10)).map((r) => (
-                <tr key={r.patientId}>
-                  <td className="py-2 pr-3">{patientLink(r.patientId)}</td>
-                  <td className="py-2 text-right tabular-nums">{formatPeso(r.balance)}</td>
-                </tr>
-              ))}
-            </Table>
+            <DataList
+              bare
+              caption="Outstanding balances, largest first"
+              rows={allOwing ? s.outstanding : s.outstanding.slice(0, 10)}
+              rowKey={(r) => r.patientId}
+              columns={[
+                { key: "patient", header: "Patient", mobile: "title", cell: (r) => patientLink(r.patientId) },
+                { key: "balance", header: "Balance", mobile: "trailing", numeric: true, cell: (r) => formatPeso(r.balance) },
+              ]}
+            />
           )}
           {s.outstanding.length > 10 && (
             <Button variant="outline" size="sm" onClick={() => setAllOwing((v) => !v)}>
@@ -139,16 +132,32 @@ export function FinanceDashboard() {
           {s.unpaidAppointments.length === 0 ? (
             <p className="text-sm text-ink-muted">Every recent appointment is billed and paid.</p>
           ) : (
-            <Table head={["Date", "Patient", "Reason", "Owed"]}>
-              {(allUnpaid ? s.unpaidAppointments : s.unpaidAppointments.slice(0, 10)).map((a) => (
-                <tr key={a.appointmentId}>
-                  <td className="py-2 pr-3 whitespace-nowrap tabular-nums">{format(parseISO(a.startsAt), "MMM d")}</td>
-                  <td className="py-2 pr-3">{patientLink(a.patientId)}</td>
-                  <td className="py-2 pr-3">{a.reason}</td>
-                  <td className="py-2 text-right tabular-nums">{a.balance === undefined ? <span className="text-alert">Not billed</span> : formatPeso(a.balance)}</td>
-                </tr>
-              ))}
-            </Table>
+            <DataList
+              bare
+              caption="Unpaid appointments, last 30 days"
+              rows={allUnpaid ? s.unpaidAppointments : s.unpaidAppointments.slice(0, 10)}
+              rowKey={(a) => a.appointmentId}
+              columns={[
+                { key: "date", header: "Date", mobile: "meta", className: "whitespace-nowrap tabular-nums", cell: (a) => format(parseISO(a.startsAt), "MMM d") },
+                { key: "patient", header: "Patient", mobile: "title", cell: (a) => patientLink(a.patientId) },
+                { key: "reason", header: "Reason", mobile: "meta", cell: (a) => a.reason },
+                {
+                  key: "owed",
+                  header: "Owed",
+                  mobile: "trailing",
+                  numeric: true,
+                  cell: (a) =>
+                    a.balance === undefined ? (
+                      // An operational warning, not a clinical alert: amber, with an icon.
+                      <span className="inline-flex items-center gap-1 font-medium text-warning">
+                        <ReceiptIcon className="size-3.5" aria-hidden /> Not billed
+                      </span>
+                    ) : (
+                      formatPeso(a.balance)
+                    ),
+                },
+              ]}
+            />
           )}
           {s.unpaidAppointments.length > 10 && (
             <Button variant="outline" size="sm" onClick={() => setAllUnpaid((v) => !v)}>

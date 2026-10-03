@@ -43,7 +43,7 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={client}>
       <MockGate>{children}</MockGate>
-      <Toaster />
+      <Toaster mobileOffset={{ bottom: "calc(var(--bottom-nav-h) + 1rem)" }} />
     </QueryClientProvider>
   );
 }

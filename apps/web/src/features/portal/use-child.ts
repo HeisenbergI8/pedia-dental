@@ -4,10 +4,10 @@ import { useSessionStore } from "@/stores/session-store";
 
 /** The signed-in parent's children (the API returns only theirs) and the one being viewed. */
 export function useChildren() {
-  const { data: kids = [], isLoading, error } = usePatients();
+  const { data: kids = [], isLoading, error, refetch, isRefetching } = usePatients();
   const activeId = useSessionStore((s) => s.activeChildId);
   const setActive = useSessionStore((s) => s.setActiveChild);
-  return { kids, child: kids.find((k) => k.id === activeId) ?? kids[0], setActive, isLoading, error };
+  return { kids, child: kids.find((k) => k.id === activeId) ?? kids[0], setActive, isLoading, error, refetch, isRefetching };
 }
 
 /** For portal sections, which PortalShell renders only once a child is loaded. */

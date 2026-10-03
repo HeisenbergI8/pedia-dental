@@ -3,14 +3,16 @@ import { useState } from "react";
 import { format, parseISO } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { STATUS_LABEL, usePatientAppointments } from "../api";
+import { usePatientAppointments } from "../api";
+import { StatusChip } from "./status-chip";
 import { AppointmentForm, type AppointmentDraft } from "./appointment-form";
 import { Loading } from "@/components/brand";
+import { ErrorState } from "@/components/error-state";
 
 const UPCOMING = new Set(["booked", "confirmed", "arrived", "in_chair"]);
 
 export function PatientAppointments({ patientId }: { patientId: string }) {
-  const { data, isLoading, error } = usePatientAppointments(patientId);
+  const { data, isLoading, error, refetch, isRefetching } = usePatientAppointments(patientId);
   const [draft, setDraft] = useState<AppointmentDraft | null>(null);
   const noShows = data?.filter((a) => a.status === "no_show").length ?? 0;
   const upcoming = data?.filter((a) => UPCOMING.has(a.status)) ?? [];
@@ -31,17 +33,21 @@ export function PatientAppointments({ patientId }: { patientId: string }) {
         </Button>
       </div>
       {isLoading && <Loading label="Loading appointments…" />}
-      {error && <p className="text-danger">Couldn&apos;t load appointments.</p>}
+      {error && <ErrorState compact what="the appointments" onRetry={() => refetch()} retrying={isRefetching} />}
       {data && upcoming.length === 0 && <p className="text-ink-muted">Nothing booked.</p>}
       {upcoming.length > 0 && (
         <ul className="divide-y divide-line">
           {upcoming.map((a) => (
-            <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
-              <span>
-                {format(parseISO(a.startsAt), "EEE, MMM d · h:mm a")}
-                <span className="text-ink-muted"> · {a.reason}</span>
+            <li key={a.id} className="flex items-start justify-between gap-3 py-2.5">
+              {/* Two lines on a phone (when / what), so the status chip keeps one column on the right. */}
+              <span className="min-w-0">
+                <span className="block font-medium tabular-nums sm:inline">{format(parseISO(a.startsAt), "EEE, MMM d · h:mm a")}</span>
+                <span className="block text-ink-muted sm:inline">
+                  <span className="hidden sm:inline"> · </span>
+                  {a.reason}
+                </span>
               </span>
-              <Badge variant="outline">{STATUS_LABEL[a.status]}</Badge>
+              <StatusChip status={a.status} />
             </li>
           ))}
         </ul>
