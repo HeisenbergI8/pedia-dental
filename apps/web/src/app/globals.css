@@ -117,7 +117,8 @@
 /* The phone bottom nav (clinic shell, portal shell) reserves its height for sticky bars and toasts. */
 @media (max-width: 767px) {
   :root:has([data-bottom-nav]) {
-    --bottom-nav-h: 4.25rem;
+    /* Plus the home indicator strip, which pb-safe adds to the nav itself. */
+    --bottom-nav-h: calc(4.25rem + env(safe-area-inset-bottom));
   }
 }
 /* Phones read at 16px: body and data text (text-sm) steps up from 14px, so no screen needs its own

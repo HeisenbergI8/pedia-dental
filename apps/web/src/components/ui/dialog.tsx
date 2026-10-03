@@ -103,7 +103,8 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "sticky -bottom-6 -mx-6 -mb-6 flex flex-col-reverse gap-2 border-t border-line bg-background px-6 py-4 sm:flex-row sm:justify-end",
+        // Phones: the dialog is a full-screen sheet, so the footer clears the home indicator.
+        "sticky -bottom-6 -mx-6 -mb-6 flex flex-col-reverse gap-2 border-t border-line bg-background px-6 py-4 max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))] sm:flex-row sm:justify-end",
         className
       )}
       {...props}
