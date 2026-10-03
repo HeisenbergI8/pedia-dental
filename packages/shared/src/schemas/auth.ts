@@ -26,6 +26,7 @@ export const Permission = z.enum([
   "uploads.create",
   "clinic.view",
   "settings.view",
+  "audit.view",
 ]);
 export type Permission = z.infer<typeof Permission>;
 
@@ -53,6 +54,10 @@ export const LoginInput = z.object({
   password: z.string().min(1, "Enter your password"),
 });
 export type LoginInput = z.infer<typeof LoginInput>;
+
+/** `idle`: the app signed the user out after a period of inactivity, logged as "timed out". */
+export const LogoutInput = z.object({ reason: z.enum(["user", "idle"]).default("user") });
+export type LogoutInput = z.input<typeof LogoutInput>;
 
 /** Prototype only: the one-click accounts on the login screen. NestJS won't serve this. */
 export const DemoAccount = SessionUser.pick({ id: true, role: true, name: true, email: true }).extend({

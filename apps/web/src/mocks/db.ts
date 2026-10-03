@@ -1,6 +1,7 @@
 import type {
   Appointment,
   AppointmentRequest,
+  AuditEvent,
   Chair,
   ChartEntry,
   ClinicalNote,
@@ -46,10 +47,11 @@ export type Db = {
   messages: Message[]; // the outbox log; the prototype never sends
   documents: PatientDocument[]; // the generated-documents log; append-only, PDFs aren't stored
   appointmentRequests: AppointmentRequest[]; // from the parent portal; staff mark them handled
+  auditEvents: AuditEvent[]; // who touched which personal data (RA 10173); append-only, written by mocks/access.ts
 };
 
-// v14: demo login. A seeded sibling (a two-child parent account) and the appointmentRequests collection.
-const KEY = "pedia-dental:mock-db:v14";
+// v15: the auditEvents collection, and a data privacy consent on most seeded patients.
+const KEY = "pedia-dental:mock-db:v15";
 
 function load(): Db {
   if (typeof window === "undefined") return seed();

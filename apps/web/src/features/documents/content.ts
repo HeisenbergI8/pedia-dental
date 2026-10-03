@@ -62,6 +62,8 @@ const CONSENT_TEXT: Record<ConsentScope, string> = {
   radiographs: "the dental X-rays needed for diagnosis and treatment",
   clinical_photos: "photographs of my child's teeth and mouth for the clinical record",
   sedation: "sedation for treatment, after its risks and alternatives were explained to me",
+  data_privacy:
+    "the clinic collecting, storing and using my child's personal and health information for treatment, billing and appointment reminders, as explained in the clinic's privacy notice under the Data Privacy Act of 2012 (RA 10173). I may ask to see, correct or get a copy of it",
 };
 
 const NONE = "None recorded";
@@ -158,7 +160,7 @@ export function buildDocument(choice: GenerateDocumentInput, src: DocSources, no
           {
             kind: "text",
             paragraphs: [
-              `I, ${guardian.fullName}, ${guardian.relationship.toLowerCase()} of ${child}, consent to ${need(CONSENT_TEXT[scope], "That consent")}. The treatment, its risks, benefits and alternatives were explained to me, and my questions were answered.`,
+              `I, ${guardian.fullName}, ${guardian.relationship.toLowerCase()} of ${child}, consent to ${need(CONSENT_TEXT[scope], "That consent")}. ${scope === "data_privacy" ? "The privacy notice was" : "The treatment, its risks, benefits and alternatives were"} explained to me, and my questions were answered.`,
               ...(recorded ? [`This consent was recorded on ${formatDate(recorded.date)}.`] : []),
             ],
           },

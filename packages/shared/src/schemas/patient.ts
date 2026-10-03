@@ -20,6 +20,7 @@ export const ConsentScope = z.enum([
   "radiographs",
   "clinical_photos",
   "sedation",
+  "data_privacy",
 ]);
 export type ConsentScope = z.infer<typeof ConsentScope>;
 

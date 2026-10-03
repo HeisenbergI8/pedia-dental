@@ -11,6 +11,7 @@ export const CONSENT_LABEL: Record<ConsentScope, string> = {
   radiographs: "X-rays",
   clinical_photos: "Clinical photos",
   sedation: "Sedation",
+  data_privacy: "Data privacy (RA 10173)",
 };
 
 export const patientKeys = {

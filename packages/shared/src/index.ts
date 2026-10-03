@@ -14,6 +14,7 @@ export * from "./schemas/message";
 export * from "./schemas/document";
 export * from "./schemas/finance";
 export * from "./schemas/auth";
+export * from "./schemas/audit";
 export * from "./domain/teeth";
 export * from "./errors";
 export * from "./domain/chart";

@@ -1,8 +1,9 @@
 import { http, HttpResponse } from "msw";
-import { permissionScope, type Permission } from "@pedia/shared";
+import { permissionScope, type AuditAction, type Permission } from "@pedia/shared";
 import { env } from "@/lib/env";
-import { db } from "./db";
+import { db, persist } from "./db";
 import { accountForToken, childrenOf, type DemoAccountRecord } from "./demo-accounts";
+import { CLINIC_ID } from "./seed";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 export const SESSION_COOKIE = "pd_session";
@@ -36,7 +37,15 @@ export function inScope(session: MockSession | undefined, permission: Permission
 
 /** Which patient a request is about, for `own`-scoped callers. */
 type Owner = ((params: Record<string, string>, url: URL) => string | undefined) | "filtered";
-type Rule = { method: string; path: string; permission: Permission | Permission[]; owner?: Owner };
+/** `audit` names the record in the audit trail; routes without one (reference data) aren't logged. */
+type Rule = {
+  method: string;
+  path: string;
+  permission: Permission | Permission[];
+  owner?: Owner;
+  audit?: string;
+  action?: AuditAction; // when the method alone says it wrong, e.g. signing a note is an update
+};
 
 const byId: Owner = (p) => p.id;
 const byQuery: Owner = (_, u) => u.searchParams.get("patientId") ?? undefined;
@@ -50,69 +59,73 @@ const via =
  * endpoint must be added (CONVENTIONS "Registering a new feature"). NestJS: one guard decorator each.
  */
 const RULES: Rule[] = [
-  // Reference data
+  // Reference data: not personal data, so not audited
   { method: "GET", path: "/staff", permission: "clinic.view" },
   { method: "GET", path: "/chairs", permission: "clinic.view" },
   { method: "GET", path: "/procedures", permission: "clinic.view" },
   { method: "GET", path: "/note-templates", permission: "clinic.view" },
   // Patients
-  { method: "GET", path: "/patients", permission: "patients.view", owner: "filtered" },
-  { method: "POST", path: "/patients", permission: "patients.write" },
-  { method: "GET", path: "/patients/:id", permission: "patients.view", owner: byId },
-  { method: "PUT", path: "/patients/:id", permission: "patients.write" },
-  { method: "POST", path: "/patients/:id/consents", permission: "patients.write" },
+  { method: "GET", path: "/patients", permission: "patients.view", owner: "filtered", audit: "Patient list" },
+  { method: "POST", path: "/patients", permission: "patients.write", audit: "Patient profile" },
+  { method: "GET", path: "/patients/:id", permission: "patients.view", owner: byId, audit: "Patient profile" },
+  { method: "PUT", path: "/patients/:id", permission: "patients.write", audit: "Patient profile" },
+  { method: "POST", path: "/patients/:id/consents", permission: "patients.write", audit: "Consent" },
+  { method: "POST", path: "/patients/:id/exports", permission: "patients.view", owner: byId, audit: "Copy of records", action: "export" },
   // Clinical records
-  { method: "GET", path: "/patients/:id/visits", permission: "clinical.view" },
-  { method: "POST", path: "/patients/:id/visits", permission: "clinical.write" },
-  { method: "POST", path: "/visits/:id/complete", permission: "clinical.write" },
-  { method: "GET", path: "/patients/:id/chart", permission: "clinical.view" },
-  { method: "POST", path: "/patients/:id/chart", permission: "clinical.write" },
-  { method: "GET", path: "/patients/:id/notes", permission: "clinical.view" },
-  { method: "POST", path: "/patients/:id/notes", permission: "clinical.write" },
-  { method: "PUT", path: "/notes/:id", permission: "clinical.write" },
-  { method: "POST", path: "/notes/:id/sign", permission: "clinical.write" },
-  { method: "GET", path: "/patients/:id/growth", permission: "clinical.view" },
-  { method: "PUT", path: "/visits/:id/growth", permission: "clinical.write" },
+  { method: "GET", path: "/patients/:id/visits", permission: "clinical.view", audit: "Visits" },
+  { method: "POST", path: "/patients/:id/visits", permission: "clinical.write", audit: "Visit" },
+  { method: "POST", path: "/visits/:id/complete", permission: "clinical.write", owner: via(() => db.visits), audit: "Visit (completed)", action: "update" },
+  { method: "GET", path: "/patients/:id/chart", permission: "clinical.view", audit: "Dental chart" },
+  { method: "POST", path: "/patients/:id/chart", permission: "clinical.write", audit: "Dental chart", action: "update" },
+  { method: "GET", path: "/patients/:id/notes", permission: "clinical.view", audit: "Clinical notes" },
+  { method: "POST", path: "/patients/:id/notes", permission: "clinical.write", audit: "Clinical note" },
+  { method: "PUT", path: "/notes/:id", permission: "clinical.write", owner: via(() => db.notes), audit: "Clinical note" },
+  { method: "POST", path: "/notes/:id/sign", permission: "clinical.write", owner: via(() => db.notes), audit: "Clinical note (signed)", action: "update" },
+  { method: "GET", path: "/patients/:id/growth", permission: "clinical.view", audit: "Growth and habits" },
+  { method: "PUT", path: "/visits/:id/growth", permission: "clinical.write", owner: via(() => db.visits), audit: "Growth and habits" },
   // Photos: clinical photos for staff; a parent's own uploads (the handler narrows the list, Step 5.3)
-  { method: "GET", path: "/patients/:id/photos", permission: ["clinical.view", "uploads.create"], owner: byId },
-  { method: "POST", path: "/patients/:id/photos", permission: ["clinical.write", "uploads.create"], owner: byId },
-  { method: "GET", path: "/photos/:id/file", permission: ["clinical.view", "uploads.create"], owner: via(() => db.photos) },
+  { method: "GET", path: "/patients/:id/photos", permission: ["clinical.view", "uploads.create"], owner: byId, audit: "Photos" },
+  { method: "POST", path: "/patients/:id/photos", permission: ["clinical.write", "uploads.create"], owner: byId, audit: "Photo" },
+  { method: "GET", path: "/photos/:id/file", permission: ["clinical.view", "uploads.create"], owner: via(() => db.photos), audit: "Photo" },
   // Treatment plan
-  { method: "GET", path: "/patients/:id/plan", permission: "plan.view", owner: byId },
-  { method: "POST", path: "/patients/:id/plan", permission: "plan.write" },
-  { method: "PATCH", path: "/plan-items/:id", permission: "plan.write" },
+  { method: "GET", path: "/patients/:id/plan", permission: "plan.view", owner: byId, audit: "Treatment plan" },
+  { method: "POST", path: "/patients/:id/plan", permission: "plan.write", audit: "Treatment plan", action: "update" },
+  { method: "PATCH", path: "/plan-items/:id", permission: "plan.write", owner: via(() => db.planItems), audit: "Treatment plan" },
   // Appointments
-  { method: "GET", path: "/appointments", permission: "appointments.view" }, // the whole calendar: staff only
-  { method: "GET", path: "/patients/:id/appointments", permission: "appointments.view", owner: byId },
-  { method: "POST", path: "/appointments", permission: "appointments.manage" },
-  { method: "PUT", path: "/appointments/:id", permission: "appointments.manage" },
+  { method: "GET", path: "/appointments", permission: "appointments.view", audit: "Appointment calendar" }, // the whole calendar: staff only
+  { method: "GET", path: "/patients/:id/appointments", permission: "appointments.view", owner: byId, audit: "Appointments" },
+  { method: "POST", path: "/appointments", permission: "appointments.manage", audit: "Appointment" },
+  { method: "PUT", path: "/appointments/:id", permission: "appointments.manage", owner: via(() => db.appointments), audit: "Appointment" },
   {
     method: "POST",
     path: "/appointments/:id/status",
     permission: ["appointments.manage", "appointments.confirm"], // the handler limits confirm-only callers
     owner: via(() => db.appointments),
+    audit: "Appointment status",
+    action: "update",
   },
-  { method: "GET", path: "/appointment-requests", permission: "appointments.manage" },
-  { method: "POST", path: "/appointment-requests/:id/handled", permission: "appointments.manage" },
-  { method: "GET", path: "/patients/:id/appointment-requests", permission: ["appointments.manage", "appointments.request"], owner: byId },
-  { method: "POST", path: "/patients/:id/appointment-requests", permission: "appointments.request", owner: byId },
+  { method: "GET", path: "/appointment-requests", permission: "appointments.manage", audit: "Appointment requests" },
+  { method: "POST", path: "/appointment-requests/:id/handled", permission: "appointments.manage", owner: via(() => db.appointmentRequests), audit: "Appointment request", action: "update" },
+  { method: "GET", path: "/patients/:id/appointment-requests", permission: ["appointments.manage", "appointments.request"], owner: byId, audit: "Appointment requests" },
+  { method: "POST", path: "/patients/:id/appointment-requests", permission: "appointments.request", owner: byId, audit: "Appointment request" },
   // Recalls and messages
-  { method: "GET", path: "/due-items", permission: "recalls.manage" },
-  { method: "POST", path: "/due-items/:id/message", permission: "messages.manage" },
+  { method: "GET", path: "/due-items", permission: "recalls.manage", audit: "Recall list" },
+  { method: "POST", path: "/due-items/:id/message", permission: "messages.manage", owner: via(() => db.dueItems), audit: "Recall message" },
   { method: "GET", path: "/message-templates", permission: ["messages.manage", "documents.issue"] }, // documents print post-op text
   { method: "PUT", path: "/message-templates/:kind", permission: "messages.manage" },
-  { method: "GET", path: "/messages", permission: "messages.view", owner: byQuery },
+  { method: "GET", path: "/messages", permission: "messages.view", owner: byQuery, audit: "Messages" },
   // Billing
-  { method: "GET", path: "/patients/:id/invoices", permission: "billing.view", owner: byId },
-  { method: "POST", path: "/patients/:id/invoices", permission: "billing.collect" },
-  { method: "GET", path: "/patients/:id/payments", permission: "billing.view", owner: byId },
-  { method: "GET", path: "/payments", permission: "billing.collect" },
-  { method: "POST", path: "/invoices/:id/payments", permission: "billing.collect" },
+  { method: "GET", path: "/patients/:id/invoices", permission: "billing.view", owner: byId, audit: "Invoices" },
+  { method: "POST", path: "/patients/:id/invoices", permission: "billing.collect", audit: "Invoice" },
+  { method: "GET", path: "/patients/:id/payments", permission: "billing.view", owner: byId, audit: "Payments" },
+  { method: "GET", path: "/payments", permission: "billing.collect", audit: "Daily collections" },
+  { method: "POST", path: "/invoices/:id/payments", permission: "billing.collect", owner: via(() => db.invoices), audit: "Payment" },
   // Documents and reports
-  { method: "GET", path: "/documents", permission: "documents.issue" },
-  { method: "GET", path: "/patients/:id/documents", permission: "documents.issue" },
-  { method: "POST", path: "/patients/:id/documents", permission: "documents.issue" },
-  { method: "GET", path: "/reports/finance", permission: "dashboard.view" },
+  { method: "GET", path: "/documents", permission: "documents.issue", audit: "Documents log" },
+  { method: "GET", path: "/patients/:id/documents", permission: "documents.issue", audit: "Documents" },
+  { method: "POST", path: "/patients/:id/documents", permission: "documents.issue", audit: "Document", action: "export" },
+  { method: "GET", path: "/reports/finance", permission: "dashboard.view", audit: "Financial report" },
+  { method: "GET", path: "/audit-log", permission: "audit.view", audit: "Audit log" },
 ];
 
 /** `/patients/:id/plan` against `/patients/abc/plan` → `{ id: "abc" }`. Segment for segment, no wildcards. */
@@ -130,9 +143,63 @@ function match(pattern: string, path: string): Record<string, string> | undefine
 
 const deny = (status: 401 | 403, message: string) => new HttpResponse(message, { status });
 
+const ACTION_OF: Record<string, AuditAction> = { GET: "view", POST: "create", PUT: "update", PATCH: "update" };
+const REPEAT_WINDOW_MS = 5 * 60_000;
+const MAX_EVENTS = 1000; // prototype only: localStorage is small. The real API keeps every entry.
+
+/**
+ * Appends one entry to the audit trail. Looking at the same record again within five minutes (a refetch,
+ * a tab switch) isn't logged twice; changes always are. NestJS: an interceptor writing to an
+ * insert-only table.
+ */
+export function recordAudit(actor: DemoAccountRecord, action: AuditAction, record: string, patientId?: string) {
+  const now = new Date();
+  const repeat =
+    action === "view" &&
+    db.auditEvents.some(
+      (e) =>
+        e.actorId === actor.id && e.action === action && e.record === record && e.patientId === patientId &&
+        now.getTime() - Date.parse(e.at) < REPEAT_WINDOW_MS,
+    );
+  if (repeat) return;
+  db.auditEvents.push({
+    id: crypto.randomUUID(),
+    clinicId: CLINIC_ID,
+    at: now.toISOString(),
+    actorId: actor.id,
+    actorName: actor.name,
+    actorRole: actor.role,
+    action,
+    record,
+    patientId,
+  });
+  if (db.auditEvents.length > MAX_EVENTS) db.auditEvents.splice(0, db.auditEvents.length - MAX_EVENTS);
+  persist();
+}
+
+/** The patient a request is about, when the path or the record says. */
+function patientOf(rule: Rule, params: Record<string, string>, u: URL): string | undefined {
+  if (rule.path.startsWith("/patients/:id")) return params.id;
+  return typeof rule.owner === "function" ? rule.owner(params, u) : undefined;
+}
+
+/** 403 when this caller may not make this request, otherwise nothing. */
+function refusal(session: MockSession, rule: Rule, params: Record<string, string>, u: URL) {
+  const scopes = [rule.permission].flat().map((p) => permissionScope(session.role, p));
+  if (scopes.includes("all")) return;
+  if (!scopes.includes("own") || !rule.owner) return deny(403, "You don't have access to this");
+  if (rule.owner === "filtered") return;
+  const patientId = rule.owner(params, u);
+  if (!patientId || !session.patientIds.has(patientId)) {
+    return deny(403, "This isn't one of your children's records");
+  }
+}
+
 /**
  * Registered before every feature handler. Answers 401 / 403, or returns nothing so MSW falls through
  * to the feature handler. Stands in for NestJS's auth guard plus a permission decorator per route.
+ * Every audited request is logged here, refused ones as "denied". An allowed write is logged even if
+ * the handler then rejects its input; NestJS logs after the response instead.
  */
 export const accessGate = http.all(url("/*"), ({ request }) => {
   const u = new URL(request.url);
@@ -147,12 +214,8 @@ export const accessGate = http.all(url("/*"), ({ request }) => {
     .find((h) => h.params);
   if (!hit?.params) return deny(403, `No access rule for ${request.method} ${path}`);
 
-  const scopes = [hit.rule.permission].flat().map((p) => permissionScope(session.role, p));
-  if (scopes.includes("all")) return;
-  if (!scopes.includes("own") || !hit.rule.owner) return deny(403, "You don't have access to this");
-  if (hit.rule.owner === "filtered") return;
-  const patientId = hit.rule.owner(hit.params, u);
-  if (!patientId || !session.patientIds.has(patientId)) {
-    return deny(403, "This isn't one of your children's records");
-  }
+  const refused = refusal(session, hit.rule, hit.params, u);
+  const { audit, action = ACTION_OF[request.method] } = hit.rule;
+  if (audit) recordAudit(session, refused ? "denied" : action, audit, patientOf(hit.rule, hit.params, u));
+  return refused;
 });

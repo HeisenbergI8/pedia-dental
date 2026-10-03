@@ -90,7 +90,7 @@ MSW handler (now) or NestJS (later).
   and only import `@/mocks/browser` dynamically from `app/providers.tsx`.
 - `NEXT_PUBLIC_*` env vars are inlined at build time. Changing `.env.local` needs a dev-server restart.
 - Mock data lives in `localStorage`. After changing `seed()` or `Db`, bump the key in `mocks/db.ts`
-  or clear storage, or you'll keep seeing old data. The key is `pedia-dental:mock-db:v14`; each bump gets a
+  or clear storage, or you'll keep seeing old data. The key is `pedia-dental:mock-db:v15`; each bump gets a
   one-line comment above it saying why.
 - `describe` order in `mocks/handlers.test.ts` matters: the tests share one seeded db.
   `describe("financial dashboard")` must stay before `describe("billing")`, because its totals only hold while

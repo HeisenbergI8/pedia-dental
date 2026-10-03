@@ -1,13 +1,14 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { z } from "zod";
-import { DemoAccounts, Session, type LoginInput } from "@pedia/shared";
+import { DemoAccounts, Session, type LoginInput, type LogoutInput } from "@pedia/shared";
 import { api } from "@/lib/api-client";
 import { useSessionStore } from "@/stores/session-store";
 import { ROLE_HOME } from "./access";
 
-export const authKeys = { demo: ["auth", "demo-accounts"] as const };
+export const authKeys = { demo: ["auth", "demo-accounts"] as const, signIn: ["auth", "sign-in"] as const };
 
 /** Prototype only: the one-click accounts. Derived from the data, so refetched like any other query. */
 export function useDemoAccounts() {
@@ -22,11 +23,17 @@ export function useSignIn() {
   const qc = useQueryClient();
   const router = useRouter();
   const signIn = useSessionStore((s) => s.signIn);
+  // Load every role's home page ahead of time, so the switch after signing in doesn't wait for its code.
+  useEffect(() => {
+    for (const href of new Set(Object.values(ROLE_HOME))) router.prefetch(href);
+  }, [router]);
   return useMutation({
+    mutationKey: authKeys.signIn,
     mutationFn: (input: LoginInput) => api("/auth/login", Session, { method: "POST", body: JSON.stringify(input) }),
     onSuccess: (session) => {
       signIn(session); // cookie first, so refetches below already carry the new user
-      qc.removeQueries();
+      // Demo accounts are the same for everyone, so keep them: the login screen stays put until it leaves.
+      qc.removeQueries({ predicate: (q) => q.queryKey[0] !== authKeys.demo[0] });
       router.replace(ROLE_HOME[session.user.role]);
     },
   });

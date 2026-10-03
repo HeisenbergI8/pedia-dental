@@ -51,6 +51,8 @@ export function FinanceDashboard() {
   const patients = usePatients().data ?? [];
   const procedures = useProcedures().data ?? [];
   const [period, setPeriod] = useState<Period>("day");
+  const [allUnpaid, setAllUnpaid] = useState(false);
+  const [allOwing, setAllOwing] = useState(false);
   const header = <PageHeader title="Dashboard" description={`Computed from invoices and payments as of ${formatDate(today)}. Collections are net of refunds.`} />;
 
   if (!isAdmin) {
@@ -118,7 +120,7 @@ export function FinanceDashboard() {
             <p className="text-sm text-ink-muted">No one owes a balance.</p>
           ) : (
             <Table head={["Patient", "Balance"]}>
-              {s.outstanding.slice(0, 10).map((r) => (
+              {(allOwing ? s.outstanding : s.outstanding.slice(0, 10)).map((r) => (
                 <tr key={r.patientId}>
                   <td className="py-2 pr-3">{patientLink(r.patientId)}</td>
                   <td className="py-2 text-right tabular-nums">{formatPeso(r.balance)}</td>
@@ -126,14 +128,18 @@ export function FinanceDashboard() {
               ))}
             </Table>
           )}
-          {s.outstanding.length > 10 && <p className="text-sm text-ink-muted">and {s.outstanding.length - 10} more</p>}
+          {s.outstanding.length > 10 && (
+            <Button variant="outline" size="sm" onClick={() => setAllOwing((v) => !v)}>
+              {allOwing ? "Show fewer" : `Show all ${s.outstanding.length}`}
+            </Button>
+          )}
         </SectionCard>
         <SectionCard title={`Unpaid appointments (${s.unpaidAppointments.length})`} description="Done in the last 30 days, and not billed or not fully paid">
           {s.unpaidAppointments.length === 0 ? (
             <p className="text-sm text-ink-muted">Every recent appointment is billed and paid.</p>
           ) : (
             <Table head={["Date", "Patient", "Reason", "Owed"]}>
-              {s.unpaidAppointments.map((a) => (
+              {(allUnpaid ? s.unpaidAppointments : s.unpaidAppointments.slice(0, 10)).map((a) => (
                 <tr key={a.appointmentId}>
                   <td className="py-2 pr-3 whitespace-nowrap tabular-nums">{format(parseISO(a.startsAt), "MMM d")}</td>
                   <td className="py-2 pr-3">{patientLink(a.patientId)}</td>
@@ -142,6 +148,11 @@ export function FinanceDashboard() {
                 </tr>
               ))}
             </Table>
+          )}
+          {s.unpaidAppointments.length > 10 && (
+            <Button variant="outline" size="sm" onClick={() => setAllUnpaid((v) => !v)}>
+              {allUnpaid ? "Show fewer" : `Show all ${s.unpaidAppointments.length}`}
+            </Button>
           )}
         </SectionCard>
       </div>

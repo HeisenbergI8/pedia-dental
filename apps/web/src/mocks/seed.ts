@@ -1,5 +1,5 @@
 import { faker } from "@faker-js/faker";
-import { addDays, addMinutes, differenceInYears, format, parseISO, setHours, startOfDay, subMonths } from "date-fns";
+import { addDays, addMinutes, differenceInYears, format, parseISO, setHours, startOfDay, subDays, subMonths } from "date-fns";
 import {
   PERMANENT_TEETH,
   PRIMARY_TEETH,
@@ -10,6 +10,7 @@ import {
   reminderSendAt,
   surfacesFor,
   type Appointment,
+  type AuditEvent,
   type Chair,
   type ChartEntry,
   type ClinicalNote,
@@ -104,6 +105,11 @@ export function seed(): Db {
       createdAt,
     };
   });
+  // Every sixth child has no data privacy consent yet, so the overview's "missing" notice has examples.
+  patients.forEach((p, i) => {
+    if (i % 6 === 5) return;
+    p.consents.push({ id: `consent_privacy_${i}`, guardianId: p.guardians[0].id, scope: "data_privacy", date: p.createdAt.slice(0, 10) });
+  });
 
   // Past visits, oldest first, all completed. No visit is left in progress.
   const visits: Visit[] = patients.flatMap((p) =>
@@ -177,6 +183,7 @@ export function seed(): Db {
     messages: seedMessages(appointments, { templates: messageTemplates, patients, staff: STAFF }),
     documents: [],
     appointmentRequests: [],
+    auditEvents: seedAudit(patients, example.planItems[0]?.patientId),
   };
 }
 
@@ -477,4 +484,52 @@ function seedSibling(patients: Patient[], olderId: string | undefined) {
     status: "booked",
   };
   return { patients: [sibling], appointments: [appointment] };
+}
+
+/**
+ * A few days of audit trail, so the log isn't empty on a fresh demo: sign-ins, a dentist charting and
+ * signing, front desk taking a payment and being refused the financial report, a parent checking the
+ * plan. Times are relative to today. No faker calls.
+ */
+function seedAudit(patients: Patient[], exampleId: string | undefined): AuditEvent[] {
+  const child = patients.find((p) => p.id === exampleId) ?? patients[0];
+  const other = patients[3];
+  const guardian = child.guardians[0];
+  const actors = {
+    admin: { actorId: "staff_delacruz", actorName: "Carmen Dela Cruz", actorRole: "admin" },
+    desk: { actorId: "staff_cruz", actorName: "Liza Cruz", actorRole: "front_desk" },
+    reyes: { actorId: "staff_reyes", actorName: "Dr. Ana Reyes", actorRole: "dentist" },
+    santos: { actorId: "staff_santos", actorName: "Dr. Miguel Santos", actorRole: "dentist" },
+    parent: { actorId: `guardian.${guardian.id}`, actorName: guardian.fullName, actorRole: "parent" }, // the account id format in demo-accounts.ts
+  } as const;
+  type Row = [daysAgo: number, time: string, actor: keyof typeof actors, action: AuditEvent["action"], record: string, patientId?: string];
+  const rows: Row[] = [
+    [2, "07:58", "admin", "sign_in", "Session"],
+    [2, "08:03", "admin", "view", "Financial report"],
+    [2, "08:10", "admin", "view", "Audit log"],
+    [1, "07:49", "desk", "sign_in_failed", "Session"],
+    [1, "07:50", "desk", "sign_in", "Session"],
+    [1, "07:52", "desk", "view", "Appointment calendar"],
+    [1, "09:15", "desk", "view", "Patient profile", other.id],
+    [1, "09:16", "desk", "update", "Patient profile", other.id],
+    [1, "10:02", "reyes", "sign_in", "Session"],
+    [1, "10:05", "reyes", "view", "Dental chart", child.id],
+    [1, "10:31", "reyes", "update", "Dental chart", child.id],
+    [1, "10:44", "reyes", "update", "Clinical note (signed)", child.id],
+    [1, "10:47", "reyes", "export", "Document", child.id],
+    [1, "11:05", "desk", "create", "Payment", child.id],
+    [1, "11:20", "desk", "denied", "Financial report"],
+    [1, "12:30", "santos", "sign_in", "Session"],
+    [1, "12:34", "santos", "view", "Clinical notes", other.id],
+    [1, "12:51", "santos", "timed_out", "Session"],
+    [0, "06:40", "parent", "sign_in", "Session"],
+    [0, "06:41", "parent", "view", "Treatment plan", child.id],
+    [0, "06:43", "parent", "view", "Invoices", child.id],
+    [0, "06:45", "parent", "sign_out", "Session"],
+  ];
+  return rows.map(([daysAgo, time, actor, action, record, patientId], i) => {
+    const [h, m] = time.split(":").map(Number);
+    const at = addMinutes(setHours(startOfDay(subDays(new Date(), daysAgo)), h), m);
+    return { id: `audit_seed_${i}`, clinicId: CLINIC_ID, at: at.toISOString(), ...actors[actor], action, record, patientId };
+  });
 }

@@ -90,6 +90,39 @@ body {
   color: var(--color-ink);
 }
 
+/* Tailwind v4 dropped the pointer cursor on buttons; restore it for everything clickable. */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="tab"],
+  [role="checkbox"],
+  [role="radio"],
+  [role="switch"],
+  [role="option"],
+  [role="menuitem"],
+  [role="menuitemcheckbox"],
+  [role="menuitemradio"],
+  [role="combobox"],
+  a[href],
+  summary,
+  label[for],
+  select,
+  input[type="checkbox"],
+  input[type="radio"],
+  input[type="file"],
+  input[type="submit"],
+  input[type="button"],
+  input[type="reset"] {
+    cursor: pointer;
+  }
+
+  :disabled,
+  [aria-disabled="true"],
+  [data-disabled] {
+    cursor: not-allowed;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -168,6 +201,10 @@ body {
 .calendar .rbc-event,
 .calendar .rbc-day-slot .rbc-background-event {
   padding: 2px 6px;
+}
+
+.calendar .rbc-event {
+  cursor: pointer;
 }
 
 .calendar .rbc-event:focus-visible {

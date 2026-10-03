@@ -1,5 +1,7 @@
 "use client";
 import Link from "next/link";
+import { useState } from "react";
+import { useIsMutating } from "@tanstack/react-query";
 import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { CalendarCheckIcon, HeartHandshakeIcon, ShieldCheckIcon, SmileIcon, StethoscopeIcon, type LucideIcon } from "lucide-react";
@@ -8,7 +10,7 @@ import { FormField } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ROLE_HOME, ROLE_LABEL, useSession } from "../access";
-import { useDemoAccounts, useSignIn } from "../api";
+import { authKeys, useDemoAccounts, useSignIn } from "../api";
 
 const ROLE_ICON: Record<Role, LucideIcon> = {
   admin: ShieldCheckIcon,
@@ -22,6 +24,10 @@ export function LoginScreen() {
   const signIn = useSignIn();
   const session = useSession();
   const accounts = demo.data?.accounts ?? [];
+  // The account this page opened with. Once a sign-in starts, or the session changes to someone else,
+  // the "signed in as" line would only flash the old or new name while the next page loads.
+  const [openedAs] = useState(() => session?.user.id);
+  const signingIn = useIsMutating({ mutationKey: authKeys.signIn }) > 0 || session?.user.id !== openedAs;
   const busyEmail = signIn.isPending ? signIn.variables?.email : undefined;
   const pick = (a: DemoAccount) => signIn.mutate({ email: a.email, password: demo.data?.password ?? "" });
 
@@ -39,7 +45,7 @@ export function LoginScreen() {
           <p className="text-ink-muted">This is a demo with sample data. Choose an account to see the app as that person.</p>
         </header>
 
-        {session && (
+        {session && !signingIn && (
           <p role="status" className="rounded-lg border border-line bg-surface px-4 py-3 text-sm">
             You&apos;re signed in as <strong>{session.user.name}</strong> ({ROLE_LABEL[session.user.role]}).{" "}
             <Link href={ROLE_HOME[session.user.role]} className="font-medium text-brand underline-offset-2 hover:underline">
