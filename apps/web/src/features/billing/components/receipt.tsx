@@ -1,6 +1,6 @@
 "use client";
 import { PrinterIcon } from "lucide-react";
-import { CLINIC_NAME } from "@pedia/shared";
+import { KidsmileLogo, Loading } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { useStaff } from "@/features/clinic/api";
 import { DownloadDocumentButton } from "@/features/documents/components/download-document-button";
@@ -15,7 +15,7 @@ export function Receipt({ patientId, paymentId }: { patientId: string; paymentId
   const payments = usePayments(patientId);
   const staff = useStaff().data ?? [];
 
-  if (patient.isLoading || invoices.isLoading || payments.isLoading) return <p className="text-ink-muted">Loading receipt…</p>;
+  if (patient.isLoading || invoices.isLoading || payments.isLoading) return <Loading label="Loading receipt…" />;
   const all = payments.data ?? [];
   const payment = all.find((p) => p.id === paymentId);
   const invoice = invoices.data?.find((i) => i.id === payment?.invoiceId);
@@ -32,8 +32,8 @@ export function Receipt({ patientId, paymentId }: { patientId: string; paymentId
         </Button>
       </div>
       <article className="mx-auto max-w-xl space-y-5 rounded-xl border border-line bg-surface p-6 shadow-card print:max-w-none print:border-0 print:p-0 print:shadow-none">
-        <header className="space-y-1 text-center">
-          <p className="text-lg font-semibold">{CLINIC_NAME}</p>
+        <header className="flex flex-col items-center gap-1 border-b-2 border-brand-soft pb-4 text-center">
+          <KidsmileLogo className="mb-2 w-44" />
           <h1 className="text-base font-semibold tracking-wide uppercase">{receipt.title}</h1>
           <p className="text-sm text-ink-muted">{receipt.subtitle}</p>
         </header>

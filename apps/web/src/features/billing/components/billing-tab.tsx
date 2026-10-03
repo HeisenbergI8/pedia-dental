@@ -13,6 +13,7 @@ import { formatDate } from "@/lib/format";
 import { METHOD_LABEL, useInvoices, usePayments } from "../api";
 import { CreateInvoice } from "./create-invoice";
 import { PaymentDialog } from "./payment-dialog";
+import { Loading } from "@/components/brand";
 
 export function BillingTab({ patientId }: { patientId: string }) {
   const invoices = useInvoices(patientId);
@@ -21,7 +22,7 @@ export function BillingTab({ patientId }: { patientId: string }) {
   const [paying, setPaying] = useState<{ invoice: Invoice; refund: boolean } | null>(null);
   const canCollect = useCan()("billing.collect");
 
-  if (invoices.isLoading || payments.isLoading || plan.isLoading) return <p className="text-ink-muted">Loading billing…</p>;
+  if (invoices.isLoading || payments.isLoading || plan.isLoading) return <Loading label="Loading billing…" />;
   if (invoices.error || payments.error || plan.error) return <p className="text-danger">Couldn&apos;t load billing. Refresh to try again.</p>;
   const allInvoices = invoices.data ?? [];
   const allPayments = payments.data ?? [];

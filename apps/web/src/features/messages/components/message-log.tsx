@@ -11,6 +11,7 @@ import { usePatients } from "@/features/patients/api";
 import { formatPhone } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { KIND_LABEL, MESSAGE_STATUS_LABEL, useMessages } from "../api";
+import { Loading } from "@/components/brand";
 
 const STATUS_TONE: Record<MessageStatus, string> = {
   queued: "bg-info-bg text-info",
@@ -24,7 +25,7 @@ export function MessageLog() {
   const patients = usePatients().data ?? [];
   const [status, setStatus] = useState<MessageStatus | "all">("all");
 
-  if (isLoading) return <p className="text-ink-muted">Loading messages…</p>;
+  if (isLoading) return <Loading label="Loading messages…" />;
   if (error) return <p className="text-danger">Couldn&apos;t load messages. Refresh to try again.</p>;
   const shown = status === "all" ? rows : rows.filter((m) => m.status === status);
   const options = [

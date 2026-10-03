@@ -11,6 +11,7 @@ import { buildDocument, type DocContent, type DocSources } from "../content";
 import { DocumentOptions, sourceOptions, type Draft } from "./document-options";
 import { DocumentPreview } from "./document-preview";
 import { DownloadDocumentButton } from "./download-document-button";
+import { Loading } from "@/components/brand";
 
 const DESCRIPTION: Record<DocumentType, string> = {
   dental_certificate: "Proof of a visit, for school or work",
@@ -53,7 +54,7 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
   const [showErrors, setShowErrors] = useState(false);
 
   if (sources.error) return <p className="text-danger">Couldn&apos;t load this patient&apos;s record. Refresh to try again.</p>;
-  if (!sources.data) return <p className="text-ink-muted">Loading documents…</p>;
+  if (!sources.data) return <Loading label="Loading documents…" />;
   const src = sources.data;
   const current = draft ?? initialDraft(type, src);
   const parsed = toInput(type, current);
@@ -125,7 +126,7 @@ function IssuedDocuments({ patientId, src }: { patientId: string; src: DocSource
   return (
     <SectionCard title="Issued documents">
       {isLoading ? (
-        <p className="text-sm text-ink-muted">Loading…</p>
+        <Loading label="Loading…" compact />
       ) : docs.length === 0 ? (
         <EmptyState icon={FileTextIcon} title="No documents issued yet">Each document you download is listed here.</EmptyState>
       ) : (

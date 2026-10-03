@@ -10,6 +10,7 @@ import { CARE_KINDS, KIND_LABEL, usePatientMessages } from "@/features/messages/
 import { usePlan } from "@/features/plan/api";
 import { ClipboardListIcon, HeartPulseIcon, ReceiptIcon } from "lucide-react";
 import { useActiveChild } from "../use-child";
+import { Loading } from "@/components/brand";
 
 /** Plain words for parents. The staff labels say "Declined", which reads like a refusal of care. */
 const PLAN_STATUS: Record<PlanItemStatus, string> = {
@@ -31,7 +32,7 @@ export function PortalPlan() {
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-semibold tracking-tight">{child.firstName}&apos;s treatment plan</h1>
-      {isLoading ? <p className="text-ink-muted">Loading the plan…</p> : error ? loadError : items.length === 0 ? (
+      {isLoading ? <Loading label="Loading the plan…" /> : error ? loadError : items.length === 0 ? (
         <EmptyState icon={ClipboardListIcon} title="Nothing planned right now">
           After a check-up, the dentist&apos;s plan for {child.firstName} will show here.
         </EmptyState>
@@ -69,7 +70,7 @@ export function PortalBilling() {
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-semibold tracking-tight">Bills for {child.firstName}</h1>
-      {invoices.isLoading || payments.isLoading ? <p className="text-ink-muted">Loading bills…</p> : invoices.error || payments.error ? loadError : allInvoices.length === 0 ? (
+      {invoices.isLoading || payments.isLoading ? <Loading label="Loading bills…" /> : invoices.error || payments.error ? loadError : allInvoices.length === 0 ? (
         <EmptyState icon={ReceiptIcon} title="No bills yet">Bills from {child.firstName}&apos;s visits will show here.</EmptyState>
       ) : (
         <>
@@ -121,7 +122,7 @@ export function PortalCare() {
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-semibold tracking-tight">Care instructions for {child.firstName}</h1>
-      {isLoading ? <p className="text-ink-muted">Loading instructions…</p> : error ? loadError : care.length === 0 ? (
+      {isLoading ? <Loading label="Loading instructions…" /> : error ? loadError : care.length === 0 ? (
         <EmptyState icon={HeartPulseIcon} title="No instructions yet">
           After a treatment, the clinic&apos;s instructions for {child.firstName} will show here.
         </EmptyState>

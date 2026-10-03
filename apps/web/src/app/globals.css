@@ -1,18 +1,31 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* Design tokens. Change the palette here, not in components. */
+/* Design tokens. Change the palette here, not in components.
+   Brand: Kidsmile Pediatric Dental Clinic. The logo's "smile" teal is the brand hue; its crayon
+   colours (orange K, purple i, lime d, yellow handle, pink bristles) are decoration only. */
 @theme {
-  --color-ground: #f4f8f7;
+  --color-ground: #f4f9f9;
   --color-surface: #ffffff;
-  --color-ink: #12302f;
-  --color-ink-muted: #4a6261; /* 5.9:1 on ground, 6.4:1 on white */
-  --color-line: #d5e2e0;
-  --color-line-strong: #b4c8c5; /* decorative dashed outlines */
-  --color-input-border: #7a9390; /* 3.3:1 on white: a field's edge must be visible (WCAG 1.4.11) */
-  --color-brand: #0e6b66; /* 6.3:1 on white */
+  --color-ink: #16282b;
+  --color-ink-muted: #4c6265; /* 6.1:1 on ground, 6.5:1 on white */
+  --color-line: #d6e6e6;
+  --color-line-strong: #b2cccc; /* decorative dashed outlines */
+  --color-input-border: #7a9396; /* 3.3:1 on white: a field's edge must be visible (WCAG 1.4.11) */
+  --color-brand: #17686e; /* the logo teal, deepened to 6.5:1 on white for text and buttons */
   --color-brand-ink: #ffffff;
-  --color-brand-subtle: #e3f1ef; /* selected nav, active rows */
+  --color-brand-subtle: #e3f3f3; /* selected nav, active rows */
+  --color-brand-soft: #7ec4c6; /* the logo teal itself: fills and accents, never text */
+
+  /* Logo crayons. Decorative only (logo, loader, brand strips, portal illustration). Never status:
+     orange would compete with the clinical alert colours. */
+  --color-crayon-orange: #e07a48;
+  --color-crayon-purple: #694ab4;
+  --color-crayon-lime: #b8d050;
+  --color-crayon-teal: #7ec4c6;
+  --color-crayon-yellow: #f2c35c;
+  --color-crayon-pink: #f2c8c0;
+  --color-crayon-outline: #1d1d1f;
   /* Clinical alerts only (allergies, conditions). Never decorative. */
   --color-alert: #8a3b00; /* 6.6:1 on alert-bg */
   --color-alert-bg: #fdecd9;
@@ -41,12 +54,15 @@
   --color-tooth-pulpotomy-bg: #ece3f7;
 
   /* Charts (dashboard). One series per chart, so one hue. */
-  --color-chart-bar: #0e6b66; /* = brand: 6.3:1 on white */
+  --color-chart-bar: #17686e; /* = brand: 6.5:1 on white */
   --color-chart-negative: #a12622; /* = danger: net refunds */
-  --color-chart-grid: #e6eeec;
+  --color-chart-grid: #e4efef;
 
   --font-sans: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
-  --shadow-card: 0 1px 2px 0 rgb(18 48 47 / 0.05);
+  /* Fredoka echoes the logo's rounded letters. Headings and brand moments only; body stays Figtree. */
+  --font-display: var(--font-fredoka), var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
+  --shadow-card: 0 1px 2px 0 rgb(22 40 43 / 0.05), 0 1px 3px 0 rgb(22 40 43 / 0.04);
+  --tracking-brand: 0.32em; /* the logo's spaced "PEDIATRIC DENTAL CLINIC" line */
 }
 
 /* shadcn/ui names, mapped onto the tokens above so components/ui stays unedited. */
@@ -69,7 +85,7 @@
   --color-border: var(--color-line);
   --color-input: var(--color-input-border);
   --color-ring: var(--color-brand);
-  --radius: 0.5rem;
+  --radius: 0.625rem;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -129,6 +145,137 @@ body {
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* Page and card titles carry the brand's rounded face. */
+@layer base {
+  h1,
+  h2 {
+    font-family: var(--font-display);
+  }
+}
+
+/* A strip of the logo's crayon colours: the brand's signature, used once per surface. */
+.brand-strip {
+  background: linear-gradient(
+    90deg,
+    var(--color-crayon-orange) 0 20%,
+    var(--color-crayon-purple) 20% 40%,
+    var(--color-crayon-lime) 40% 60%,
+    var(--color-crayon-teal) 60% 80%,
+    var(--color-crayon-yellow) 80% 100%
+  );
+}
+
+/* ---- KidsmileMark: the animated logo (components/brand.tsx) ---- */
+.ks-letter {
+  display: inline-block;
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  color: var(--ks-fill);
+  /* An ink outline under the fill and an offset crayon shadow, as in the hand-drawn logo. */
+  -webkit-text-stroke: 0.1em var(--color-crayon-outline);
+  paint-order: stroke fill;
+  text-shadow: 0.06em 0.05em 0 var(--ks-shadow);
+  transform-origin: 50% 100%;
+  animation: ks-hop 1.6s cubic-bezier(0.3, 0.7, 0.4, 1) infinite;
+}
+.ks-letter[data-crayon="orange"] {
+  --ks-fill: var(--color-crayon-orange);
+  --ks-shadow: color-mix(in oklab, var(--color-crayon-orange) 45%, white);
+}
+.ks-letter[data-crayon="purple"] {
+  --ks-fill: var(--color-crayon-purple);
+  --ks-shadow: color-mix(in oklab, var(--color-crayon-purple) 40%, white);
+}
+.ks-letter[data-crayon="lime"] {
+  --ks-fill: var(--color-crayon-lime);
+  --ks-shadow: color-mix(in oklab, var(--color-crayon-lime) 50%, white);
+}
+.ks-letter[data-crayon="teal"] {
+  --ks-fill: var(--color-crayon-teal);
+  --ks-shadow: color-mix(in oklab, var(--color-crayon-teal) 50%, white);
+}
+/* Room after the "e" for the bristle head, as in the logo. The brush takes the word's width
+   (w-0 min-w-full), so the two scale together. */
+.ks-word {
+  padding-right: 1.2em;
+  padding-left: 0.05em;
+}
+.ks-brush {
+  margin-top: -0.2em; /* the handle runs just under the letters, as in the logo */
+}
+.ks-brush-body {
+  animation: ks-scrub 0.8s ease-in-out infinite alternate;
+}
+.ks-bubble {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation: ks-bubble 1.35s ease-out infinite;
+}
+.ks-fade-in {
+  animation: ks-fade-in 0.2s ease-out 0.15s both;
+}
+
+@keyframes ks-hop {
+  0%,
+  55%,
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+  15% {
+    transform: translateY(-0.28em) scale(0.96, 1.05);
+  }
+  30% {
+    transform: translateY(0) scale(1.06, 0.92);
+  }
+  40% {
+    transform: translateY(-0.06em) scale(1, 1);
+  }
+}
+@keyframes ks-scrub {
+  from {
+    transform: translateX(-4%);
+  }
+  to {
+    transform: translateX(4%);
+  }
+}
+@keyframes ks-bubble {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.3);
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-22px) scale(1);
+  }
+}
+@keyframes ks-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Reduced motion: the logo stands still rather than flickering through 0.01ms loops. */
+@media (prefers-reduced-motion: reduce) {
+  .ks-letter,
+  .ks-brush-body,
+  .ks-fade-in {
+    animation: none !important;
+  }
+  .ks-bubble {
+    display: none;
   }
 }
 

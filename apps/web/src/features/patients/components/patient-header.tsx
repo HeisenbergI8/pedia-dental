@@ -7,6 +7,7 @@ import { formatDate, formatPhone, initials } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { usePatient } from "../api";
 import { formatAge } from "../age";
+import { Loading } from "@/components/brand";
 
 const SEX_LABEL = { female: "Female", male: "Male" } as const;
 
@@ -43,7 +44,7 @@ export function PatientHeader({ patientId }: { patientId: string }) {
         <ChevronLeftIcon className="size-4" aria-hidden /> Patients
       </Link>
       {isLoading || !p ? (
-        <p className="py-3 text-ink-muted">Loading patient…</p>
+        <Loading label="Loading patient…" compact />
       ) : (
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-6">
           <div className="flex min-w-0 items-center gap-3">

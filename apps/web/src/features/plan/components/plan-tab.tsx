@@ -22,6 +22,7 @@ import { useNoteTemplates, useNotes } from "@/features/notes/api";
 import { useVisits } from "@/features/visits/api";
 import { cn } from "@/lib/utils";
 import { PLAN_STATUS_LABEL, useAddPlanItem, usePlan, useSetPlanItemStatus } from "../api";
+import { Loading } from "@/components/brand";
 
 export function PlanTab({ patientId }: { patientId: string }) {
   const { data: items, isLoading, error } = usePlan(patientId);
@@ -32,7 +33,7 @@ export function PlanTab({ patientId }: { patientId: string }) {
   const setStatus = useSetPlanItemStatus(patientId);
   const canEdit = useCan()("plan.write");
 
-  if (isLoading) return <p className="text-ink-muted">Loading treatment plan…</p>;
+  if (isLoading) return <Loading label="Loading treatment plan…" />;
   if (error || !items) return <p className="text-danger">Couldn&apos;t load the treatment plan.</p>;
 
   const { done, total } = planProgress(items);

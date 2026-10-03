@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { STATUS_LABEL, usePatientAppointments } from "../api";
 import { AppointmentForm, type AppointmentDraft } from "./appointment-form";
+import { Loading } from "@/components/brand";
 
 const UPCOMING = new Set(["booked", "confirmed", "arrived", "in_chair"]);
 
@@ -29,7 +30,7 @@ export function PatientAppointments({ patientId }: { patientId: string }) {
           Book appointment
         </Button>
       </div>
-      {isLoading && <p className="text-ink-muted">Loading appointments…</p>}
+      {isLoading && <Loading label="Loading appointments…" />}
       {error && <p className="text-danger">Couldn&apos;t load appointments.</p>}
       {data && upcoming.length === 0 && <p className="text-ink-muted">Nothing booked.</p>}
       {upcoming.length > 0 && (

@@ -11,10 +11,11 @@ import {
   MessageSquareIcon,
   ReceiptIcon,
   SettingsIcon,
-  SmileIcon,
   UsersIcon,
   type LucideIcon,
 } from "lucide-react";
+import { KidsmileLogo, Loading } from "@/components/brand";
+import { useNavigationPending } from "@/components/navigation-pending";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { routePermission, useCan } from "@/features/auth/access";
@@ -37,16 +38,10 @@ const NAV: NavItem[] = [
   { href: "/settings", label: "Settings", icon: SettingsIcon },
 ];
 
-function Brand() {
+function Brand({ className }: { className?: string }) {
   return (
-    <Link href="/" className="flex items-center gap-2.5 rounded-md font-semibold">
-      <span className="flex size-8 items-center justify-center rounded-lg bg-brand text-brand-ink">
-        <SmileIcon className="size-5" aria-hidden />
-      </span>
-      <span className="leading-tight">
-        Pedia Dental
-        <span className="block text-xs font-normal text-ink-muted">Clinic</span>
-      </span>
+    <Link href="/" aria-label="Kidsmile home" className="inline-flex rounded-md">
+      <KidsmileLogo priority className={className} />
     </Link>
   );
 }
@@ -99,6 +94,7 @@ function RouteGate({ children }: { children: ReactNode }) {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const navigating = useNavigationPending();
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[15rem_1fr] print:block">
@@ -110,9 +106,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       </a>
 
       {/* Desktop: a fixed sidebar. */}
-      <aside className="sticky top-0 hidden h-screen flex-col gap-8 border-r border-line bg-surface px-3 py-5 lg:flex print:hidden!">
+      <aside className="sticky top-0 hidden h-screen flex-col gap-6 border-r border-line bg-surface px-3 pt-6 pb-5 lg:flex print:hidden!">
+        <span aria-hidden className="brand-strip absolute inset-x-0 top-0 h-1" />
         <div className="px-2">
-          <Brand />
+          <Brand className="w-44" />
         </div>
         <div className="flex-1 overflow-y-auto">
           <Nav />
@@ -122,6 +119,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* Tablet and phone: a top bar, with the same nav in a drawer. */}
       <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-line bg-surface/95 px-4 backdrop-blur lg:hidden print:hidden">
+        <span aria-hidden className="brand-strip absolute inset-x-0 top-0 h-1" />
         <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
           <SheetTrigger asChild>
             <Button variant="ghost" size="icon" aria-label="Open menu" className="-ml-2 size-10">
@@ -130,21 +128,25 @@ export function AppShell({ children }: { children: ReactNode }) {
           </SheetTrigger>
           <SheetContent side="left" className="w-72 gap-6 p-4 pt-5">
             <SheetTitle className="sr-only">Menu</SheetTitle>
-            <Brand />
+            <Brand className="w-40" />
             <div className="flex-1 overflow-y-auto">
               <Nav onNavigate={() => setMenuOpen(false)} />
             </div>
             <AccountMenu />
           </SheetContent>
         </Sheet>
-        <Brand />
+        <Brand className="w-28" />
         <div className="ml-auto">
           <AccountMenu compact />
         </div>
       </header>
 
       <main id="main" tabIndex={-1} className="mx-auto w-full max-w-7xl min-w-0 px-4 py-5 outline-none sm:px-6 lg:px-8 lg:py-8 print:max-w-none print:p-0">
-        <RouteGate>{children}</RouteGate>
+        {navigating && <Loading label="Opening…" />}
+        {/* Hidden, not unmounted, so a navigation that doesn't land leaves the page as it was. */}
+        <div hidden={navigating} className="contents">
+          <RouteGate>{children}</RouteGate>
+        </div>
       </main>
     </div>
   );

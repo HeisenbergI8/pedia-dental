@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { photoFileUrl, usePhotos, useUploadPhoto } from "@/features/photos/api";
 import { useActiveChild } from "../use-child";
+import { Loading } from "@/components/brand";
 
 const KIND = { document: "Medical document (clearance, lab result)", intraoral: "Photo of teeth or mouth" } as const;
 const UploadForm = z.object({
@@ -81,7 +82,7 @@ export function PortalUploads() {
         </FormProvider>
       </SectionCard>
 
-      {isLoading ? <p className="text-ink-muted">Loading uploads…</p> : error ? (
+      {isLoading ? <Loading label="Loading uploads…" /> : error ? (
         <p role="alert" className="text-danger">We couldn&apos;t load your uploads. Refresh the page to try again.</p>
       ) : files.length === 0 ? (
         <EmptyState icon={UploadIcon} title="Nothing uploaded yet">Photos and documents you send will show here.</EmptyState>

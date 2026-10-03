@@ -11,6 +11,7 @@ import { Can } from "@/features/auth/access";
 import { formatPhone, initials } from "@/lib/format";
 import { usePatients } from "../api";
 import { formatAge } from "../age";
+import { Loading } from "@/components/brand";
 
 const primaryGuardian = (p: Patient) => p.guardians.find((g) => g.isPrimary) ?? p.guardians[0];
 const alertsOf = (p: Patient) => [...p.allergies, ...p.medicalConditions, ...p.alerts];
@@ -71,7 +72,7 @@ export function PatientList() {
       </p>
 
       {error && <p className="text-danger">Couldn&apos;t load patients. Refresh to try again.</p>}
-      {isLoading && <p className="text-ink-muted">Loading patients…</p>}
+      {isLoading && <Loading label="Loading patients…" />}
 
       {data?.length === 0 &&
         (search ? (

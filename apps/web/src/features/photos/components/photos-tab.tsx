@@ -16,6 +16,7 @@ import { useStaff } from "@/features/clinic/api";
 import { useVisits } from "@/features/visits/api";
 import { photoFileUrl, usePhotos } from "../api";
 import { TYPE_LABEL, UploadPhotoDialog } from "./upload-photo-dialog";
+import { Loading } from "@/components/brand";
 
 const describe = (p: ClinicalPhoto) =>
   [TYPE_LABEL[p.type], p.stage, p.tooth && `tooth ${p.tooth}`, format(parseISO(p.takenOn), "MMM d, yyyy")]
@@ -112,7 +113,7 @@ export function PhotosTab({ patientId }: { patientId: string }) {
           <UploadPhotoDialog patientId={patientId} />
         </Can>
       </div>
-      {isLoading && <p className="text-ink-muted">Loading photos…</p>}
+      {isLoading && <Loading label="Loading photos…" />}
       {error && <p className="text-danger">Couldn&apos;t load photos.</p>}
       {photos?.length === 0 && (
         <EmptyState icon={CameraIcon} title="No photos yet">

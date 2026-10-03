@@ -9,6 +9,7 @@ import { SectionCard } from "@/components/section-card";
 import { useStaff } from "@/features/clinic/api";
 import { usePatients } from "@/features/patients/api";
 import { useDocumentLog } from "../api";
+import { Loading } from "@/components/brand";
 
 /** Every document issued across the clinic. Documents are created from a patient's Documents tab. */
 export function DocumentLog() {
@@ -19,7 +20,7 @@ export function DocumentLog() {
     <div className="space-y-5">
       <PageHeader title="Documents" description="Every certificate, prescription, receipt and letter issued, newest first. To create one, open the patient and choose Documents." />
       {isLoading ? (
-        <p className="text-ink-muted">Loading documents…</p>
+        <Loading label="Loading documents…" />
       ) : error ? (
         <p className="text-danger">Couldn&apos;t load documents. Refresh to try again.</p>
       ) : docs.length === 0 ? (

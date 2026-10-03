@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { useStaff } from "@/features/clinic/api";
 import { cn } from "@/lib/utils";
 import { useVisits } from "../api";
+import { Loading } from "@/components/brand";
 
 export function VisitList({ patientId }: { patientId: string }) {
   const { data: visits, isLoading, error } = useVisits(patientId);
@@ -13,7 +14,7 @@ export function VisitList({ patientId }: { patientId: string }) {
   return (
     <section className="space-y-3 rounded-xl border border-line bg-surface p-4 shadow-card sm:p-5">
       <h2 className="text-base font-semibold">Visits</h2>
-      {isLoading && <p className="text-ink-muted">Loading visits…</p>}
+      {isLoading && <Loading label="Loading visits…" />}
       {error && <p className="text-danger">Couldn&apos;t load visits.</p>}
       {visits?.length === 0 && <p className="text-ink-muted">No visits yet.</p>}
       {!!visits?.length && (

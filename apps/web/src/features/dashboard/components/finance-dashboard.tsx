@@ -16,6 +16,7 @@ import { env } from "@/lib/env";
 import { formatDate } from "@/lib/format";
 import { useFinanceSummary } from "../api";
 import { RankBars, TimeBars } from "./charts";
+import { Loading } from "@/components/brand";
 
 const PERIODS = { day: "Last 14 days", week: "Last 8 weeks", month: "Last 6 months" } as const;
 type Period = keyof typeof PERIODS;
@@ -65,7 +66,7 @@ export function FinanceDashboard() {
       </div>
     );
   }
-  if (isLoading) return <div className="space-y-5">{header}<p className="text-ink-muted">Loading the dashboard…</p></div>;
+  if (isLoading) return <div className="space-y-5">{header}<Loading label="Loading the dashboard…" /></div>;
   if (error || !s) return <div className="space-y-5">{header}<p className="text-danger">Couldn&apos;t load the dashboard. Refresh to try again.</p></div>;
 
   const patientLink = (id: string) => {

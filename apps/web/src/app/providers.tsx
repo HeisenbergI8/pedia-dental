@@ -3,6 +3,7 @@ import { QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-qu
 import { useEffect, useState, type ReactNode } from "react";
 import { z } from "zod";
 import { plainLanguageError } from "@pedia/shared";
+import { LoadingScreen } from "@/components/brand";
 import { Toaster } from "@/components/ui/sonner";
 import { ApiError } from "@/lib/api-client";
 import { env } from "@/lib/env";
@@ -20,7 +21,7 @@ function MockGate({ children }: { children: ReactNode }) {
       .then(({ worker }) => worker.start({ onUnhandledFrame: "bypass", quiet: true }))
       .then(() => setReady(true));
   }, []);
-  return ready ? children : null;
+  return ready ? children : <LoadingScreen />;
 }
 
 /** 401 and 403 won't change on a retry. */

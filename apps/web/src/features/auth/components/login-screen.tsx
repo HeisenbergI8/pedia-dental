@@ -4,11 +4,13 @@ import { useState } from "react";
 import { useIsMutating } from "@tanstack/react-query";
 import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CalendarCheckIcon, HeartHandshakeIcon, ShieldCheckIcon, SmileIcon, StethoscopeIcon, type LucideIcon } from "lucide-react";
+import { CalendarCheckIcon, HeartHandshakeIcon, HeartIcon, RainbowIcon, ShieldCheckIcon, SparklesIcon, StethoscopeIcon, type LucideIcon } from "lucide-react";
 import { LoginInput, type DemoAccount, type Role } from "@pedia/shared";
+import { KidsmileLogo, Loading, LoadingScreen } from "@/components/brand";
 import { FormField } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { ROLE_HOME, ROLE_LABEL, useSession } from "../access";
 import { authKeys, useDemoAccounts, useSignIn } from "../api";
 
@@ -18,6 +20,21 @@ const ROLE_ICON: Record<Role, LucideIcon> = {
   front_desk: CalendarCheckIcon,
   parent: HeartHandshakeIcon,
 };
+
+/** A crayon tint per role, for recognition only: the role is always written out beside it. */
+const ROLE_TINT: Record<Role, string> = {
+  admin: "bg-crayon-purple/15",
+  dentist: "bg-crayon-teal/30",
+  front_desk: "bg-crayon-lime/30",
+  parent: "bg-crayon-orange/20",
+};
+
+/** The clinic's own promises, as they put them on their page. */
+const PROMISES: { icon: LucideIcon; text: string; tint: string }[] = [
+  { icon: RainbowIcon, text: "Child-friendly dental care", tint: "bg-crayon-orange/20" },
+  { icon: HeartIcon, text: "Gentle and caring pediatric dentists", tint: "bg-crayon-teal/30" },
+  { icon: SparklesIcon, text: "A fun clinic environment", tint: "bg-crayon-yellow/40" },
+];
 
 export function LoginScreen() {
   const demo = useDemoAccounts();
@@ -32,43 +49,70 @@ export function LoginScreen() {
   const pick = (a: DemoAccount) => signIn.mutate({ email: a.email, password: demo.data?.password ?? "" });
 
   return (
-    <main className="min-h-screen bg-ground px-4 py-10 sm:py-16">
-      <div className="mx-auto max-w-3xl space-y-8">
-        <header className="space-y-3">
-          <p className="flex items-center gap-2.5 font-semibold">
-            <span className="flex size-9 items-center justify-center rounded-lg bg-brand text-brand-ink">
-              <SmileIcon className="size-5" aria-hidden />
-            </span>
-            Pedia Dental
-          </p>
-          <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
-          <p className="text-ink-muted">This is a demo with sample data. Choose an account to see the app as that person.</p>
-        </header>
+    <>
+      <main inert={signingIn} className="relative min-h-screen overflow-hidden bg-ground lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+        {/* Brand panel: the clinic introduces itself the way it does on its own page. */}
+        <section aria-label="About Kidsmile" className="relative overflow-hidden bg-surface px-6 pt-8 pb-10 lg:flex lg:flex-col lg:justify-center lg:px-12 lg:py-16">
+          <span aria-hidden className="brand-strip absolute inset-x-0 top-0 h-1.5" />
+          <span aria-hidden className="absolute -top-16 -right-20 size-56 rounded-full bg-crayon-teal/20" />
+          <span aria-hidden className="absolute -bottom-24 -left-16 hidden size-64 rounded-full bg-crayon-yellow/25 lg:block" />
+          <div className="relative mx-auto max-w-md space-y-6 lg:mx-0">
+            <KidsmileLogo priority className="w-60 sm:w-72 lg:w-80" />
+            <p className="font-display text-2xl leading-snug font-medium text-balance lg:text-3xl">
+              Give your child a <span className="text-brand">smile</span> they&apos;ll love.
+            </p>
+            <ul className="hidden space-y-3 sm:block">
+              {PROMISES.map(({ icon: Icon, text, tint }) => (
+                <li key={text} className="flex items-center gap-3 text-sm font-medium">
+                  <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-full text-ink", tint)}>
+                    <Icon className="size-4.5" aria-hidden />
+                  </span>
+                  {text}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
 
-        {session && !signingIn && (
-          <p role="status" className="rounded-lg border border-line bg-surface px-4 py-3 text-sm">
-            You&apos;re signed in as <strong>{session.user.name}</strong> ({ROLE_LABEL[session.user.role]}).{" "}
-            <Link href={ROLE_HOME[session.user.role]} className="font-medium text-brand underline-offset-2 hover:underline">
-              Continue
-            </Link>{" "}
-            or choose another account.
-          </p>
-        )}
-        {signIn.error && <p role="alert" className="text-sm text-danger">{signIn.error.message}</p>}
-        {demo.isLoading && <p className="text-ink-muted">Loading demo accounts…</p>}
-        {demo.error && <p role="alert" className="text-danger">Couldn&apos;t load the demo accounts. Sign in with an email below.</p>}
+        <div className="px-4 py-10 sm:px-8 lg:flex lg:items-center lg:py-16">
+          <div className="mx-auto w-full max-w-2xl space-y-8">
+            <header className="space-y-2">
+              <h1 className="text-3xl font-semibold tracking-tight">Sign in</h1>
+              <p className="text-ink-muted">This is a demo with sample data. Choose an account to see the app as that person.</p>
+            </header>
 
-        <AccountGroup title="Clinic staff" accounts={accounts.filter((a) => a.role !== "parent")} busyEmail={busyEmail} onPick={pick} />
-        <AccountGroup
-          title="Parents"
-          description="The parent portal, for one family."
-          accounts={accounts.filter((a) => a.role === "parent")}
-          busyEmail={busyEmail}
-          onPick={pick}
-        />
-        <EmailSignIn password={demo.data?.password ?? ""} />
-      </div>
-    </main>
+            {session && !signingIn && (
+              <p role="status" className="rounded-lg border border-line bg-surface px-4 py-3 text-sm">
+                You&apos;re signed in as <strong>{session.user.name}</strong> ({ROLE_LABEL[session.user.role]}).{" "}
+                <Link href={ROLE_HOME[session.user.role]} className="font-medium text-brand underline-offset-2 hover:underline">
+                  Continue
+                </Link>{" "}
+                or choose another account.
+              </p>
+            )}
+            {signIn.error && <p role="alert" className="text-sm text-danger">{signIn.error.message}</p>}
+            {demo.isLoading && <Loading label="Loading demo accounts…" />}
+            {demo.error && <p role="alert" className="text-danger">Couldn&apos;t load the demo accounts. Sign in with an email below.</p>}
+
+            <AccountGroup title="Clinic staff" accounts={accounts.filter((a) => a.role !== "parent")} busyEmail={busyEmail} onPick={pick} />
+            <AccountGroup
+              title="Parents"
+              description="The parent portal, for one family."
+              accounts={accounts.filter((a) => a.role === "parent")}
+              busyEmail={busyEmail}
+              onPick={pick}
+            />
+            <EmailSignIn password={demo.data?.password ?? ""} />
+          </div>
+        </div>
+      </main>
+      {/* Over the page rather than instead of it, so the email form keeps its state if sign-in fails. */}
+      {signingIn && (
+        <div className="fixed inset-0 z-50">
+          <LoadingScreen label="Signing you in…" />
+        </div>
+      )}
+    </>
   );
 }
 
@@ -83,7 +127,7 @@ function AccountGroup(props: {
   return (
     <section className="space-y-3">
       <div>
-        <h2 className="text-base font-semibold">{props.title}</h2>
+        <h2 className="text-lg font-semibold">{props.title}</h2>
         {props.description && <p className="text-sm text-ink-muted">{props.description}</p>}
       </div>
       <ul className="grid gap-3 sm:grid-cols-2">
@@ -96,9 +140,9 @@ function AccountGroup(props: {
                 onClick={() => props.onPick(a)}
                 disabled={!!props.busyEmail}
                 aria-busy={props.busyEmail === a.email}
-                className="flex min-h-16 w-full items-start gap-3 rounded-xl border border-line bg-surface p-4 text-left shadow-card transition-colors hover:border-brand focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-60"
+                className="flex min-h-16 w-full items-start gap-3 rounded-xl border border-line bg-surface p-4 text-left shadow-card transition-[border-color,transform] hover:border-brand focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-60 motion-safe:hover:-translate-y-0.5"
               >
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-subtle text-brand">
+                <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-full text-ink", ROLE_TINT[a.role])}>
                   <Icon className="size-4.5" aria-hidden />
                 </span>
                 <span className="min-w-0 flex-1">

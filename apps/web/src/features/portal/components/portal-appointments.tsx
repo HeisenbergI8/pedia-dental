@@ -21,6 +21,7 @@ import {
 } from "@/features/appointments/api";
 import { useStaff } from "@/features/clinic/api";
 import { useActiveChild } from "../use-child";
+import { Loading } from "@/components/brand";
 
 export const whenText = (iso: string) => format(parseISO(iso), "EEEE, MMMM d 'at' h:mm a");
 const UPCOMING = ["booked", "confirmed", "arrived", "in_chair"];
@@ -67,7 +68,7 @@ export function PortalAppointments() {
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-semibold tracking-tight">{child.firstName}&apos;s appointments</h1>
-      {isLoading && <p className="text-ink-muted">Loading appointments…</p>}
+      {isLoading && <Loading label="Loading appointments…" />}
       {error && <p role="alert" className="text-danger">We couldn&apos;t load the appointments. Refresh the page to try again.</p>}
 
       <SectionCard title="Coming up" description="To move or cancel a visit, please call the clinic.">

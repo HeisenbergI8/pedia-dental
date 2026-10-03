@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { findRule, formatPeso, type FollowUpRule } from "@pedia/shared";
 import { PageHeader } from "@/components/page-header";
 import { useChairs, useProcedures, useStaff } from "../api";
+import { Loading } from "@/components/brand";
 
 const ROLE_LABEL = { admin: "Admin", dentist: "Dentist", front_desk: "Front desk" } as const;
 
@@ -43,7 +44,7 @@ export function ClinicSettings() {
   const chairs = useChairs();
 
   if (procedures.isLoading || staff.isLoading || chairs.isLoading) {
-    return <p className="text-ink-muted">Loading settings…</p>;
+    return <Loading label="Loading settings…" />;
   }
   if (procedures.error || staff.error || chairs.error) {
     return <p className="text-danger">Couldn&apos;t load settings. Refresh to try again.</p>;

@@ -8,6 +8,7 @@ import { useCurrentVisit, useVisits } from "@/features/visits/api";
 import { useChartEntries } from "../api";
 import { DentalChart, defaultChartMode } from "./dental-chart";
 import { ToothPanel } from "./tooth-panel";
+import { Loading } from "@/components/brand";
 
 const LATEST = "latest";
 
@@ -18,7 +19,7 @@ export function ChartTab({ patient }: { patient: Patient }) {
   const [asOf, setAsOf] = useState(LATEST);
   const [open, setOpen] = useState<{ tooth: ToothNumber; surface?: Surface }>();
 
-  if (isLoading) return <p className="text-ink-muted">Loading chart…</p>;
+  if (isLoading) return <Loading label="Loading chart…" />;
   if (error || !entries) return <p className="text-danger">Couldn&apos;t load the chart.</p>;
 
   // "As of visit X": only what was recorded up to and including that visit, later corrections excluded.

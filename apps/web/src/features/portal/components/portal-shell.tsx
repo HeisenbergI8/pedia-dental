@@ -3,6 +3,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { CalendarDaysIcon, ClipboardListIcon, HeartPulseIcon, HomeIcon, ReceiptIcon, SmileIcon, UploadIcon } from "lucide-react";
+import { KidsmileLogo, Loading } from "@/components/brand";
+import { useNavigationPending } from "@/components/navigation-pending";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { AccountMenu } from "@/features/auth/components/account-menu";
@@ -20,6 +22,7 @@ const SECTIONS = [
 
 export function PortalShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const navigating = useNavigationPending();
   const { kids, child, setActive, isLoading, error } = useChildren();
 
   return (
@@ -31,12 +34,10 @@ export function PortalShell({ children }: { children: ReactNode }) {
         Skip to content
       </a>
       <header className="sticky top-0 z-40 border-b border-line bg-surface/95 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-3xl items-center gap-3 px-4 sm:px-6">
-          <Link href="/portal" className="flex items-center gap-2.5 rounded-md text-lg font-semibold">
-            <span className="flex size-9 items-center justify-center rounded-full bg-brand text-brand-ink">
-              <SmileIcon className="size-5" aria-hidden />
-            </span>
-            Pedia Dental
+        <span aria-hidden className="brand-strip absolute inset-x-0 top-0 h-1" />
+        <div className="mx-auto flex h-18 max-w-3xl items-center gap-3 px-4 pt-1 sm:px-6">
+          <Link href="/portal" aria-label="Kidsmile home" className="inline-flex rounded-md">
+            <KidsmileLogo priority className="w-36 sm:w-44" />
           </Link>
           <div className="ml-auto">
             <AccountMenu compact />
@@ -71,14 +72,14 @@ export function PortalShell({ children }: { children: ReactNode }) {
         {kids.length > 1 && child && (
           <div role="group" aria-label="Whose records to show" className="flex flex-wrap gap-2">
             {kids.map((k) => (
-              <Button key={k.id} className="min-h-11" variant={k.id === child.id ? "default" : "outline"} aria-pressed={k.id === child.id} onClick={() => setActive(k.id)}>
+              <Button key={k.id} className="min-h-11 rounded-full px-5" variant={k.id === child.id ? "default" : "outline"} aria-pressed={k.id === child.id} onClick={() => setActive(k.id)}>
                 {k.firstName}
               </Button>
             ))}
           </div>
         )}
         {isLoading ? (
-          <p className="text-ink-muted">Loading your family&apos;s records…</p>
+          <Loading label="Loading your family's records…" />
         ) : error ? (
           <p role="alert" className="text-danger">We couldn&apos;t load your family&apos;s records. Refresh the page to try again.</p>
         ) : !child ? (
@@ -86,7 +87,12 @@ export function PortalShell({ children }: { children: ReactNode }) {
             Ask the clinic to add you as your child&apos;s guardian.
           </EmptyState>
         ) : (
-          children
+          <>
+            {navigating && <Loading label="Opening…" />}
+            <div hidden={navigating} className="contents">
+              {children}
+            </div>
+          </>
         )}
       </main>
     </div>

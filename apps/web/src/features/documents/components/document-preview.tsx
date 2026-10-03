@@ -1,4 +1,4 @@
-import { CLINIC_NAME } from "@pedia/shared";
+import { KidsmileLogo } from "@/components/brand";
 import { cn } from "@/lib/utils";
 import type { DocBlock, DocContent } from "../content";
 
@@ -6,8 +6,8 @@ import type { DocBlock, DocContent } from "../content";
 export function DocumentPreview({ content }: { content: DocContent }) {
   return (
     <article aria-label={`Preview of the ${content.title.toLowerCase()}`} className="mx-auto w-full max-w-2xl space-y-4 rounded-xl border border-line bg-surface p-5 text-sm shadow-card sm:p-8">
-      <header className="space-y-0.5 border-b border-line pb-3">
-        <p className="font-semibold">{CLINIC_NAME}</p>
+      <header className="space-y-0.5 border-b-2 border-brand-soft pb-3">
+        <KidsmileLogo className="mb-2 w-36" />
         <h3 className="font-semibold tracking-wide uppercase">{content.title}</h3>
         <p className="text-ink-muted">{content.subtitle}</p>
       </header>

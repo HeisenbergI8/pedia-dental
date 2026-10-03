@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { usePatients } from "@/features/patients/api";
 import { formatDate } from "@/lib/format";
 import { METHOD_LABEL, useDailyPayments } from "../api";
+import { Loading } from "@/components/brand";
 
 /** Payments and refunds received on one day, with the day's total per method. */
 export function CollectionsList() {
@@ -37,7 +38,7 @@ export function CollectionsList() {
         }
       />
       {isLoading ? (
-        <p className="text-ink-muted">Loading collections…</p>
+        <Loading label="Loading collections…" />
       ) : error ? (
         <p className="text-danger">Couldn&apos;t load collections. Refresh to try again.</p>
       ) : rows.length === 0 ? (

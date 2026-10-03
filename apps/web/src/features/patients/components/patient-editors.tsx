@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { useCreatePatient, usePatient, useUpdatePatient } from "../api";
 import { PatientForm } from "./patient-form";
+import { Loading } from "@/components/brand";
 
 export function CreatePatient() {
   const router = useRouter();
@@ -33,7 +34,7 @@ export function EditPatient({ patientId }: { patientId: string }) {
   const router = useRouter();
   const { data: patient, isLoading } = usePatient(patientId);
   const update = useUpdatePatient(patientId);
-  if (isLoading || !patient) return <p className="text-ink-muted">Loading patient…</p>;
+  if (isLoading || !patient) return <Loading label="Loading patient…" />;
 
   return (
     <div className="space-y-4">

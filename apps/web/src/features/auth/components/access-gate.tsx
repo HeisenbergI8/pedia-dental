@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { LockIcon } from "lucide-react";
 import { isStaffRole } from "@pedia/shared";
+import { LoadingScreen } from "@/components/brand";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { useSessionStore } from "@/stores/session-store";
@@ -55,7 +56,7 @@ export function RequireSession({ area, children }: { area: "clinic" | "portal"; 
     if (hydrated && !role) router.replace("/login");
   }, [hydrated, role, router]);
 
-  if (!hydrated || !role) return null;
+  if (!hydrated || !role) return <LoadingScreen />;
   if ((area === "clinic") !== isStaffRole(role)) {
     return (
       <main className="mx-auto max-w-xl px-4 py-16">
@@ -74,5 +75,5 @@ export function HomeRedirect() {
   useEffect(() => {
     if (hydrated) router.replace(role ? ROLE_HOME[role] : "/login");
   }, [hydrated, role, router]);
-  return null;
+  return <LoadingScreen />;
 }

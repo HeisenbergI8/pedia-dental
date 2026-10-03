@@ -15,6 +15,7 @@ import { useQueueDueMessage } from "@/features/messages/api";
 import { usePatients } from "@/features/patients/api";
 import { formatDate, formatPhone } from "@/lib/format";
 import { useDueItems } from "../api";
+import { Loading } from "@/components/brand";
 
 const SECTIONS: { bucket: DueBucket; title: string; empty: string }[] = [
   { bucket: "overdue", title: "Overdue", empty: "Nothing overdue." },
@@ -51,7 +52,7 @@ export function RecallList() {
     });
   }
 
-  if (isLoading) return <p className="text-ink-muted">Loading recalls…</p>;
+  if (isLoading) return <Loading label="Loading recalls…" />;
   if (error) return <p className="text-danger">Couldn&apos;t load recalls. Refresh to try again.</p>;
   const listed = (items ?? []).filter((i) => dueBucket(i.dueOn, today));
 

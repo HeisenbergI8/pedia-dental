@@ -8,6 +8,7 @@ import { useStaff } from "@/features/clinic/api";
 import { useCurrentVisit, useVisits } from "@/features/visits/api";
 import { useNoteTemplates, useNotes } from "../api";
 import { BEHAVIOR_LABEL, NoteDialog } from "./note-dialog";
+import { Loading } from "@/components/brand";
 
 function display(f: TemplateField, v: unknown): string | undefined {
   if (f.type === "checkbox") return v === true ? "Yes" : undefined;
@@ -23,7 +24,7 @@ export function NotesTab({ patient }: { patient: Patient }) {
   const current = useCurrentVisit(patient.id);
   const staff = useStaff().data ?? [];
 
-  if (isLoading) return <p className="text-ink-muted">Loading notes…</p>;
+  if (isLoading) return <Loading label="Loading notes…" />;
   if (error || !notes) return <p className="text-danger">Couldn&apos;t load notes.</p>;
   const withNotes = visits.filter((v) => v.status === "in_progress" || notes.some((n) => n.visitId === v.id));
 

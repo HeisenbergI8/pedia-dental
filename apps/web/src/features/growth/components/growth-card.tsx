@@ -33,6 +33,7 @@ import { useChartEntries } from "@/features/chart/api";
 import { formatAge } from "@/features/patients/age";
 import { useCurrentVisit, useVisits } from "@/features/visits/api";
 import { useGrowth, useSaveGrowth } from "../api";
+import { Loading } from "@/components/brand";
 
 const HABIT_LABEL: Record<OralHabit, string> = {
   thumb_sucking: "Thumb sucking",
@@ -81,7 +82,7 @@ export function GrowthCard({ patient }: { patient: Patient }) {
         )}
       </div>
 
-      {isLoading && <p className="text-ink-muted">Loading…</p>}
+      {isLoading && <Loading label="Loading…" compact />}
       {error && <p className="text-danger">Couldn&apos;t load growth records.</p>}
       {!isLoading && records.length === 0 && <p className="text-ink-muted">No habits or speech observations recorded.</p>}
 
