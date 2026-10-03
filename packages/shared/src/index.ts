@@ -10,6 +10,7 @@ export * from "./schemas/growth";
 export * from "./schemas/plan";
 export * from "./schemas/photo";
 export * from "./domain/teeth";
+export * from "./errors";
 export * from "./domain/chart";
 export * from "./domain/notes";
 export * from "./domain/growth";

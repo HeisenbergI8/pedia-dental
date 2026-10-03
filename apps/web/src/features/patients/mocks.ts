@@ -13,9 +13,19 @@ const url = (p: string) => `${env.apiUrl}${p}`;
 export const patientHandlers = [
   http.get(url("/patients"), async ({ request }) => {
     await delay(150);
-    const q = new URL(request.url).searchParams.get("q")?.toLowerCase() ?? "";
+    const q = new URL(request.url).searchParams.get("q")?.trim().toLowerCase() ?? "";
+    // Front desk looks a child up by the child's or a guardian's name, or a guardian's phone.
+    // Every word must match somewhere, so "Balistreri Carmel" and "0917 123 4567" both work.
+    const words = q.split(/\s+/).filter(Boolean);
+    const matches = (p: Patient) => {
+      const names = [`${p.firstName} ${p.lastName}`, ...p.guardians.map((g) => g.fullName)].join(" ").toLowerCase();
+      const phones = p.guardians.map((g) => g.phone.replace(/\D/g, "")).join(" ");
+      // A word made of digits and phone punctuation (0917-123-4567, +63) is matched on its digits.
+      const isPhone = (w: string) => /^[\d()+-]+$/.test(w) && /\d/.test(w);
+      return words.every((w) => names.includes(w) || (isPhone(w) && phones.includes(w.replace(/\D/g, ""))));
+    };
     const rows = db.patients
-      .filter((p) => `${p.firstName} ${p.lastName}`.toLowerCase().includes(q))
+      .filter(matches)
       .sort((a, b) => a.lastName.localeCompare(b.lastName));
     return HttpResponse.json(rows);
   }),

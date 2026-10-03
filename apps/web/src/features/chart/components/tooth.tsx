@@ -12,17 +12,17 @@ type ConditionStyle = {
 
 /** Fills differ in lightness or pattern as well as hue (see the legend). */
 export const CONDITION_STYLE: Record<ToothCondition, ConditionStyle> = {
-  sound: { label: "Sound", code: "", fill: "#ffffff" },
-  caries: { label: "Caries", code: "C", fill: "#a12622" },
-  restored: { label: "Restored", code: "R", fill: "#7aa7dc" },
+  sound: { label: "Sound", code: "", fill: "var(--color-tooth-sound)" },
+  caries: { label: "Caries", code: "C", fill: "var(--color-tooth-caries)" },
+  restored: { label: "Restored", code: "R", fill: "var(--color-tooth-restored)" },
   sealant: { label: "Sealant", code: "Se", fill: "url(#pd-stripes)" },
   fluoride: { label: "Fluoride", code: "F", fill: "url(#pd-dots)" },
   pulpotomy: { label: "Pulpotomy", code: "PO", fill: "url(#pd-bars)" },
-  pulpectomy: { label: "Pulpectomy", code: "PE", fill: "#3d2266" },
-  extracted: { label: "Extracted", code: "X", fill: "#d7dcdc", mark: "cross" },
-  missing: { label: "Missing", code: "M", fill: "#ffffff", mark: "cross" },
-  unerupted: { label: "Unerupted", code: "UE", fill: "#ffffff", mark: "dashed" },
-  erupting: { label: "Erupting", code: "E", fill: "#cfe8e6", mark: "dashed" },
+  pulpectomy: { label: "Pulpectomy", code: "PE", fill: "var(--color-tooth-pulpectomy)" },
+  extracted: { label: "Extracted", code: "X", fill: "var(--color-tooth-extracted)", mark: "cross" },
+  missing: { label: "Missing", code: "M", fill: "var(--color-tooth-sound)", mark: "cross" },
+  unerupted: { label: "Unerupted", code: "UE", fill: "var(--color-tooth-sound)", mark: "dashed" },
+  erupting: { label: "Erupting", code: "E", fill: "var(--color-tooth-erupting)", mark: "dashed" },
 };
 
 /** Pattern fills, rendered once per chart and referenced by `url(#id)`. */
@@ -31,16 +31,16 @@ export function ChartPatterns() {
     <svg aria-hidden width="0" height="0" className="absolute">
       <defs>
         <pattern id="pd-stripes" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-          <rect width="5" height="5" fill="#e3f1e8" />
-          <rect width="2.5" height="5" fill="#2e7d4f" />
+          <rect width="5" height="5" fill="var(--color-tooth-sealant-bg)" />
+          <rect width="2.5" height="5" fill="var(--color-tooth-sealant)" />
         </pattern>
         <pattern id="pd-dots" width="5" height="5" patternUnits="userSpaceOnUse">
-          <rect width="5" height="5" fill="#fff6d6" />
-          <circle cx="2.5" cy="2.5" r="1.3" fill="#9a6b00" />
+          <rect width="5" height="5" fill="var(--color-tooth-fluoride-bg)" />
+          <circle cx="2.5" cy="2.5" r="1.3" fill="var(--color-tooth-fluoride)" />
         </pattern>
         <pattern id="pd-bars" width="5" height="5" patternUnits="userSpaceOnUse">
-          <rect width="5" height="5" fill="#ece3f7" />
-          <rect width="5" height="2" fill="#6b3fa0" />
+          <rect width="5" height="5" fill="var(--color-tooth-pulpotomy-bg)" />
+          <rect width="5" height="2" fill="var(--color-tooth-pulpotomy)" />
         </pattern>
       </defs>
     </svg>
@@ -104,7 +104,7 @@ export function Tooth({
   const upper = [1, 2, 5, 6].includes(Math.floor(tooth / 10));
 
   const number = <span className="text-xs font-medium tabular-nums">{tooth}</span>;
-  const codeLine = <span className="h-3.5 text-[10px] leading-3.5 font-semibold text-ink-muted">{code}</span>;
+  const codeLine = <span className="h-4 text-xs leading-4 font-semibold text-ink-muted">{code}</span>;
 
   return (
     <button
@@ -127,8 +127,8 @@ export function Tooth({
             <polygon
               key={zone}
               points={ZONES[zone]}
-              fill={condition ? CONDITION_STYLE[condition].fill : (whole?.fill ?? "#ffffff")}
-              stroke="#4a6261"
+              fill={condition ? CONDITION_STYLE[condition].fill : (whole?.fill ?? "var(--color-tooth-sound)")}
+              stroke="var(--color-tooth-stroke)"
               strokeWidth="1.2"
               strokeDasharray={whole?.mark === "dashed" ? "3 2" : undefined}
               onClick={(e) => {
@@ -140,7 +140,7 @@ export function Tooth({
           );
         })}
         {whole?.mark === "cross" && (
-          <path d="M4 4 36 36 M36 4 4 36" stroke="#12302f" strokeWidth="2.5" pointerEvents="none" />
+          <path d="M4 4 36 36 M36 4 4 36" stroke="var(--color-tooth-mark)" strokeWidth="2.5" pointerEvents="none" />
         )}
       </svg>
       {upper ? codeLine : number}

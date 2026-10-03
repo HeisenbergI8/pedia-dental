@@ -54,10 +54,12 @@ export function PlanTab({ patientId }: { patientId: string }) {
 
   return (
     <div className="space-y-6">
-      <section className="space-y-4 rounded-lg border border-line bg-white p-5">
+      <section className="space-y-4 rounded-xl border border-line bg-surface p-4 shadow-card sm:p-5">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-lg font-semibold">Treatment plan</h2>
-          <p className="text-sm text-ink-muted">Total {formatPeso(totalFee)}</p>
+          <h2 className="text-base font-semibold">Treatment plan</h2>
+          <p className="text-sm text-ink-muted">
+            Total <span className="text-base font-semibold text-ink tabular-nums">{formatPeso(totalFee)}</span>
+          </p>
         </div>
         <div className="space-y-1.5">
           <p className="font-medium" id="plan-progress">
@@ -90,7 +92,7 @@ export function PlanTab({ patientId }: { patientId: string }) {
                   </p>
                   {i.status === "done" && <p className="text-sm text-ink-muted">{completedBy(i)}</p>}
                 </div>
-                <span className="text-sm tabular-nums">{formatPeso(i.fee)}</span>
+                <span className="ml-auto text-sm tabular-nums">{formatPeso(i.fee)}</span>
                 <Badge variant={i.status === "done" ? "default" : "outline"}>{PLAN_STATUS_LABEL[i.status]}</Badge>
                 {i.status !== "done" && (
                   <DropdownMenu>
@@ -151,9 +153,9 @@ function AddPlanItemForm({ patientId }: { patientId: string }) {
   }
 
   return (
-    <form onSubmit={onSubmit} noValidate className="space-y-3 rounded-lg border border-line bg-white p-5">
+    <form onSubmit={onSubmit} noValidate className="space-y-3 rounded-xl border border-line bg-surface p-4 shadow-card sm:p-5">
       <h3 className="font-semibold">Add to plan</h3>
-      <div className="grid items-start gap-3 sm:grid-cols-[1fr_7rem_9rem_auto]">
+      <div className="grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_6rem_8rem_auto]">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="plan-procedure">Procedure</Label>
           <Select
@@ -195,7 +197,6 @@ function AddPlanItemForm({ patientId }: { patientId: string }) {
         </div>
         <Button
           type="submit"
-          className="sm:mt-[1.375rem]"
           disabled={!procedure || add.isPending || !!toothError || (procedure.perTooth && !tooth)}
         >
           Add

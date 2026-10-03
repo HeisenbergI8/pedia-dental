@@ -1,97 +1,96 @@
 "use client";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { PencilIcon } from "lucide-react";
 import type { Patient } from "@pedia/shared";
+import { SectionCard } from "@/components/section-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { formatDate, formatPhone } from "@/lib/format";
 import { CONSENT_LABEL, ConsentDialog } from "./consent-dialog";
 
-function Card({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
+/** Label above value: the label is secondary, the value is what staff read. */
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <section className="space-y-3 rounded-lg border border-line bg-white p-5">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">{title}</h2>
-        {action}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function List({ label, items }: { label: string; items: string[] }) {
-  return (
-    <div>
-      <p className="text-sm text-ink-muted">{label}</p>
-      <p>{items.length ? items.join(", ") : "None recorded"}</p>
+    <div className="space-y-0.5">
+      <dt className="text-xs font-medium text-ink-muted">{label}</dt>
+      <dd className="text-sm">{children}</dd>
     </div>
   );
 }
 
+const listOrNone = (items: string[]) => (items.length ? items.join(", ") : <span className="text-ink-muted">None recorded</span>);
+const textOrNone = (text: string | undefined) => text || <span className="text-ink-muted">None recorded</span>;
+
+/** The reference column of the overview: medical, contacts, history and consents. */
 export function PatientOverview({ patient: p }: { patient: Patient }) {
   const guardianName = (id: string) => p.guardians.find((g) => g.id === id)?.fullName ?? "Former guardian";
   const emergency = p.emergencyContact?.name ? p.emergencyContact : undefined;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      <Card
-        title="Guardians"
+    <div className="grid content-start gap-5 md:grid-cols-2 xl:grid-cols-1">
+      <SectionCard
+        title="Medical"
         action={
-          <Button asChild variant="outline" size="sm">
-            <Link href={`/patients/${p.id}/edit`}>Edit profile</Link>
+          <Button asChild variant="ghost" size="sm">
+            <Link href={`/patients/${p.id}/edit`}><PencilIcon /> Edit profile</Link>
           </Button>
         }
       >
+        <dl className="space-y-3">
+          <Field label="Allergies">{listOrNone(p.allergies)}</Field>
+          <Field label="Medical conditions">{listOrNone(p.medicalConditions)}</Field>
+          <Field label="Medications">{listOrNone(p.medications)}</Field>
+          <Field label="Notes and alerts">{listOrNone(p.alerts)}</Field>
+        </dl>
+      </SectionCard>
+
+      <SectionCard title="Guardians">
         <ul className="space-y-3">
           {p.guardians.map((g) => (
-            <li key={g.id}>
-              <p className="font-medium">
-                {g.fullName} <span className="font-normal text-ink-muted">· {g.relationship}</span>
-                {g.isPrimary && <Badge className="ml-2">Primary</Badge>}
+            <li key={g.id} className="space-y-0.5">
+              <p className="flex flex-wrap items-center gap-x-2 text-sm font-medium">
+                {g.fullName}
+                <span className="font-normal text-ink-muted">{g.relationship}</span>
+                {g.isPrimary && <Badge variant="secondary" className="border-line">Primary</Badge>}
               </p>
-              <p className="text-sm">{[g.phone, g.email].filter(Boolean).join(" · ")}</p>
+              <p className="text-sm">
+                <a href={`tel:${g.phone}`} className="text-brand tabular-nums hover:underline">{formatPhone(g.phone)}</a>
+                {g.email && <span className="text-ink-muted"> · {g.email}</span>}
+              </p>
             </li>
           ))}
         </ul>
-        <div className="border-t border-line pt-3 text-sm">
-          <p className="text-ink-muted">Emergency contact</p>
-          <p>{emergency ? `${emergency.name} · ${emergency.phone}` : "None recorded"}</p>
-          <p className="mt-2 text-ink-muted">Address</p>
-          <p>{p.address || "None recorded"}</p>
-        </div>
-      </Card>
+        <dl className="space-y-3 border-t border-line pt-3">
+          <Field label="Emergency contact">
+            {emergency ? <>{emergency.name} · <span className="tabular-nums">{formatPhone(emergency.phone)}</span></> : textOrNone(undefined)}
+          </Field>
+          <Field label="Address">{textOrNone(p.address)}</Field>
+        </dl>
+      </SectionCard>
 
-      <Card title="Medical">
-        <div className="space-y-3">
-          <List label="Allergies" items={p.allergies} />
-          <List label="Medical conditions" items={p.medicalConditions} />
-          <List label="Medications" items={p.medications} />
-          <List label="Alerts" items={p.alerts} />
-        </div>
-      </Card>
-
-      <Card title="Previous dental history">
-        <p className="text-sm text-ink-muted">Previous clinic</p>
-        <p>{p.dentalHistory.previousClinic || "None recorded"}</p>
-        <p className="text-sm text-ink-muted">Notes</p>
-        <p className="whitespace-pre-line">{p.dentalHistory.notes || "None recorded"}</p>
-      </Card>
-
-      <Card title="Consents" action={<ConsentDialog patient={p} />}>
+      <SectionCard title="Consents" action={<ConsentDialog patient={p} />}>
         {p.consents.length === 0 ? (
-          <p className="text-ink-muted">No consents recorded.</p>
+          <p className="text-sm text-ink-muted">No consents recorded.</p>
         ) : (
           <ul className="divide-y divide-line">
             {p.consents.map((c) => (
-              <li key={c.id} className="flex justify-between gap-3 py-2 first:pt-0 last:pb-0">
-                <span className="font-medium">{CONSENT_LABEL[c.scope]}</span>
-                <span className="text-right text-sm text-ink-muted">
-                  {guardianName(c.guardianId)}, {c.date}
-                </span>
+              <li key={c.id} className="space-y-0.5 py-2 first:pt-0 last:pb-0">
+                <p className="text-sm font-medium">{CONSENT_LABEL[c.scope]}</p>
+                <p className="text-xs text-ink-muted">
+                  {guardianName(c.guardianId)} · {formatDate(c.date)}
+                </p>
               </li>
             ))}
           </ul>
         )}
-      </Card>
+      </SectionCard>
+
+      <SectionCard title="Previous dental history">
+        <dl className="space-y-3">
+          <Field label="Previous clinic">{textOrNone(p.dentalHistory.previousClinic)}</Field>
+          <Field label="Notes"><span className="whitespace-pre-line">{textOrNone(p.dentalHistory.notes)}</span></Field>
+        </dl>
+      </SectionCard>
     </div>
   );
 }

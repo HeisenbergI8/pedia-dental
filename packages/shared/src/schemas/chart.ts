@@ -35,7 +35,7 @@ export const ChartEntry = ClinicScoped.extend({
   id: Id,
   patientId: Id,
   visitId: Id,
-  tooth: z.number().int().refine((t) => ALL_TEETH.includes(t), "Invalid FDI tooth"),
+  tooth: z.number().int().refine((t) => ALL_TEETH.includes(t), "Use a tooth number like 74 (FDI)"),
   surfaces: z.array(z.enum(SURFACES)), // empty = whole tooth
   condition: ToothCondition,
   note: z.string().optional(),

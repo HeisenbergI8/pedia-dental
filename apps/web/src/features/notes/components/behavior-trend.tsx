@@ -14,12 +14,12 @@ export function BehaviorTrend({ patientId }: { patientId: string }) {
   const recent = visits.slice(0, SHOWN_VISITS).reverse();
 
   return (
-    <section className="space-y-3 rounded-lg border border-line bg-white p-5">
-      <h2 className="text-lg font-semibold">Behavior, last {SHOWN_VISITS} visits</h2>
+    <section className="space-y-3 rounded-xl border border-line bg-surface p-4 shadow-card sm:p-5">
+      <h2 className="text-base font-semibold">Behavior, last {SHOWN_VISITS} visits</h2>
       {recent.length === 0 ? (
         <p className="text-ink-muted">No visits yet.</p>
       ) : (
-        <ol className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <ol className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {recent.map((v) => {
             const visitNotes = notes.filter((n) => n.visitId === v.id && n.signedAt); // drafts aren't history yet
             const behavior = [...new Set(visitNotes.flatMap((n) => n.behavior))];
@@ -30,7 +30,7 @@ export function BehaviorTrend({ patientId }: { patientId: string }) {
                 {behavior.length === 0 && <p className="text-sm text-ink-muted">Not recorded</p>}
                 <div className="flex flex-wrap gap-1">
                   {behavior.map((b) => (
-                    <Badge key={b} variant={b === "cooperative" ? "default" : "outline"}>{BEHAVIOR_LABEL[b]}</Badge>
+                    <Badge key={b} variant="outline" className={b === "cooperative" ? "border-success/30 bg-success-bg text-success" : undefined}>{BEHAVIOR_LABEL[b]}</Badge>
                   ))}
                 </div>
                 {remarks.map((r, i) => (

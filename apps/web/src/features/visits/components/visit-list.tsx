@@ -11,8 +11,8 @@ export function VisitList({ patientId }: { patientId: string }) {
   const dentistName = (id: string) => staff.data?.find((s) => s.id === id)?.fullName ?? "Unknown dentist";
 
   return (
-    <section className="space-y-3 rounded-lg border border-line bg-white p-5">
-      <h2 className="text-lg font-semibold">Visits</h2>
+    <section className="space-y-3 rounded-xl border border-line bg-surface p-4 shadow-card sm:p-5">
+      <h2 className="text-base font-semibold">Visits</h2>
       {isLoading && <p className="text-ink-muted">Loading visits…</p>}
       {error && <p className="text-danger">Couldn&apos;t load visits.</p>}
       {visits?.length === 0 && <p className="text-ink-muted">No visits yet.</p>}

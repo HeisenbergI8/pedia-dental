@@ -4,7 +4,9 @@
 /* eslint-disable @next/next/no-img-element */
 import { useState } from "react";
 import { format, parseISO } from "date-fns";
+import { CameraIcon } from "lucide-react";
 import { PhotoType, type ClinicalPhoto } from "@pedia/shared";
+import { EmptyState } from "@/components/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -104,15 +106,19 @@ export function PhotosTab({ patientId }: { patientId: string }) {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">Clinical photos</h2>
+        <h2 className="text-base font-semibold">Clinical photos</h2>
         <UploadPhotoDialog patientId={patientId} />
       </div>
       {isLoading && <p className="text-ink-muted">Loading photos…</p>}
       {error && <p className="text-danger">Couldn&apos;t load photos.</p>}
-      {photos?.length === 0 && <p className="text-ink-muted">No photos yet.</p>}
+      {photos?.length === 0 && (
+        <EmptyState icon={CameraIcon} title="No photos yet">
+          Intraoral photos and X-rays taken at a visit appear here, grouped by visit.
+        </EmptyState>
+      )}
 
       {pair?.before && pair.after && (
-        <section className="space-y-3 rounded-lg border border-line bg-white p-5">
+        <section className="space-y-3 rounded-xl border border-line bg-surface p-4 shadow-card sm:p-5">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <h3 className="font-semibold">Before and after</h3>
             <div className="flex flex-col gap-1.5">
@@ -134,7 +140,7 @@ export function PhotosTab({ patientId }: { patientId: string }) {
       )}
 
       {groups.map(([visitId, inVisit]) => (
-        <section key={visitId} className="space-y-4 rounded-lg border border-line bg-white p-5">
+        <section key={visitId} className="space-y-4 rounded-xl border border-line bg-surface p-4 shadow-card sm:p-5">
           <h3 className="font-semibold">{visitLabel(visitId)}</h3>
           {PhotoType.options
             .filter((t) => inVisit.some((p) => p.type === t))

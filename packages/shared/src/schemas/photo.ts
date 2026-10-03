@@ -16,7 +16,7 @@ export const ClinicalPhoto = ClinicScoped.extend({
   visitId: Id.optional(),
   type: PhotoType,
   stage: PhotoStage.optional(),
-  tooth: z.number().int().refine((t) => ALL_TEETH.includes(t), "Invalid FDI tooth").optional(),
+  tooth: z.number().int().refine((t) => ALL_TEETH.includes(t), "Use a tooth number like 74 (FDI)").optional(),
   takenOn: IsoDate,
   caption: z.string(),
   contentType: z.string(),

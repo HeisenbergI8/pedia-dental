@@ -1,6 +1,7 @@
 "use client";
 import type { ReactNode } from "react";
 import { findRule, formatPeso, type FollowUpRule } from "@pedia/shared";
+import { PageHeader } from "@/components/page-header";
 import { useChairs, useProcedures, useStaff } from "../api";
 
 const ROLE_LABEL = { admin: "Admin", dentist: "Dentist", front_desk: "Front desk" } as const;
@@ -12,20 +13,21 @@ function describeRule(rule: FollowUpRule | undefined) {
   return rule.kind === "recall" ? `Recall in ${after}` : `Follow-up in ${after}`;
 }
 
-function Table({ title, head, children }: { title: string; head: string[]; children: ReactNode }) {
+/** Columns named in `numeric` are right-aligned, so amounts line up. */
+function Table({ title, head, numeric = [], children }: { title: string; head: string[]; numeric?: string[]; children: ReactNode }) {
   return (
     <section className="space-y-3">
-      <h2 className="text-lg font-semibold">{title}</h2>
-      <div className="overflow-x-auto rounded-lg border border-line bg-white">
+      <h2 className="text-base font-semibold">{title}</h2>
+      <div className="overflow-x-auto rounded-xl border border-line bg-surface shadow-card">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-line text-ink-muted">
+          <thead className="border-b border-line bg-ground/60 text-ink-muted">
             <tr>
               {head.map((h) => (
-                <th key={h} className="px-4 py-3 font-medium">{h}</th>
+                <th key={h} scope="col" className={`px-4 py-2.5 font-medium ${numeric.includes(h) ? "text-right" : ""}`}>{h}</th>
               ))}
             </tr>
           </thead>
-          <tbody className="[&_td]:px-4 [&_td]:py-3 [&_tr]:border-b [&_tr]:border-line [&_tr:last-child]:border-0">
+          <tbody className="[&_td]:px-4 [&_td]:py-2.5 [&_tr]:border-b [&_tr]:border-line [&_tr:last-child]:border-0">
             {children}
           </tbody>
         </table>
@@ -48,18 +50,20 @@ export function ClinicSettings() {
   }
 
   return (
-    <div className="space-y-8">
-      <h1 className="text-2xl font-semibold">Settings</h1>
+    <div className="space-y-6">
+      <PageHeader title="Settings" description="The clinic's procedures, staff and chairs. Read-only in this prototype." />
 
-      <Table title="Procedure catalog" head={["Code", "Procedure", "Duration", "Fee", "Follow-up"]}>
+      <Table title="Procedure catalog" head={["Procedure", "Duration", "Fee", "Follow-up"]} numeric={["Duration", "Fee"]}>
         {procedures.data?.map((p) => (
           <tr key={p.code}>
-            <td className="font-mono text-xs text-ink-muted">{p.code}</td>
-            <td>{p.name}</td>
-            <td>{p.defaultDurationMin} min</td>
             <td>
+              {p.name}
+              <span className="block font-mono text-xs text-ink-muted">{p.code}</span>
+            </td>
+            <td className="text-right whitespace-nowrap tabular-nums">{p.defaultDurationMin} min</td>
+            <td className="text-right whitespace-nowrap tabular-nums">
               {formatPeso(p.fee)}
-              {p.perTooth && <span className="text-ink-muted"> per tooth</span>}
+              {p.perTooth && <span className="block text-xs text-ink-muted">per tooth</span>}
             </td>
             <td>{describeRule(findRule(p.code))}</td>
           </tr>

@@ -86,6 +86,10 @@ MSW handler (now) or NestJS (later).
 - Mock data lives in `localStorage`. After changing `seed()` or `Db`, bump the key in `mocks/db.ts`
   or clear storage, or you'll keep seeing old data.
 - `@pedia/shared` ships TypeScript source (`transpilePackages`). Don't add a build step for it.
+- react-big-calendar's stylesheet loads after `globals.css`, so an unscoped `.rbc-*` override silently loses.
+  Scope calendar overrides under `.calendar` (the wrapper in `appointment-calendar.tsx`).
+- Validation wording: give user-facing schema fields their own message (`min(1, "Enter the child's first name")`).
+  Anything unworded falls back to `plainLanguageError`, installed in `app/providers.tsx`.
 
 ---
 

@@ -15,9 +15,9 @@ export function PatientAppointments({ patientId }: { patientId: string }) {
   const upcoming = data?.filter((a) => UPCOMING.has(a.status)) ?? [];
 
   return (
-    <section className="space-y-3 rounded-lg border border-line bg-white p-5">
+    <section className="space-y-3 rounded-xl border border-line bg-surface p-4 shadow-card sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">
+        <h2 className="text-base font-semibold">
           Appointments
           {data && (
             <Badge variant={noShows ? "destructive" : "outline"} className="ml-2 align-middle">

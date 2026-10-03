@@ -27,7 +27,7 @@ export function ChartTab({ patient }: { patient: Patient }) {
   const chart = deriveChart(shownVisitIds ? entries.filter((e) => shownVisitIds.has(e.visitId)) : entries);
 
   return (
-    <section className="space-y-4 rounded-lg border border-line bg-white p-5">
+    <section className="space-y-4 rounded-xl border border-line bg-surface p-4 shadow-card sm:p-5">
       <div className="flex flex-wrap items-center gap-2">
         <Label htmlFor="chart-as-of">Chart as of</Label>
         <Select value={asOf} onValueChange={setAsOf}>

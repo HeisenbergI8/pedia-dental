@@ -51,9 +51,9 @@ export function GrowthCard({ patient }: { patient: Patient }) {
   const visitOf = (id: string) => visits.find((v) => v.id === id);
 
   return (
-    <section className="space-y-4 rounded-lg border border-line bg-white p-5">
+    <section className="space-y-4 rounded-xl border border-line bg-surface p-4 shadow-card sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">Growth and development</h2>
+        <h2 className="text-base font-semibold">Growth and development</h2>
         {current && (
           <GrowthDialog patient={patient} visit={current} records={records} existing={records.find((r) => r.visitId === current.id)} />
         )}

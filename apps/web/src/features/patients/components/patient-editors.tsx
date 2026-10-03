@@ -1,6 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { PageHeader } from "@/components/page-header";
 import { useCreatePatient, usePatient, useUpdatePatient } from "../api";
 import { PatientForm } from "./patient-form";
 
@@ -8,10 +9,11 @@ export function CreatePatient() {
   const router = useRouter();
   const create = useCreatePatient();
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">New patient</h1>
+    <div className="space-y-5">
+      <PageHeader title="New patient" description="Fields are required unless marked optional." />
       <PatientForm
         submitLabel="Create patient"
+        cancelHref="/patients"
         pending={create.isPending}
         onSubmit={(input) =>
           create.mutate(input, {
@@ -34,19 +36,23 @@ export function EditPatient({ patientId }: { patientId: string }) {
   if (isLoading || !patient) return <p className="text-ink-muted">Loading patient…</p>;
 
   return (
-    <PatientForm
-      defaultValues={patient}
-      submitLabel="Save changes"
-      pending={update.isPending}
-      onSubmit={(input) =>
-        update.mutate(input, {
-          onSuccess: () => {
-            toast.success("Patient updated");
-            router.push(`/patients/${patientId}`);
-          },
-          onError: (e) => toast.error(e.message),
-        })
-      }
-    />
+    <div className="space-y-4">
+      <h2 className="text-lg font-semibold">Edit profile</h2>
+      <PatientForm
+        defaultValues={patient}
+        submitLabel="Save changes"
+        cancelHref={`/patients/${patientId}`}
+        pending={update.isPending}
+        onSubmit={(input) =>
+          update.mutate(input, {
+            onSuccess: () => {
+              toast.success("Patient updated");
+              router.push(`/patients/${patientId}`);
+            },
+            onError: (e) => toast.error(e.message),
+          })
+        }
+      />
+    </div>
   );
 }

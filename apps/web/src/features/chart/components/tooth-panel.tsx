@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Controller, FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format, parseISO } from "date-fns";
+import { AlertTriangleIcon } from "lucide-react";
 import { toast } from "sonner";
 import {
   CreateChartEntryInput,
@@ -10,6 +11,7 @@ import {
   WHOLE_TOOTH_CONDITIONS,
   isToothGone,
   surfacesFor,
+  toothName,
   type ChartEntry,
   type Surface,
   type ToothNumber,
@@ -25,6 +27,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { useStaff } from "@/features/clinic/api";
+import { usePatient } from "@/features/patients/api";
 import { AddToPlan } from "@/features/plan/components/add-to-plan";
 import { cn } from "@/lib/utils";
 import { useRecordChartEntry } from "../api";
@@ -74,9 +77,13 @@ export function ToothPanel({
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-md">
-        <SheetHeader>
-          <SheetTitle>Tooth {tooth}</SheetTitle>
+        <SheetHeader className="gap-1 border-b border-line">
+          {/* Number and name together, so the tooth being charted can't be mistaken. */}
+          <SheetTitle className="text-lg">
+            Tooth {tooth} <span className="font-normal text-ink-muted">· {toothName(tooth)}</span>
+          </SheetTitle>
           <SheetDescription>{describeTooth(tooth, state).replace(/^Tooth \d+: /, "Now: ")}</SheetDescription>
+          <PanelAllergies patientId={patientId} />
         </SheetHeader>
 
         <div className="space-y-6 px-4 pb-6">
@@ -270,5 +277,17 @@ function EntryForm({
         </Button>
       </form>
     </FormProvider>
+  );
+}
+
+/** The panel covers the pinned patient header, so allergies are repeated where findings are recorded. */
+function PanelAllergies({ patientId }: { patientId: string }) {
+  const allergies = usePatient(patientId).data?.allergies ?? [];
+  if (!allergies.length) return null;
+  return (
+    <p className="mt-2 flex items-center gap-1.5 rounded-md border border-alert-line bg-alert-bg px-2 py-1 text-sm font-semibold text-alert">
+      <AlertTriangleIcon className="size-3.5 shrink-0" aria-hidden />
+      Allergy: {allergies.join(", ")}
+    </p>
   );
 }

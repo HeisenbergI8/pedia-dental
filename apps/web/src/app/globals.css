@@ -4,20 +4,49 @@
 /* Design tokens. Change the palette here, not in components. */
 @theme {
   --color-ground: #f4f8f7;
+  --color-surface: #ffffff;
   --color-ink: #12302f;
-  --color-ink-muted: #4a6261;
+  --color-ink-muted: #4a6261; /* 5.9:1 on ground, 6.4:1 on white */
   --color-line: #d5e2e0;
-  --color-brand: #0e6b66;
+  --color-line-strong: #b4c8c5; /* decorative dashed outlines */
+  --color-input-border: #7a9390; /* 3.3:1 on white: a field's edge must be visible (WCAG 1.4.11) */
+  --color-brand: #0e6b66; /* 6.3:1 on white */
   --color-brand-ink: #ffffff;
-  --color-alert: #8a3b00;
+  --color-brand-subtle: #e3f1ef; /* selected nav, active rows */
+  /* Clinical alerts only (allergies, conditions). Never decorative. */
+  --color-alert: #8a3b00; /* 6.6:1 on alert-bg */
   --color-alert-bg: #fdecd9;
+  --color-alert-line: #f3c99b;
   --color-danger: #a12622;
+  --color-danger-bg: #fbe9e8;
+  --color-success: #1d6b3a;
+  --color-success-bg: #e4f3e9;
+  --color-info: #1f4f86;
+  --color-info-bg: #e6eef8;
+
+  /* Dental chart. Conventional colours; every one is also backed by a printed code or pattern. */
+  --color-tooth-sound: #ffffff;
+  --color-tooth-stroke: #4a6261;
+  --color-tooth-mark: #12302f;
+  --color-tooth-caries: #a12622;
+  --color-tooth-restored: #7aa7dc;
+  --color-tooth-pulpectomy: #3d2266;
+  --color-tooth-extracted: #d7dcdc;
+  --color-tooth-erupting: #cfe8e6;
+  --color-tooth-sealant: #2e7d4f;
+  --color-tooth-sealant-bg: #e3f1e8;
+  --color-tooth-fluoride: #9a6b00;
+  --color-tooth-fluoride-bg: #fff6d6;
+  --color-tooth-pulpotomy: #6b3fa0;
+  --color-tooth-pulpotomy-bg: #ece3f7;
+
   --font-sans: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
+  --shadow-card: 0 1px 2px 0 rgb(18 48 47 / 0.05);
 }
 
 /* shadcn/ui names, mapped onto the tokens above so components/ui stays unedited. */
 @theme inline {
-  --color-background: #ffffff;
+  --color-background: var(--color-surface);
   --color-foreground: var(--color-ink);
   --color-primary: var(--color-brand);
   --color-primary-foreground: var(--color-brand-ink);
@@ -25,20 +54,30 @@
   --color-secondary-foreground: var(--color-ink);
   --color-muted: var(--color-ground);
   --color-muted-foreground: var(--color-ink-muted);
-  --color-accent: var(--color-ground);
+  --color-accent: var(--color-brand-subtle);
   --color-accent-foreground: var(--color-ink);
-  --color-popover: #ffffff;
+  --color-popover: var(--color-surface);
   --color-popover-foreground: var(--color-ink);
-  --color-card: #ffffff;
+  --color-card: var(--color-surface);
   --color-card-foreground: var(--color-ink);
   --color-destructive: var(--color-danger);
   --color-border: var(--color-line);
-  --color-input: var(--color-line);
+  --color-input: var(--color-input-border);
   --color-ring: var(--color-brand);
   --radius: 0.5rem;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+html {
+  /* Keeps a focused field clear of the sticky top bar (WCAG 2.4.11). */
+  scroll-padding-top: 5rem;
+}
+/* Patient screens also pin the patient header. */
+html:has([data-patient-header]) {
+  scroll-padding-top: 13rem;
 }
 
 body {
@@ -46,10 +85,165 @@ body {
   color: var(--color-ink);
 }
 
-/* react-big-calendar shades today blue, which floods the whole day view. */
-.rbc-today {
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* react-big-calendar, restyled onto the tokens. Scoped under .calendar so these rules
+   outrank the library stylesheet, which loads after this file. */
+.calendar .rbc-calendar {
+  font-size: 0.8125rem;
+  color: var(--color-ink);
+}
+
+.calendar .rbc-header,
+.calendar .rbc-time-header-cell .rbc-header {
+  padding: 0.5rem 0.25rem;
+  font-weight: 600;
+  border-color: var(--color-line) !important;
+}
+
+.calendar .rbc-time-view,
+.calendar .rbc-month-view,
+.calendar .rbc-agenda-view table.rbc-agenda-table {
+  border-color: var(--color-line);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.calendar .rbc-time-content,
+.calendar .rbc-time-header-content,
+.calendar .rbc-timeslot-group,
+.calendar .rbc-day-bg + .rbc-day-bg,
+.calendar .rbc-month-row + .rbc-month-row,
+.calendar .rbc-time-content > * + * > *,
+.calendar .rbc-day-slot .rbc-time-slot,
+.calendar .rbc-agenda-view table.rbc-agenda-table tbody > tr > td + td,
+.calendar .rbc-agenda-view table.rbc-agenda-table tbody > tr + tr {
+  border-color: var(--color-line) !important;
+}
+
+.calendar .rbc-day-slot .rbc-time-slot {
+  border-top-style: dotted;
+}
+
+.calendar .rbc-label {
+  color: var(--color-ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.calendar .rbc-off-range-bg {
   background: var(--color-ground);
 }
-.rbc-time-view .rbc-today {
+
+/* Today is marked by the header, not a flood of colour across the day. */
+.calendar .rbc-today {
+  background: var(--color-ground);
+}
+
+.calendar .rbc-time-view .rbc-today {
   background: transparent;
+}
+
+.calendar .rbc-header.rbc-today,
+.calendar .rbc-time-header .rbc-today {
+  color: var(--color-brand);
+}
+
+.calendar .rbc-current-time-indicator {
+  background-color: var(--color-danger);
+  height: 2px;
+}
+
+.calendar .rbc-event,
+.calendar .rbc-day-slot .rbc-background-event {
+  padding: 2px 6px;
+}
+
+.calendar .rbc-event:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 1px;
+}
+
+.calendar .rbc-show-more {
+  color: var(--color-brand);
+  font-weight: 600;
+}
+
+.calendar .rbc-agenda-view table.rbc-agenda-table thead > tr > th {
+  padding: 0.5rem 0.75rem;
+  border-color: var(--color-line);
+  color: var(--color-ink-muted);
+  font-weight: 500;
+}
+
+.calendar .rbc-agenda-view table.rbc-agenda-table tbody > tr > td {
+  padding: 0.625rem 0.75rem;
+  vertical-align: middle;
+}
+
+.calendar .rbc-agenda-view table.rbc-agenda-table .rbc-agenda-time-cell {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.calendar .rbc-agenda-empty {
+  padding: 2rem 1rem;
+  color: var(--color-ink-muted);
+}
+
+/* The agenda flexes from a zero basis, which collapses it inside an auto-height box.
+*/
+.calendar .rbc-calendar:has(> .rbc-agenda-view) {
+  height: auto;
+}
+
+.calendar .rbc-calendar .rbc-agenda-view {
+  flex: 1 0 auto;
+}
+
+.calendar .rbc-agenda-view table.rbc-agenda-table tbody > tr > td.rbc-agenda-date-cell {
+  display: none;
+}
+
+.calendar .rbc-agenda-view table.rbc-agenda-table thead > tr > th:first-child {
+  display: none;
+}
+
+
+/* No all-day events exist; the empty all-day strip is wasted height. */
+.calendar .rbc-allday-cell {
+  display: none;
+}
+
+.calendar .rbc-time-header-content > .rbc-row.rbc-row-resource {
+  border-bottom: 0;
+}
+
+/* The clinic is closed on Sundays. */
+.calendar-week .rbc-time-gutter + .rbc-day-slot,
+.calendar .rbc-month-row .rbc-day-bg:first-child {
+  background: var(--color-ground);
+}
+
+.calendar .rbc-date-cell {
+  padding: 0.25rem 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.calendar .rbc-date-cell.rbc-now {
+  color: var(--color-brand);
+  font-weight: 700;
+}
+
+.calendar .rbc-row-segment {
+  padding: 1px 3px;
+}
+.calendar .rbc-month-view .rbc-today {
+  background: var(--color-brand-subtle);
 }

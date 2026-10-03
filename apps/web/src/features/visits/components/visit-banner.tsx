@@ -1,6 +1,6 @@
 "use client";
 import { format, parseISO } from "date-fns";
-import { ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon, StethoscopeIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,11 +30,18 @@ export function VisitBanner({ patientId }: { patientId: string }) {
     return (
       <div
         role="status"
-        className="flex flex-wrap items-center justify-between gap-3 rounded-lg border-2 border-brand bg-white px-4 py-3"
+        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand bg-brand-subtle px-4 py-3"
       >
-        <p>
-          <span className="font-semibold text-brand">Visit in progress</span>
-          <span className="text-ink-muted"> · started {format(parseISO(current.startedAt), "h:mm a")} with {dentist}</span>
+        <p className="flex items-center gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand text-brand-ink">
+            <StethoscopeIcon className="size-4.5" aria-hidden />
+          </span>
+          <span>
+            <span className="block font-semibold text-brand">Visit in progress</span>
+            <span className="block text-sm text-ink-muted">
+              Started {format(parseISO(current.startedAt), "h:mm a")} with {dentist}. New records attach to this visit.
+            </span>
+          </span>
         </p>
         <Button
           variant="outline"
@@ -48,8 +55,8 @@ export function VisitBanner({ patientId }: { patientId: string }) {
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-line px-4 py-3">
-      <p className="text-ink-muted">No visit in progress.</p>
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-line-strong px-4 py-3">
+      <p className="text-sm text-ink-muted">No visit in progress. Start one to chart, write notes or take photos.</p>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button disabled={start.isPending || dentists.length === 0}>

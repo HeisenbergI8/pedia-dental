@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { Controller, FormProvider, get, useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -39,11 +40,15 @@ const EMPTY: CreatePatientInput = {
 /** An empty optional input arrives as "", which `.email()` would reject. */
 const blankToUndefined = (v: string) => v || undefined;
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   return (
-    <fieldset className="space-y-4 rounded-lg border border-line bg-white p-5">
-      <legend className="px-1 text-lg font-semibold">{title}</legend>
-      {children}
+    <fieldset className="min-w-0 rounded-xl border border-line bg-surface p-4 shadow-card sm:p-5">
+      {/* Floated so the legend sits inside the card instead of on its border. */}
+      <legend className="float-left mb-4 w-full">
+        <span className="block text-base font-semibold">{title}</span>
+        {description && <span className="block text-sm text-ink-muted">{description}</span>}
+      </legend>
+      <div className="clear-both space-y-4">{children}</div>
     </fieldset>
   );
 }
@@ -59,11 +64,13 @@ export function PatientForm({
   defaultValues = EMPTY,
   submitLabel,
   pending,
+  cancelHref,
   onSubmit,
 }: {
   defaultValues?: CreatePatientInput;
   submitLabel: string;
   pending: boolean;
+  cancelHref: string;
   onSubmit: (input: CreatePatientInput) => void;
 }) {
   const form = useForm<CreatePatientInput>({ resolver: zodResolver(CreatePatientInput), defaultValues });
@@ -78,7 +85,7 @@ export function PatientForm({
 
   return (
     <FormProvider {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="max-w-3xl space-y-5">
         <Section title="Child">
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField name="firstName" label="First name">
@@ -115,7 +122,7 @@ export function PatientForm({
           </FormField>
         </Section>
 
-        <Section title="Guardians">
+        <Section title="Guardians" description="The primary contact receives reminders and signs consents.">
           {guardians.fields.map((g, i) => (
             <div key={g.id} className="space-y-4 border-b border-line pb-4 last:border-0 last:pb-0">
               <div className="grid gap-4 sm:grid-cols-2">
@@ -161,7 +168,7 @@ export function PatientForm({
           </Button>
         </Section>
 
-        <Section title="Emergency contact">
+        <Section title="Emergency contact (optional)" description="Someone to call if the guardians can't be reached.">
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField name="emergencyContact.name" label="Name">
               <Input {...register("emergencyContact.name")} />
@@ -172,7 +179,7 @@ export function PatientForm({
           </div>
         </Section>
 
-        <Section title="Medical">
+        <Section title="Medical" description="Shown on every patient screen. Press Enter after each item.">
           <div className="grid gap-4 sm:grid-cols-2">
             {LISTS.map(([name, label, placeholder]) => (
               <FormField key={name} name={name} label={label}>
@@ -199,9 +206,15 @@ export function PatientForm({
           </FormField>
         </Section>
 
-        <Button type="submit" size="lg" disabled={pending}>
-          {pending ? "Saving…" : submitLabel}
-        </Button>
+        {/* Pinned to the bottom so saving never needs a scroll back down a long form. */}
+        <div className="sticky bottom-0 z-20 -mx-4 flex items-center justify-end gap-2 border-t border-line bg-ground/95 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-xl sm:border sm:px-4">
+          <Button asChild variant="ghost">
+            <Link href={cancelHref}>Cancel</Link>
+          </Button>
+          <Button type="submit" disabled={pending}>
+            {pending ? "Saving…" : submitLabel}
+          </Button>
+        </div>
       </form>
     </FormProvider>
   );

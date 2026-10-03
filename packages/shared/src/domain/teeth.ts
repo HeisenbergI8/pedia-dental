@@ -33,3 +33,16 @@ export type Surface = (typeof SURFACES)[number];
 export function surfacesFor(t: ToothNumber): Surface[] {
   return isAnterior(t) ? ["M", "I", "D", "B", "L"] : ["M", "O", "D", "B", "L"];
 }
+
+const SIDE = ["Upper right", "Upper left", "Lower left", "Lower right"];
+const PERMANENT_NAME = ["central incisor", "lateral incisor", "canine", "first premolar", "second premolar", "first molar", "second molar", "third molar"];
+const PRIMARY_NAME = ["central incisor", "lateral incisor", "canine", "first molar", "second molar"];
+
+/** "Upper right primary second molar" for 55: shown wherever a tooth is acted on, against wrong-tooth errors. */
+export function toothName(t: ToothNumber): string {
+  const dentition = dentitionOf(t);
+  const quadrant = Math.floor(t / 10);
+  const side = SIDE[(quadrant - 1) % 4];
+  const names = dentition === "primary" ? PRIMARY_NAME : PERMANENT_NAME;
+  return `${side} ${dentition === "primary" ? "primary " : ""}${names[(t % 10) - 1]}`;
+}

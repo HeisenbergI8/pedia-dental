@@ -51,6 +51,16 @@ const newPatient: CreatePatientInput = {
 const send = (method: string, body: unknown) => ({ method, body: JSON.stringify(body) });
 
 describe("patients", () => {
+  it("finds a patient by child name, guardian name or guardian phone", async () => {
+    const created = await api("/patients", Patient, send("POST", newPatient));
+    for (const q of ["bea mend", "Rosa Mendoza", "0917 123 4567", "1234567", "Mendoza Rosa", "Bea R", "0917-123-4567"]) {
+      const found = await api(`/patients?q=${encodeURIComponent(q)}`, z.array(Patient));
+      expect(found.map((p) => p.id)).toContain(created.id);
+    }
+    const none = await api(`/patients?q=${encodeURIComponent("Bea Zz")}`, z.array(Patient));
+    expect(none.map((p) => p.id)).not.toContain(created.id);
+  });
+
   it("creates a patient that can be read back", async () => {
     const created = await api("/patients", Patient, send("POST", newPatient));
     expect(created.consents).toEqual([]);
@@ -221,7 +231,7 @@ describe("notes", () => {
     const visit = await api(`/patients/${patient.id}/visits`, Visit, send("POST", { dentistId: "staff_reyes" }));
     const bad = { visitId: visit.id, templateId: "tpl_pulpotomy", values: { teeth: [] }, behavior: [] };
     const err = await api(`/patients/${patient.id}/notes`, ClinicalNote, send("POST", bad)).catch((e: ApiError) => e);
-    expect((err as ApiError).message).toBe("Pick at least one tooth. Choose one");
+    expect((err as ApiError).message).toBe("Pick at least one tooth. Choose medicament");
   });
 
   it("rejects values that don't fit the template", async () => {

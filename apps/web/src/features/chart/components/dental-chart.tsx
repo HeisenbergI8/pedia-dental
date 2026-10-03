@@ -97,9 +97,9 @@ export function DentalChart({
           .map((c) => (
             <li key={c} className="flex items-center gap-1.5">
               <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
-                <rect x="1" y="1" width="14" height="14" fill={CONDITION_STYLE[c].fill} stroke="#4a6261"
+                <rect x="1" y="1" width="14" height="14" fill={CONDITION_STYLE[c].fill} stroke="var(--color-tooth-stroke)"
                   strokeDasharray={CONDITION_STYLE[c].mark === "dashed" ? "3 2" : undefined} />
-                {CONDITION_STYLE[c].mark === "cross" && <path d="M3 3 13 13 M13 3 3 13" stroke="#12302f" strokeWidth="1.5" />}
+                {CONDITION_STYLE[c].mark === "cross" && <path d="M3 3 13 13 M13 3 3 13" stroke="var(--color-tooth-mark)" strokeWidth="1.5" />}
               </svg>
               <span>
                 {CONDITION_STYLE[c].label} <span className="font-semibold text-ink-muted">{CONDITION_STYLE[c].code}</span>

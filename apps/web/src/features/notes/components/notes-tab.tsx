@@ -28,7 +28,7 @@ export function NotesTab({ patient }: { patient: Patient }) {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">Clinical notes</h2>
+        <h2 className="text-base font-semibold">Clinical notes</h2>
         {current ? (
           <NoteDialog patient={patient} visit={current} trigger={<Button>New note</Button>} />
         ) : (
@@ -77,7 +77,7 @@ function NoteCard({
   });
 
   return (
-    <article className="space-y-3 rounded-lg border border-line bg-white p-5">
+    <article className="space-y-3 rounded-xl border border-line bg-surface p-4 shadow-card sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="font-semibold">{template?.name ?? "Unknown template"}</p>

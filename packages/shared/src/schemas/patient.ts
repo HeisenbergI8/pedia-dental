@@ -1,14 +1,14 @@
 import { z } from "zod";
-import { ClinicScoped, Id, IsoDate, IsoDateTime } from "./common";
+import { ClinicScoped, Id, IsoDate, IsoDateTime, isoDate } from "./common";
 
 export const Sex = z.enum(["male", "female"]);
 
 export const Guardian = z.object({
   id: Id,
-  fullName: z.string().min(1),
-  relationship: z.string().min(1), // mother, father, grandparent, legal guardian…
-  phone: z.string().min(7),
-  email: z.string().email().optional(),
+  fullName: z.string().trim().min(1, "Enter the guardian's full name"),
+  relationship: z.string().trim().min(1, "Say how they're related, e.g. Mother"), // mother, father, grandparent, legal guardian…
+  phone: z.string().min(7, "Enter the guardian's phone number, like 0917 123 4567"),
+  email: z.string().email("Enter a valid email address, like name@example.com").optional(),
   isPrimary: z.boolean(),
 });
 export type Guardian = z.infer<typeof Guardian>;
@@ -37,12 +37,12 @@ export type AddConsentInput = z.infer<typeof AddConsentInput>;
 
 export const Patient = ClinicScoped.extend({
   id: Id,
-  firstName: z.string().min(1),
-  lastName: z.string().min(1),
-  birthDate: IsoDate,
+  firstName: z.string().trim().min(1, "Enter the child's first name"),
+  lastName: z.string().trim().min(1, "Enter the child's last name"),
+  birthDate: isoDate("Enter the date of birth"),
   sex: Sex,
   address: z.string().optional(),
-  guardians: z.array(Guardian).min(1),
+  guardians: z.array(Guardian).min(1, "Add at least one guardian"),
   emergencyContact: z.object({ name: z.string(), phone: z.string() }).optional(),
   allergies: z.array(z.string()),
   medicalConditions: z.array(z.string()),

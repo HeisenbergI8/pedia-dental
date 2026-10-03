@@ -13,7 +13,7 @@ export const PlanItem = ClinicScoped.extend({
   id: Id,
   patientId: Id,
   procedureCode: z.string(),
-  tooth: z.number().int().refine(isValidTooth, "Invalid FDI tooth").optional(),
+  tooth: z.number().int().refine(isValidTooth, "Use a tooth number like 74 (FDI)").optional(),
   fee: Centavos.nonnegative(),
   status: PlanItemStatus,
   /** The chart finding this item was planned from, if any. */
