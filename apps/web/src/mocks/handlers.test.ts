@@ -744,6 +744,25 @@ describe("access control", () => {
     expect(await api("/auth/me", SessionUser)).toMatchObject({ role: "dentist", staffId: dentist.id });
   });
 
+  it("lists one login per role, each signing in as that role with pass123", async () => {
+    signIn(null);
+    const { logins, password } = await api("/auth/demo-accounts", DemoAccounts);
+    expect(password).toBe("pass123");
+    expect(logins).toEqual([
+      { role: "admin", email: "admin@gmail.com" },
+      { role: "dentist", email: "dentist@gmail.com" },
+      { role: "front_desk", email: "frontdesk@gmail.com" },
+      { role: "parent", email: "parent@gmail.com" },
+    ]);
+    for (const { role, email } of logins) {
+      const session = await api("/auth/login", Session, send("POST", { email, password }));
+      signIn(session.token);
+      expect((await api("/auth/me", SessionUser)).role, email).toBe(role);
+    }
+    // The parent login is the two-children family.
+    expect((await api("/patients", z.array(Patient))).map((p) => p.id)).toContain("patient_sibling");
+  });
+
   it("keeps the finance dashboard admin-only", async () => {
     for (const token of ["demo.staff_cruz", "demo.staff_reyes"]) {
       signIn(token);

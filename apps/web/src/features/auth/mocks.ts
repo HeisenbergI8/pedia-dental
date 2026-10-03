@@ -3,7 +3,7 @@ import { LoginInput, LogoutInput, type Session, type SessionUser } from "@pedia/
 import { env } from "@/lib/env";
 import { recordAudit, sessionOf } from "@/mocks/access";
 import { db } from "@/mocks/db";
-import { DEMO_PASSWORD, allAccounts, demoAccounts, tokenFor, type DemoAccountRecord } from "@/mocks/demo-accounts";
+import { DEMO_PASSWORD, allAccounts, demoAccounts, demoLogins, tokenFor, type DemoAccountRecord } from "@/mocks/demo-accounts";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 
@@ -21,7 +21,7 @@ export const authHandlers = [
   http.get(url("/auth/demo-accounts"), async () => {
     await delay(100);
     const accounts = demoAccounts(db).map(({ id, role, name, email, summary }) => ({ id, role, name, email, summary }));
-    return HttpResponse.json({ password: DEMO_PASSWORD, accounts });
+    return HttpResponse.json({ password: DEMO_PASSWORD, accounts, logins: demoLogins(db) });
   }),
 
   // No simulated latency: it was dead time between the click and the next page.

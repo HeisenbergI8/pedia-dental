@@ -64,5 +64,9 @@ export const DemoAccount = SessionUser.pick({ id: true, role: true, name: true, 
   summary: z.string(), // "Two children, one mid-treatment"
 });
 export type DemoAccount = z.infer<typeof DemoAccount>;
-export const DemoAccounts = z.object({ password: z.string(), accounts: z.array(DemoAccount) });
+export const DemoAccounts = z.object({
+  password: z.string(),
+  accounts: z.array(DemoAccount),
+  logins: z.array(DemoAccount.pick({ role: true, email: true })), // one per role, listed on the sign-in page
+});
 export type DemoAccounts = z.infer<typeof DemoAccounts>;
