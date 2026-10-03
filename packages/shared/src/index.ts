@@ -9,6 +9,7 @@ export * from "./schemas/notes";
 export * from "./schemas/growth";
 export * from "./schemas/plan";
 export * from "./schemas/photo";
+export * from "./schemas/recall";
 export * from "./domain/teeth";
 export * from "./errors";
 export * from "./domain/chart";

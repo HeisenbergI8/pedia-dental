@@ -7,6 +7,7 @@ import {
   canReschedule,
   canTransition,
   findConflict,
+  isDueItemOpen,
   type Appointment,
 } from "@pedia/shared";
 import { env } from "@/lib/env";
@@ -62,6 +63,13 @@ export const appointmentHandlers = [
     const rejected = rejectSlot(appointment);
     if (rejected) return rejected;
     db.appointments.push(appointment);
+    // Booked from the due list: the patient's earliest open item for that rule is now booked.
+    if (appointment.sourceRuleId) {
+      const due = db.dueItems
+        .filter((i) => i.patientId === appointment.patientId && i.ruleId === appointment.sourceRuleId && isDueItemOpen(i, db.appointments))
+        .sort((a, b) => a.dueOn.localeCompare(b.dueOn))[0];
+      if (due) due.appointmentId = appointment.id;
+    }
     persist();
     return HttpResponse.json(appointment, { status: 201 });
   }),

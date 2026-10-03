@@ -3,6 +3,7 @@ import { addDays, addMinutes, differenceInYears, parseISO, setHours, startOfDay 
 import {
   PERMANENT_TEETH,
   PRIMARY_TEETH,
+  dueItemFor,
   isAnterior,
   pesos,
   surfacesFor,
@@ -10,6 +11,7 @@ import {
   type Chair,
   type ChartEntry,
   type ClinicalNote,
+  type DueItem,
   type Patient,
   type PlanItem,
   type Procedure,
@@ -157,6 +159,9 @@ export function seed(): Db {
     planItems: example.planItems,
     appointments: seedAppointments(patients),
     photos: [],
+    dueItems: seedDueItems(visits, [...notes, ...example.notes]),
+    invoices: [],
+    payments: [],
   };
 }
 
@@ -279,6 +284,26 @@ function seedExamplePlan(patients: Patient[], visits: Visit[]) {
   );
 
   return { chartEntries: [...caries, restored51], notes, planItems };
+}
+
+/** Each patient's latest signed note with a rule (in practice their last oral exam) sets their next recall. */
+function seedDueItems(visits: Visit[], notes: ClinicalNote[]): DueItem[] {
+  const latest = new Map<string, DueItem>();
+  for (const n of [...notes].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
+    const procedure = NOTE_TEMPLATES.find((t) => t.id === n.templateId)?.procedure ?? "";
+    const visit = visits.find((v) => v.id === n.visitId);
+    const due = n.signedAt && visit && dueItemFor(procedure, visit.date);
+    if (!due || !n.signedAt) continue;
+    latest.set(`${n.patientId}:${due.ruleId}`, {
+      ...due,
+      id: `due_${n.id}`,
+      clinicId: CLINIC_ID,
+      patientId: n.patientId,
+      sourceNoteId: n.id,
+      createdAt: n.signedAt,
+    });
+  }
+  return [...latest.values()];
 }
 
 /**

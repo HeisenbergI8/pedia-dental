@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dueDateFor, findRule } from "./recall";
+import { dueBucket, dueDateFor, dueItemFor, findRule, isDueItemOpen } from "./recall";
 
 describe("follow-up rules", () => {
   it("extraction → 7 days", () => {
@@ -10,5 +10,29 @@ describe("follow-up rules", () => {
   });
   it("sealant → 6 months", () => {
     expect(dueDateFor(findRule("sealant")!, "2026-10-02")).toBe("2027-04-02");
+  });
+  it("an extraction done today is due in 7 days, in this week's list", () => {
+    const item = dueItemFor("extraction", "2026-10-03")!; // a Saturday: a calendar week would miss it
+    expect(item).toEqual({ ruleId: "extraction", kind: "follow_up", procedure: "extraction", dueOn: "2026-10-10" });
+    expect(dueBucket(item.dueOn, "2026-10-03")).toBe("this_week");
+  });
+  it("creates nothing for a procedure without a rule", () => {
+    expect(dueItemFor("restoration", "2026-10-03")).toBeUndefined();
+  });
+  it("buckets by rolling window from today", () => {
+    expect(dueBucket("2026-10-02", "2026-10-03")).toBe("overdue");
+    expect(dueBucket("2026-10-03", "2026-10-03")).toBe("this_week");
+    expect(dueBucket("2026-10-11", "2026-10-03")).toBe("this_month");
+    expect(dueBucket("2026-11-02", "2026-10-03")).toBe("this_month");
+    expect(dueBucket("2026-11-03", "2026-10-03")).toBeUndefined();
+  });
+  it("leaves the list when booked, and returns if the booking is cancelled or missed", () => {
+    const item = { appointmentId: "a1" };
+    expect(isDueItemOpen({}, [])).toBe(true);
+    expect(isDueItemOpen(item, [{ id: "a1", status: "booked" }])).toBe(false);
+    expect(isDueItemOpen(item, [{ id: "a1", status: "done" }])).toBe(false);
+    expect(isDueItemOpen(item, [{ id: "a1", status: "cancelled" }])).toBe(true);
+    expect(isDueItemOpen(item, [{ id: "a1", status: "no_show" }])).toBe(true);
+    expect(isDueItemOpen({ closedAt: "2026-10-03T00:00:00Z" }, [])).toBe(false);
   });
 });

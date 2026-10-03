@@ -4,6 +4,7 @@ import { z } from "zod";
 import { ClinicalNote, CreateNoteInput, NoteTemplate, UpdateNoteInput } from "@pedia/shared";
 import { api } from "@/lib/api-client";
 import { planKeys } from "@/features/plan/api";
+import { dueKeys } from "@/features/recalls/api";
 
 export const noteKeys = {
   forPatient: (patientId: string) => ["notes", "patient", patientId] as const,
@@ -44,6 +45,7 @@ export function useSignNote(patientId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: noteKeys.forPatient(patientId) });
       qc.invalidateQueries({ queryKey: planKeys.forPatient(patientId) }); // signing completes plan items
+      qc.invalidateQueries({ queryKey: dueKeys.all }); // and can make a follow-up or recall due
     },
   });
 }

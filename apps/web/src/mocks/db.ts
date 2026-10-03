@@ -4,9 +4,12 @@ import type {
   ChartEntry,
   ClinicalNote,
   ClinicalPhoto,
+  DueItem,
   GrowthRecord,
+  Invoice,
   NoteTemplate,
   Patient,
+  Payment,
   PlanItem,
   Procedure,
   StaffMember,
@@ -32,10 +35,13 @@ export type Db = {
   planItems: PlanItem[];
   appointments: Appointment[];
   photos: ClinicalPhoto[]; // metadata only; the files live in blob-store.ts
+  dueItems: DueItem[];
+  invoices: Invoice[];
+  payments: Payment[]; // append-only; refunds are negative rows
 };
 
-// Bumped past both parallel tracks (v7 chunks 5-9, v4 chunks 10-15) so either shape reseeds.
-const KEY = "pedia-dental:mock-db:v8";
+// v10: Chunk 12 added invoices and payments.
+const KEY = "pedia-dental:mock-db:v10";
 
 function load(): Db {
   if (typeof window === "undefined") return seed();

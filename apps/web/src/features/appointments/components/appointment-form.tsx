@@ -28,7 +28,7 @@ const FormValues = z.object({
 type FormValues = z.infer<typeof FormValues>;
 
 /** Where the form opens: a slot picked on the calendar, or an appointment being moved. */
-export type AppointmentDraft = Partial<Pick<Appointment, "patientId" | "chairId" | "dentistId" | "reason" | "durationMin">> & {
+export type AppointmentDraft = Partial<Pick<Appointment, "patientId" | "chairId" | "dentistId" | "reason" | "durationMin" | "sourceRuleId">> & {
   start?: Date;
   appointment?: Appointment;
 };
@@ -96,7 +96,7 @@ export function AppointmentForm({ draft, onClose }: { draft: AppointmentDraft | 
       onClose();
     };
     if (editing) reschedule.mutate({ id: editing.id, ...input }, { onSuccess: saved("Appointment moved"), onError });
-    else book.mutate({ ...input, patientId }, { onSuccess: saved("Appointment booked"), onError });
+    else book.mutate({ ...input, patientId, sourceRuleId: draft?.sourceRuleId }, { onSuccess: saved("Appointment booked"), onError });
   }
 
   const patientName = (id: string) => {

@@ -9,6 +9,7 @@ import {
   type RescheduleAppointmentInput,
 } from "@pedia/shared";
 import { api } from "@/lib/api-client";
+import { dueKeys } from "@/features/recalls/api";
 
 export const appointmentKeys = {
   all: ["appointments"] as const,
@@ -44,7 +45,13 @@ export function usePatientAppointments(patientId: string) {
 
 function useAppointmentMutation<T>(mutationFn: (input: T) => Promise<Appointment>) {
   const qc = useQueryClient();
-  return useMutation({ mutationFn, onSuccess: () => qc.invalidateQueries({ queryKey: appointmentKeys.all }) });
+  return useMutation({
+    mutationFn,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: appointmentKeys.all });
+      qc.invalidateQueries({ queryKey: dueKeys.all }); // booking closes a due item; cancelling reopens it
+    },
+  });
 }
 
 export function useBookAppointment() {

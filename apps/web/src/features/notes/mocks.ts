@@ -1,5 +1,5 @@
 import { http, HttpResponse, delay } from "msw";
-import { CreateNoteInput, UpdateNoteInput, itemsCompletedBy, noteValuesSchema, type ClinicalNote } from "@pedia/shared";
+import { CreateNoteInput, UpdateNoteInput, dueItemFor, itemsCompletedBy, noteValuesSchema, type ClinicalNote } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { db, persist } from "@/mocks/db";
 import { CLINIC_ID } from "@/mocks/seed";
@@ -70,7 +70,8 @@ export const noteHandlers = [
     const note = db.notes.find((n) => n.id === params.id);
     if (!note) return new HttpResponse("Note not found", { status: 404 });
     if (note.signedAt) return new HttpResponse("This note is already signed", { status: 409 });
-    note.signedAt = new Date().toISOString();
+    const signedAt = new Date().toISOString();
+    note.signedAt = signedAt;
 
     // Signing is what completes treatment plan items for this procedure and these teeth.
     const procedure = db.noteTemplates.find((t) => t.id === note.templateId)?.procedure ?? "";
@@ -78,6 +79,23 @@ export const noteHandlers = [
     const plan = db.planItems.filter((i) => i.patientId === note.patientId);
     for (const item of itemsCompletedBy(procedure, teeth, plan)) {
       Object.assign(item, { status: "done", completedVisitId: note.visitId, completedNoteId: note.id });
+    }
+
+    // Signing is also what makes a follow-up or recall fall due (DEFAULT_FOLLOW_UP_RULES).
+    const visit = db.visits.find((v) => v.id === note.visitId);
+    const due = visit && dueItemFor(procedure, visit.date);
+    if (due) {
+      for (const old of db.dueItems) {
+        if (old.patientId === note.patientId && old.ruleId === due.ruleId && !old.closedAt) old.closedAt = signedAt;
+      }
+      db.dueItems.push({
+        ...due,
+        id: crypto.randomUUID(),
+        clinicId: CLINIC_ID,
+        patientId: note.patientId,
+        sourceNoteId: note.id,
+        createdAt: signedAt,
+      });
     }
     persist();
     return HttpResponse.json(note);

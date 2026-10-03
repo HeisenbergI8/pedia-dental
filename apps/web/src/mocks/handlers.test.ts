@@ -1,20 +1,29 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { setupServer } from "msw/node";
 import { z } from "zod";
+import { addDays, format } from "date-fns";
 import {
   Appointment,
   ChartEntry,
   ClinicalNote,
   ClinicalPhoto,
+  DueItem,
   GrowthRecord,
+  Invoice,
   NoteTemplate,
   Patient,
+  Payment,
   PlanItem,
   Procedure,
   Visit,
+  accountSummary,
   deriveChart,
+  dueBucket,
   findConflict,
   habitTimeline,
+  invoiceBalance,
+  invoiceTotal,
+  pesos,
   planProgress,
   surfacesFor,
   type CreatePatientInput,
@@ -410,5 +419,105 @@ describe("photos", () => {
     await expect(upload(patient.id, meta, new Blob(["x"], { type: "text/plain" }))).rejects.toMatchObject({ status: 400 });
     await expect(upload(patient.id, { ...meta, tooth: 19 })).rejects.toMatchObject({ status: 400 });
     await expect(upload(patient.id, { ...meta, visitId: otherVisit.id })).rejects.toMatchObject({ status: 400 });
+  });
+});
+
+describe("follow-ups and recalls", () => {
+  const day = (offset: number) => format(addDays(new Date(), offset), "yyyy-MM-dd"); // local, like visits/mocks.ts
+
+  it("makes an extraction signed today due in 7 days, and booking it takes it off the list", async () => {
+    const patient = await api("/patients", Patient, send("POST", newPatient));
+    const visit = await api(`/patients/${patient.id}/visits`, Visit, send("POST", { dentistId: "staff_reyes" }));
+    const body = { visitId: visit.id, templateId: "tpl_extraction", values: { teeth: [75], reason: "Abscess" }, behavior: [] };
+    const note = await api(`/patients/${patient.id}/notes`, ClinicalNote, send("POST", body));
+    const listed = async () => (await api("/due-items", z.array(DueItem))).filter((i) => i.patientId === patient.id);
+    expect(await listed()).toEqual([]); // a draft makes nothing due
+
+    await api(`/notes/${note.id}/sign`, ClinicalNote, { method: "POST" });
+    const [due] = await listed();
+    expect(due).toMatchObject({ ruleId: "extraction", kind: "follow_up", dueOn: day(7), sourceNoteId: note.id });
+    expect(dueBucket(due.dueOn, day(0))).toBe("this_week");
+
+    // Far from the seeded fortnight around today, so nothing else can clash.
+    const booking = { patientId: patient.id, dentistId: "staff_reyes", chairId: "chair_3", startsAt: "2030-02-04T01:00:00.000Z", durationMin: 15, reason: "Follow-up after extraction", sourceRuleId: "extraction" };
+    const booked = await api("/appointments", Appointment, send("POST", booking));
+    expect(await listed()).toEqual([]);
+
+    await api(`/appointments/${booked.id}/status`, Appointment, send("POST", { status: "cancelled", cancelReason: "Parent asked to move it" }));
+    expect((await listed()).map((i) => i.id)).toEqual([due.id]); // a cancelled booking puts it back
+  });
+
+  it("seeds one routine recall per patient, from their latest signed exam", async () => {
+    const items = (await api("/due-items", z.array(DueItem))).filter((i) => i.id.startsWith("due_"));
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.every((i) => i.ruleId === "routine" && i.kind === "recall")).toBe(true);
+    expect(new Set(items.map((i) => i.patientId)).size).toBe(items.length);
+  });
+});
+
+describe("billing", () => {
+  /** A patient whose plan items are all done, completed by signing notes in one visit. */
+  async function patientWithDoneItems(plan: [string, number?][], notes: [string, Record<string, unknown>][]) {
+    const fee = Object.fromEntries((await api("/procedures", z.array(Procedure))).map((p) => [p.code, p.fee]));
+    const patient = await api("/patients", Patient, send("POST", newPatient));
+    for (const [procedureCode, tooth] of plan) {
+      await api(`/patients/${patient.id}/plan`, PlanItem, send("POST", { procedureCode, tooth, fee: fee[procedureCode] }));
+    }
+    const visit = await api(`/patients/${patient.id}/visits`, Visit, send("POST", { dentistId: "staff_reyes" }));
+    for (const [templateId, values] of notes) {
+      const note = await api(`/patients/${patient.id}/notes`, ClinicalNote, send("POST", { visitId: visit.id, templateId, values, behavior: [] }));
+      await api(`/notes/${note.id}/sign`, ClinicalNote, { method: "POST" });
+    }
+    const items = await api(`/patients/${patient.id}/plan`, z.array(PlanItem));
+    expect(items.every((i) => i.status === "done")).toBe(true);
+    return { patient, items };
+  }
+
+  it("reproduces the spec's ₱8,500 total, ₱5,000 paid, ₱3,500 balance with invoiceBalance", async () => {
+    const { patient, items } = await patientWithDoneItems(
+      [["prophylaxis"], ["fluoride"], ["restoration", 51], ["restoration", 74], ["restoration", 84], ["follow_up"]],
+      [
+        ["tpl_prophylaxis", { method: "Rubber cup and paste" }],
+        ["tpl_fluoride", { agent: "5% NaF varnish", teeth: [] }],
+        ["tpl_restoration", { teeth: [51, 74, 84], material: "Composite" }],
+        ["tpl_follow_up", { healing: "Satisfactory" }],
+      ],
+    );
+    const invoices = `/patients/${patient.id}/invoices`;
+    const invoice = await api(invoices, Invoice, send("POST", { planItemIds: items.map((i) => i.id) }));
+    expect(invoiceTotal(invoice)).toBe(pesos(8500));
+    expect(invoice.lines.map((l) => l.planItemId)).toEqual(items.map((i) => i.id));
+    await expect(api(invoices, Invoice, send("POST", { planItemIds: [items[0].id] }))).rejects.toMatchObject({ status: 409 }); // billed once
+
+    const pay = (body: object) => api(`/invoices/${invoice.id}/payments`, Payment, send("POST", { receivedBy: "staff_cruz", ...body }));
+    await expect(pay({ amount: pesos(9000), method: "cash" })).rejects.toMatchObject({ status: 409 }); // more than the balance
+    await expect(pay({ amount: pesos(2000), method: "gcash" })).rejects.toMatchObject({ status: 400 }); // no reference number
+    await pay({ amount: pesos(3000), method: "cash" });
+    const second = await pay({ amount: pesos(2000), method: "gcash", referenceNo: "1012 345 678" });
+    expect(second.receiptNo).toMatch(/^AR-\d{6}$/);
+
+    const payments = await api(`/patients/${patient.id}/payments`, z.array(Payment));
+    expect(invoiceBalance(invoice, payments)).toBe(pesos(3500));
+    expect(accountSummary([invoice], payments)).toEqual({ total: pesos(8500), paid: pesos(5000), balance: pesos(3500) });
+  });
+
+  it("applies a discount, records a refund as a negative payment, and lists the day's collections", async () => {
+    const { patient, items } = await patientWithDoneItems([["fluoride"]], [["tpl_fluoride", { agent: "5% NaF varnish", teeth: [] }]]);
+    const invoices = `/patients/${patient.id}/invoices`;
+    await expect(api(invoices, Invoice, send("POST", { planItemIds: [items[0].id], discount: pesos(900) }))).rejects.toMatchObject({ status: 400 });
+    const invoice = await api(invoices, Invoice, send("POST", { planItemIds: [items[0].id], discount: pesos(100) }));
+    expect(invoiceTotal(invoice)).toBe(pesos(700));
+
+    const pay = (body: object) => api(`/invoices/${invoice.id}/payments`, Payment, send("POST", { receivedBy: "staff_cruz", method: "cash", ...body }));
+    await pay({ amount: pesos(700) });
+    await expect(pay({ amount: -pesos(200) })).rejects.toMatchObject({ status: 400 }); // a refund needs a reason
+    const refund = await pay({ amount: -pesos(200), note: "Parent overpaid at the counter" });
+    await expect(pay({ amount: -pesos(600) })).rejects.toMatchObject({ status: 400 }); // still no reason
+    await expect(pay({ amount: -pesos(600), note: "Too much" })).rejects.toMatchObject({ status: 409 }); // only ₱500 left paid
+
+    const payments = await api(`/patients/${patient.id}/payments`, z.array(Payment));
+    expect(invoiceBalance(invoice, payments)).toBe(pesos(200));
+    const today = await api(`/payments?date=${format(new Date(), "yyyy-MM-dd")}`, z.array(Payment));
+    expect(today.map((p) => p.id)).toContain(refund.id);
   });
 });
