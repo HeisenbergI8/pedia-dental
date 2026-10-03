@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
+import { useCan } from "@/features/auth/access";
 import { useChairs, useStaff } from "@/features/clinic/api";
 import { usePatient } from "@/features/patients/api";
 import { useStartVisit } from "@/features/visits/api";
@@ -31,6 +32,7 @@ function Details({ appointment: a, onReschedule }: { appointment: Appointment; o
   const chairs = useChairs();
   const change = useChangeAppointmentStatus();
   const startVisit = useStartVisit(a.patientId);
+  const can = useCan();
   const [cancelReason, setCancelReason] = useState<string | null>(null);
   const start = parseISO(a.startsAt);
   const onError = (e: Error) => toast.error(e.message);
@@ -82,7 +84,7 @@ function Details({ appointment: a, onReschedule }: { appointment: Appointment; o
           {canTransition(a.status, "arrived") && (
             <Button disabled={busy} onClick={() => setStatus({ status: "arrived" })}>Check in</Button>
           )}
-          {canTransition(a.status, "in_chair") && (
+          {canTransition(a.status, "in_chair") && can("clinical.write") && (
             <Button
               disabled={busy}
               onClick={() =>

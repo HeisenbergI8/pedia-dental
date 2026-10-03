@@ -88,7 +88,7 @@ Optional and built last. Parents can view and confirm appointments, request an a
 treatment plans and invoices, read care instructions, and upload medical documents or photos.
 
 - **Rules:** a parent sees only their own children. The portal uses the same API, not a separate copy.
-- **Prototype:** a "view as parent" demo login picks a guardian.
+- **Prototype:** a demo login with parent accounts tied to seeded guardians; ownership enforced by the mock API (403).
 - **Later:** real parent accounts and invitations.
 
 ## 7. Billing and payments
@@ -345,7 +345,7 @@ filled in.
 
 **Depends on:** 9, 12.
 
-## Chunk 17: Parent portal (8 h) — feature 6
+## ✅ Chunk 17: Parent portal (8 h) — feature 6 (done, with demo login and role-based access)
 
 - A `(portal)` layout with "view as parent" demo login.
 - Appointments (view, confirm, request), treatment plan, invoices, instructions, uploads.

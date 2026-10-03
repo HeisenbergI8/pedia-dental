@@ -5,6 +5,7 @@ import type { Patient } from "@pedia/shared";
 import { SectionCard } from "@/components/section-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Can } from "@/features/auth/access";
 import { formatDate, formatPhone } from "@/lib/format";
 import { CONSENT_LABEL } from "../api";
 import { ConsentDialog } from "./consent-dialog";
@@ -32,9 +33,11 @@ export function PatientOverview({ patient: p }: { patient: Patient }) {
       <SectionCard
         title="Medical"
         action={
-          <Button asChild variant="ghost" size="sm">
-            <Link href={`/patients/${p.id}/edit`}><PencilIcon /> Edit profile</Link>
-          </Button>
+          <Can permission="patients.write">
+            <Button asChild variant="ghost" size="sm">
+              <Link href={`/patients/${p.id}/edit`}><PencilIcon /> Edit profile</Link>
+            </Button>
+          </Can>
         }
       >
         <dl className="space-y-3">
@@ -69,7 +72,7 @@ export function PatientOverview({ patient: p }: { patient: Patient }) {
         </dl>
       </SectionCard>
 
-      <SectionCard title="Consents" action={<ConsentDialog patient={p} />}>
+      <SectionCard title="Consents" action={<Can permission="patients.write"><ConsentDialog patient={p} /></Can>}>
         {p.consents.length === 0 ? (
           <p className="text-sm text-ink-muted">No consents recorded.</p>
         ) : (

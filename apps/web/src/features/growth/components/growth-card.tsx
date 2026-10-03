@@ -28,6 +28,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useCan } from "@/features/auth/access";
 import { useChartEntries } from "@/features/chart/api";
 import { formatAge } from "@/features/patients/age";
 import { useCurrentVisit, useVisits } from "@/features/visits/api";
@@ -46,6 +47,7 @@ export function GrowthCard({ patient }: { patient: Patient }) {
   const { data: records = [], isLoading, error } = useGrowth(patient.id);
   const visits = useVisits(patient.id).data ?? [];
   const current = useCurrentVisit(patient.id);
+  const canWrite = useCan()("clinical.write");
   const stage = dentitionStage(deriveChart(useChartEntries(patient.id).data ?? []));
   const habits = habitTimeline(records);
   const visitOf = (id: string) => visits.find((v) => v.id === id);
@@ -54,7 +56,7 @@ export function GrowthCard({ patient }: { patient: Patient }) {
     <section className="space-y-4 rounded-xl border border-line bg-surface p-4 shadow-card sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-base font-semibold">Growth and development</h2>
-        {current && (
+        {current && canWrite && (
           <GrowthDialog patient={patient} visit={current} records={records} existing={records.find((r) => r.visitId === current.id)} />
         )}
       </div>

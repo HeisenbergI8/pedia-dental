@@ -27,6 +27,7 @@ export const TYPE_LABEL: Record<PhotoType, string> = {
   extraoral: "Extraoral",
   xray: "X-ray",
   referral: "Referral document",
+  document: "Medical document",
 };
 
 const NONE = "none"; // Radix Select can't hold an empty value

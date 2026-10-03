@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Can } from "@/features/auth/access";
 import { useStaff } from "@/features/clinic/api";
 import { useVisits } from "@/features/visits/api";
 import { photoFileUrl, usePhotos } from "../api";
@@ -107,7 +108,9 @@ export function PhotosTab({ patientId }: { patientId: string }) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-base font-semibold">Clinical photos</h2>
-        <UploadPhotoDialog patientId={patientId} />
+        <Can permission="clinical.write">
+          <UploadPhotoDialog patientId={patientId} />
+        </Can>
       </div>
       {isLoading && <p className="text-ink-muted">Loading photos…</p>}
       {error && <p className="text-danger">Couldn&apos;t load photos.</p>}

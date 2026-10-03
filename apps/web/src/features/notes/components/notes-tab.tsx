@@ -3,6 +3,7 @@ import { format, parseISO } from "date-fns";
 import type { ClinicalNote, NoteTemplate, Patient, TemplateField } from "@pedia/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Can, useCan } from "@/features/auth/access";
 import { useStaff } from "@/features/clinic/api";
 import { useCurrentVisit, useVisits } from "@/features/visits/api";
 import { useNoteTemplates, useNotes } from "../api";
@@ -16,6 +17,7 @@ function display(f: TemplateField, v: unknown): string | undefined {
 
 export function NotesTab({ patient }: { patient: Patient }) {
   const { data: notes, isLoading, error } = useNotes(patient.id);
+  const canWrite = useCan()("clinical.write");
   const templates = useNoteTemplates().data ?? [];
   const visits = useVisits(patient.id).data ?? [];
   const current = useCurrentVisit(patient.id);
@@ -29,7 +31,7 @@ export function NotesTab({ patient }: { patient: Patient }) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-base font-semibold">Clinical notes</h2>
-        {current ? (
+        {!canWrite ? null : current ? (
           <NoteDialog patient={patient} visit={current} trigger={<Button>New note</Button>} />
         ) : (
           <p className="text-sm text-ink-muted">Start a visit to write a note.</p>
@@ -91,7 +93,9 @@ function NoteCard({
         ) : (
           <div className="flex items-center gap-2">
             <Badge variant="secondary">Draft</Badge>
-            <NoteDialog patient={patient} note={note} trigger={<Button size="sm" variant="outline">Edit or sign</Button>} />
+            <Can permission="clinical.write">
+              <NoteDialog patient={patient} note={note} trigger={<Button size="sm" variant="outline">Edit or sign</Button>} />
+            </Can>
           </div>
         )}
       </div>

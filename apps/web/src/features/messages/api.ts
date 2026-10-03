@@ -21,6 +21,17 @@ export const KIND_LABEL: Record<MessageKind, string> = {
 
 export const MESSAGE_STATUS_LABEL: Record<MessageStatus, string> = { queued: "Queued", sent: "Sent", failed: "Failed", cancelled: "Withdrawn" };
 
+/** The messages a parent sees as care instructions in the portal. */
+export const CARE_KINDS: readonly MessageKind[] = ["pre_treatment", "post_extraction", "post_pulpotomy", "fluoride_instructions"];
+
+/** One child's messages, newest first. Parents may only ask for their own child (mocks/access.ts). */
+export function usePatientMessages(patientId: string) {
+  return useQuery({
+    queryKey: [...messageKeys.all, "patient", patientId],
+    queryFn: () => api(`/messages?patientId=${encodeURIComponent(patientId)}`, z.array(Message)),
+  });
+}
+
 /** The whole log, newest first. Filtering by status is done on screen so the counts stay right. */
 export function useMessages() {
   return useQuery({ queryKey: messageKeys.all, queryFn: () => api("/messages", z.array(Message)) });

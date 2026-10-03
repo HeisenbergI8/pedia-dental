@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useCan } from "@/features/auth/access";
 import { useProcedures } from "@/features/clinic/api";
 import { useNoteTemplates, useNotes } from "@/features/notes/api";
 import { useVisits } from "@/features/visits/api";
@@ -29,6 +30,7 @@ export function PlanTab({ patientId }: { patientId: string }) {
   const notes = useNotes(patientId).data ?? [];
   const templates = useNoteTemplates().data ?? [];
   const setStatus = useSetPlanItemStatus(patientId);
+  const canEdit = useCan()("plan.write");
 
   if (isLoading) return <p className="text-ink-muted">Loading treatment plan…</p>;
   if (error || !items) return <p className="text-danger">Couldn&apos;t load the treatment plan.</p>;
@@ -87,7 +89,7 @@ export function PlanTab({ patientId }: { patientId: string }) {
                 </div>
                 <span className="ml-auto text-sm tabular-nums">{formatPeso(i.fee)}</span>
                 <Badge variant={i.status === "done" ? "default" : "outline"}>{PLAN_STATUS_LABEL[i.status]}</Badge>
-                {i.status !== "done" && (
+                {canEdit && i.status !== "done" && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button size="icon" variant="ghost" aria-label={`Change status of ${procedureName(i.procedureCode)}`}>
@@ -113,7 +115,7 @@ export function PlanTab({ patientId }: { patientId: string }) {
         )}
       </section>
 
-      <AddPlanItemForm patientId={patientId} />
+      {canEdit && <AddPlanItemForm patientId={patientId} />}
     </div>
   );
 }

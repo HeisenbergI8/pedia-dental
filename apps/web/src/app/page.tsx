@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { HomeRedirect } from "@/features/auth/components/access-gate";
 
 export default function Home() {
-  redirect("/patients");
+  return <HomeRedirect />;
 }

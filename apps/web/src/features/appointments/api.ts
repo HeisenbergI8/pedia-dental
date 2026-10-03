@@ -3,9 +3,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import {
   Appointment,
+  AppointmentRequest,
   type AppointmentStatus,
   type BookAppointmentInput,
   type ChangeAppointmentStatusInput,
+  type CreateAppointmentRequestInput,
   type RescheduleAppointmentInput,
 } from "@pedia/shared";
 import { api } from "@/lib/api-client";
@@ -16,7 +18,12 @@ export const appointmentKeys = {
   all: ["appointments"] as const,
   range: (from: string, to: string) => [...appointmentKeys.all, "range", from, to] as const,
   forPatient: (patientId: string) => [...appointmentKeys.all, "patient", patientId] as const,
+  // Under `all`, so every appointment mutation refreshes them too.
+  requests: () => [...appointmentKeys.all, "requests"] as const,
+  requestsFor: (patientId: string) => [...appointmentKeys.all, "requests", patientId] as const,
 };
+
+export const TIME_OF_DAY_LABEL = { morning: "Morning", afternoon: "Afternoon", any: "Any time" } as const;
 
 export const STATUS_LABEL: Record<AppointmentStatus, string> = {
   booked: "Booked",
@@ -72,4 +79,36 @@ export function useChangeAppointmentStatus() {
   return useAppointmentMutation(({ id, ...input }: ChangeAppointmentStatusInput & { id: string }) =>
     api(`/appointments/${id}/status`, Appointment, { method: "POST", body: JSON.stringify(input) }),
   );
+}
+
+/** The staff inbox: requests nobody has booked yet, newest first. */
+export function usePendingRequests() {
+  return useQuery({
+    queryKey: appointmentKeys.requests(),
+    queryFn: () => api("/appointment-requests?status=pending", z.array(AppointmentRequest)),
+  });
+}
+
+export function usePatientRequests(patientId: string) {
+  return useQuery({
+    queryKey: appointmentKeys.requestsFor(patientId),
+    queryFn: () => api(`/patients/${patientId}/appointment-requests`, z.array(AppointmentRequest)),
+  });
+}
+
+export function useRequestAppointment(patientId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateAppointmentRequestInput) =>
+      api(`/patients/${patientId}/appointment-requests`, AppointmentRequest, { method: "POST", body: JSON.stringify(input) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: appointmentKeys.requests() }),
+  });
+}
+
+export function useMarkRequestHandled() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api(`/appointment-requests/${id}/handled`, AppointmentRequest, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: appointmentKeys.requests() }),
+  });
 }

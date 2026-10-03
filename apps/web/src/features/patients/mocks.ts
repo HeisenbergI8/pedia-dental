@@ -1,6 +1,7 @@
 import { http, HttpResponse, delay } from "msw";
 import { AddConsentInput, CreatePatientInput, type Patient } from "@pedia/shared";
 import { env } from "@/lib/env";
+import { inScope, sessionOf } from "@/mocks/access";
 import { db, persist } from "@/mocks/db";
 import { CLINIC_ID } from "@/mocks/seed";
 
@@ -13,6 +14,7 @@ const url = (p: string) => `${env.apiUrl}${p}`;
 export const patientHandlers = [
   http.get(url("/patients"), async ({ request }) => {
     await delay(150);
+    const session = sessionOf(request);
     const q = new URL(request.url).searchParams.get("q")?.trim().toLowerCase() ?? "";
     // Front desk looks a child up by the child's or a guardian's name, or a guardian's phone.
     // Every word must match somewhere, so "Balistreri Carmel" and "0917 123 4567" both work.
@@ -25,7 +27,7 @@ export const patientHandlers = [
       return words.every((w) => names.includes(w) || (isPhone(w) && phones.includes(w.replace(/\D/g, ""))));
     };
     const rows = db.patients
-      .filter(matches)
+      .filter((p) => inScope(session, "patients.view", p.id) && matches(p)) // a parent: their children only
       .sort((a, b) => a.lastName.localeCompare(b.lastName));
     return HttpResponse.json(rows);
   }),

@@ -1,16 +1,21 @@
 import { http, HttpResponse, delay } from "msw";
 import { format } from "date-fns";
 import {
+  AppointmentRequestStatus,
   BookAppointmentInput,
   ChangeAppointmentStatusInput,
+  CreateAppointmentRequestInput,
   RescheduleAppointmentInput,
   canReschedule,
   canTransition,
   findConflict,
   isDueItemOpen,
+  roleCan,
   type Appointment,
+  type AppointmentRequest,
 } from "@pedia/shared";
 import { env } from "@/lib/env";
+import { sessionOf } from "@/mocks/access";
 import { db, persist } from "@/mocks/db";
 import { cancelQueued, queueBookingMessages, queueMessage } from "@/mocks/outbox";
 import { CLINIC_ID } from "@/mocks/seed";
@@ -99,6 +104,11 @@ export const appointmentHandlers = [
     if (!appointment) return new HttpResponse("Appointment not found", { status: 404 });
     const parsed = ChangeAppointmentStatusInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
+    // Confirm-only callers (a parent) can't check in, cancel or mark a no-show.
+    const session = sessionOf(request);
+    if (parsed.data.status !== "confirmed" && !(session && roleCan(session.role, "appointments.manage"))) {
+      return new HttpResponse("You can confirm this appointment. To change it, call the clinic.", { status: 403 });
+    }
     if (!canTransition(appointment.status, parsed.data.status)) {
       return new HttpResponse(`Can't go from ${appointment.status} to ${parsed.data.status}`, { status: 409 });
     }
@@ -109,5 +119,53 @@ export const appointmentHandlers = [
     }
     persist();
     return HttpResponse.json(appointment);
+  }),
+
+  // Parent requests from the portal, newest first. ?status=pending narrows it (the staff inbox).
+  http.get(url("/appointment-requests"), async ({ request }) => {
+    await delay(100);
+    const status = AppointmentRequestStatus.safeParse(new URL(request.url).searchParams.get("status"));
+    const rows = db.appointmentRequests.filter((r) => !status.success || r.status === status.data);
+    return HttpResponse.json(rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+  }),
+
+  http.get(url("/patients/:id/appointment-requests"), async ({ params }) => {
+    await delay(100);
+    const rows = db.appointmentRequests.filter((r) => r.patientId === params.id);
+    return HttpResponse.json(rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+  }),
+
+  http.post(url("/patients/:id/appointment-requests"), async ({ params, request }) => {
+    const patient = db.patients.find((p) => p.id === params.id);
+    if (!patient) return new HttpResponse("Patient not found", { status: 404 });
+    const parsed = CreateAppointmentRequestInput.safeParse(await request.json());
+    if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
+    if (parsed.data.preferredDate < format(new Date(), "yyyy-MM-dd")) {
+      return new HttpResponse("Pick today or a later date", { status: 400 });
+    }
+    if (db.appointmentRequests.some((r) => r.patientId === patient.id && r.status === "pending")) {
+      return new HttpResponse("You already have a request waiting. The clinic will call you to book it.", { status: 409 });
+    }
+    const guardianId = sessionOf(request)?.guardianId ?? (patient.guardians.find((g) => g.isPrimary) ?? patient.guardians[0]).id;
+    const row: AppointmentRequest = {
+      ...parsed.data,
+      id: crypto.randomUUID(),
+      clinicId: CLINIC_ID,
+      patientId: patient.id,
+      guardianId,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+    };
+    db.appointmentRequests.push(row);
+    persist();
+    return HttpResponse.json(row, { status: 201 });
+  }),
+
+  http.post(url("/appointment-requests/:id/handled"), async ({ params }) => {
+    const row = db.appointmentRequests.find((r) => r.id === params.id);
+    if (!row) return new HttpResponse("Request not found", { status: 404 });
+    row.status = "handled";
+    persist();
+    return HttpResponse.json(row);
   }),
 ];

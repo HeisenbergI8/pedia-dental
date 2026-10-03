@@ -7,6 +7,7 @@ import { accountSummary, formatPeso, invoiceBalance, invoiceTotal, type Invoice 
 import { EmptyState } from "@/components/empty-state";
 import { SectionCard } from "@/components/section-card";
 import { Button } from "@/components/ui/button";
+import { useCan } from "@/features/auth/access";
 import { usePlan } from "@/features/plan/api";
 import { formatDate } from "@/lib/format";
 import { METHOD_LABEL, useInvoices, usePayments } from "../api";
@@ -18,6 +19,7 @@ export function BillingTab({ patientId }: { patientId: string }) {
   const payments = usePayments(patientId);
   const plan = usePlan(patientId);
   const [paying, setPaying] = useState<{ invoice: Invoice; refund: boolean } | null>(null);
+  const canCollect = useCan()("billing.collect");
 
   if (invoices.isLoading || payments.isLoading || plan.isLoading) return <p className="text-ink-muted">Loading billing…</p>;
   if (invoices.error || payments.error || plan.error) return <p className="text-danger">Couldn&apos;t load billing. Refresh to try again.</p>;
@@ -39,7 +41,7 @@ export function BillingTab({ patientId }: { patientId: string }) {
         </dl>
       </SectionCard>
 
-      <CreateInvoice patientId={patientId} items={plan.data ?? []} invoices={allInvoices} />
+      {canCollect && <CreateInvoice patientId={patientId} items={plan.data ?? []} invoices={allInvoices} />}
 
       {allInvoices.length === 0 ? (
         <EmptyState icon={ReceiptIcon} title="No invoices yet">
@@ -58,12 +60,14 @@ export function BillingTab({ patientId }: { patientId: string }) {
               title={`Invoice of ${formatDate(inv.issuedAt)}`}
               description={balance === 0 ? "Paid in full" : `Balance ${formatPeso(balance)}`}
               action={
-                <>
-                  {paid > 0 && (
-                    <Button variant="outline" size="sm" onClick={() => setPaying({ invoice: inv, refund: true })}>Refund</Button>
-                  )}
-                  {balance > 0 && <Button size="sm" onClick={() => setPaying({ invoice: inv, refund: false })}>Record payment</Button>}
-                </>
+                canCollect && (
+                  <>
+                    {paid > 0 && (
+                      <Button variant="outline" size="sm" onClick={() => setPaying({ invoice: inv, refund: true })}>Refund</Button>
+                    )}
+                    {balance > 0 && <Button size="sm" onClick={() => setPaying({ invoice: inv, refund: false })}>Record payment</Button>}
+                  </>
+                )
               }
             >
               <table className="w-full text-sm">

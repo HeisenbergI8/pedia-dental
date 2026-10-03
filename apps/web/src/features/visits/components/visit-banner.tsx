@@ -10,6 +10,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useCan } from "@/features/auth/access";
 import { useStaff } from "@/features/clinic/api";
 import { useCompleteVisit, useCurrentVisit, useStartVisit, useVisits } from "../api";
 
@@ -22,6 +23,7 @@ export function VisitBanner({ patientId }: { patientId: string }) {
   const complete = useCompleteVisit(patientId);
   const dentists = staff.data?.filter((s) => s.role === "dentist") ?? [];
   const onError = (e: Error) => toast.error(e.message);
+  const canWrite = useCan()("clinical.write");
 
   if (isLoading) return null;
 
@@ -43,16 +45,20 @@ export function VisitBanner({ patientId }: { patientId: string }) {
             </span>
           </span>
         </p>
-        <Button
-          variant="outline"
-          disabled={complete.isPending}
-          onClick={() => complete.mutate(current.id, { onSuccess: () => toast.success("Visit finished"), onError })}
-        >
-          Finish visit
-        </Button>
+        {canWrite && (
+          <Button
+            variant="outline"
+            disabled={complete.isPending}
+            onClick={() => complete.mutate(current.id, { onSuccess: () => toast.success("Visit finished"), onError })}
+          >
+            Finish visit
+          </Button>
+        )}
       </div>
     );
   }
+
+  if (!canWrite) return null; // front desk: "visit in progress" is shown above; there's nothing to start
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-line-strong px-4 py-3">

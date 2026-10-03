@@ -15,44 +15,31 @@ import {
   UsersIcon,
   type LucideIcon,
 } from "lucide-react";
-import { Role } from "@pedia/shared";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { routePermission, useCan } from "@/features/auth/access";
+import { AccountMenu } from "@/features/auth/components/account-menu";
+import { NoAccess } from "@/features/auth/components/access-gate";
 import { cn } from "@/lib/utils";
-import { useRole } from "@/stores/role-store";
-import { env } from "@/lib/env";
 
-type NavItem = { href: string; label: string; icon: LucideIcon; roles: readonly Role[]; soon?: true };
+/** Who sees an item is decided by ROUTE_ACCESS + ROLE_PERMISSIONS, never here. */
+type NavItem = { href: string; label: string; icon: LucideIcon; soon?: true };
 
 /** `soon` marks screens that still render ComingSoon, so staff aren't surprised by an empty page. */
 const NAV: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboardIcon, roles: ["admin"] },
-  { href: "/appointments", label: "Appointments", icon: CalendarDaysIcon, roles: ["admin", "dentist", "front_desk"] },
-  { href: "/patients", label: "Patients", icon: UsersIcon, roles: ["admin", "dentist", "front_desk"] },
-  { href: "/billing", label: "Billing", icon: ReceiptIcon, roles: ["admin", "front_desk"] },
-  { href: "/recall", label: "Recalls", icon: BellRingIcon, roles: ["admin", "front_desk"] },
-  { href: "/messages", label: "Messages", icon: MessageSquareIcon, roles: ["admin", "front_desk"] },
-  { href: "/documents", label: "Documents", icon: FileTextIcon, roles: ["admin", "dentist", "front_desk"] },
-  { href: "/settings", label: "Settings", icon: SettingsIcon, roles: ["admin", "dentist", "front_desk"] },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboardIcon },
+  { href: "/appointments", label: "Appointments", icon: CalendarDaysIcon },
+  { href: "/patients", label: "Patients", icon: UsersIcon },
+  { href: "/billing", label: "Billing", icon: ReceiptIcon },
+  { href: "/recall", label: "Recalls", icon: BellRingIcon },
+  { href: "/messages", label: "Messages", icon: MessageSquareIcon },
+  { href: "/documents", label: "Documents", icon: FileTextIcon },
+  { href: "/settings", label: "Settings", icon: SettingsIcon },
 ];
-
-const ROLE_LABEL: Record<Exclude<Role, "parent">, string> = {
-  admin: "Admin",
-  dentist: "Dentist",
-  front_desk: "Front desk",
-};
-
-/** Reseeds the mock database. Imported lazily, like providers.tsx, so mocks stay out of the bundle. */
-function resetDemoData() {
-  if (!window.confirm("Reset all demo data? Every patient, visit and appointment you added will be replaced by the original sample data.")) return;
-  void import("@/mocks/db").then((m) => m.resetDb());
-}
 
 function Brand() {
   return (
-    <Link href="/patients" className="flex items-center gap-2.5 rounded-md font-semibold">
+    <Link href="/" className="flex items-center gap-2.5 rounded-md font-semibold">
       <span className="flex size-8 items-center justify-center rounded-lg bg-brand text-brand-ink">
         <SmileIcon className="size-5" aria-hidden />
       </span>
@@ -66,8 +53,11 @@ function Brand() {
 
 function Nav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
-  const { role } = useRole();
-  const items = NAV.filter((n) => n.roles.includes(role));
+  const can = useCan();
+  const items = NAV.filter((n) => {
+    const needs = routePermission(n.href);
+    return !needs || can(needs);
+  });
 
   return (
     <nav aria-label="Main">
@@ -99,30 +89,12 @@ function Nav({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-function DemoControls() {
-  const { role, setRole } = useRole();
-  if (!env.apiMocking) return null;
-  return (
-    <div className="space-y-3 rounded-lg border border-dashed border-line-strong p-3">
-      <p className="text-xs font-semibold tracking-wide text-ink-muted uppercase">Demo controls</p>
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="demo-role" className="text-sm">View as</Label>
-        <Select value={role} onValueChange={(v) => setRole(Role.parse(v))}>
-          <SelectTrigger id="demo-role" className="w-full bg-surface">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(ROLE_LABEL).map(([value, label]) => (
-              <SelectItem key={value} value={value}>{label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <Button variant="ghost" size="sm" className="w-full text-ink-muted" onClick={resetDemoData}>
-        Reset demo data
-      </Button>
-    </div>
-  );
+/** A pasted URL for a page this role can't use shows NoAccess instead, inside the shell. */
+function RouteGate({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const can = useCan();
+  const needs = routePermission(pathname);
+  return needs && !can(needs) ? <NoAccess /> : <>{children}</>;
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -145,7 +117,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="flex-1 overflow-y-auto">
           <Nav />
         </div>
-        <DemoControls />
+        <AccountMenu />
       </aside>
 
       {/* Tablet and phone: a top bar, with the same nav in a drawer. */}
@@ -162,14 +134,17 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="flex-1 overflow-y-auto">
               <Nav onNavigate={() => setMenuOpen(false)} />
             </div>
-            <DemoControls />
+            <AccountMenu />
           </SheetContent>
         </Sheet>
         <Brand />
+        <div className="ml-auto">
+          <AccountMenu compact />
+        </div>
       </header>
 
       <main id="main" tabIndex={-1} className="mx-auto w-full max-w-7xl min-w-0 px-4 py-5 outline-none sm:px-6 lg:px-8 lg:py-8 print:max-w-none print:p-0">
-        {children}
+        <RouteGate>{children}</RouteGate>
       </main>
     </div>
   );

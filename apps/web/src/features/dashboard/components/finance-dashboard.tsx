@@ -9,11 +9,11 @@ import { PageHeader } from "@/components/page-header";
 import { SectionCard } from "@/components/section-card";
 import { Button } from "@/components/ui/button";
 import { METHOD_LABEL } from "@/features/billing/api";
+import { useCan } from "@/features/auth/access";
 import { useProcedures } from "@/features/clinic/api";
 import { usePatients } from "@/features/patients/api";
 import { env } from "@/lib/env";
 import { formatDate } from "@/lib/format";
-import { useRole } from "@/stores/role-store";
 import { useFinanceSummary } from "../api";
 import { RankBars, TimeBars } from "./charts";
 
@@ -45,8 +45,7 @@ function Table({ head, children }: { head: string[]; children: ReactNode }) {
 }
 
 export function FinanceDashboard() {
-  const { role } = useRole();
-  const isAdmin = role === "admin";
+  const isAdmin = useCan()("dashboard.view");
   const today = format(new Date(), "yyyy-MM-dd");
   const { data: s, isLoading, error } = useFinanceSummary(today, isAdmin);
   const patients = usePatients().data ?? [];
@@ -59,7 +58,7 @@ export function FinanceDashboard() {
       <div className="space-y-5">
         {header}
         <EmptyState icon={LockIcon} title="The dashboard is for clinic admins">
-          {env.apiMocking ? "Switch “View as” to Admin in Demo controls to see it." : "Ask a clinic admin for these figures."}
+          {env.apiMocking ? "Sign in as the clinic admin to see it." : "Ask a clinic admin for these figures."}
         </EmptyState>
       </div>
     );

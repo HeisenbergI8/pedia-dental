@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ClinicScoped, Id, IsoDateTime } from "./common";
+import { ClinicScoped, Id, IsoDateTime, isoDate } from "./common";
 
 export const AppointmentStatus = z.enum([
   "booked",
@@ -51,3 +51,32 @@ export const ChangeAppointmentStatusInput = z.discriminatedUnion("status", [
   z.object({ status: z.literal("cancelled"), cancelReason: z.string().trim().min(1, "Give a reason") }),
 ]);
 export type ChangeAppointmentStatusInput = z.infer<typeof ChangeAppointmentStatusInput>;
+
+export const TimeOfDay = z.enum(["morning", "afternoon", "any"]);
+export type TimeOfDay = z.infer<typeof TimeOfDay>;
+
+/** `handled`: staff booked it or called the parent back. Nothing else happens to a request. */
+export const AppointmentRequestStatus = z.enum(["pending", "handled"]);
+export type AppointmentRequestStatus = z.infer<typeof AppointmentRequestStatus>;
+
+/** A parent's request from the portal. It isn't an appointment: staff pick the slot and book it. */
+export const AppointmentRequest = ClinicScoped.extend({
+  id: Id,
+  patientId: Id,
+  guardianId: Id,
+  preferredDate: isoDate("Pick a date"),
+  timeOfDay: TimeOfDay,
+  reason: z.string().trim().min(1, "Say what the visit is for").max(200, "Keep it under 200 characters"),
+  note: z.string().trim().max(500, "Keep it under 500 characters").optional(),
+  status: AppointmentRequestStatus,
+  createdAt: IsoDateTime,
+});
+export type AppointmentRequest = z.infer<typeof AppointmentRequest>;
+
+export const CreateAppointmentRequestInput = AppointmentRequest.pick({
+  preferredDate: true,
+  timeOfDay: true,
+  reason: true,
+  note: true,
+});
+export type CreateAppointmentRequestInput = z.infer<typeof CreateAppointmentRequestInput>;

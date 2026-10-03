@@ -6,10 +6,10 @@ A pediatric dental clinic management system. **Current phase: frontend prototype
 answered in the browser by MSW using fake, seeded data; there is no backend yet. A NestJS + MySQL API
 (`apps/api`) will replace the mocks later, endpoint by endpoint, without changing feature code.
 
-Users: dentists, front desk and clinic admin (staff app); parents (portal, later).
+Users: dentists, front desk and clinic admin (staff app); parents (portal, through the demo login).
 
 **Stack:** pnpm workspace · Next.js 15 (App Router, webpack) · React 19 · TypeScript strict · Tailwind v4 ·
-TanStack Query · React Hook Form + Zod 4 · Zustand (UI state only) · MSW 3 · Vitest.
+TanStack Query · React Hook Form + Zod 4 · Zustand (UI state, plus the demo session in `stores/session-store.ts`) · MSW 3 · Vitest.
 
 ---
 
@@ -21,7 +21,7 @@ TanStack Query · React Hook Form + Zod 4 · Zustand (UI state only) · MSW 3 ·
 | Fast check (runs every turn) | `pnpm run typecheck` |
 | Tests, one file | `pnpm --filter <web|@pedia/shared> exec vitest run <path>` |
 | Run the app locally | `pnpm dev` → http://localhost:3000 |
-| Reset demo data | browser console: `localStorage.clear()` then reload |
+| Reset demo data | account menu → Reset demo data (keeps you signed in). `localStorage.clear()` then reload also works, but signs you out |
 
 ---
 
@@ -35,6 +35,8 @@ TanStack Query · React Hook Form + Zod 4 · Zustand (UI state only) · MSW 3 ·
 | Features | `apps/web/src/features/<name>/` | `api.ts` (Query hooks), `mocks.ts` (MSW handlers), `components/` |
 | Fake backend | `apps/web/src/mocks/` | MSW setup, localStorage-backed `db`, deterministic `seed` |
 | HTTP | `apps/web/src/lib/api-client.ts` | The only `fetch` in the app |
+| Access rules | `packages/shared/src/domain/permissions.ts` | `ROLE_PERMISSIONS`: who may do what. The only place access is decided |
+| Access gate | `apps/web/src/mocks/access.ts` | Route → permission (`RULES`), 401 / 403, parent ownership |
 
 **Read this first:** `apps/web/src/features/patients/`. Every new feature copies its shape.
 
@@ -44,7 +46,11 @@ TanStack Query · React Hook Form + Zod 4 · Zustand (UI state only) · MSW 3 ·
 2. Collection added to `Db` and `seed()` in `apps/web/src/mocks/`.
 3. Handlers in `features/<name>/mocks.ts`, spread into `apps/web/src/mocks/handlers.ts`. A missing
    handler means the request goes to the real network and 404s.
-4. Route under `app/(clinic)/…`, and a `NAV` entry in `components/app-shell.tsx` with its roles.
+4. Route under `app/(clinic)/…`, a `NAV` entry in `components/app-shell.tsx`, and a `ROUTE_ACCESS` entry in
+   `features/auth/access.tsx` (who sees the page comes from there; a route with no entry is open in the UI).
+5. Every new API route gets a rule in `RULES` in `mocks/access.ts`. Without one the gate answers 403
+   (deny by default, and the body names the route). A new kind of access is a new `Permission` plus a
+   `ROLE_PERMISSIONS` entry, never a role check in a component or handler.
 
 ---
 
@@ -84,11 +90,14 @@ MSW handler (now) or NestJS (later).
   and only import `@/mocks/browser` dynamically from `app/providers.tsx`.
 - `NEXT_PUBLIC_*` env vars are inlined at build time. Changing `.env.local` needs a dev-server restart.
 - Mock data lives in `localStorage`. After changing `seed()` or `Db`, bump the key in `mocks/db.ts`
-  or clear storage, or you'll keep seeing old data. The key is `pedia-dental:mock-db:v13`; each bump gets a
+  or clear storage, or you'll keep seeing old data. The key is `pedia-dental:mock-db:v14`; each bump gets a
   one-line comment above it saying why.
 - `describe` order in `mocks/handlers.test.ts` matters: the tests share one seeded db.
   `describe("financial dashboard")` must stay before `describe("billing")`, because its totals only hold while
   every payment is a seeded one (the `pay_seed_` guard fails loudly if moved).
+- `handlers.test.ts` signs in by stubbing `document.cookie` (admin by default), because the mock reads the session
+  from the `pd_session` cookie (`<img>` photo requests can't send headers). `describe("access control")` and
+  `describe("parent portal")` stay last and restore admin in `afterAll`.
 - PDFs (`@react-pdf/renderer`) must use Noto Sans from `apps/web/public/fonts/`. The built-in PDF fonts have no
   `₱` glyph. Keep the library behind the dynamic import in `features/documents/download.ts` so it stays out of
   page bundles.
@@ -104,8 +113,8 @@ MSW handler (now) or NestJS (later).
 
 ## Reporting rules
 
-- **A deferral is not a gap.** Deliberately deferred for the prototype: real authentication (the role
-  switcher is a demo control), the NestJS backend, real SMS/email sending, real file storage, BIR
+- **A deferral is not a gap.** Deliberately deferred for the prototype: real authentication (the demo
+  login is a demo control: anyone can sign in as any account with the shown password; the token is the account id), the NestJS backend, real SMS/email sending, real file storage, BIR
   official receipts, and every screen that currently renders `ComingSoon`. Their absence is intentional.
 - **A claim that ages carries the date it was measured.** Any count or "every / all / none" statement
   written into something durable says when it was measured.

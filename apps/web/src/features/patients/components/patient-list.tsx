@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Can } from "@/features/auth/access";
 import { formatPhone, initials } from "@/lib/format";
 import { usePatients } from "../api";
 import { formatAge } from "../age";
@@ -43,11 +44,13 @@ export function PatientList() {
         title="Patients"
         description={data && !search ? `${data.length} patients` : undefined}
         actions={
-          <Button asChild>
-            <Link href="/patients/new">
-              <PlusIcon /> New patient
-            </Link>
-          </Button>
+          <Can permission="patients.write">
+            <Button asChild>
+              <Link href="/patients/new">
+                <PlusIcon /> New patient
+              </Link>
+            </Button>
+          </Can>
         }
       />
 
@@ -83,7 +86,7 @@ export function PatientList() {
           <EmptyState
             icon={UsersIcon}
             title="No patients yet"
-            action={<Button asChild><Link href="/patients/new"><PlusIcon /> New patient</Link></Button>}
+            action={<Can permission="patients.write"><Button asChild><Link href="/patients/new"><PlusIcon /> New patient</Link></Button></Can>}
           >
             Add your first patient to start charting and booking.
           </EmptyState>

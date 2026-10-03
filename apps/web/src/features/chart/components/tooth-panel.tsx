@@ -26,6 +26,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
+import { useCan } from "@/features/auth/access";
 import { useStaff } from "@/features/clinic/api";
 import { usePatient } from "@/features/patients/api";
 import { AddToPlan } from "@/features/plan/components/add-to-plan";
@@ -50,7 +51,7 @@ export function ToothPanel({
   surface,
   state,
   visits,
-  recordingVisit,
+  recordingVisit: visitInProgress,
   historical,
   onClose,
 }: {
@@ -66,6 +67,9 @@ export function ToothPanel({
   historical: boolean;
   onClose: () => void;
 }) {
+  const can = useCan();
+  // Front desk reads the chart (ROLE_PERMISSIONS): no entry form, no "Correct", no "Add to plan".
+  const recordingVisit = can("clinical.write") ? visitInProgress : undefined;
   const [correcting, setCorrecting] = useState<ChartEntry>();
   const history = [...(state?.history ?? [])].reverse();
   const correctedIds = new Set(history.map((e) => e.supersedes).filter(Boolean));
@@ -105,11 +109,13 @@ export function ToothPanel({
             />
           ) : (
             <p className="rounded-md bg-ground px-3 py-2 text-sm text-ink-muted">
-              Read-only. Start a visit and show the latest chart to record findings.
+              {can("clinical.write")
+                ? "Read-only. Start a visit and show the latest chart to record findings."
+                : "Read-only. Findings are recorded by the dentist."}
             </p>
           )}
 
-          {!historical && !isToothGone(state) && <AddToPlan patientId={patientId} tooth={tooth} state={state} />}
+          {!historical && can("plan.write") && !isToothGone(state) && <AddToPlan patientId={patientId} tooth={tooth} state={state} />}
 
           <section className="space-y-2">
             <h3 className="font-semibold">History</h3>

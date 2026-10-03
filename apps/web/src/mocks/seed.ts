@@ -1,5 +1,5 @@
 import { faker } from "@faker-js/faker";
-import { addDays, addMinutes, differenceInYears, parseISO, setHours, startOfDay } from "date-fns";
+import { addDays, addMinutes, differenceInYears, format, parseISO, setHours, startOfDay, subMonths } from "date-fns";
 import {
   PERMANENT_TEETH,
   PRIMARY_TEETH,
@@ -155,9 +155,10 @@ export function seed(): Db {
   const appointments = seedAppointments(patients);
   const billing = seedBilling(appointments, example.planItems[0]?.patientId);
   const messageTemplates = defaultMessageTemplates(CLINIC_ID, new Date().toISOString());
+  const family = seedSibling(patients, example.planItems[0]?.patientId);
 
   return {
-    patients,
+    patients: [...patients, ...family.patients],
     staff: STAFF,
     chairs: CHAIRS,
     procedures: PROCEDURES,
@@ -167,7 +168,7 @@ export function seed(): Db {
     notes: [...notes, ...example.notes],
     growth: [],
     planItems: example.planItems,
-    appointments,
+    appointments: [...appointments, ...family.appointments],
     photos: [],
     dueItems: seedDueItems(visits, [...notes, ...example.notes]),
     invoices: billing.invoices,
@@ -175,6 +176,7 @@ export function seed(): Db {
     messageTemplates,
     messages: seedMessages(appointments, { templates: messageTemplates, patients, staff: STAFF }),
     documents: [],
+    appointmentRequests: [],
   };
 }
 
@@ -432,4 +434,47 @@ function seedBilling(appointments: Appointment[], skipPatientId?: string) {
     });
   });
   return { invoices, payments };
+}
+
+/**
+ * A younger sibling of the example-plan child, under the same guardian, so one parent account has two
+ * children to switch between. One booked appointment on chair 3 at 5 PM, outside the seeded hours, so
+ * "Confirm" has something to confirm without double-booking anyone. No faker calls.
+ */
+function seedSibling(patients: Patient[], olderId: string | undefined) {
+  const older = patients.find((p) => p.id === olderId);
+  if (!older) return { patients: [], appointments: [] };
+  const guardian = older.guardians[0];
+  const sibling: Patient = {
+    id: "patient_sibling",
+    clinicId: CLINIC_ID,
+    firstName: "Mika",
+    lastName: older.lastName,
+    birthDate: format(subMonths(new Date(), 40), "yyyy-MM-dd"), // 3 years 4 months: never a birthday today
+    sex: "female",
+    address: older.address,
+    guardians: [guardian], // the same guardian id is what makes both children this parent's
+    allergies: [],
+    medicalConditions: [],
+    medications: [],
+    alerts: [],
+    dentalHistory: { previousClinic: "", notes: "" },
+    consents: [{ id: "consent_sibling", guardianId: guardian.id, scope: "general_treatment", date: older.createdAt.slice(0, 10) }],
+    createdAt: older.createdAt,
+  };
+  let day = addDays(startOfDay(new Date()), 2);
+  if (day.getDay() === 0) day = addDays(day, 1); // closed on Sundays
+  const exam = PROCEDURES.find((p) => p.code === "oral_exam")!;
+  const appointment: Appointment = {
+    id: "appointment_sibling",
+    clinicId: CLINIC_ID,
+    patientId: sibling.id,
+    dentistId: "staff_santos",
+    chairId: "chair_3",
+    startsAt: setHours(day, 17).toISOString(),
+    durationMin: exam.defaultDurationMin,
+    reason: exam.name,
+    status: "booked",
+  };
+  return { patients: [sibling], appointments: [appointment] };
 }

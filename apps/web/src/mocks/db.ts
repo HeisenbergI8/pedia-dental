@@ -1,5 +1,6 @@
 import type {
   Appointment,
+  AppointmentRequest,
   Chair,
   ChartEntry,
   ClinicalNote,
@@ -44,10 +45,11 @@ export type Db = {
   messageTemplates: MessageTemplate[]; // one per MessageKind
   messages: Message[]; // the outbox log; the prototype never sends
   documents: PatientDocument[]; // the generated-documents log; append-only, PDFs aren't stored
+  appointmentRequests: AppointmentRequest[]; // from the parent portal; staff mark them handled
 };
 
-// v13: Chunk 13 seeded invoices and payments (with Invoice.appointmentId) for the dashboard.
-const KEY = "pedia-dental:mock-db:v13";
+// v14: demo login. A seeded sibling (a two-child parent account) and the appointmentRequests collection.
+const KEY = "pedia-dental:mock-db:v14";
 
 function load(): Db {
   if (typeof window === "undefined") return seed();
