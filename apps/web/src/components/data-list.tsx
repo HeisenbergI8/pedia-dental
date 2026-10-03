@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
+import { MetaLine } from "@/components/meta-line";
 import { cn } from "@/lib/utils";
 
 /**
  * Where a column goes in the phone card. `title` (line 1, strong), `trailing` (line 1, right: an
- * amount or status), `meta` (line 2, joined with " · "), `detail` (behind "More details"), `hidden`.
+ * amount or status), `meta` (line 2, a MetaLine), `detail` (behind "More details"), `hidden`.
  */
 export type MobileSlot = "title" | "trailing" | "meta" | "detail" | "hidden";
 
@@ -92,16 +93,7 @@ export function DataList<T>({
                 </div>
               )}
             </div>
-            {meta.length > 0 && (
-              <p className="text-sm text-ink-muted">
-                {meta.map((c, i) => (
-                  <span key={c.key}>
-                    {i > 0 && " · "}
-                    {c.cell(r)}
-                  </span>
-                ))}
-              </p>
-            )}
+            {meta.length > 0 && <MetaLine items={meta.map((c) => c.cell(r))} />}
             {detail.length > 0 && (
               <details className="group text-sm">
                 <summary className="inline-flex min-h-(--control-h-sm) items-center font-medium text-brand">More details</summary>

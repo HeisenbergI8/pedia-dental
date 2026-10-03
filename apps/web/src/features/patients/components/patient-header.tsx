@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { usePatient, usePatients } from "../api";
 import { formatAge } from "../age";
 import { Loading } from "@/components/brand";
+import { MetaLine } from "@/components/meta-line";
 
 const SEX_LABEL = { female: "Female", male: "Male" } as const;
 
@@ -61,11 +62,13 @@ export function PatientHeader({ patientId }: { patientId: string }) {
               <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
                 {p.firstName} {p.lastName}
               </h1>
-              <p className="text-sm text-ink-muted">
-                <span className="font-medium text-ink">{formatAge(p.birthDate)}</span>
-                {" · "}
-                {SEX_LABEL[p.sex]} · Born {formatDate(p.birthDate)}
-              </p>
+              <MetaLine
+                items={[
+                  <span key="age" className="font-medium text-ink">{formatAge(p.birthDate)}</span>,
+                  SEX_LABEL[p.sex],
+                  `Born ${formatDate(p.birthDate)}`,
+                ]}
+              />
               {siblings.length > 0 && (
                 <p className="mt-1 inline-flex items-center gap-1 rounded-md border border-info-line bg-info-bg px-2 py-0.5 text-xs font-medium text-info">
                   <UsersIcon className="size-3 shrink-0" aria-hidden />

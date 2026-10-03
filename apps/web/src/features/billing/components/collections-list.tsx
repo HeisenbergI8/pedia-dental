@@ -29,7 +29,7 @@ export function CollectionsList() {
     const x = patients.find((p) => p.id === id);
     return x ? `${x.lastName}, ${x.firstName}` : "Patient";
   };
-  // Phone card: patient and amount on top, time · method · ref below, receipt in the details.
+  // Phone card: patient and amount on top; time, method, reference and receipt below.
   const columns: DataColumn<Payment>[] = [
     { key: "time", header: "Time", mobile: "meta", numeric: false, className: "whitespace-nowrap tabular-nums text-ink-muted", cell: (p) => format(parseISO(p.receivedAt), "h:mm a") },
     {
@@ -42,7 +42,8 @@ export function CollectionsList() {
         </Link>
       ),
     },
-    { key: "method", header: "Method", mobile: "meta", cell: (p) => `${p.amount < 0 ? "Refund · " : ""}${METHOD_LABEL[p.method]}${p.referenceNo ? ` · ref ${p.referenceNo}` : ""}` },
+    { key: "method", header: "Method", mobile: "meta", cell: (p) => (p.amount < 0 ? `${METHOD_LABEL[p.method]} refund` : METHOD_LABEL[p.method]) },
+    { key: "reference", header: "Reference", mobile: "meta", className: "whitespace-nowrap tabular-nums", cell: (p) => (p.referenceNo ? `ref ${p.referenceNo}` : null) },
     {
       key: "receipt",
       header: "Receipt",
@@ -86,7 +87,16 @@ export function CollectionsList() {
       ) : rows.length === 0 ? (
         <EmptyState icon={WalletIcon} title={`Nothing collected on ${formatDate(date)}`} />
       ) : (
-        <SectionCard title={`Collected ${formatPeso(total)}`} description={byMethod.map(([m, sum]) => `${METHOD_LABEL[m]} ${formatPeso(sum)}`).join(" · ")}>
+        <SectionCard title={`Collected ${formatPeso(total)}`}>
+          {/* The day's split by method, as a list: one method per row, amounts lined up to compare. */}
+          <dl className="mb-4 grid grid-cols-[1fr_auto] gap-x-6 gap-y-1 border-b border-line pb-4 text-sm sm:max-w-sm">
+            {byMethod.map(([m, sum]) => (
+              <div key={m} className="contents">
+                <dt className="text-ink-muted">{METHOD_LABEL[m]}</dt>
+                <dd className="text-right tabular-nums">{formatPeso(sum)}</dd>
+              </div>
+            ))}
+          </dl>
           <DataList bare rows={rows} columns={columns} rowKey={(p) => p.id} caption={`Payments on ${formatDate(date)}`} />
         </SectionCard>
       )}

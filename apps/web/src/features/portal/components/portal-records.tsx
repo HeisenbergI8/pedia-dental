@@ -12,6 +12,7 @@ import { ClipboardListIcon, HeartPulseIcon, ReceiptIcon } from "lucide-react";
 import { useActiveChild } from "../use-child";
 import { Loading } from "@/components/brand";
 import { ErrorState } from "@/components/error-state";
+import { MetaLine } from "@/components/meta-line";
 
 /** Plain words for parents. The staff labels say "Declined", which reads like a refusal of care. */
 const PLAN_STATUS: Record<PlanItemStatus, string> = {
@@ -94,8 +95,7 @@ export function PortalBilling() {
                     {allPayments.filter((p) => p.invoiceId === inv.id).map((p) => (
                       <tr key={p.id} className="text-ink-muted">
                         <td className="py-1.5">
-                          {p.amount < 0 ? "Refunded to you" : "Paid"} {day(p.receivedAt)} · {METHOD_LABEL[p.method]} ·{" "}
-                          <span className="whitespace-nowrap">{p.receiptNo}</span>
+                          <MetaLine items={[`${p.amount < 0 ? "Refunded to you" : "Paid"} ${day(p.receivedAt)}`, METHOD_LABEL[p.method], p.receiptNo]} />
                         </td>
                         {/* Against the bill: a payment lowers it, a refund raises it again. Sign stays with the amount. */}
                         <td className="py-1.5 text-right whitespace-nowrap tabular-nums">

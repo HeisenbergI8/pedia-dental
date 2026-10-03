@@ -5,6 +5,7 @@ import { format, parseISO } from "date-fns";
 import { ReceiptIcon } from "lucide-react";
 import { accountSummary, formatPeso, invoiceBalance, invoiceTotal, type Invoice } from "@pedia/shared";
 import { EmptyState } from "@/components/empty-state";
+import { MetaLine } from "@/components/meta-line";
 import { SectionCard } from "@/components/section-card";
 import { Button } from "@/components/ui/button";
 import { useCan } from "@/features/auth/access";
@@ -93,16 +94,21 @@ export function BillingTab({ patientId }: { patientId: string }) {
                 </tbody>
               </table>
               {own.length > 0 && (
-                <ul className="space-y-1.5 border-t border-line pt-3 text-sm">
+                <ul className="space-y-3 border-t border-line pt-3 text-sm">
                   {own.map((p) => (
-                    <li key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                      <span className="text-ink-muted tabular-nums">{format(parseISO(p.receivedAt), "MMM d, yyyy h:mm a")}</span>
-                      <span>
-                        {p.amount < 0 ? "Refund" : "Payment"} · {METHOD_LABEL[p.method]}
-                        {p.referenceNo && ` · ref ${p.referenceNo}`}
-                      </span>
-                      <span className="ml-auto tabular-nums">{formatPeso(p.amount)}</span>
-                      <Link href={`/patients/${patientId}/receipts/${p.id}`} className="text-brand underline">Receipt {p.receiptNo}</Link>
+                    <li key={p.id}>
+                      {/* What and how much first; when, reference and receipt on the line below. */}
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span>{METHOD_LABEL[p.method]} {p.amount < 0 ? "refund" : "payment"}</span>
+                        <span className="tabular-nums whitespace-nowrap">{formatPeso(p.amount)}</span>
+                      </div>
+                      <MetaLine
+                        items={[
+                          <span key="at" className="tabular-nums">{format(parseISO(p.receivedAt), "MMM d, yyyy h:mm a")}</span>,
+                          p.referenceNo && `ref ${p.referenceNo}`,
+                          <Link key="receipt" href={`/patients/${patientId}/receipts/${p.id}`} className="text-brand underline">Receipt {p.receiptNo}</Link>,
+                        ]}
+                      />
                     </li>
                   ))}
                 </ul>

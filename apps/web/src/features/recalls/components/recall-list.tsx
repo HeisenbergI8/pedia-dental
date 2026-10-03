@@ -17,6 +17,7 @@ import { formatDate, formatPhone } from "@/lib/format";
 import { useDueItems } from "../api";
 import { Loading } from "@/components/brand";
 import { ErrorState } from "@/components/error-state";
+import { MetaLine } from "@/components/meta-line";
 
 const SECTIONS: { bucket: DueBucket; title: string; empty: string }[] = [
   { bucket: "overdue", title: "Overdue", empty: "Nothing overdue." },
@@ -89,17 +90,17 @@ export function RecallList() {
                           <Link href={`/patients/${i.patientId}`} className="font-medium text-brand underline-offset-2 hover:underline">
                             {name}
                           </Link>
-                          <p className="text-sm text-ink-muted">
-                            {what(i)} · <span className="whitespace-nowrap">due {formatDate(i.dueOn)}</span>
-                            {phone && (
-                              <>
-                                {" · "}
-                                <a href={`tel:${phone}`} className="whitespace-nowrap text-brand underline-offset-2 hover:underline">
+                          <MetaLine
+                            items={[
+                              what(i),
+                              `due ${formatDate(i.dueOn)}`,
+                              phone && (
+                                <a href={`tel:${phone}`} className="text-brand underline-offset-2 hover:underline">
                                   {formatPhone(phone)}
                                 </a>
-                              </>
-                            )}
-                          </p>
+                              ),
+                            ]}
+                          />
                         </div>
                         {/* Full-width, thumb-sized buttons on a phone; inline from sm. */}
                         <div className="grid grid-cols-2 gap-2 sm:flex">

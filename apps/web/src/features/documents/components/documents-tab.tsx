@@ -13,6 +13,7 @@ import { DocumentPreview } from "./document-preview";
 import { DownloadDocumentButton } from "./download-document-button";
 import { Loading } from "@/components/brand";
 import { ErrorState } from "@/components/error-state";
+import { MetaLine } from "@/components/meta-line";
 
 const DESCRIPTION: Record<DocumentType, string> = {
   dental_certificate: "Proof of a visit, for school or work",
@@ -136,9 +137,9 @@ function IssuedDocuments({ patientId, src }: { patientId: string; src: DocSource
             <li key={d.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-2.5 text-sm">
               <div className="min-w-0 flex-1">
                 <p className="font-medium">{DOCUMENT_TYPE_LABEL[d.type]}</p>
-                <p className="text-ink-muted">
-                  {format(parseISO(d.createdAt), "MMM d, yyyy h:mm a")} · {src.staff.find((s) => s.id === d.issuedBy)?.fullName ?? "Staff"}
-                </p>
+                <MetaLine
+                  items={[format(parseISO(d.createdAt), "MMM d, yyyy h:mm a"), src.staff.find((s) => s.id === d.issuedBy)?.fullName ?? "Staff"]}
+                />
               </div>
               <DownloadDocumentButton
                 patientId={patientId}

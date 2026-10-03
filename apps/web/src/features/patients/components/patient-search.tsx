@@ -9,6 +9,7 @@ import { ErrorState } from "@/components/error-state";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { MetaLine } from "@/components/meta-line";
 import { formatDate, formatPhone, initials } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { usePatients } from "../api";
@@ -133,14 +134,13 @@ function SearchBody({ onDone }: { onDone: () => void }) {
                     <span className="block font-medium">
                       {p.lastName}, {p.firstName}
                     </span>
-                    <span className="block text-sm text-ink-muted">
-                      {formatAge(p.birthDate)} · born {formatDate(p.birthDate)}
-                      {guardian && (
-                        <>
-                          {" "}· {guardian.fullName} <span className="whitespace-nowrap">{formatPhone(guardian.phone)}</span>
-                        </>
-                      )}
-                    </span>
+                    <MetaLine
+                      items={[
+                        formatAge(p.birthDate),
+                        `born ${formatDate(p.birthDate)}`,
+                        guardian && `${guardian.fullName} ${formatPhone(guardian.phone)}`,
+                      ]}
+                    />
                     {alerts.length > 0 && (
                       <span className={cn("mt-1 inline-flex items-center gap-1 rounded-full border border-alert-line bg-alert-bg px-2 py-0.5 text-xs font-medium text-alert")}>
                         <TriangleAlertIcon className="size-3" aria-hidden />
