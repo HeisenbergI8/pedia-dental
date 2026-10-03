@@ -87,6 +87,15 @@
             "type": "command",
             "command": "node",
             "args": [
+              ".claude/harness/guard-git-identity.mjs"
+            ],
+            "statusMessage": "Checking the commit author",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
               ".claude/harness/guard-commit.mjs"
             ],
             "statusMessage": "Checking the commit",

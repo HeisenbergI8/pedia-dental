@@ -14,5 +14,9 @@
       "**/*.md",
       "**/__snapshots__/**"
     ]
+  },
+  "gitIdentity": {
+    "name": "HeisenbergI8",
+    "email": "227385864+HeisenbergI8@users.noreply.github.com"
   }
 }

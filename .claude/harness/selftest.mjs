@@ -30,6 +30,7 @@ const SCRIPTS = [
   'guard-destructive.mjs',
   'guard-secrets.mjs',
   'guard-commit.mjs',
+  'guard-git-identity.mjs',
   'verify-plan.mjs',
   'next-phase.mjs',
   'goal-check.mjs',
