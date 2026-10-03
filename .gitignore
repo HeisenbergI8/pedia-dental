@@ -9,3 +9,7 @@ coverage
 
 # provenly runtime state (the config at the root is tracked, this is not)
 .claude/.harness/
+
+# Plan working files stay local; only each plan's implementation log is tracked
+.claude/plans/*/*
+!.claude/plans/*/implementation-log.md
