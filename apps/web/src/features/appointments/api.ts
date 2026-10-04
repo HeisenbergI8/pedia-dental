@@ -109,6 +109,10 @@ export function useMarkRequestHandled() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api(`/appointment-requests/${id}/handled`, AppointmentRequest, { method: "POST" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: appointmentKeys.requests() }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: appointmentKeys.requests() });
+      // The dashboard shows this list beside Today's request count; keep the two in step.
+      qc.invalidateQueries({ queryKey: [...appointmentKeys.all, "today"] });
+    },
   });
 }

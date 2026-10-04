@@ -114,7 +114,7 @@ export function TodayGlance({ today, now }: { today: string; now: Date }) {
         <ErrorState what="today's schedule" onRetry={() => refetch()} retrying={isRefetching} />
       </div>
     );
-  if (isLoading || !s) return <GlanceSkeleton now={now} />;
+  if (isLoading || !s) return <GlanceSkeleton now={now} cells={seesRequests ? 5 : 4} />;
 
   const { counts: c } = s;
   const live = s.appointments.filter((a) => a.status !== "cancelled" && a.status !== "no_show");
@@ -231,11 +231,11 @@ export function TodayGlance({ today, now }: { today: string; now: Date }) {
 }
 
 /** Shaped like the content (DESIGN_SYSTEM §8 Loading): the banner and its cells, a list card, a side card. */
-function GlanceSkeleton({ now }: { now: Date }) {
+function GlanceSkeleton({ now, cells }: { now: Date; cells: number }) {
   return (
     <div className="space-y-5" role="status" aria-label="Loading today's schedule">
-      <Banner now={now} cells={4}>
-        {Array.from({ length: 4 }, (_, i) => (
+      <Banner now={now} cells={cells}>
+        {Array.from({ length: cells }, (_, i) => (
           <Skeleton key={i} className="h-24 rounded-[14px] bg-on-deep/7" />
         ))}
       </Banner>

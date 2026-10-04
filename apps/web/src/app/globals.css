@@ -266,9 +266,10 @@ html {
   /* Keeps a focused field clear of the sticky top bar (WCAG 2.4.11). */
   scroll-padding-top: 5rem;
 }
-/* Patient screens also pin the patient header. */
+/* Patient screens also pin the patient header. Its floating card reaches about 245px on a tablet (measured
+   2026-10-04, 820px wide), so 16rem keeps a focused field clear of it (WCAG 2.4.11). */
 html:has([data-patient-header]) {
-  scroll-padding-top: 13rem;
+  scroll-padding-top: 16rem;
 }
 
 body {

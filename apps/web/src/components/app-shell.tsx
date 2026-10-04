@@ -212,7 +212,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* Desktop: the full sidebar. */}
       <aside className="sticky top-0 hidden h-screen flex-col gap-5 border-r border-line bg-surface px-3.5 pt-5 pb-4 lg:flex print:hidden!">
-          <div className="px-2">
+        <div className="px-2">
           <Brand className="w-44" />
         </div>
         {canSearch && <PatientSearch variant="field" />}
@@ -226,7 +226,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* Phones: a slim top bar (brand, search, account) and the bottom nav. */}
       <header className="sticky top-0 z-(--z-header) flex h-14 items-center gap-1 border-b border-line bg-surface/95 px-4 backdrop-blur md:hidden print:hidden">
-          <Brand className="w-28" />
+        <Brand className="w-28" />
         <div className="ml-auto flex items-center gap-1">
           {canSearch && <PatientSearch variant="icon" />}
           <AccountMenu variant="bar" />
