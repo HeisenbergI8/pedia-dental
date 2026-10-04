@@ -71,7 +71,7 @@ export function SwitchUserDialog({ open, onOpenChange }: { open: boolean; onOpen
                     {others.map((s) => (
                       <label
                         key={s.id}
-                        className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border border-line bg-surface px-3 py-2 has-[:checked]:border-brand has-[:checked]:bg-brand-subtle has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/50"
+                        className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border border-line bg-surface px-3 py-2 has-[:checked]:border-brand has-[:checked]:bg-brand-subtle has-[:checked]:text-brand-tint-ink has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/50"
                       >
                         <input
                           type="radio"

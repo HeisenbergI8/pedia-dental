@@ -5,6 +5,7 @@ import { format, parseISO } from "date-fns";
 import { ReceiptIcon } from "lucide-react";
 import { formatPeso } from "@pedia/shared";
 import { SectionCard } from "@/components/section-card";
+import { Segmented } from "@/components/segmented";
 import { Button } from "@/components/ui/button";
 import { METHOD_LABEL } from "@/features/billing/api";
 import { useProcedures } from "@/features/clinic/api";
@@ -22,10 +23,10 @@ const tick: Record<Period, string> = { day: "MMM d", week: "'Wk of' MMM d", mont
 
 function Tile({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="min-w-0 rounded-xl border border-line bg-surface p-4 shadow-card">
+    <div className="min-w-0 bg-surface p-4 sm:p-5">
       <dt className="text-sm text-ink-muted">{label}</dt>
       {/* Two tiles share a 360px row: the figure steps down a size there so ₱34,550.00 fits. */}
-      <dd className="mt-1 text-xl font-semibold break-words tabular-nums sm:text-2xl">{value}</dd>
+      <dd className="mt-1 font-title text-xl font-semibold tracking-tight break-words tabular-nums sm:text-2xl">{value}</dd>
       {hint && <dd className="text-xs text-ink-muted">{hint}</dd>}
     </div>
   );
@@ -64,7 +65,8 @@ export function FinanceDashboard({ today }: { today: string }) {
   return (
     <section aria-label="Finance" className="space-y-5">
       {header}
-      <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {/* One strip: a gap-px grid over a line background draws the dividers at every column count. */}
+      <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line bg-line shadow-card lg:grid-cols-4">
         <Tile label="Collected today" value={formatPeso(s.collected.today)} />
         <Tile label="This week" value={formatPeso(s.collected.week)} hint="Since Monday" />
         <Tile label="This month" value={formatPeso(s.collected.month)} hint={`Since ${format(parseISO(today), "MMM 1")}`} />
@@ -75,13 +77,12 @@ export function FinanceDashboard({ today }: { today: string }) {
         title="Collections"
         description={`${PERIODS[period]} · ${formatPeso(seriesTotal)} in total`}
         action={
-          <div role="group" aria-label="Group collections by" className="flex gap-1">
-            {(Object.keys(PERIODS) as Period[]).map((p) => (
-              <Button key={p} size="sm" variant={period === p ? "default" : "outline"} aria-pressed={period === p} onClick={() => setPeriod(p)}>
-                {{ day: "Day", week: "Week", month: "Month" }[p]}
-              </Button>
-            ))}
-          </div>
+          <Segmented
+            label="Group collections by"
+            value={period}
+            onChange={setPeriod}
+            options={(Object.keys(PERIODS) as Period[]).map((p) => ({ value: p, label: { day: "Day", week: "Week", month: "Month" }[p] }))}
+          />
         }
       >
         <TimeBars data={series} caption={`Collections, ${PERIODS[period].toLowerCase()}`} />

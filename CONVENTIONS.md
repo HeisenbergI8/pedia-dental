@@ -20,6 +20,7 @@ TanStack Query · React Hook Form + Zod 4 · Zustand (UI state, plus the demo se
 | Full check (the closing gate) | `pnpm run check` |
 | Fast check (runs every turn) | `pnpm run typecheck` |
 | Tests, one file | `pnpm --filter <web|@pedia/shared> exec vitest run <path>` |
+| Design guards (contrast, tokens, shell, screens) | `pnpm run check -- design` (typecheck + every `src/design/design-*.test.ts`) |
 | Run the app locally | `pnpm dev` → http://localhost:3000 |
 | Reset demo data | account menu → Reset demo data (keeps you signed in). `localStorage.clear()` then reload also works, but signs you out |
 
@@ -70,6 +71,11 @@ MSW handler (now) or NestJS (later).
   clinical-safety patterns.
 - Palette, type and radius changes go in `apps/web/src/app/globals.css` tokens, never as raw values in
   components.
+- `apps/web/src/design/` holds guards that read source and render primitives: token contrast in both themes, no raw
+  hex outside `globals.css` / `manifest.ts` / `document-pdf.tsx`, no dashed outlines, crayon strip and Fredoka only on
+  login and portal. A failing guard means the system was bypassed. Fix the component, not the guard.
+- Tailwind v4's bare `border` is `currentColor`. `globals.css` restores `line` as the default, so a darker edge is
+  always named (`border-input`, `border-alert-line`).
 
 ## Domain rules
 

@@ -71,7 +71,7 @@ export function RecallList() {
           // An empty group is one quiet line, not a whole card: the work queue stays what you see.
           if (rows.length === 0) {
             return (
-              <p key={bucket} className="rounded-xl border border-dashed border-line-strong px-4 py-3 text-sm text-ink-muted">
+              <p key={bucket} className="rounded-2xl border border-line bg-surface px-4 py-3 text-sm text-ink-muted">
                 <span className="font-medium text-ink">{title}:</span> {empty}
               </p>
             );

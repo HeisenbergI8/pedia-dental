@@ -43,7 +43,7 @@ export function TimeBars({ data, caption }: { data: Point[]; caption: string }) 
             <CartesianGrid vertical={false} stroke="var(--color-chart-grid)" />
             <XAxis dataKey="label" {...AXIS} interval="preserveStartEnd" minTickGap={12} />
             <YAxis {...AXIS} width={56} tickFormatter={tickPeso} />
-            <Tooltip {...TOOLTIP} formatter={(v) => [formatPeso(Number(v)), "Collected"]} cursor={{ fill: "var(--color-brand-subtle)" }} />
+            <Tooltip {...TOOLTIP} formatter={(v) => [formatPeso(Number(v)), "Collected"]} cursor={{ fill: "var(--color-selected)" }} />
             <Bar dataKey="amount" radius={[4, 4, 0, 0]} isAnimationActive={false}>
               {data.map((d) => <Cell key={d.label} fill={fill(d.amount)} />)}
             </Bar>
@@ -88,7 +88,7 @@ export function MixBars({ data, caption }: { data: MixPoint[]; caption: string }
             <CartesianGrid vertical={false} stroke="var(--color-chart-grid)" />
             <XAxis dataKey="label" {...AXIS} />
             <YAxis {...AXIS} width={28} allowDecimals={false} />
-            <Tooltip {...TOOLTIP} cursor={{ fill: "var(--color-brand-subtle)" }} />
+            <Tooltip {...TOOLTIP} cursor={{ fill: "var(--color-selected)" }} />
             {/* A 2px surface stroke keeps a gap between the stacked segments. */}
             <Bar dataKey="returning" name="Returning" stackId="v" fill="var(--color-chart-returning)" stroke="var(--color-surface)" strokeWidth={2} isAnimationActive={false} />
             <Bar dataKey="new" name="New" stackId="v" fill="var(--color-chart-new)" stroke="var(--color-surface)" strokeWidth={2} radius={[4, 4, 0, 0]} isAnimationActive={false} />

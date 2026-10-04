@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { differenceInYears, parseISO } from "date-fns";
 import { ALL_TEETH, ToothCondition, type Surface, type ToothNumber, type ToothState } from "@pedia/shared";
-import { Button } from "@/components/ui/button";
+import { Segmented } from "@/components/segmented";
 import { PHONE, useMediaQuery } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 import { CONDITION_STYLE, ChartPatterns, Tooth } from "./tooth";
@@ -53,38 +53,19 @@ export function DentalChart({
   return (
     <div className="space-y-4">
       <ChartPatterns />
-      <div role="group" aria-label="Dentition" className="flex gap-1">
-        {MODES.map((m) => (
-          <Button
-            key={m.value}
-            type="button"
-            size="sm"
-            variant={mode === m.value ? "default" : "outline"}
-            aria-pressed={mode === m.value}
-            onClick={() => setMode(m.value)}
-          >
-            {m.label}
-          </Button>
-        ))}
-      </div>
+      <Segmented label="Dentition" className="w-full sm:w-fit" value={mode} onChange={setMode} options={MODES} />
 
       {isPhone && (
-        <div role="group" aria-label="Side of the mouth" className="flex rounded-lg bg-line/60 p-1">
-          {(["Patient's right", "Patient's left"] as const).map((label, i) => (
-            <button
-              key={label}
-              type="button"
-              aria-pressed={half === i}
-              onClick={() => setHalf(i as 0 | 1)}
-              className={cn(
-                "h-(--control-h-sm) flex-1 rounded-md text-sm font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-                half === i ? "bg-surface text-ink shadow-card" : "text-ink-muted",
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          label="Side of the mouth"
+          className="w-full"
+          value={String(half)}
+          onChange={(v) => setHalf(Number(v) as 0 | 1)}
+          options={[
+            { value: "0", label: "Patient's right" },
+            { value: "1", label: "Patient's left" },
+          ]}
+        />
       )}
       <div>
         <div className="mx-auto max-w-4xl">

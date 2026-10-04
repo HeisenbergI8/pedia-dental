@@ -34,7 +34,7 @@ export function PortalPlan() {
     <div className="space-y-5">
       <h1 className="text-2xl font-semibold tracking-tight">{child.firstName}&apos;s treatment plan</h1>
       {isLoading ? <Loading label="Loading the plan…" /> : error ? <ErrorState what="the plan" onRetry={() => refetch()} retrying={isRefetching} /> : items.length === 0 ? (
-        <EmptyState icon={ClipboardListIcon} title="Nothing planned right now">
+        <EmptyState tone="warm" icon={ClipboardListIcon} title="Nothing planned right now">
           After a check-up, the dentist&apos;s plan for {child.firstName} will show here.
         </EmptyState>
       ) : (
@@ -72,7 +72,7 @@ export function PortalBilling() {
     <div className="space-y-5">
       <h1 className="text-2xl font-semibold tracking-tight">Bills for {child.firstName}</h1>
       {invoices.isLoading || payments.isLoading ? <Loading label="Loading bills…" /> : invoices.error || payments.error ? <ErrorState what="the bills" onRetry={() => [invoices, payments].forEach((q) => q.refetch())} /> : allInvoices.length === 0 ? (
-        <EmptyState icon={ReceiptIcon} title="No bills yet">Bills from {child.firstName}&apos;s visits will show here.</EmptyState>
+        <EmptyState tone="warm" icon={ReceiptIcon} title="No bills yet">Bills from {child.firstName}&apos;s visits will show here.</EmptyState>
       ) : (
         <>
           <SectionCard title={summary.balance > 0 ? `Balance ${formatPeso(summary.balance)}` : "Nothing to pay"} description="Pay at the clinic by cash, GCash, Maya, card or bank transfer.">
@@ -123,7 +123,7 @@ export function PortalCare() {
     <div className="space-y-5">
       <h1 className="text-2xl font-semibold tracking-tight">Care instructions for {child.firstName}</h1>
       {isLoading ? <Loading label="Loading instructions…" /> : error ? <ErrorState what="the care instructions" onRetry={() => refetch()} retrying={isRefetching} /> : care.length === 0 ? (
-        <EmptyState icon={HeartPulseIcon} title="No instructions yet">
+        <EmptyState tone="warm" icon={HeartPulseIcon} title="No instructions yet">
           After a treatment, the clinic&apos;s instructions for {child.firstName} will show here.
         </EmptyState>
       ) : (

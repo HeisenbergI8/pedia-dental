@@ -38,7 +38,7 @@ export function TemplateEditor() {
                 type="button"
                 onClick={() => setKind(t.kind)}
                 aria-current={t.kind === kind ? "true" : undefined}
-                className={cn("min-h-10 w-full rounded-lg px-3 text-left text-sm", t.kind === kind ? "bg-brand-subtle font-medium text-brand" : "hover:bg-ground")}
+                className={cn("min-h-10 w-full rounded-lg px-3 text-left text-sm", t.kind === kind ? "bg-selected font-bold text-ink" : "text-ink-muted hover:bg-selected hover:text-ink")}
               >
                 {t.name}
               </button>

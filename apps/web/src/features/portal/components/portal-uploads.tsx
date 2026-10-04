@@ -86,7 +86,7 @@ export function PortalUploads() {
       {isLoading ? <Loading label="Loading uploads…" /> : error ? (
         <ErrorState what="your uploads" onRetry={() => refetch()} retrying={isRefetching} />
       ) : files.length === 0 ? (
-        <EmptyState icon={UploadIcon} title="Nothing uploaded yet">Photos and documents you send will show here.</EmptyState>
+        <EmptyState tone="warm" icon={UploadIcon} title="Nothing uploaded yet">Photos and documents you send will show here.</EmptyState>
       ) : (
         <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           {files.map((f) => (

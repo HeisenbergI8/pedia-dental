@@ -1,6 +1,5 @@
 "use client";
 import { format } from "date-fns";
-import { PageHeader } from "@/components/page-header";
 import { Can } from "@/features/auth/access";
 import { FinanceDashboard } from "./finance-dashboard";
 import { TodayGlance } from "./today-glance";
@@ -11,8 +10,7 @@ export function DashboardScreen() {
   const today = format(now, "yyyy-MM-dd");
   return (
     <div className="space-y-5">
-      <PageHeader title="Today" description={format(now, "EEEE, d MMMM")} />
-      <TodayGlance today={today} />
+      <TodayGlance today={today} now={now} />
       <Can permission="dashboard.view">
         <FinanceDashboard today={today} />
       </Can>

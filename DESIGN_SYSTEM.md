@@ -5,6 +5,7 @@ The rules for how the Kidsmile clinic app looks and behaves. Tokens live in
 a screen.** UI_AUDIT.md records why each rule exists.
 
 **Personality:** warm, playful, gentle, trustworthy, clean.
+**Look:** calm, precise, elevated ("Option C refined", 2026-10-04). Plum brand, teal secondary, warm-grey ground.
 **Never:** anything cold or hospital-like, and no cartoon chrome on staff screens.
 **Dark mode:** Light, Dark or System, chosen per device in the account menu. See §2a.
 
@@ -12,26 +13,30 @@ a screen.** UI_AUDIT.md records why each rule exists.
 
 | Surface | Tone |
 | --- | --- |
-| Staff data screens (calendar, chart, billing, lists) | A calm, precise instrument: neutral surfaces, one brand colour, status colour only for status |
-| Login, parent portal, empty states, success moments, copy | Warm: Fredoka headings, crayon accents, the hand-drawn badge, friendly words |
+| Staff screens (dashboard, calendar, chart, billing, lists) | A calm, precise instrument: warm-grey ground, white cards, one brand colour (plum), status colour only for status, Bricolage titles. **No crayon chrome**: the strip is gone from the staff shell. The one rich moment is the dashboard's brand-deep greeting banner. |
+| Login, parent portal, success moments, copy | Warm: Fredoka (`font-display`) for the login hero and portal greeting, the crayon strip, the hand-drawn badge (`EmptyState tone="warm"`), friendly words |
 
 ## 2. Colour
 
-Every text pair below passes WCAG AA, measured.
+Every text pair below passes WCAG AA in both themes. Contrast is asserted by `apps/web/src/design/design-tokens.test.ts`;
+a new text or chart token adds its pair there.
 
 | Role | Token | Notes |
 | --- | --- | --- |
-| Primary | `brand` #17686e | The logo teal, deepened. Buttons, links, selection. 6.5:1 on white. |
-| Primary tints | `brand-subtle`, `brand-soft` | Selected rows and nav / decorative fills only, never text |
-| Secondary | `plum`, `plum-bg` | The logo's purple. Secondary emphasis, never status. |
-| Warm surface | `sunny` | Empty-state badges and celebrations. Never status. |
-| Ground / surface | `ground`, `surface`, `surface-raised` | Page, cards, things above cards |
-| Text | `ink`, `ink-muted` | Muted is 6.1:1 on ground. Don't go lighter. |
-| Lines | `line`, `line-strong`, `input-border` | Input borders are 3.3:1 (WCAG 1.4.11) |
+| Primary | `brand` #5b3fa8 | Plum (the logo's purple "i", deepened). Primary buttons, links, focus, the active nav icon. 7.7:1 on white. |
+| Brand tint | `brand-subtle`, `brand-ring`, `brand-tint-ink` | Confirmed tiles and chips, the visit-in-progress banner, calendar today. Text on the tint is `brand-tint-ink` (12.8:1). |
+| Brand deep | `brand-deep`, `brand-glow`, `on-deep*` | The dashboard banner and identity avatars. `on-deep*` text is constant in both themes. |
+| Secondary | `second`, `second-bg` | The logo's teal. Requests from parents, the "new" chart series. **Never status.** |
+| Warm surface | `sunny` | Birthdays, celebrations, the warm empty state. Never status. |
+| Ground / surface | `ground`, `surface`, `surface-raised` | Warm-grey page, white cards, things above cards |
+| Neutral fills | `selected`, `track` | `selected`: the active nav item, menu and hover highlight (never a brand tint). `track`: the Segmented track. |
+| Text | `ink`, `ink-muted` | Muted is 5.6:1 on ground. Don't go lighter. |
+| Lines | `line`, `line-soft`, `line-strong`, `control-border`, `input-border` | `line` card hairlines (and the default for a bare `border`), `line-soft` dividers inside a card. **`control-border` is never a field edge**: it is for labelled controls (secondary buttons). Fields use `input-border` (3.5:1, WCAG 1.4.11). |
+| Overlay | `scrim` | Behind dialogs and sheets, never `bg-black`. |
 | **Status** (fg / bg / line) | `success*`, `info*`, `warning*`, `danger*` | Status only, always with an icon and a word |
 | **Clinical alert** | `alert*` | Allergies, conditions and patient alerts **only** |
 | Crayons | `crayon-*` | Logo, loader, brand strip, illustrations. **Decoration only.** |
-| Charts | `chart-bar`, `chart-returning` + `chart-new` | `chart-bar` for one series. The new/returning pair was run through the dataviz validator in both themes (2026-10-03). A new series needs a validated token, light and dark. |
+| Charts | `chart-bar`, `chart-returning` + `chart-new` | `chart-bar` (= brand) for one series. Returning = plum, new = teal; the pair passed the dataviz validator in both themes (2026-10-04) and must differ in lightness by ≥ 1.3:1 (tested). A new series needs a validated token, light and dark. |
 
 **Do:** show arrived as `warning` (someone is waiting) and "Not billed" as `warning` with an icon.
 **Don't:** use `alert` for anything that isn't clinical, or orange crayon for status. That's alarm fatigue.
@@ -48,14 +53,17 @@ Every text pair below passes WCAG AA, measured.
   white tile. The animated mark keeps its crayon fills, and its outline reverses to light.
 - **Constant tokens** (`paper`, `photo-backdrop`) are the same in both themes. Use them only for artwork and photos.
 - **Teeth stay white** with their conventional fills in both themes.
-- **Measured pairs (2026-10-03):** ink 13.9:1 on surface, ink-muted 6.8:1 on surface-raised, brand 7.7:1 on surface,
-  every status text 7.9:1 or more on its own background, input border 4.4:1.
+- **Measured pairs (2026-10-04):** ink 14.6:1 on surface, ink-muted 7.0:1 on surface-raised, brand 7.8:1 on surface,
+  brand-ink on brand 8.0:1, input border 4.4:1. Every pair is re-measured by `design-tokens.test.ts`.
+- **The banner is constant-dark** (`brand-deep`) and edged with an inset hairline, because its fill is close to the dark
+  ground.
 - **Charts:** spread `TOOLTIP` from `features/dashboard/components/charts.tsx`. Recharts' default tooltip is white.
 
 ## 3. Type
 
-- **Fredoka** (`font-display`, 500/600) for page and card titles, the portal greeting and empty-state titles.
-  `h1` and `h2` get it automatically. **Figtree** for everything else.
+- **Bricolage Grotesque** (`font-title`, 600) for page and card titles and big numbers. `h1` and `h2` get it
+  automatically. **Fredoka** (`font-display`) only for the login hero, the portal greeting and warm empty states.
+  **Figtree** for everything else.
 - Scale: 12 / 14 / 16 / 18 / 20 / 24 / 30 / 36 (Tailwind `xs` to `4xl`).
 - **Phones read at 16 px.** Under 768 px, `text-sm` *is* 16 px (a token override), so no screen needs mobile
   type of its own. Labels (`text-xs`) stay at 12 px. Nothing goes below 12 px.
@@ -69,10 +77,13 @@ Every text pair below passes WCAG AA, measured.
 ## 4. Space, shape, elevation
 
 - 4 px base. Group gaps are smaller than section gaps (Tailwind 1–16).
-- Radius: 10 px base (`--radius`). Pills (`rounded-full`) for chips, segmented controls and the child switcher.
+- Radius: 12 px base (`--radius`). Buttons 10 px (`rounded-md`), cards 18 px (`rounded-2xl`), the dashboard banner 22 px
+  (`rounded-3xl`). Pills (`rounded-full`) for chips and the child switcher.
 - Elevation, three levels: flat (page) → `shadow-card` / `shadow-raised` → `shadow-overlay` (dialogs, sheets).
-- **Motif:** the crayon strip (`.brand-strip`) tops every shell. The hand-drawn badge (`border-2
-  border-crayon-outline bg-sunny shadow-crayon`) appears only in EmptyState and success moments.
+  Buttons add `shadow-xs` (secondary) and `shadow-button` (primary: top highlight and a soft brand lift).
+- **No dashed outlines.** An empty box is a hairline card with a muted line.
+- **Motif:** the crayon strip (`.brand-strip`) tops the login and portal only. The hand-drawn badge (`border-2
+  border-crayon-outline bg-sunny shadow-crayon`) appears only in `EmptyState tone="warm"` and success moments.
 
 ## 5. Touch and controls
 
@@ -82,6 +93,9 @@ Every text pair below passes WCAG AA, measured.
 - Small controls (checkboxes) get a 44 px invisible hit area via `.touch-hit`.
 - At least 8 px between adjacent buttons. The primary action comes last, and the rarer or money-out action is
   quieter (Refund is a ghost button).
+- **Buttons:** primary = solid brand with highlight and lift. Secondary (`outline`) = white with a hairline, never an
+  ink edge. Ghost = text. `strong` = solid ink, for final but not destructive actions (sign out). Destructive = red, for
+  data loss only.
 
 ## 6. Motion
 
@@ -99,17 +113,18 @@ Every text pair below passes WCAG AA, measured.
 
 | Component | Use it for | Rules |
 | --- | --- | --- |
-| **AppShell** | Staff app | Phones: top bar plus **bottom nav** (4 + More). Tablets: **icon rail** with labels. Desktop: full sidebar. Patient search everywhere (⌘K / Ctrl-K). |
-| **PortalShell** | Parent portal | Phones: bottom tab bar (Home, Appointments, Bills, More). md+: section tabs. |
+| **AppShell** | Staff app | Phones: top bar plus **bottom nav** (4 + More). Tablets: **icon rail** with labels. Desktop: full sidebar. Patient search everywhere (⌘K / Ctrl-K). Current page = neutral `selected` pill + brand icon + bold label (no side bar, no tint); on the phone tab bar, a 3 px brand bar on the top edge. |
+| **PortalShell** | Parent portal | Phones: bottom tab bar (Home, Appointments, Bills, More), same current-tab marker as the staff app. md+: section tabs with a brand underline. Keeps the crayon strip. |
 | **PatientSearch** | Finding a child | Two identifiers per result (name + age and DOB) and alerts, so the wrong child isn't opened |
 | **PatientHeader** | Every patient screen | Always visible: identity, alerts, **sibling chip**. Never collapse or hide it. |
 | **DataList** | Any table | A table from md up; cards below md (`title`, `trailing`, `meta`, `detail` slots). `bare` inside a card. |
-| **Dialog** | Forms and confirmations | Full-screen sheet on phones, 85dvh capped at sm+, inner scroll, **sticky footer** |
+| **Dialog** | Forms and confirmations | Full-screen sheet on phones, 85dvh capped at sm+, inner scroll, **sticky footer**. `size="confirm"` for a short question: a bottom sheet with a handle on phones, a small card from sm. |
+| **Segmented** | One choice of a few (calendar view, dentition, side of the mouth, grouping, photo layout) | A `track` with a white pill on the chosen option; buttons with `aria-pressed` in a labelled group. Never tabs (nothing is a tabpanel). |
 | **Loading** | Content inside an open page | A skeleton shaped like the content, fading in after 150 ms. `compact` is one line. |
 | **PageLoading / LoadingScreen** | Page changes / app start and sign-in | The animated Kidsmile logo |
 | **ErrorState** | Any failed query | Plain words for what failed, plus **Try again** (refetch). `compact` for cards. |
-| **EmptyState** | First use and no results | The hand-drawn badge, a Fredoka title, what's missing, and the next step |
-| **StatusChip** | Appointment status | Icon + word + tone. Never colour alone. |
+| **EmptyState** | First use and no results | What's missing and the next step. `tone="quiet"` (staff, default): a brand-tint icon tile and a Bricolage title. `tone="warm"` (portal, success): the hand-drawn badge and Fredoka. |
+| **StatusChip** | Appointment status | Icon + word + tone. Never colour alone. Confirmed = brand tint + ring. Calendar tiles lead with the same status icon. |
 | **FlagChip** (patient list) | Computed patient labels | Icon + word. Recall due = `info`, Balance due and No contact = `warning`. Never `alert`. Driven by `domain/patient-list.ts` rules, never set by hand. |
 | **Toast** | Saved, failed, queued | Status colours (`richColors`). Top centre, so it never covers a dialog, sheet or bottom-nav action (Part B). |
 
@@ -132,6 +147,8 @@ Every text pair below passes WCAG AA, measured.
 ## 10. Checklist for a new screen
 
 - [ ] Tokens only. No hex, no `text-[13px]`.
+- [ ] No `border-dashed`, no tinted selection (selection is `selected`), one-of-N toggles use `Segmented`.
+- [ ] `pnpm run check -- design` passes.
 - [ ] Checked in dark at 375 / 768 / 1280: no white panel, invisible text or invisible border.
 - [ ] One primary action. Patient identity and alerts visible if it's a patient screen.
 - [ ] A phone layout on purpose (DataList, agenda, steps), with no page-level sideways scroll at 360 px.

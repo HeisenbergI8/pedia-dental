@@ -42,17 +42,17 @@ export function PatientSearch({ variant }: { variant: "field" | "icon" | "rail" 
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="flex h-(--control-h) w-full items-center gap-2 rounded-md border border-input bg-surface px-3 text-sm text-ink-muted transition-colors duration-(--duration-fast) hover:border-brand focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+          className="flex h-(--control-h) w-full items-center gap-2 rounded-lg border border-line bg-ground px-3 text-sm text-ink-muted transition-colors duration-(--duration-fast) hover:border-control-border hover:bg-surface focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
         >
           <SearchIcon className="size-4" aria-hidden />
           <span className="flex-1 text-left">Find a patient</span>
-          <kbd className="rounded border border-line px-1.5 text-xs">⌘K</kbd>
+          <kbd className="rounded-md border border-line bg-surface px-1.5 text-xs font-semibold">⌘K</kbd>
         </button>
       ) : variant === "rail" ? (
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="flex min-h-14 w-full flex-col items-center justify-center gap-1 rounded-lg text-xs font-medium text-ink-muted hover:bg-ground hover:text-ink focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+          className="flex min-h-14 w-full flex-col items-center justify-center gap-1 rounded-lg text-xs font-medium text-ink-muted hover:bg-selected hover:text-ink focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
         >
           <SearchIcon className="size-5" aria-hidden />
           Search
@@ -107,7 +107,7 @@ function SearchBody({ onDone }: { onDone: () => void }) {
         <Link
           href="/appointments"
           onClick={onDone}
-          className="flex min-h-(--control-h) items-center gap-3 rounded-lg px-3 text-sm font-medium hover:bg-ground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+          className="flex min-h-(--control-h) items-center gap-3 rounded-lg px-3 text-sm font-medium hover:bg-selected focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
         >
           <CalendarDaysIcon className="size-4 text-brand" aria-hidden />
           Today&apos;s appointments
@@ -128,9 +128,9 @@ function SearchBody({ onDone }: { onDone: () => void }) {
                 <Link
                   href={`/patients/${p.id}`}
                   onClick={onDone}
-                  className="flex items-start gap-3 rounded-lg px-2 py-2.5 hover:bg-ground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                  className="flex items-start gap-3 rounded-lg px-2 py-2.5 hover:bg-selected focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
                 >
-                  <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-subtle text-sm font-semibold text-brand">
+                  <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-subtle text-sm font-semibold text-brand-tint-ink">
                     {initials(p.firstName, p.lastName)}
                   </span>
                   <span className="min-w-0 flex-1">

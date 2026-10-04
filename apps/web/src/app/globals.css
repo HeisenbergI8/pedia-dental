@@ -13,29 +13,41 @@
 }
 
 /* Design tokens. Change the palette here, not in components.
-   Brand: Kidsmile Pediatric Dental Clinic. The logo's "smile" teal is the brand hue; its crayon
-   colours (orange K, purple i, lime d, yellow handle, pink bristles) are decoration only. */
+   Brand: Kidsmile Pediatric Dental Clinic. Plum (the logo's purple "i", deepened) is the brand hue and the logo's
+   teal is the secondary accent ("Option C refined", 2026-10-04). Crayon colours are decoration only. */
 @theme {
-  --color-ground: #f4f9f9;
+  --color-ground: #f7f7f4;
   --color-surface: #ffffff;
-  --color-ink: #16282b;
-  --color-ink-muted: #4c6265; /* 6.1:1 on ground, 6.5:1 on white */
-  --color-line: #d6e6e6;
-  --color-line-strong: #b2cccc; /* decorative dashed outlines */
-  --color-input-border: #7a9396; /* 3.3:1 on white: a field's edge must be visible (WCAG 1.4.11) */
-  --color-brand: #17686e; /* the logo teal, deepened to 6.5:1 on white for text and buttons */
+  --color-ink: #111c1e; /* 17.4:1 on white */
+  --color-ink-muted: #56656a; /* 5.65:1 on ground, 6.1:1 on white */
+  --color-line: #ecebe6; /* card and shell hairlines */
+  --color-line-soft: #f2f1ed; /* dividers inside a card */
+  --color-line-strong: #d9d8d1; /* decorative edges that must read on ground (booked chip) */
+  /* The edge of a secondary button or a segmented track. Decorative: the label identifies the control. Never a field. */
+  --color-control-border: #e3e2dc;
+  --color-input-border: #848a88; /* 3.5:1 on white: a field's edge must be visible (WCAG 1.4.11) */
+  --color-selected: #f1f1ee; /* neutral selected / hover fill: active nav, menu highlight */
+  --color-track: #eeeeea; /* segmented-control track */
+  --color-brand: #5b3fa8; /* plum: 7.7:1 on white for text and buttons */
   --color-brand-ink: #ffffff;
-  --color-brand-subtle: #e3f3f3; /* selected nav, active rows */
-  --color-brand-soft: #7ec4c6; /* the logo teal itself: fills and accents, never text */
+  --color-brand-subtle: #f1edfb; /* brand tint: confirmed tiles, calendar today */
+  --color-brand-ring: #dcd3f4; /* the border of a brand-tinted thing */
+  --color-brand-tint-ink: #2e1b5c; /* text on brand-subtle */
+  --color-brand-deep: #33215f; /* the dashboard banner and identity avatars */
+  --color-brand-glow: rgb(176 146 255 / 0.32); /* the banner's radial light */
+  --color-on-deep: #ffffff; /* text on brand-deep, constant in both themes */
+  --color-on-deep-muted: #e3dbfa;
+  --color-on-deep-label: #cdbef7; /* banner and stat-cell labels */
+  --color-scrim: rgb(17 28 30 / 0.45); /* behind dialogs and sheets */
   --color-surface-raised: #ffffff; /* cards that sit above surface (popovers, sticky bars); paired with --shadow-raised */
   /* Always white, in both themes: the plate behind the logo artwork (drawn for white), the brush highlight and
      bubbles in the animated mark, the split line over photos. Never a page or card surface. */
   --color-paper: #ffffff;
-  --color-photo-backdrop: #16282b; /* behind photos, in both themes: photos read best on near-black */
+  --color-photo-backdrop: #111c1e; /* behind photos, in both themes: photos read best on near-black */
 
-  /* Secondary brand: the logo's purple "i". Secondary emphasis and kid moments, never status. */
-  --color-plum: #694ab4; /* 6.5:1 on white */
-  --color-plum-bg: #f0ebfa; /* plum text 5.6:1 */
+  /* Secondary accent: the logo's teal. Requests, nav counts, the "new" series. Never status. */
+  --color-second: #0f4c51; /* 9.7:1 on white */
+  --color-second-bg: #e6f3f1;
   /* Warm surface for celebrations, empty states and the portal welcome. Never status. */
   --color-sunny: #fff6dc; /* ink 14.2:1, ink-muted 6.0:1 */
 
@@ -86,21 +98,29 @@
 
   /* Charts (dashboard). One hue per series. chart-bar is the single-series hue; the new/returning mix has its own
      validated pair (dataviz validator, 2026-10-03: lightness, chroma, CVD ΔE 15.9, normal ΔE 22.1, contrast). */
-  --color-chart-bar: #17686e; /* = brand: 6.5:1 on white */
-  --color-chart-returning: #00939a;
-  --color-chart-new: #694ab4; /* = plum, the app's "new" marker */
+  --color-chart-bar: #5b3fa8; /* = brand */
+  /* new/returning pair: dataviz validator 2026-10-04, all checks pass (CVD ΔE 23.1, normal ΔE 27.6, contrast). */
+  --color-chart-returning: #5b3fa8; /* = brand */
+  --color-chart-new: #2a9d8f; /* = the teal secondary, 3.3:1 on white */
   --color-chart-negative: #a12622; /* = danger: net refunds */
-  --color-chart-grid: #e4efef;
+  --color-chart-grid: #f2f1ed;
 
   --font-sans: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
-  /* Fredoka echoes the logo's rounded letters. Headings and brand moments only; body stays Figtree. */
+  /* Bricolage Grotesque: page and card titles, big numbers. h1/h2 get it automatically. */
+  --font-title: var(--font-bricolage), var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
+  /* Fredoka echoes the logo's rounded letters. Warm moments only (login hero, portal greeting), set explicitly. */
   --font-display: var(--font-fredoka), var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
-  --shadow-card: 0 1px 2px 0 rgb(22 40 43 / 0.05), 0 1px 3px 0 rgb(22 40 43 / 0.04);
+  --shadow-card: 0 1px 2px 0 rgb(16 24 40 / 0.04);
+  --shadow-xs: 0 1px 2px 0 rgb(16 24 40 / 0.05); /* secondary buttons, booked tiles */
+  /* Primary button: a top highlight and a soft brand-coloured drop. */
+  --shadow-button: inset 0 1px 0 rgb(255 255 255 / 0.16), 0 1px 2px rgb(16 24 40 / 0.12),
+    0 6px 14px -8px color-mix(in oklab, var(--color-brand) 60%, transparent);
+  --shadow-banner: 0 1px 2px rgb(16 24 40 / 0.08), 0 18px 36px -22px color-mix(in oklab, var(--color-brand-deep) 55%, transparent);
   --tracking-brand: 0.32em; /* the logo's spaced "PEDIATRIC DENTAL CLINIC" line */
 
   /* Elevation: flat (page) < raised (cards, sticky bars) < overlay (dialogs, sheets, popovers). */
-  --shadow-raised: 0 2px 8px -2px rgb(22 40 43 / 0.12), 0 1px 2px 0 rgb(22 40 43 / 0.06);
-  --shadow-overlay: 0 16px 40px -12px rgb(22 40 43 / 0.28), 0 2px 6px 0 rgb(22 40 43 / 0.08);
+  --shadow-raised: 0 2px 8px -2px rgb(16 24 40 / 0.12), 0 1px 2px 0 rgb(16 24 40 / 0.06);
+  --shadow-overlay: 0 16px 40px -12px rgb(16 24 40 / 0.28), 0 2px 6px 0 rgb(16 24 40 / 0.08);
   /* The logo's hand-drawn offset shadow. Illustrations, empty states and success moments only. */
   --shadow-crayon: 3px 3px 0 0 var(--color-crayon-teal);
 
@@ -158,20 +178,28 @@
 @media screen {
   :root[data-theme="dark"] {
     color-scheme: dark;
-    --color-ground: #0f1a1c;
-    --color-surface: #152325;
-    --color-surface-raised: #1c2e31; /* lighter than surface: on dark, elevation reads as lightness, not shadow */
-    --color-ink: #e6f0f0; /* 13.9:1 on surface, 15.3:1 on ground */
-    --color-ink-muted: #a3b8ba; /* 7.8:1 on surface, 6.8:1 on surface-raised */
-    --color-line: #2a3e41;
-    --color-line-strong: #3d5558;
-    --color-input-border: #6f8b8e; /* 4.4:1 on surface (WCAG 1.4.11 needs 3:1) */
-    --color-brand: #5fc2c7; /* 7.7:1 on surface */
-    --color-brand-ink: #0b2224; /* 7.9:1 on brand: primary buttons get dark text in dark mode */
-    --color-brand-subtle: #17393c; /* ink 10.7:1, brand 5.9:1 */
-    --color-brand-soft: #3f8f92;
-    --color-plum: #bba6ef; /* 7.6:1 on surface */
-    --color-plum-bg: #2a2342; /* plum 6.9:1 */
+    --color-ground: #121413;
+    --color-surface: #1a1c1b;
+    --color-surface-raised: #222524; /* lighter than surface: on dark, elevation reads as lightness, not shadow */
+    --color-ink: #ecede9;
+    --color-ink-muted: #a9b0ad;
+    --color-line: #2d302e;
+    --color-line-soft: #242725;
+    --color-line-strong: #3f4341;
+    --color-control-border: #3a3e3c;
+    --color-input-border: #7c8380; /* >= 3:1 on surface (WCAG 1.4.11) */
+    --color-selected: #2a2d2c;
+    --color-track: #232625;
+    --color-brand: #b7a3f5;
+    --color-brand-ink: #1c1236; /* primary buttons get dark text in dark mode */
+    --color-brand-subtle: #2a2245;
+    --color-brand-ring: #43386b;
+    --color-brand-tint-ink: #ddd3fb;
+    --color-brand-deep: #2b1f52;
+    --color-brand-glow: rgb(176 146 255 / 0.22);
+    --color-scrim: rgb(0 0 0 / 0.6);
+    --color-second: #7fd3c6;
+    --color-second-bg: #15312e;
     --color-sunny: #2f2915; /* ink 12.5:1, ink-muted 7.0:1 */
     --color-crayon-outline: #dfe9e9; /* the logo's ink line, reversed */
     --color-alert: #f7b57e; /* 8.5:1 on alert-bg */
@@ -190,12 +218,16 @@
     --color-warning: #f2c96d; /* 9.2:1 on warning-bg */
     --color-warning-bg: #33280c;
     --color-warning-line: #6e5418;
-    --color-chart-bar: #5fc2c7; /* = dark brand */
-    --color-chart-returning: #25a0a7; /* validated pair on dark surface: CVD ΔE 11.3, normal ΔE 20.0 */
-    --color-chart-new: #8f6fe0;
+    --color-chart-bar: #b7a3f5; /* = dark brand */
+    /* validated pair on dark surface (2026-10-04): CVD ΔE 15.6, normal ΔE above floor, lightness band, contrast */
+    --color-chart-returning: #8a6fe0;
+    --color-chart-new: #3aa898;
     --color-chart-negative: #ff9e97; /* = dark danger */
-    --color-chart-grid: #223538;
+    --color-chart-grid: #262928;
     --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+    --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+    --shadow-button: inset 0 1px 0 rgb(255 255 255 / 0.18), 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-banner: 0 1px 2px rgb(0 0 0 / 0.4), inset 0 0 0 1px rgb(255 255 255 / 0.06); /* deep vs ground is ~1.25:1 */
     --shadow-raised: 0 2px 8px -2px rgb(0 0 0 / 0.5), 0 1px 2px 0 rgb(0 0 0 / 0.3);
     --shadow-overlay: 0 16px 40px -12px rgb(0 0 0 / 0.7), 0 2px 6px 0 rgb(0 0 0 / 0.4);
   }
@@ -207,11 +239,11 @@
   --color-foreground: var(--color-ink);
   --color-primary: var(--color-brand);
   --color-primary-foreground: var(--color-brand-ink);
-  --color-secondary: var(--color-ground);
+  --color-secondary: var(--color-selected);
   --color-secondary-foreground: var(--color-ink);
   --color-muted: var(--color-ground);
   --color-muted-foreground: var(--color-ink-muted);
-  --color-accent: var(--color-brand-subtle);
+  --color-accent: var(--color-selected); /* ghost hover, menu and select highlight: neutral, never tinted */
   --color-accent-foreground: var(--color-ink);
   --color-popover: var(--color-surface);
   --color-popover-foreground: var(--color-ink);
@@ -221,11 +253,13 @@
   --color-border: var(--color-line);
   --color-input: var(--color-input-border);
   --color-ring: var(--color-brand);
-  --radius: 0.625rem;
+  --radius: 0.75rem; /* 12px */
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 6px); /* 18px: cards */
+  --radius-3xl: calc(var(--radius) + 10px); /* 22px: the dashboard banner */
 }
 
 html {
@@ -314,11 +348,20 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
-/* Page and card titles carry the brand's rounded face. */
+/* Page and card titles: Bricolage Grotesque, tightened. Fredoka is opt-in via font-display (warm surfaces). */
 @layer base {
   h1,
   h2 {
-    font-family: var(--font-display);
+    font-family: var(--font-title);
+    letter-spacing: -0.015em;
+  }
+  /* Tailwind v4's bare `border` is currentColor (ink). Hairlines are the default; a darker edge is always explicit. */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-line);
   }
 }
 
@@ -457,7 +500,7 @@ body {
   padding: 0.5rem 0.25rem;
   font-size: 0.8125rem; /* the library's 90% made headers 11.7px; labels stay >= 12px */
   font-weight: 600;
-  border-color: var(--color-line) !important;
+  border-color: var(--color-line-soft) !important;
 }
 
 .calendar .rbc-time-view,
@@ -480,8 +523,10 @@ body {
   border-color: var(--color-line) !important;
 }
 
+/* The dotted slot lines are the inner grid: softer than the outer frame. */
 .calendar .rbc-day-slot .rbc-time-slot {
   border-top-style: dotted;
+  border-color: var(--color-line-soft) !important;
 }
 
 .calendar .rbc-label {
@@ -614,7 +659,7 @@ body {
   border-radius: 9999px;
 }
 .calendar .rbc-date-cell .rbc-button-link:hover {
-  background: var(--color-brand-subtle);
+  background: var(--color-selected);
 }
 
 .calendar .rbc-row-segment {

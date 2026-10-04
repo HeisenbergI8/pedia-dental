@@ -27,7 +27,7 @@ export function AgendaList({
         return (
           <section key={day.toISOString()} aria-labelledby={`day-${day.toISOString()}`} className="space-y-2">
             {days.length > 1 && (
-              <h2 id={`day-${day.toISOString()}`} className="flex items-baseline justify-between text-base font-semibold">
+              <h2 id={`day-${day.toISOString()}`} className="flex items-baseline justify-between text-lg font-semibold">
                 {format(day, "EEEE, MMM d")}
                 <span className="text-sm font-normal text-ink-muted">
                   {today.length === 0 ? "None" : `${today.length} appointment${today.length === 1 ? "" : "s"}`}
@@ -35,17 +35,17 @@ export function AgendaList({
               </h2>
             )}
             {today.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-line-strong px-4 py-5 text-sm text-ink-muted">
+              <p className="rounded-2xl bg-surface px-4 py-5 text-sm text-ink-muted ring-1 ring-line">
                 {isClosedDay(day, counts?.get(format(day, "yyyy-MM-dd")) ?? today.length) ? "The clinic is closed." : "No appointments."}
               </p>
             ) : (
-              <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
+              <ul className="divide-y divide-line-soft overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
                 {today.map((i) => (
                   <li key={i.appointment.id}>
                     <button
                       type="button"
                       onClick={() => onOpen(i.appointment.id)}
-                      className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors duration-(--duration-fast) hover:bg-ground focus-visible:bg-ground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:ring-inset"
+                      className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors duration-(--duration-fast) hover:bg-selected focus-visible:bg-selected focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:ring-inset"
                     >
                       <span className="w-22 shrink-0 text-sm whitespace-nowrap tabular-nums">
                         <span className="block font-semibold">{format(i.start, "h:mm a")}</span>

@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Calendar, dateFnsLocalizer, type DateHeaderProps } from "react-big-calendar";
+import { Calendar, dateFnsLocalizer, type DateHeaderProps, type ResourceHeaderProps } from "react-big-calendar";
 import withDragAndDrop, { type EventInteractionArgs } from "react-big-calendar/lib/addons/dragAndDrop";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import "react-big-calendar/lib/addons/dragAndDrop/styles.css";
@@ -28,6 +28,7 @@ import { canReschedule, countByDay, inStatusGroup, isStatusGroup, type Appointme
 import { ErrorState } from "@/components/error-state";
 import { PageHeader } from "@/components/page-header";
 import { Loading } from "@/components/brand";
+import { Segmented } from "@/components/segmented";
 import { Button } from "@/components/ui/button";
 import { useChairs } from "@/features/clinic/api";
 import { usePatients } from "@/features/patients/api";
@@ -38,6 +39,7 @@ import { AgendaList } from "./agenda-list";
 import { AppointmentForm, type AppointmentDraft } from "./appointment-form";
 import { AppointmentSheet } from "./appointment-sheet";
 import { MonthCountGrid } from "./month-count-grid";
+import { STATUS_ICON } from "./status-chip";
 
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales: { "en-US": enUS } });
 
@@ -58,12 +60,12 @@ const VIEWS = {
 type CalendarView = keyof typeof VIEWS;
 
 /**
- * Grid event colours, from the status triples (as StatusChip). The printed status word keeps them apart
- * without colour. Confirmed is the one solid fill: the day's committed work reads first.
+ * Grid event colours, from the status triples (as StatusChip). Each tile also leads with its status icon and prints
+ * the status word, so they stay apart without colour. Confirmed is the brand tint: the day's committed work reads first.
  */
 const STATUS_CLASS: Record<AppointmentStatus, string> = {
-  booked: "!bg-surface !text-ink !border-brand border-dashed",
-  confirmed: "!bg-brand !text-brand-ink !border-brand",
+  booked: "!bg-surface !text-ink !border-control-border shadow-xs",
+  confirmed: "!bg-brand-subtle !text-brand-tint-ink !border-brand-ring",
   arrived: "!bg-warning-bg !text-warning !border-warning-line",
   in_chair: "!bg-info-bg !text-info !border-info-line",
   done: "!bg-ground !text-ink-muted !border-line",
@@ -73,9 +75,13 @@ const STATUS_CLASS: Record<AppointmentStatus, string> = {
 
 /** Two lines that each cut off cleanly, so narrow week columns and short slots stay legible. */
 function EventLabel({ event }: { event: CalendarEvent }) {
+  const Icon = STATUS_ICON[event.appointment.status];
   return (
     <span className="block min-w-0 text-xs leading-tight">
-      <strong className="block truncate">{event.title}</strong>
+      <strong className="flex min-w-0 items-center gap-1">
+        <Icon className="size-3 shrink-0" aria-hidden />
+        <span className="truncate">{event.title}</span>
+      </strong>
       <span className="block truncate">
         {STATUS_LABEL[event.appointment.status]} · {event.appointment.reason}
       </span>
@@ -211,8 +217,19 @@ export function AppointmentCalendar() {
           );
         },
       },
+      // Day view: each chair's column names how full it is, from the events already loaded.
+      resourceHeader: ({ label, resource }: ResourceHeaderProps<Chair>) => {
+        const day = format(date, "yyyy-MM-dd");
+        const n = events.filter((e) => e.resourceId === resource.id && format(e.start, "yyyy-MM-dd") === day).length;
+        return (
+          <span className="flex items-center justify-between gap-2 px-1">
+            <span className="font-title font-semibold">{label}</span>
+            {n > 0 && <span className="text-xs font-medium text-ink-muted tabular-nums">{n} appt{n === 1 ? "" : "s"}</span>}
+          </span>
+        );
+      },
     }),
-    [counts],
+    [counts, events, date],
   );
 
   return (
@@ -230,34 +247,24 @@ export function AppointmentCalendar() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={() => setDate(new Date())}>Today</Button>
-          <div className="flex">
-            <Button variant="ghost" size="icon" aria-label="Previous" onClick={() => setDate(VIEWS[view].step(date, -1))}>
+          <div className="flex overflow-hidden rounded-md border border-control-border bg-surface shadow-xs">
+            <Button variant="ghost" size="icon" className="rounded-none text-ink" aria-label="Previous" onClick={() => setDate(VIEWS[view].step(date, -1))}>
               <ChevronLeftIcon />
             </Button>
-            <Button variant="ghost" size="icon" aria-label="Next" onClick={() => setDate(VIEWS[view].step(date, 1))}>
+            <Button variant="ghost" size="icon" className="rounded-none border-l border-control-border text-ink" aria-label="Next" onClick={() => setDate(VIEWS[view].step(date, 1))}>
               <ChevronRightIcon />
             </Button>
           </div>
-          <p className="text-base font-semibold" aria-live="polite">{VIEWS[view].title(date)}</p>
+          <p className="font-title text-lg font-semibold tracking-tight" aria-live="polite">{VIEWS[view].title(date)}</p>
         </div>
-        {/* A segmented control: one choice, visibly grouped. */}
-        <div className="flex w-full rounded-lg bg-line/60 p-1 sm:w-auto" role="group" aria-label="Calendar view">
-          {offered.map((v) => (
-            <button
-              key={v}
-              type="button"
-              aria-pressed={v === view || (isPhone && view === "agenda" && v === "day")}
-              onClick={() => setView(v)}
-              className={cn(
-                "h-(--control-h-sm) flex-1 rounded-md px-3 text-sm font-medium transition-colors duration-(--duration-fast) sm:flex-none",
-                "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-                v === view || (isPhone && view === "agenda" && v === "day") ? "bg-surface text-ink shadow-card" : "text-ink-muted hover:text-ink",
-              )}
-            >
-              {VIEWS[v].label}
-            </button>
-          ))}
-        </div>
+        {/* On a phone the agenda is the day view, so Day reads as pressed there. */}
+        <Segmented
+          label="Calendar view"
+          className="w-full sm:w-auto"
+          value={isPhone && view === "agenda" ? "day" : view}
+          onChange={setView}
+          options={offered.map((v) => ({ value: v, label: VIEWS[v].label }))}
+        />
       </div>
       {status && (
         <p className="flex flex-wrap items-center gap-2 text-sm" role="status">
@@ -280,7 +287,7 @@ export function AppointmentCalendar() {
           <AgendaList items={events} days={listDays} onOpen={setSelectedId} counts={counts} />
         )
       ) : (
-        <div className={`calendar calendar-${view} overflow-x-auto rounded-xl border border-line bg-surface p-3 shadow-card`}>
+        <div className={`calendar calendar-${view} overflow-x-auto rounded-2xl border border-line bg-surface p-3 shadow-card`}>
           <div
             className={cn(
               view === "day" ? "h-[64rem] min-w-[40rem]" : "min-w-[48rem]",

@@ -19,7 +19,7 @@ import { VisitList } from "@/features/visits/components/visit-list";
 import { usePatient } from "../api";
 import { PatientOverview } from "./patient-overview";
 
-const TAB_TRIGGER = "h-11 flex-none rounded-none px-3 data-[state=active]:text-brand group-data-[variant=line]/tabs-list:data-[state=active]:after:bg-brand";
+const TAB_TRIGGER = "h-11 flex-none rounded-none px-3";
 
 const TABS = ["overview", "chart", "notes", "plan", "photos", "billing", "documents"] as const;
 type Tab = (typeof TABS)[number];

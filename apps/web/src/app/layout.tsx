@@ -1,11 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { Figtree, Fredoka } from "next/font/google";
+import { Bricolage_Grotesque, Figtree, Fredoka } from "next/font/google";
 import { THEME_SCRIPT } from "@/lib/theme";
 import { Providers } from "./providers";
 import "./globals.css";
 
 const figtree = Figtree({ subsets: ["latin"], variable: "--font-figtree" });
 const fredoka = Fredoka({ subsets: ["latin"], weight: ["500", "600"], variable: "--font-fredoka" });
+// Variable font: weight plus optical size, so 600 titles tighten at display sizes.
+const bricolage = Bricolage_Grotesque({ subsets: ["latin"], axes: ["opsz"], variable: "--font-bricolage" });
 
 export const metadata: Metadata = {
   title: "Kidsmile Pediatric Dental Clinic",
@@ -24,7 +26,7 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, view
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     // suppressHydrationWarning: THEME_SCRIPT sets data-theme before React hydrates, and the server can't know it.
-    <html lang="en" className={`${figtree.variable} ${fredoka.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${figtree.variable} ${fredoka.variable} ${bricolage.variable}`} suppressHydrationWarning>
       <head>
         {/* The saved theme, applied before first paint. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />

@@ -26,7 +26,7 @@ export const STATUS_ICON: Record<AppointmentStatus, LucideIcon> = {
 /** Status tones from the status triples. Arrived is amber: someone is waiting. Never the clinical alert colour. */
 export const STATUS_TONE: Record<AppointmentStatus, string> = {
   booked: "border-line-strong bg-surface text-ink",
-  confirmed: "border-brand-soft bg-brand-subtle text-brand",
+  confirmed: "border-brand-ring bg-brand-subtle text-brand",
   arrived: "border-warning-line bg-warning-bg text-warning",
   in_chair: "border-info-line bg-info-bg text-info",
   done: "border-success-line bg-success-bg text-success",

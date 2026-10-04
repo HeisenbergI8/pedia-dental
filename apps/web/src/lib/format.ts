@@ -11,6 +11,11 @@ export function formatDate(isoDate: string): string {
   return format(parseISO(isoDate), "MMM d, yyyy");
 }
 
+/** "Dr. Ana Reyes" → "Ana Reyes": greetings and avatars address the person, not the title. */
+export const withoutTitle = (name: string) => name.replace(/^Dr\.\s*/, "");
+/** "Dr. Ana Reyes" → "Ana". */
+export const firstName = (name: string) => withoutTitle(name).split(/\s+/)[0];
+
 /** "AC" from "Ana Cruz", for avatars. */
 export function initials(firstName: string, lastName: string): string {
   return `${firstName[0] ?? ""}${lastName[0] ?? ""}`.toUpperCase();
