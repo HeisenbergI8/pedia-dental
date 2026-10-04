@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { ChevronsUpDownIcon, LogOutIcon, RotateCcwIcon, UsersIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,6 +41,7 @@ export function AccountMenu({ variant = "full" }: { variant?: "full" | "bar" | "
   const session = useSession();
   const signOut = useSignOut();
   const [switching, setSwitching] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   if (!session) return null;
   const { user } = session;
 
@@ -89,13 +91,32 @@ export function AccountMenu({ variant = "full" }: { variant?: "full" | "bar" | "
           <DropdownMenuSeparator />
           <AppearanceItems />
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={signOut}>
-            <LogOutIcon /> Sign out
+          <DropdownMenuItem onSelect={() => setSigningOut(true)}>
+            <LogOutIcon /> Sign out…
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
       {/* Outside the menu, so the menu's focus handling doesn't fight the dialog's focus trap. */}
       <SwitchUserDialog open={switching} onOpenChange={setSwitching} />
+      <Dialog open={signingOut} onOpenChange={setSigningOut}>
+        {/* A short question, so a centred card on phones too rather than the full-screen sheet. */}
+        <DialogContent className="max-sm:inset-x-4 max-sm:top-1/2 max-sm:bottom-auto max-sm:h-auto max-sm:w-auto max-sm:-translate-y-1/2 max-sm:rounded-xl max-sm:border sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Sign out?</DialogTitle>
+            <DialogDescription>
+              {user.name} will be signed out on this device. Anything not yet saved will be lost.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSigningOut(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={signOut}>
+              <LogOutIcon /> Sign out
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

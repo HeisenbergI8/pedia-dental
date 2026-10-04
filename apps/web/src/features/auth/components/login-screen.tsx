@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useIsMutating } from "@tanstack/react-query";
 import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CalendarCheckIcon, HeartHandshakeIcon, HeartIcon, RainbowIcon, ShieldCheckIcon, SparklesIcon, StethoscopeIcon, type LucideIcon } from "lucide-react";
+import { CalendarCheckIcon, EyeIcon, EyeOffIcon, HeartHandshakeIcon, HeartIcon, RainbowIcon, ShieldCheckIcon, SparklesIcon, StethoscopeIcon, type LucideIcon } from "lucide-react";
 import { LoginInput, type DemoAccounts, type Role } from "@pedia/shared";
 import { KidsmileLogo, Loading, LoadingScreen } from "@/components/brand";
 import { FormField } from "@/components/form-field";
@@ -111,6 +111,7 @@ export function LoginScreen() {
 function EmailSignIn() {
   const signIn = useSignIn();
   const form = useForm<LoginInput>({ resolver: zodResolver(LoginInput), defaultValues: { email: "", password: "" } });
+  const [showPassword, setShowPassword] = useState(false);
   return (
     <section aria-label="Sign in" className="rounded-xl border border-line bg-surface p-4 shadow-card sm:p-6">
       <FormProvider {...form}>
@@ -119,7 +120,28 @@ function EmailSignIn() {
             <Input type="email" autoComplete="username" {...form.register("email")} />
           </FormField>
           <FormField name="password" label="Password">
-            <Input type="password" autoComplete="current-password" {...form.register("password")} />
+            {(control) => (
+              <div className="relative">
+                <Input
+                  {...control}
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  className="pr-11"
+                  {...form.register("password")}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute inset-y-0 right-0 h-full text-ink-muted"
+                >
+                  {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+                </Button>
+              </div>
+            )}
           </FormField>
           {signIn.error && <p role="alert" className="text-sm text-danger">{signIn.error.message}</p>}
           <Button type="submit" disabled={signIn.isPending} className="w-full sm:w-auto">
