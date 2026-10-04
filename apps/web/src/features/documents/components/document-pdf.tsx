@@ -2,12 +2,12 @@ import { Document, Font, Image, Page, StyleSheet, Text, View } from "@react-pdf/
 import { CLINIC_NAME } from "@pedia/shared";
 import type { DocBlock, DocContent } from "../content";
 
-/** react-pdf can't read CSS variables: these mirror --color-ink, --color-ink-muted, --color-line, --color-line-strong, --color-brand-soft. */
-const INK = "#16282b";
-const MUTED = "#4c6265";
-const LINE = "#d6e6e6";
-const LINE_STRONG = "#b2cccc";
-const BRAND_SOFT = "#7ec4c6";
+/** react-pdf can't read CSS variables: these mirror --color-ink, --color-ink-muted, --color-line, --color-line-strong, --color-brand-ring. */
+const INK = "#111c1e";
+const MUTED = "#56656a";
+const LINE = "#ecebe6";
+const LINE_STRONG = "#d9d8d1";
+const BRAND_RING = "#dcd3f4";
 
 // Helvetica has no ₱ glyph; Noto Sans does (public/fonts, plan Q2).
 Font.register({ family: "Noto Sans", fonts: [{ src: "/fonts/NotoSans-Regular.ttf" }, { src: "/fonts/NotoSans-Bold.ttf", fontWeight: 700 }] });
@@ -15,7 +15,7 @@ Font.registerHyphenationCallback((word) => [word]); // never hyphenate a child's
 
 const s = StyleSheet.create({
   page: { fontFamily: "Noto Sans", fontSize: 10, lineHeight: 1.45, color: INK, padding: 48, paddingBottom: 64 },
-  header: { borderBottomWidth: 2, borderBottomColor: BRAND_SOFT, paddingBottom: 8, marginBottom: 16 },
+  header: { borderBottomWidth: 2, borderBottomColor: BRAND_RING, paddingBottom: 8, marginBottom: 16 },
   logo: { width: 150, marginBottom: 6 },
   title: { fontSize: 12, fontWeight: 700, marginTop: 4, textTransform: "uppercase" },
   muted: { color: MUTED },

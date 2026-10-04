@@ -39,7 +39,7 @@ function DialogOverlay({
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        "fixed inset-0 z-50 bg-black/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
+        "fixed inset-0 z-50 bg-scrim data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
         className
       )}
       {...props}
@@ -51,9 +51,12 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  size = "default",
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
+  /** "confirm": a short question. A bottom sheet with a handle on phones, a small card from sm. */
+  size?: "default" | "confirm"
 }) {
   return (
     <DialogPortal data-slot="dialog-portal">
@@ -61,11 +64,15 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "fixed z-(--z-overlay) grid w-full content-start gap-4 overflow-y-auto overscroll-contain bg-background p-6 shadow-(--shadow-overlay) duration-(--duration-base) outline-none max-sm:inset-0 max-sm:h-dvh sm:top-[50%] sm:left-[50%] sm:max-h-(--dialog-max-h) sm:max-w-[calc(100%-2rem)] sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-xl sm:border data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg",
+          "fixed z-(--z-overlay) grid w-full content-start gap-4 overflow-y-auto overscroll-contain bg-background p-6 shadow-(--shadow-overlay) duration-(--duration-base) outline-none sm:top-[50%] sm:left-[50%] sm:max-h-(--dialog-max-h) sm:max-w-[calc(100%-2rem)] sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-2xl sm:border data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg",
+          size === "default" && "max-sm:inset-0 max-sm:h-dvh",
+          size === "confirm" &&
+            "max-sm:inset-x-0 max-sm:bottom-0 max-sm:rounded-t-3xl max-sm:pt-3 max-sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:max-w-sm",
           className
         )}
         {...props}
       >
+        {size === "confirm" && <span aria-hidden className="mx-auto h-1 w-10 rounded-full bg-control-border sm:hidden" />}
         {children}
         {showCloseButton && (
           <DialogPrimitive.Close
@@ -104,7 +111,7 @@ function DialogFooter({
       data-slot="dialog-footer"
       className={cn(
         // Phones: the dialog is a full-screen sheet, so the footer clears the home indicator.
-        "sticky -bottom-6 -mx-6 -mb-6 flex flex-col-reverse gap-2 border-t border-line bg-background px-6 py-4 max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))] sm:flex-row sm:justify-end",
+        "sticky -bottom-6 -mx-6 -mb-6 flex flex-col-reverse gap-2 border-t border-line-soft bg-background px-6 py-4 max-sm:pb-[calc(1rem+env(safe-area-inset-bottom))] sm:flex-row sm:justify-end",
         className
       )}
       {...props}

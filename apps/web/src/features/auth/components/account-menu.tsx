@@ -53,18 +53,18 @@ export function AccountMenu({ variant = "full" }: { variant?: "full" | "bar" | "
             variant="ghost"
             aria-label={`${user.name}, ${ROLE_LABEL[user.role]}. Account menu`}
             className={cn(
-              "h-auto min-h-11 text-left",
-              variant === "full" && "w-full justify-start gap-3 px-2",
+              "h-auto min-h-11 text-left text-ink", // ghost is muted by default; the account name is not
+              variant === "full" && "w-full justify-start gap-3 rounded-xl border border-line bg-surface p-2 hover:bg-selected",
               variant === "bar" && "gap-2 px-2",
               variant === "rail" && "w-full flex-col gap-1 px-1 py-1.5",
             )}
           >
-            <span aria-hidden className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-subtle text-sm font-semibold text-brand">
+            <span aria-hidden className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-deep text-sm font-bold text-on-deep">
               {initials(user.name)}
             </span>
             {variant === "full" && (
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">{user.name}</span>
+                <span className="block truncate text-sm font-semibold">{user.name}</span>
                 <span className="block text-xs font-normal text-ink-muted">{ROLE_LABEL[user.role]}</span>
               </span>
             )}
@@ -99,19 +99,30 @@ export function AccountMenu({ variant = "full" }: { variant?: "full" | "bar" | "
       {/* Outside the menu, so the menu's focus handling doesn't fight the dialog's focus trap. */}
       <SwitchUserDialog open={switching} onOpenChange={setSwitching} />
       <Dialog open={signingOut} onOpenChange={setSigningOut}>
-        {/* A short question, so a centred card on phones too rather than the full-screen sheet. */}
-        <DialogContent className="max-sm:inset-x-4 max-sm:top-1/2 max-sm:bottom-auto max-sm:h-auto max-sm:w-auto max-sm:-translate-y-1/2 max-sm:rounded-xl max-sm:border sm:max-w-sm">
+        {/* A short question: a bottom sheet on phones, a small card from sm. */}
+        <DialogContent size="confirm">
           <DialogHeader>
             <DialogTitle>Sign out?</DialogTitle>
             <DialogDescription>
               {user.name} will be signed out on this device. Anything not yet saved will be lost.
             </DialogDescription>
           </DialogHeader>
+          {/* Who is leaving, at a glance: on a shared device the name alone is easy to skim past. aria-hidden because the
+              description already says it in words. */}
+          <div aria-hidden className="flex items-center gap-3 rounded-xl border border-line bg-ground p-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-deep text-sm font-bold text-on-deep">
+              {initials(user.name)}
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate font-semibold">{user.name}</span>
+              <span className="block text-sm text-ink-muted">{ROLE_LABEL[user.role]}</span>
+            </span>
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSigningOut(false)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={signOut}>
+            <Button variant="strong" onClick={signOut}>
               <LogOutIcon /> Sign out
             </Button>
           </DialogFooter>

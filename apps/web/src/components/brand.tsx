@@ -68,7 +68,7 @@ export function KidsmileMark({ className }: { className?: string }) {
               cy={cy}
               r={r}
               fill="var(--color-paper)"
-              stroke="var(--color-brand-soft)"
+              stroke="var(--color-crayon-teal)"
               strokeWidth="2.5"
               style={{ animationDelay: `${delay}s` }}
             />

@@ -84,13 +84,12 @@ function Nav({ onNavigate }: { onNavigate?: () => void }) {
                 onClick={onNavigate}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "relative flex min-h-(--control-h) items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors duration-(--duration-fast)",
-                  active ? "bg-brand-subtle text-brand" : "text-ink-muted hover:bg-ground hover:text-ink",
+                  "flex min-h-(--control-h) items-center gap-3 rounded-lg px-3 text-sm transition-colors duration-(--duration-fast)",
+                  // A filled pill and bold text as well as the brand icon, so the current page doesn't rely on hue alone.
+                  active ? "bg-selected font-bold text-ink" : "font-medium text-ink-muted hover:bg-selected hover:text-ink",
                 )}
               >
-                {/* A bar as well as colour, so the current page doesn't rely on hue alone. */}
-                {active && <span aria-hidden className="absolute inset-y-2 left-0 w-1 rounded-r-full bg-brand" />}
-                <Icon className="size-4.5 shrink-0" aria-hidden />
+                <Icon className={cn("size-4.5 shrink-0", active && "text-brand")} strokeWidth={active ? 2.25 : 1.75} aria-hidden />
                 <span className="flex-1">{label}</span>
                 {soon && <span className="text-xs font-normal text-ink-muted">Soon</span>}
               </Link>
@@ -109,7 +108,6 @@ function Rail() {
   const can = useCan();
   return (
     <aside className="sticky top-0 hidden h-screen flex-col items-stretch gap-3 border-r border-line bg-surface px-2 pt-5 pb-4 md:flex lg:hidden print:hidden!">
-      <span aria-hidden className="brand-strip absolute inset-x-0 top-0 h-1" />
       <Link href="/" aria-label="Kidsmile home" className="mx-auto rounded-lg">
         <Image src="/brand/kidsmile-mark.svg" alt="" width={44} height={44} priority />
       </Link>
@@ -124,11 +122,11 @@ function Rail() {
                   href={href}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg px-1 text-center text-xs font-medium transition-colors duration-(--duration-fast)",
-                    active ? "bg-brand-subtle text-brand" : "text-ink-muted hover:bg-ground hover:text-ink",
+                    "flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg px-1 text-center text-xs transition-colors duration-(--duration-fast)",
+                    active ? "bg-selected font-bold text-ink" : "font-medium text-ink-muted hover:bg-selected hover:text-ink",
                   )}
                 >
-                  <Icon className="size-5" aria-hidden />
+                  <Icon className={cn("size-5", active && "text-brand")} strokeWidth={active ? 2.25 : 1.75} aria-hidden />
                   {label}
                 </Link>
               </li>
@@ -151,23 +149,23 @@ function BottomNav({ onMore, moreOpen }: { onMore: () => void; moreOpen: boolean
   const primary = pinned ? pinned.flatMap((href) => items.filter((n) => n.href === href)) : items.slice(0, 4);
   const overflow = items.filter((n) => !primary.includes(n));
   const inOverflow = overflow.some((n) => isActive(pathname, n.href));
-  const tab = "flex min-h-14 flex-1 flex-col items-center justify-center gap-1 rounded-lg text-xs font-medium transition-colors duration-(--duration-fast)";
+  const tab = "relative flex min-h-14 flex-1 flex-col items-center justify-center gap-1 text-xs transition-colors duration-(--duration-fast)";
+  /** The current tab: a bar on the nav's top edge, a brand icon and a bold label (not hue alone). */
+  const marker = <span aria-hidden className="absolute inset-x-4 top-0 h-[3px] rounded-b-full bg-brand" />;
   return (
     <nav
       aria-label="Quick"
       data-bottom-nav
-      className="pb-safe fixed inset-x-0 bottom-0 z-(--z-header) border-t border-line bg-surface/95 px-2 pt-1 backdrop-blur md:hidden print:hidden"
+      className="pb-safe fixed inset-x-0 bottom-0 z-(--z-header) border-t border-line bg-surface/95 px-2 backdrop-blur md:hidden print:hidden"
     >
       <ul className="flex gap-1">
         {primary.map(({ href, label, icon: Icon }) => {
           const active = isActive(pathname, href);
           return (
             <li key={href} className="flex flex-1">
-              <Link href={href} aria-current={active ? "page" : undefined} className={cn(tab, active ? "text-brand" : "text-ink-muted")}>
-                {/* A pill behind the icon as well as colour, so the current page doesn't rely on hue alone. */}
-                <span className={cn("flex h-7 w-12 items-center justify-center rounded-full", active && "bg-brand-subtle")}>
-                  <Icon className="size-5" aria-hidden />
-                </span>
+              <Link href={href} aria-current={active ? "page" : undefined} className={cn(tab, active ? "font-bold text-ink" : "font-medium text-ink-muted")}>
+                {active && marker}
+                <Icon className={cn("size-5", active && "text-brand")} strokeWidth={active ? 2.25 : 1.75} aria-hidden />
                 {label}
               </Link>
             </li>
@@ -175,10 +173,9 @@ function BottomNav({ onMore, moreOpen }: { onMore: () => void; moreOpen: boolean
         })}
         {overflow.length > 0 && (
           <li className="flex flex-1">
-            <button type="button" onClick={onMore} aria-expanded={moreOpen} className={cn(tab, inOverflow ? "text-brand" : "text-ink-muted")}>
-              <span className={cn("flex h-7 w-12 items-center justify-center rounded-full", inOverflow && "bg-brand-subtle")}>
-                <MenuIcon className="size-5" aria-hidden />
-              </span>
+            <button type="button" onClick={onMore} aria-expanded={moreOpen} className={cn(tab, inOverflow ? "font-bold text-ink" : "font-medium text-ink-muted")}>
+              {inOverflow && marker}
+              <MenuIcon className={cn("size-5", inOverflow && "text-brand")} aria-hidden />
               More
             </button>
           </li>
@@ -214,9 +211,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       </a>
 
       {/* Desktop: the full sidebar. */}
-      <aside className="sticky top-0 hidden h-screen flex-col gap-5 border-r border-line bg-surface px-3 pt-6 pb-5 lg:flex print:hidden!">
-        <span aria-hidden className="brand-strip absolute inset-x-0 top-0 h-1" />
-        <div className="px-2">
+      <aside className="sticky top-0 hidden h-screen flex-col gap-5 border-r border-line bg-surface px-3.5 pt-5 pb-4 lg:flex print:hidden!">
+          <div className="px-2">
           <Brand className="w-44" />
         </div>
         {canSearch && <PatientSearch variant="field" />}
@@ -230,8 +226,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* Phones: a slim top bar (brand, search, account) and the bottom nav. */}
       <header className="sticky top-0 z-(--z-header) flex h-14 items-center gap-1 border-b border-line bg-surface/95 px-4 backdrop-blur md:hidden print:hidden">
-        <span aria-hidden className="brand-strip absolute inset-x-0 top-0 h-1" />
-        <Brand className="w-28" />
+          <Brand className="w-28" />
         <div className="ml-auto flex items-center gap-1">
           {canSearch && <PatientSearch variant="icon" />}
           <AccountMenu variant="bar" />
