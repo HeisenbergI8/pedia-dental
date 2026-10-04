@@ -57,7 +57,7 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
   const [showErrors, setShowErrors] = useState(false);
 
   if (sources.error) return <ErrorState what="this patient's record" onRetry={() => sources.refetch()} retrying={sources.isRefetching} />;
-  if (!sources.data) return <Loading label="Loading documents…" />;
+  if (!sources.data) return <Loading label="Loading documents" />;
   const src = sources.data;
   const current = draft ?? initialDraft(type, src);
   const parsed = toInput(type, current);
@@ -127,7 +127,7 @@ function IssuedDocuments({ patientId, src }: { patientId: string; src: DocSource
   return (
     <SectionCard title="Issued documents">
       {isLoading ? (
-        <Loading label="Loading…" compact />
+        <Loading label="Loading" compact />
       ) : docs.length === 0 ? (
         <EmptyState icon={FileTextIcon} title="No documents issued yet">Each document you download is listed here.</EmptyState>
       ) : (

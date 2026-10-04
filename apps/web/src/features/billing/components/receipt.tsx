@@ -15,7 +15,7 @@ export function Receipt({ patientId, paymentId }: { patientId: string; paymentId
   const payments = usePayments(patientId);
   const staff = useStaff().data ?? [];
 
-  if (patient.isLoading || invoices.isLoading || payments.isLoading) return <Loading label="Loading receipt…" />;
+  if (patient.isLoading || invoices.isLoading || payments.isLoading) return <Loading label="Loading receipt" />;
   const all = payments.data ?? [];
   const payment = all.find((p) => p.id === paymentId);
   const invoice = invoices.data?.find((i) => i.id === payment?.invoiceId);

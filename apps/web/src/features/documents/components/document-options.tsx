@@ -73,7 +73,7 @@ export function DocumentOptions({ type, src, draft, errors, onChange }: { type: 
       {DOCUMENT_SOURCE_LABEL[type] && (
         <Field id="doc-source" label={DOCUMENT_SOURCE_LABEL[type]} error={errors.sourceId}>
           {sources.length ? (
-            <Pick id="doc-source" value={draft.sourceId} options={sources} onChange={(sourceId) => set({ sourceId })} placeholder="Choose…" error={errors.sourceId} />
+            <Pick id="doc-source" value={draft.sourceId} options={sources} onChange={(sourceId) => set({ sourceId })} placeholder="Choose" error={errors.sourceId} />
           ) : (
             <p className="text-sm text-ink-muted">Nothing in this patient&apos;s record to generate this from yet.</p>
           )}
@@ -82,7 +82,7 @@ export function DocumentOptions({ type, src, draft, errors, onChange }: { type: 
 
       {type === "consent_form" && (
         <Field id="doc-scope" label="Consent for" error={errors["details.scope"]}>
-          <Pick id="doc-scope" value={draft.details.scope} options={ConsentScope.options.map((s) => ({ value: s, label: CONSENT_LABEL[s] }))} onChange={(v) => detail("scope", v)} placeholder="Choose…" error={errors["details.scope"]} />
+          <Pick id="doc-scope" value={draft.details.scope} options={ConsentScope.options.map((s) => ({ value: s, label: CONSENT_LABEL[s] }))} onChange={(v) => detail("scope", v)} placeholder="Choose" error={errors["details.scope"]} />
         </Field>
       )}
 
@@ -105,7 +105,7 @@ export function DocumentOptions({ type, src, draft, errors, onChange }: { type: 
               value={draft.details.procedure}
               options={planned.length ? planned : src.procedures.map((p) => ({ value: p.code, label: p.name }))}
               onChange={(v) => detail("procedure", v)}
-              placeholder="Choose…"
+              placeholder="Choose"
               error={errors["details.procedure"]}
             />
           </Field>
@@ -133,7 +133,7 @@ export function DocumentOptions({ type, src, draft, errors, onChange }: { type: 
                     const d = findDrug(drugId);
                     setItem(i, { drugId, sig: d?.defaultSig ?? "", quantity: d?.defaultQuantity ?? "" });
                   }}
-                  placeholder="Choose a medicine…"
+                  placeholder="Choose a medicine"
                   error={errors[`items.${i}.drugId`]}
                 />
               </Field>
@@ -156,7 +156,7 @@ export function DocumentOptions({ type, src, draft, errors, onChange }: { type: 
       )}
 
       <Field id="doc-issuer" label={DENTIST_SIGNED.includes(type) ? "Issued and signed by" : "Issued by"} error={errors.issuedBy}>
-        <Pick id="doc-issuer" value={draft.issuedBy} options={issuers.map((s) => ({ value: s.id, label: s.fullName }))} onChange={(issuedBy) => set({ issuedBy })} placeholder="Choose…" error={errors.issuedBy} />
+        <Pick id="doc-issuer" value={draft.issuedBy} options={issuers.map((s) => ({ value: s.id, label: s.fullName }))} onChange={(issuedBy) => set({ issuedBy })} placeholder="Choose" error={errors.issuedBy} />
       </Field>
     </div>
   );

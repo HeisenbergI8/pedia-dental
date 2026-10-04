@@ -116,7 +116,7 @@ export function PhotosTab({ patientId }: { patientId: string }) {
           <UploadPhotoDialog patientId={patientId} />
         </Can>
       </div>
-      {isLoading && <Loading label="Loading photos…" />}
+      {isLoading && <Loading label="Loading photos" />}
       {error && <ErrorState what="the photos" onRetry={() => refetch()} retrying={isRefetching} />}
       {photos?.length === 0 && (
         <EmptyState icon={CameraIcon} title="No photos yet">

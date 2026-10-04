@@ -43,7 +43,7 @@ export function NotesTab({ patient }: { patient: PatientView }) {
   const invoices = useInvoices(patient.id, { enabled: canSeePrices }).data ?? []; // disabled without billing.view: no 403
   const procedures = useProcedures().data ?? [];
 
-  if (isLoading) return <Loading label="Loading notes…" />;
+  if (isLoading) return <Loading label="Loading notes" />;
   if (error || !notes) return <ErrorState what="the notes" onRetry={() => refetch()} retrying={isRefetching} />;
   const canExport = can("documents.issue") && !!staffId && notes.some((n) => n.signedAt);
   const withNotes = visits.filter((v) => v.status === "in_progress" || notes.some((n) => n.visitId === v.id));

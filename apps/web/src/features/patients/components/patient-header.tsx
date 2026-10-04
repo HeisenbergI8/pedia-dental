@@ -54,7 +54,7 @@ export function PatientHeader({ patientId }: { patientId: string }) {
         <ChevronLeftIcon className="size-4" aria-hidden /> Patients
       </Link>
       {isLoading || !p ? (
-        <Loading label="Loading patient…" compact />
+        <Loading label="Loading patient" compact />
       ) : (
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-6">
           <div className="flex min-w-0 items-center gap-3">

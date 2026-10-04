@@ -88,7 +88,7 @@ export function QuickUpdateDialog({ patient: p }: { patient: PatientView }) {
               )}
             </FormField>
             <DialogFooter>
-              <Button type="submit" disabled={update.isPending}>{update.isPending ? "Saving…" : "Save"}</Button>
+              <Button type="submit" disabled={update.isPending}>{update.isPending ? "Saving" : "Save"}</Button>
             </DialogFooter>
           </form>
         </FormProvider>

@@ -32,7 +32,7 @@ export function ClinicSettings() {
   const chairs = useChairs();
 
   if (procedures.isLoading || staff.isLoading || chairs.isLoading) {
-    return <Loading label="Loading settings…" />;
+    return <Loading label="Loading settings" />;
   }
   if (procedures.error || staff.error || chairs.error) {
     return <ErrorState what="the settings" onRetry={() => [procedures, staff, chairs].forEach((q) => q.refetch())} />;

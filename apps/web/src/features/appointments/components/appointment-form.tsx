@@ -59,7 +59,7 @@ function SelectField({ name, label, options }: { name: keyof FormValues; label: 
           render={({ field }) => (
             <Select value={String(field.value)} onValueChange={field.onChange}>
               <SelectTrigger {...props} className="w-full">
-                <SelectValue placeholder="Choose…" />
+                <SelectValue placeholder="Choose" />
               </SelectTrigger>
               <SelectContent>
                 {options.map((o) => (
@@ -134,7 +134,7 @@ export function AppointmentForm({ draft, onClose }: { draft: AppointmentDraft | 
                   }}
                 >
                   <SelectTrigger id="appt-procedure" className="w-full">
-                    <SelectValue placeholder="Choose…" />
+                    <SelectValue placeholder="Choose" />
                   </SelectTrigger>
                   <SelectContent>
                     {procedures.data?.map((p) => (

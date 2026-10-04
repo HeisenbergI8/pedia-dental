@@ -43,7 +43,7 @@ export function DownloadDocumentButton({ patientId, choice, label = "Download PD
 
   return (
     <Button variant={variant} disabled={busy || sources.isLoading} onClick={run} aria-label={ariaLabel}>
-      <DownloadIcon aria-hidden /> {busy ? "Preparing…" : label}
+      <DownloadIcon aria-hidden /> {busy ? "Preparing" : label}
     </Button>
   );
 }

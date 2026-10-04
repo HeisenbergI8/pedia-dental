@@ -207,7 +207,7 @@ function NoteFields({
             Save draft
           </Button>
           <Button type="button" disabled={busy} onClick={form.handleSubmit((v) => submit(v, true))}>
-            {busy ? "Saving…" : "Save and sign"}
+            {busy ? "Saving" : "Save and sign"}
           </Button>
         </div>
       </form>
@@ -238,7 +238,7 @@ function TemplateInput({ field: f, patient }: { field: TemplateField; patient: P
               render={({ field }) => (
                 <Select value={(field.value as string | undefined) ?? ""} onValueChange={field.onChange}>
                   <SelectTrigger {...props} className="w-full">
-                    <SelectValue placeholder="Choose…" />
+                    <SelectValue placeholder="Choose" />
                   </SelectTrigger>
                   <SelectContent>
                     {f.options.map((o) => (

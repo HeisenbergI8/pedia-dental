@@ -81,7 +81,7 @@ export function CollectionsList() {
         }
       />
       {isLoading ? (
-        <Loading label="Loading collections…" />
+        <Loading label="Loading collections" />
       ) : error ? (
         <ErrorState what="the collections" onRetry={() => refetch()} retrying={isRefetching} />
       ) : rows.length === 0 ? (

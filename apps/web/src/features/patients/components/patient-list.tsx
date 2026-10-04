@@ -195,7 +195,7 @@ export function PatientList() {
       </p>
 
       {error && <ErrorState what="the patients" onRetry={() => refetch()} retrying={isRefetching} />}
-      {isLoading && <Loading label="Loading patients…" />}
+      {isLoading && <Loading label="Loading patients" />}
 
       {data && rows.length === 0 &&
         (query.q ? (

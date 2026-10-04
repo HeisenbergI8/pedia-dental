@@ -32,7 +32,7 @@ export function PatientAppointments({ patientId }: { patientId: string }) {
           Book appointment
         </Button>
       </div>
-      {isLoading && <Loading label="Loading appointments…" />}
+      {isLoading && <Loading label="Loading appointments" />}
       {error && <ErrorState compact what="the appointments" onRetry={() => refetch()} retrying={isRefetching} />}
       {data && upcoming.length === 0 && <p className="text-ink-muted">Nothing booked.</p>}
       {upcoming.length > 0 && (

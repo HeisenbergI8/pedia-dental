@@ -97,7 +97,7 @@ export function ConsentDialog({ patient }: { patient: PatientView }) {
             </FormField>
             <DialogFooter>
               <Button type="submit" disabled={addConsent.isPending}>
-                {addConsent.isPending ? "Saving…" : "Save consent"}
+                {addConsent.isPending ? "Saving" : "Save consent"}
               </Button>
             </DialogFooter>
           </form>

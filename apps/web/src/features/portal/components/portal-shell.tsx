@@ -150,7 +150,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
           </div>
         )}
         {isLoading ? (
-          <Loading label="Loading your family's records…" />
+          <Loading label="Loading your family's records" />
         ) : error ? (
           <ErrorState what="your family's records" onRetry={() => refetch()} retrying={isRefetching} />
         ) : !child ? (

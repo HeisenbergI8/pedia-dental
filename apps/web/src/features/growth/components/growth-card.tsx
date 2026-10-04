@@ -83,7 +83,7 @@ export function GrowthCard({ patient }: { patient: PatientView }) {
         )}
       </div>
 
-      {isLoading && <Loading label="Loading…" compact />}
+      {isLoading && <Loading label="Loading" compact />}
       {error && <ErrorState compact what="growth records" onRetry={() => refetch()} retrying={isRefetching} />}
       {!isLoading && records.length === 0 && <p className="text-ink-muted">No habits or speech observations recorded.</p>}
 
@@ -217,7 +217,7 @@ function GrowthForm({ patient, visit, records, existing, onSaved }: GrowthProps 
         <Textarea id="growth-speech" rows={2} {...form.register("speech")} />
       </div>
       <DialogFooter>
-        <Button type="submit" disabled={save.isPending}>{save.isPending ? "Saving…" : "Save"}</Button>
+        <Button type="submit" disabled={save.isPending}>{save.isPending ? "Saving" : "Save"}</Button>
       </DialogFooter>
     </form>
   );

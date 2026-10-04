@@ -78,12 +78,12 @@ export function PortalUploads() {
             <FormField name="caption" label="Description">
               <Input {...form.register("caption")} />
             </FormField>
-            <Button type="submit" className="min-h-11" disabled={upload.isPending}>{upload.isPending ? "Uploading…" : "Upload"}</Button>
+            <Button type="submit" className="min-h-11" disabled={upload.isPending}>{upload.isPending ? "Uploading" : "Upload"}</Button>
           </form>
         </FormProvider>
       </SectionCard>
 
-      {isLoading ? <Loading label="Loading uploads…" /> : error ? (
+      {isLoading ? <Loading label="Loading uploads" /> : error ? (
         <ErrorState what="your uploads" onRetry={() => refetch()} retrying={isRefetching} />
       ) : files.length === 0 ? (
         <EmptyState tone="warm" icon={UploadIcon} title="Nothing uploaded yet">Photos and documents you send will show here.</EmptyState>

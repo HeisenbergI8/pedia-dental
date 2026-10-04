@@ -90,7 +90,7 @@ export function LoginScreen() {
             <EmailSignIn />
             {env.apiMocking && (
               <>
-                {demo.isLoading && <Loading label="Loading demo logins…" />}
+                {demo.isLoading && <Loading label="Loading demo logins" />}
                 {demo.error && <p role="alert" className="text-danger">Couldn&apos;t load the demo logins.</p>}
                 {demo.data && <DemoLogins {...demo.data} />}
               </>
@@ -101,7 +101,7 @@ export function LoginScreen() {
       {/* Over the page rather than instead of it, so the email form keeps its state if sign-in fails. */}
       {signingIn && (
         <div className="fixed inset-0 z-50">
-          <LoadingScreen label="Signing you in…" />
+          <LoadingScreen label="Signing you in" />
         </div>
       )}
     </>
@@ -145,7 +145,7 @@ function EmailSignIn() {
           </FormField>
           {signIn.error && <p role="alert" className="text-sm text-danger">{signIn.error.message}</p>}
           <Button type="submit" disabled={signIn.isPending} className="w-full sm:w-auto">
-            {signIn.isPending ? "Signing in…" : "Sign in"}
+            {signIn.isPending ? "Signing in" : "Sign in"}
           </Button>
         </form>
       </FormProvider>

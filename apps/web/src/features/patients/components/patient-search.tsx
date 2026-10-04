@@ -93,7 +93,7 @@ function SearchBody({ onDone }: { onDone: () => void }) {
           type="search"
           autoFocus
           aria-label="Search patients"
-          placeholder={canContact ? "e.g. Cruz, Ana, or 0917…" : "e.g. Cruz or Ana"}
+          placeholder={canContact ? "e.g. Cruz, Ana, or 0917" : "e.g. Cruz or Ana"}
           className="pl-9"
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -113,7 +113,7 @@ function SearchBody({ onDone }: { onDone: () => void }) {
           Today&apos;s appointments
         </Link>
       ) : isLoading ? (
-        <Loading label="Searching patients…" rows={2} />
+        <Loading label="Searching patients" rows={2} />
       ) : error ? (
         <ErrorState compact what="patients" onRetry={() => refetch()} retrying={isRefetching} />
       ) : results.length === 0 ? (

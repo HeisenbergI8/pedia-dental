@@ -45,7 +45,7 @@ export function MessageLog() {
   const [status, setStatus] = useState<MessageStatus | "all">("all");
   const [limit, setLimit] = useState(PAGE);
 
-  if (isLoading) return <Loading label="Loading messages…" />;
+  if (isLoading) return <Loading label="Loading messages" />;
   if (error) return <ErrorState what="the messages" onRetry={() => refetch()} retrying={isRefetching} />;
   const shown = status === "all" ? rows : rows.filter((m) => m.status === status);
   const options = [
