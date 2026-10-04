@@ -80,7 +80,7 @@ export function AccountMenu({ variant = "full" }: { variant?: "full" | "bar" | "
           </DropdownMenuLabel>
           <Can permission="session.switch">
             <DropdownMenuItem onSelect={() => setSwitching(true)}>
-              <UsersIcon /> Switch user…
+              <UsersIcon /> Switch user
             </DropdownMenuItem>
           </Can>
           {env.apiMocking && (
@@ -92,7 +92,7 @@ export function AccountMenu({ variant = "full" }: { variant?: "full" | "bar" | "
           <AppearanceItems />
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setSigningOut(true)}>
-            <LogOutIcon /> Sign out…
+            <LogOutIcon /> Sign out
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
