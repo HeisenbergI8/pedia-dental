@@ -136,7 +136,7 @@ function EmailSignIn() {
                   aria-label={showPassword ? "Hide password" : "Show password"}
                   aria-pressed={showPassword}
                   onClick={() => setShowPassword((v) => !v)}
-                  className="absolute inset-y-0 right-0 h-full text-ink-muted"
+                  className="absolute inset-y-0 right-0 h-full text-ink-muted hover:bg-transparent hover:text-ink-muted dark:hover:bg-transparent"
                 >
                   {showPassword ? <EyeOffIcon /> : <EyeIcon />}
                 </Button>
