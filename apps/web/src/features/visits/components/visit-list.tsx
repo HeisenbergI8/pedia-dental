@@ -15,7 +15,7 @@ export function VisitList({ patientId }: { patientId: string }) {
   return (
     <section className="space-y-3 rounded-xl border border-line bg-surface p-4 shadow-card sm:p-5">
       <h2 className="text-base font-semibold">Visits</h2>
-      {isLoading && <Loading label="Loading visits…" />}
+      {isLoading && <Loading label="Loading visits" />}
       {error && <ErrorState compact what="the visits" onRetry={() => refetch()} retrying={isRefetching} />}
       {visits?.length === 0 && <p className="text-ink-muted">No visits yet.</p>}
       {!!visits?.length && (

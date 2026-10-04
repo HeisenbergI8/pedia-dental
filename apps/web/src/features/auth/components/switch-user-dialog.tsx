@@ -57,7 +57,7 @@ export function SwitchUserDialog({ open, onOpenChange }: { open: boolean; onOpen
             Hand this device to a colleague. They sign in with their own PIN, and anything not saved on this page is cleared.
           </DialogDescription>
         </DialogHeader>
-        {staff.isLoading && <Loading label="Loading staff…" />}
+        {staff.isLoading && <Loading label="Loading staff" />}
         {staff.error && <ErrorState compact what="the staff list" onRetry={() => staff.refetch()} />}
         <FormProvider {...form}>
           <form id="switch-user" noValidate onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
@@ -131,7 +131,7 @@ export function SwitchUserDialog({ open, onOpenChange }: { open: boolean; onOpen
             Cancel
           </Button>
           <Button type="submit" form="switch-user" disabled={switchUser.isPending}>
-            {switchUser.isPending ? "Switching…" : "Switch user"}
+            {switchUser.isPending ? "Switching" : "Switch user"}
           </Button>
         </DialogFooter>
       </DialogContent>

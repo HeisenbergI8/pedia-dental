@@ -28,7 +28,7 @@ export function ChartTab({ patient }: { patient: PatientView }) {
   const [batchOpen, setBatchOpen] = useState(false);
   const canRecord = useCan()("clinical.write") && !!current;
 
-  if (isLoading) return <Loading label="Loading chart…" />;
+  if (isLoading) return <Loading label="Loading chart" />;
   if (error || !entries) return <ErrorState what="the dental chart" onRetry={() => refetch()} retrying={isRefetching} />;
 
   // "As of visit X": only what was recorded up to and including that visit, later corrections excluded.

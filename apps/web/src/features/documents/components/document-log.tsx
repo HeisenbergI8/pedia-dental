@@ -21,7 +21,7 @@ export function DocumentLog() {
     <div className="space-y-5">
       <PageHeader title="Documents" description="Every certificate, prescription, receipt and letter issued, newest first. To create one, open the patient and choose Documents." />
       {isLoading ? (
-        <Loading label="Loading documents…" />
+        <Loading label="Loading documents" />
       ) : error ? (
         <ErrorState what="the documents" onRetry={() => refetch()} retrying={isRefetching} />
       ) : docs.length === 0 ? (

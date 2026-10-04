@@ -34,7 +34,7 @@ export function PlanTab({ patientId }: { patientId: string }) {
   const setStatus = useSetPlanItemStatus(patientId);
   const canEdit = useCan()("plan.write");
 
-  if (isLoading) return <Loading label="Loading treatment plan…" />;
+  if (isLoading) return <Loading label="Loading treatment plan" />;
   if (error || !items) return <ErrorState what="the treatment plan" onRetry={() => refetch()} retrying={isRefetching} />;
 
   const { done, total } = planProgress(items);

@@ -54,7 +54,7 @@ export function RecallList() {
     });
   }
 
-  if (isLoading) return <Loading label="Loading recalls…" />;
+  if (isLoading) return <Loading label="Loading recalls" />;
   if (error) return <ErrorState what="the recalls" onRetry={() => refetch()} retrying={isRefetching} />;
   const listed = (items ?? []).filter((i) => dueBucket(i.dueOn, today));
 

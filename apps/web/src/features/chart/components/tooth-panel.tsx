@@ -219,7 +219,7 @@ function EntryForm({
         <FindingFields surfaces={surfacesFor(tooth)} />
 
         <Button type="submit" disabled={record.isPending}>
-          {record.isPending ? "Saving…" : correcting ? "Save correction" : "Save finding"}
+          {record.isPending ? "Saving" : correcting ? "Save correction" : "Save finding"}
         </Button>
       </form>
     </FormProvider>

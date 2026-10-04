@@ -168,7 +168,7 @@ export function AppointmentCalendar() {
   const events = useMemo<CalendarEvent[]>(() => {
     const name = (id: string) => {
       const p = patients.data?.find((x) => x.id === id);
-      return p ? `${p.firstName} ${p.lastName}` : "…";
+      return p ? `${p.firstName} ${p.lastName}` : "Patient";
     };
     return (appointments.data ?? [])
       // Cancelled ones stay hidden unless the filter asks for them (the dashboard's "Cancelled or no-show").
@@ -277,13 +277,13 @@ export function AppointmentCalendar() {
       )}
       {phoneMonth ? (
         appointments.isLoading ? (
-          <Loading label="Loading appointments…" rows={4} />
+          <Loading label="Loading appointments" rows={4} />
         ) : (
           <MonthCountGrid month={date} counts={counts} onPick={(d) => go({ date: d, view: "day" })} />
         )
       ) : asList ? (
         appointments.isLoading ? (
-          <Loading label="Loading appointments…" rows={4} />
+          <Loading label="Loading appointments" rows={4} />
         ) : (
           <AgendaList items={events} days={listDays} onOpen={setSelectedId} counts={counts} />
         )

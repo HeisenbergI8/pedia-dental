@@ -241,7 +241,7 @@ function GlanceSkeleton({ now, cells }: { now: Date; cells: number }) {
       </Banner>
       <div className="grid gap-5 lg:grid-cols-3">
         <SectionCard className="min-w-0 lg:col-span-2" title="Today's appointments">
-          <Loading rows={4} label="Loading today's appointments…" />
+          <Loading rows={4} label="Loading today's appointments" />
         </SectionCard>
         <SectionCard className="min-w-0" title="New and returning this week">
           <Skeleton className="h-40" />

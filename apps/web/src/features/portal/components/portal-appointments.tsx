@@ -69,7 +69,7 @@ export function PortalAppointments() {
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-semibold tracking-tight">{child.firstName}&apos;s appointments</h1>
-      {isLoading && <Loading label="Loading appointments…" />}
+      {isLoading && <Loading label="Loading appointments" />}
       {error && <ErrorState what="the appointments" onRetry={() => refetch()} retrying={isRefetching} />}
 
       <SectionCard title="Coming up" description="To move or cancel a visit, please call the clinic.">
@@ -158,13 +158,13 @@ function RequestAppointment() {
               )}
             </FormField>
             <FormField name="reason" label="What is the visit for?">
-              <Input placeholder="Check-up, toothache, cleaning…" {...form.register("reason")} />
+              <Input placeholder="Check-up, toothache, cleaning" {...form.register("reason")} />
             </FormField>
             <FormField name="note" label="Anything we should know? (optional)">
               <Textarea rows={3} {...form.register("note")} />
             </FormField>
             <Button type="submit" className="min-h-11" disabled={request.isPending}>
-              {request.isPending ? "Sending…" : "Send request"}
+              {request.isPending ? "Sending" : "Send request"}
             </Button>
           </form>
         </FormProvider>

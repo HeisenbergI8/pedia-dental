@@ -70,7 +70,7 @@ export function PatientPhotoDialog({ patient: p }: { patient: PatientView }) {
                 <ImageIcon aria-hidden /> Choose file
               </Button>
               <Button disabled={set.isPending} onClick={() => camera.current?.click()}>
-                <CameraIcon aria-hidden /> {set.isPending ? "Saving…" : "Take photo"}
+                <CameraIcon aria-hidden /> {set.isPending ? "Saving" : "Take photo"}
               </Button>
             </div>
           </DialogFooter>

@@ -23,7 +23,7 @@ export function ErrorState({
   const retry = onRetry && (
     <Button variant="outline" size="sm" onClick={onRetry} disabled={retrying}>
       <RotateCwIcon aria-hidden className={cn(retrying && "motion-safe:animate-spin")} />
-      {retrying ? "Trying again…" : "Try again"}
+      {retrying ? "Trying again" : "Try again"}
     </Button>
   );
   if (compact) {

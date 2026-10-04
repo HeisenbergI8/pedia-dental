@@ -155,7 +155,7 @@ export function UploadPhotoDialog({ patientId }: { patientId: string }) {
             </FormField>
             <DialogFooter>
               <Button type="submit" disabled={upload.isPending}>
-                {upload.isPending ? "Saving…" : "Save photo"}
+                {upload.isPending ? "Saving" : "Save photo"}
               </Button>
             </DialogFooter>
           </form>

@@ -48,7 +48,7 @@ export function FinanceDashboard({ today }: { today: string }) {
     </div>
   );
 
-  if (isLoading) return <section aria-label="Finance" className="space-y-5">{header}<Loading label="Loading the finance figures…" /></section>;
+  if (isLoading) return <section aria-label="Finance" className="space-y-5">{header}<Loading label="Loading the finance figures" /></section>;
   if (error || !s) return <section aria-label="Finance" className="space-y-5">{header}<ErrorState what="the finance figures" onRetry={() => refetch()} retrying={isRefetching} /></section>;
 
   const patientLink = (id: string) => {

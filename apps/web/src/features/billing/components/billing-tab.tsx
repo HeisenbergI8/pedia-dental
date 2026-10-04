@@ -24,7 +24,7 @@ export function BillingTab({ patientId }: { patientId: string }) {
   const [paying, setPaying] = useState<{ invoice: Invoice; refund: boolean } | null>(null);
   const canCollect = useCan()("billing.collect");
 
-  if (invoices.isLoading || payments.isLoading || plan.isLoading) return <Loading label="Loading billing…" />;
+  if (invoices.isLoading || payments.isLoading || plan.isLoading) return <Loading label="Loading billing" />;
   if (invoices.error || payments.error || plan.error) return <ErrorState what="this patient's billing" onRetry={() => [invoices, payments, plan].forEach((q) => q.refetch())} />;
   const allInvoices = invoices.data ?? [];
   const allPayments = payments.data ?? [];

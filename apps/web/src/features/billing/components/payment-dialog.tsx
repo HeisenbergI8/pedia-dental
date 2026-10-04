@@ -96,7 +96,7 @@ export function PaymentDialog({ target, payments, onClose }: { target: { invoice
           <div className="space-y-1.5">
             <Label htmlFor="pay-receivedBy">{refund ? "Refunded by" : "Received by"}</Label>
             <Select value={by} onValueChange={setReceivedBy}>
-              <SelectTrigger id="pay-receivedBy" className="w-full"><SelectValue placeholder="Choose…" /></SelectTrigger>
+              <SelectTrigger id="pay-receivedBy" className="w-full"><SelectValue placeholder="Choose" /></SelectTrigger>
               <SelectContent>
                 {staff.map((s) => <SelectItem key={s.id} value={s.id}>{s.fullName}</SelectItem>)}
               </SelectContent>

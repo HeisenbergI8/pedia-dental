@@ -8,7 +8,7 @@ export default function Page() {
     <div className="space-y-5">
       <AppointmentRequests />
       {/* The calendar reads its date and view from the URL. */}
-      <Suspense fallback={<PageLoading label="Loading the calendar…" />}>
+      <Suspense fallback={<PageLoading label="Loading the calendar" />}>
         <AppointmentCalendar />
       </Suspense>
     </div>

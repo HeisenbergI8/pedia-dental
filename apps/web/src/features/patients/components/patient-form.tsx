@@ -220,7 +220,7 @@ export function PatientForm({
                   <Input {...register(`guardians.${i}.fullName`)} />
                 </FormField>
                 <FormField name={`guardians.${i}.relationship`} label="Relationship">
-                  <Input placeholder="Mother, father, grandparent…" {...register(`guardians.${i}.relationship`)} />
+                  <Input placeholder="Mother, father, grandparent" {...register(`guardians.${i}.relationship`)} />
                 </FormField>
                 {!hideContacts && (
                   <>
@@ -339,7 +339,7 @@ export function PatientForm({
           </FormField>
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField name="profile.diet" label="Diet (optional)">
-              <Textarea rows={2} placeholder="Sweets, juice, bottle at night…" {...register("profile.diet")} />
+              <Textarea rows={2} placeholder="Sweets, juice, bottle at night" {...register("profile.diet")} />
             </FormField>
             <FormField name="profile.brushing" label="Brushing habits (optional)">
               <Textarea rows={2} {...register("profile.brushing")} />
@@ -372,7 +372,7 @@ export function PatientForm({
             </Button>
           ) : (
             <Button key="submit" type="submit" disabled={pending}>
-              {pending ? "Saving…" : submitLabel}
+              {pending ? "Saving" : submitLabel}
             </Button>
           )}
         </div>

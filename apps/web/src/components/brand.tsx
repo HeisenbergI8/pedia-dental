@@ -84,7 +84,7 @@ export function KidsmileMark({ className }: { className?: string }) {
  * doesn't jump when the rows arrive. Fades in after a beat so fast loads don't flash. `compact` is one
  * line, for tight spots like the patient header or a side card. The label is for screen readers.
  */
-export function Loading({ label = "Loading…", compact, rows = 3, className }: { label?: string; compact?: boolean; rows?: number; className?: string }) {
+export function Loading({ label = "Loading", compact, rows = 3, className }: { label?: string; compact?: boolean; rows?: number; className?: string }) {
   return (
     <div role="status" aria-live="polite" className={cn("ks-fade-in", compact ? "py-3" : "space-y-3 py-2", className)}>
       <span className="sr-only">{label}</span>
@@ -106,7 +106,7 @@ export function Loading({ label = "Loading…", compact, rows = 3, className }: 
 }
 
 /** A whole page or area on its way (navigation, route loading): the animated logo. */
-export function PageLoading({ label = "Opening…" }: { label?: string }) {
+export function PageLoading({ label = "Opening" }: { label?: string }) {
   return (
     <div role="status" aria-live="polite" className="ks-fade-in flex flex-col items-center gap-3 py-16 text-center">
       <KidsmileMark className="text-3xl" />
@@ -116,7 +116,7 @@ export function PageLoading({ label = "Opening…" }: { label?: string }) {
 }
 
 /** The whole screen while the app starts up, signs in or switches areas. */
-export function LoadingScreen({ label = "Getting things ready…" }: { label?: string }) {
+export function LoadingScreen({ label = "Getting things ready" }: { label?: string }) {
   return (
     <div role="status" aria-live="polite" className="flex min-h-screen flex-col items-center justify-center gap-6 bg-ground px-4 text-center">
       <div className="flex flex-col items-center gap-3">

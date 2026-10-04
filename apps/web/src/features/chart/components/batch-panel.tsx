@@ -52,7 +52,7 @@ export function BatchPanel({
           <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="space-y-4 px-4 pb-6">
             <FindingFields surfaces={commonSurfaces(sorted)} hint="Only surfaces every picked tooth has. None checked = the whole tooth." />
             <Button type="submit" disabled={record.isPending}>
-              {record.isPending ? "Saving…" : `Save on ${sorted.length} teeth`}
+              {record.isPending ? "Saving" : `Save on ${sorted.length} teeth`}
             </Button>
           </form>
         </FormProvider>

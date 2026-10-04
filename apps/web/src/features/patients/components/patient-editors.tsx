@@ -82,7 +82,7 @@ export function EditPatient({ patientId }: { patientId: string }) {
   const { data: patient, isLoading } = usePatient(patientId);
   const update = useUpdatePatient(patientId);
   const canContact = useCan()("patients.contact");
-  if (isLoading || !patient) return <Loading label="Loading patient…" />;
+  if (isLoading || !patient) return <Loading label="Loading patient" />;
 
   return (
     <div className="space-y-4">
