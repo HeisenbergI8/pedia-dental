@@ -66,17 +66,27 @@ const RULES: Rule[] = [
   { method: "GET", path: "/note-templates", permission: "clinic.view" },
   // Patients
   { method: "GET", path: "/patients", permission: "patients.view", owner: "filtered", audit: "Patient list" },
+  { method: "GET", path: "/patient-summaries", permission: "patients.view", owner: "filtered", audit: "Patient list" },
   { method: "POST", path: "/patients", permission: "patients.write", audit: "Patient profile" },
   { method: "GET", path: "/patients/:id", permission: "patients.view", owner: byId, audit: "Patient profile" },
   { method: "PUT", path: "/patients/:id", permission: "patients.write", audit: "Patient profile" },
   { method: "POST", path: "/patients/:id/consents", permission: "patients.write", audit: "Consent" },
   { method: "POST", path: "/patients/:id/exports", permission: "patients.view", owner: byId, audit: "Copy of records", action: "export" },
+  { method: "PATCH", path: "/patients/:id", permission: "patients.write", audit: "Patient profile" },
+  // Same record name as GET /patients/:id: the 5-minute repeat window folds the header's summary into the profile view.
+  { method: "GET", path: "/patients/:id/summary", permission: "patients.view", owner: byId, audit: "Patient profile" },
+  { method: "GET", path: "/patient-duplicates", permission: "patients.write", audit: "Patient list" },
+  { method: "PUT", path: "/patients/:id/photo", permission: "patients.write", audit: "Patient photo", action: "update" },
+  { method: "GET", path: "/patients/:id/photo", permission: "patients.view", owner: byId, audit: "Patient photo" },
+  // AuditAction has no "delete": removing the photo changes the profile.
+  { method: "DELETE", path: "/patients/:id/photo", permission: "patients.write", audit: "Patient photo", action: "update" },
   // Clinical records
   { method: "GET", path: "/patients/:id/visits", permission: "clinical.view", audit: "Visits" },
   { method: "POST", path: "/patients/:id/visits", permission: "clinical.write", audit: "Visit" },
   { method: "POST", path: "/visits/:id/complete", permission: "clinical.write", owner: via(() => db.visits), audit: "Visit (completed)", action: "update" },
   { method: "GET", path: "/patients/:id/chart", permission: "clinical.view", audit: "Dental chart" },
   { method: "POST", path: "/patients/:id/chart", permission: "clinical.write", audit: "Dental chart", action: "update" },
+  { method: "POST", path: "/patients/:id/chart/batch", permission: "clinical.write", audit: "Dental chart", action: "update" },
   { method: "GET", path: "/patients/:id/notes", permission: "clinical.view", audit: "Clinical notes" },
   { method: "POST", path: "/patients/:id/notes", permission: "clinical.write", audit: "Clinical note" },
   { method: "PUT", path: "/notes/:id", permission: "clinical.write", owner: via(() => db.notes), audit: "Clinical note" },
@@ -111,6 +121,7 @@ const RULES: Rule[] = [
   // Recalls and messages
   { method: "GET", path: "/due-items", permission: "recalls.manage", audit: "Recall list" },
   { method: "POST", path: "/due-items/:id/message", permission: "messages.manage", owner: via(() => db.dueItems), audit: "Recall message" },
+  { method: "POST", path: "/patients/:id/birthday-greeting", permission: "messages.manage", audit: "Birthday greeting" },
   { method: "GET", path: "/message-templates", permission: ["messages.manage", "documents.issue"] }, // documents print post-op text
   { method: "PUT", path: "/message-templates/:kind", permission: "messages.manage" },
   { method: "GET", path: "/messages", permission: "messages.view", owner: byQuery, audit: "Messages" },
@@ -125,6 +136,7 @@ const RULES: Rule[] = [
   { method: "GET", path: "/patients/:id/documents", permission: "documents.issue", audit: "Documents" },
   { method: "POST", path: "/patients/:id/documents", permission: "documents.issue", audit: "Document", action: "export" },
   { method: "GET", path: "/reports/finance", permission: "dashboard.view", audit: "Financial report" },
+  { method: "GET", path: "/reports/today", permission: "today.view", audit: "Today's schedule" }, // names, times, birthdays: personal data
   { method: "GET", path: "/audit-log", permission: "audit.view", audit: "Audit log" },
 ];
 

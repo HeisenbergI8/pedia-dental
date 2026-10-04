@@ -1,5 +1,6 @@
 import { http, HttpResponse, delay } from "msw";
-import { MessageStatus, UpdateMessageTemplateInput, isDueItemOpen } from "@pedia/shared";
+import { format } from "date-fns";
+import { MessageStatus, UpdateMessageTemplateInput, birthdayGreeting, isBirthdayOn, isDueItemOpen } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { db, persist } from "@/mocks/db";
 import { queueMessage, runDailyJobs } from "@/mocks/outbox";
@@ -44,6 +45,21 @@ export const messageHandlers = [
     }
     const kind = item.kind === "follow_up" ? "follow_up_reminder" : "recall";
     const message = queueMessage({ kind, patientId: item.patientId, dueItemId: item.id, dueOn: item.dueOn, sendAt: new Date().toISOString() });
+    if (!message) return new HttpResponse("This patient has no primary guardian to message", { status: 409 });
+    persist();
+    return HttpResponse.json(message, { status: 201 });
+  }),
+
+  // "Send greeting" on the dashboard: the birthday template, now, once a year (the daily job's rule).
+  http.post(url("/patients/:id/birthday-greeting"), async ({ params }) => {
+    const patient = db.patients.find((p) => p.id === params.id);
+    if (!patient) return new HttpResponse("Patient not found", { status: 404 });
+    const today = format(new Date(), "yyyy-MM-dd");
+    if (!isBirthdayOn(patient.birthDate, today)) return new HttpResponse(`It isn't ${patient.firstName}'s birthday today`, { status: 409 });
+    if (birthdayGreeting(db.messages, patient.id, today)) {
+      return new HttpResponse(`${patient.firstName} already has a birthday greeting this year`, { status: 409 });
+    }
+    const message = queueMessage({ kind: "birthday", patientId: patient.id, sendAt: new Date().toISOString() });
     if (!message) return new HttpResponse("This patient has no primary guardian to message", { status: 409 });
     persist();
     return HttpResponse.json(message, { status: 201 });

@@ -29,3 +29,11 @@ export function accountSummary(invoices: Pick<Invoice, "id" | "lines" | "discoun
   const balance = invoices.reduce((s, inv) => s + invoiceBalance(inv, payments), 0);
   return { total, paid: total - balance, balance };
 }
+
+/**
+ * Money received beyond what was billed, invoice by invoice. Computed, never stored.
+ * Always 0 while POST /invoices/:id/payments refuses an amount over the balance.
+ */
+export function accountCredit(invoices: Pick<Invoice, "id" | "lines" | "discount">[], payments: Payment[]): number {
+  return invoices.reduce((s, inv) => s + Math.max(0, -invoiceBalance(inv, payments)), 0);
+}

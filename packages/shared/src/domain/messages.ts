@@ -1,6 +1,6 @@
 import { addDays, format, parseISO, setHours, startOfDay } from "date-fns";
 import type { Patient } from "../schemas/patient";
-import type { MessageKind } from "../schemas/message";
+import type { Message, MessageKind } from "../schemas/message";
 
 /** Shown on messages and documents until the clinic has a settings record (chunks-11-12 Q7). */
 export const CLINIC_NAME = "Kidsmile Pediatric Dental Clinic";
@@ -33,7 +33,7 @@ export function renderMessage(body: string, vars: MessageVars): string {
 
 /** The values for one patient. `startsAt` (appointment) gives date and time; `dueOn` (recall) gives a date only. */
 export function messageVars(
-  patient: Pick<Patient, "firstName" | "lastName" | "guardians">,
+  patient: Pick<Patient, "firstName" | "lastName"> & { guardians: Pick<Patient["guardians"][number], "fullName" | "isPrimary">[] },
   at: { startsAt?: string; dueOn?: string; dentistName?: string } = {},
 ): MessageVars {
   const guardian = patient.guardians.find((g) => g.isPrimary) ?? patient.guardians[0];
@@ -60,4 +60,16 @@ export const NOTE_MESSAGES: Partial<Record<string, MessageKind>> = {
 export function reminderSendAt(startsAt: string, now = new Date()): string {
   const at = setHours(startOfDay(addDays(parseISO(startsAt), -1)), 9);
   return (at < now ? now : at).toISOString();
+}
+
+/** A birthday today: month and day match. 29 February matches only in leap years (the daily job's rule). */
+export const isBirthdayOn = (birthDate: string, today: string) => birthDate.slice(5) === today.slice(5);
+
+/** This calendar year's birthday message for the child, if any. Once a year, whatever its status (outbox.ts). */
+export function birthdayGreeting<M extends Pick<Message, "patientId" | "kind" | "createdAt">>(
+  messages: M[],
+  patientId: string,
+  today: string,
+): M | undefined {
+  return messages.filter((m) => m.patientId === patientId && m.kind === "birthday" && m.createdAt.startsWith(today.slice(0, 4))).at(-1);
 }

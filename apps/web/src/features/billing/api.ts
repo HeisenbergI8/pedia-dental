@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { Invoice, Payment, type CreateInvoiceInput, type PaymentMethod, type RecordPaymentInput } from "@pedia/shared";
 import { api } from "@/lib/api-client";
+import { patientKeys } from "@/features/patients/api";
 
 export const billingKeys = {
   all: ["billing"] as const,
@@ -20,8 +21,8 @@ export const METHOD_LABEL: Record<PaymentMethod, string> = {
 };
 
 /** Oldest first. */
-export function useInvoices(patientId: string) {
-  return useQuery({ queryKey: billingKeys.invoices(patientId), queryFn: () => api(`/patients/${patientId}/invoices`, z.array(Invoice)) });
+export function useInvoices(patientId: string, opts?: { enabled?: boolean }) {
+  return useQuery({ queryKey: billingKeys.invoices(patientId), queryFn: () => api(`/patients/${patientId}/invoices`, z.array(Invoice)), ...opts });
 }
 
 /** Every payment and refund for the patient, oldest first. */
@@ -38,7 +39,10 @@ export function useCreateInvoice(patientId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateInvoiceInput) => api(`/patients/${patientId}/invoices`, Invoice, { method: "POST", body: JSON.stringify(input) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: billingKeys.all }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: billingKeys.all });
+      qc.invalidateQueries({ queryKey: patientKeys.all }); // the header's balance and the list's Balance due
+    },
   });
 }
 
@@ -48,6 +52,9 @@ export function useRecordPayment() {
   return useMutation({
     mutationFn: ({ invoiceId, ...input }: RecordPaymentInput & { invoiceId: string }) =>
       api(`/invoices/${invoiceId}/payments`, Payment, { method: "POST", body: JSON.stringify(input) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: billingKeys.all }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: billingKeys.all });
+      qc.invalidateQueries({ queryKey: patientKeys.all }); // the header's balance and the list's Balance due
+    },
   });
 }

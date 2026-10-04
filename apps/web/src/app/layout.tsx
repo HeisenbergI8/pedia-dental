@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Figtree, Fredoka } from "next/font/google";
+import { THEME_SCRIPT } from "@/lib/theme";
 import { Providers } from "./providers";
 import "./globals.css";
 
@@ -22,7 +23,12 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, view
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${figtree.variable} ${fredoka.variable}`}>
+    // suppressHydrationWarning: THEME_SCRIPT sets data-theme before React hydrates, and the server can't know it.
+    <html lang="en" className={`${figtree.variable} ${fredoka.variable}`} suppressHydrationWarning>
+      <head>
+        {/* The saved theme, applied before first paint. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body className="font-sans antialiased">
         <Providers>{children}</Providers>
       </body>

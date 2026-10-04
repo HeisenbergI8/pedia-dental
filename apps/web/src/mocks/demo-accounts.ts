@@ -49,13 +49,14 @@ const loginFamily = (db: Db) => {
   return child && primaryGuardian(child);
 };
 
-const staffAccount = (s: StaffMember): DemoAccountRecord => ({
+const staffAccount = (s: StaffMember, pin?: string): DemoAccountRecord => ({
   id: s.id,
   role: s.role,
   name: s.fullName,
   email: STAFF_LOGIN[s.id] ?? `${handle(s.fullName)}@pediadental.demo`,
   summary: STAFF_SUMMARY[s.role],
   staffId: s.id,
+  pin,
 });
 
 const parentAccount = (db: Db, g: Guardian, summary: string): DemoAccountRecord => ({
@@ -70,7 +71,7 @@ const parentAccount = (db: Db, g: Guardian, summary: string): DemoAccountRecord 
 /** Everyone who can sign in: all staff and every guardian on any patient. */
 export function allAccounts(db: Db): DemoAccountRecord[] {
   const guardians = new Map(db.patients.flatMap((p) => p.guardians).map((g) => [g.id, g]));
-  return [...db.staff.map(staffAccount), ...[...guardians.values()].map((g) => parentAccount(db, g, ""))];
+  return [...db.staff.map((s) => staffAccount(s)), ...[...guardians.values()].map((g) => parentAccount(db, g, ""))];
 }
 
 /** The logins the sign-in page lists, one per role, in role order. */
@@ -106,7 +107,7 @@ export function demoAccounts(db: Db): DemoAccountRecord[] {
     return [parentAccount(db, guardian, summary)];
   };
   return [
-    ...db.staff.map(staffAccount),
+    ...db.staff.map((s) => staffAccount(s, db.staffPins.find((p) => p.staffId === s.id)?.pin)),
     ...pick("Two children, one mid-treatment", (p) => childrenOf(db, primaryGuardian(p).id).length > 1),
     ...pick("Has an unpaid balance", owes),
     ...pick("Has an appointment to confirm", (p) => toConfirm.has(p.id)),

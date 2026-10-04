@@ -25,6 +25,7 @@ const DESCRIPTION: Record<DocumentType, string> = {
   prescription: "Medicines, never controlled (S2) drugs",
   receipt: "Acknowledgment receipt for a payment",
   patient_summary: "The whole record on one page",
+  notes_report: "Every signed clinical note, with the services done and their prices",
 };
 
 /** Sensible defaults: the latest record to generate from, and the dentist who saw the child last. */

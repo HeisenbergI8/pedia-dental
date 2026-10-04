@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ALL_TEETH, dentitionOf, isAnterior, surfacesFor, toothName } from "./teeth";
+import { ALL_TEETH, commonSurfaces, dentitionOf, isAnterior, surfacesFor, toothName } from "./teeth";
 
 describe("FDI teeth", () => {
   it("has 32 permanent + 20 primary teeth", () => {
@@ -26,5 +26,11 @@ describe("FDI teeth", () => {
     expect(toothName(55)).toBe("Upper right primary second molar");
     expect(toothName(74)).toBe("Lower left primary first molar");
     expect(toothName(83)).toBe("Lower right primary canine");
+  });
+
+  it("finds the surfaces a mixed pick of teeth shares", () => {
+    expect(commonSurfaces([74, 84])).toEqual(["M", "O", "D", "B", "L"]);
+    expect(commonSurfaces([51, 74])).toEqual(["M", "D", "B", "L"]);
+    expect(commonSurfaces([])).toEqual([]);
   });
 });

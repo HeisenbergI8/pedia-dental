@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Controller, FormProvider, useForm } from "react-hook-form";
+import { Controller, FormProvider, useForm, useFormContext } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format, parseISO } from "date-fns";
 import { AlertTriangleIcon } from "lucide-react";
@@ -126,7 +126,7 @@ export function ToothPanel({
                 return (
                   <li key={e.id} className="space-y-1 py-2.5">
                     <div className="flex items-start justify-between gap-2">
-                      <p className={cn("font-medium", corrected && "text-ink-muted line-through")}>
+                      <p className={cn("font-medium", corrected && "text-ink-muted" /* the "Corrected" badge says it */)}>
                         {CONDITION_STYLE[e.condition].label} · {surfaceText(e)}
                       </p>
                       {recordingVisit && !corrected && (
@@ -185,8 +185,6 @@ function EntryForm({
       ? { ...blank, surfaces: correcting.surfaces, condition: correcting.condition, supersedes: correcting.id }
       : blank,
   });
-  const wholeOnly = WHOLE_TOOTH_CONDITIONS.includes(form.watch("condition"));
-
   function onSubmit(input: CreateChartEntryInput) {
     record.mutate(
       { ...input, note: input.note?.trim() || undefined },
@@ -218,65 +216,7 @@ function EntryForm({
           <p className="text-sm text-ink-muted">New finding for this visit{dentist && ` with ${dentist}`}.</p>
         )}
 
-        <FormField name="condition" label="Condition">
-          {(props) => (
-            <Controller
-              control={form.control}
-              name="condition"
-              render={({ field }) => (
-                <Select
-                  value={field.value}
-                  onValueChange={(v: ToothCondition) => {
-                    field.onChange(v);
-                    if (WHOLE_TOOTH_CONDITIONS.includes(v)) form.setValue("surfaces", []);
-                  }}
-                >
-                  <SelectTrigger {...props} className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ToothCondition.options.map((c) => (
-                      <SelectItem key={c} value={c}>
-                        {CONDITION_STYLE[c].label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            />
-          )}
-        </FormField>
-
-        <Controller
-          control={form.control}
-          name="surfaces"
-          render={({ field, fieldState }) => (
-            <fieldset className="space-y-2" disabled={wholeOnly}>
-              <legend className="text-sm font-medium">Surfaces</legend>
-              <div className="flex flex-wrap gap-x-4 gap-y-2">
-                {surfacesFor(tooth).map((s) => (
-                  <Label key={s} className="font-normal">
-                    <Checkbox
-                      checked={field.value.includes(s)}
-                      onCheckedChange={(on) =>
-                        field.onChange(on ? [...field.value, s] : field.value.filter((x) => x !== s))
-                      }
-                    />
-                    {SURFACE_LABEL[s]} ({s})
-                  </Label>
-                ))}
-              </div>
-              <p className="text-sm text-ink-muted">
-                {wholeOnly ? "This condition applies to the whole tooth." : "None checked = the whole tooth."}
-              </p>
-              {fieldState.error && <p className="text-sm text-danger">{fieldState.error.message}</p>}
-            </fieldset>
-          )}
-        />
-
-        <FormField name="note" label="Note (optional)">
-          <Textarea rows={2} {...form.register("note")} />
-        </FormField>
+        <FindingFields surfaces={surfacesFor(tooth)} />
 
         <Button type="submit" disabled={record.isPending}>
           {record.isPending ? "Saving…" : correcting ? "Save correction" : "Save finding"}
@@ -286,8 +226,82 @@ function EntryForm({
   );
 }
 
+type FindingValues = { condition: ToothCondition; surfaces: Surface[]; note?: string };
+
+/**
+ * Condition, surfaces and note: shared by the single-tooth form and the several-teeth form (batch-panel.tsx),
+ * so the two can't drift. `surfaces` is what the tooth (or every picked tooth) has.
+ */
+export function FindingFields({ surfaces, hint = "None checked = the whole tooth." }: { surfaces: Surface[]; hint?: string }) {
+  const { control, register, setValue, watch } = useFormContext<FindingValues>();
+  const wholeOnly = WHOLE_TOOTH_CONDITIONS.includes(watch("condition"));
+  return (
+    <>
+      <FormField name="condition" label="Condition">
+        {(props) => (
+          <Controller
+            control={control}
+            name="condition"
+            render={({ field }) => (
+              <Select
+                value={field.value}
+                onValueChange={(v: ToothCondition) => {
+                  field.onChange(v);
+                  if (WHOLE_TOOTH_CONDITIONS.includes(v)) setValue("surfaces", []);
+                }}
+              >
+                <SelectTrigger {...props} className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ToothCondition.options.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {CONDITION_STYLE[c].label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          />
+        )}
+      </FormField>
+
+      <Controller
+        control={control}
+        name="surfaces"
+        render={({ field, fieldState }) => (
+          <fieldset className="space-y-2" disabled={wholeOnly}>
+            <legend className="text-sm font-medium">Surfaces</legend>
+            <div className="flex flex-wrap gap-x-4 gap-y-2">
+              {surfaces.map((s) => (
+                <Label key={s} className="font-normal">
+                  <Checkbox
+                    checked={field.value.includes(s)}
+                    onCheckedChange={(on) =>
+                      field.onChange(on ? [...field.value, s] : field.value.filter((x) => x !== s))
+                    }
+                  />
+                  {SURFACE_LABEL[s]} ({s})
+                </Label>
+              ))}
+            </div>
+            <p className="text-sm text-ink-muted">
+              {wholeOnly ? "This condition applies to the whole tooth." : hint}
+            </p>
+            {fieldState.error && <p className="text-sm text-danger">{fieldState.error.message}</p>}
+          </fieldset>
+        )}
+      />
+
+      <FormField name="note" label="Note (optional)">
+        <Textarea rows={2} {...register("note")} />
+      </FormField>
+    </>
+  );
+}
+
 /** The panel covers the pinned patient header, so allergies are repeated where findings are recorded. */
-function PanelAllergies({ patientId }: { patientId: string }) {
+export function PanelAllergies({ patientId }: { patientId: string }) {
   const allergies = usePatient(patientId).data?.allergies ?? [];
   if (!allergies.length) return null;
   return (

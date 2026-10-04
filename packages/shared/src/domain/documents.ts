@@ -10,6 +10,7 @@ export const DOCUMENT_TYPE_LABEL: Record<DocumentType, string> = {
   prescription: "Prescription",
   receipt: "Acknowledgment receipt",
   patient_summary: "Patient summary",
+  notes_report: "Clinical notes report",
 };
 
 /** Issued and signed by a dentist. A receipt or a summary can come from anyone on staff. */

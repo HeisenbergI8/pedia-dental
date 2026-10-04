@@ -1,10 +1,13 @@
 "use client";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
-import { Controller, FormProvider, get, useFieldArray, useForm, type FieldErrors, type FieldPath } from "react-hook-form";
+import { Controller, FormProvider, get, useFieldArray, useForm, type FieldErrors, type FieldPath, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ChevronLeftIcon, ChevronRightIcon, PlusIcon, Trash2Icon } from "lucide-react";
-import { CreatePatientInput } from "@pedia/shared";
+import { BloodType, CreatePatientInput, EditPatientWithoutContactsInput, type GuardianView } from "@pedia/shared";
+
+/** The form's values: a patient whose guardians may lack a phone (an edit by someone without patients.contact). */
+export type PatientFormValues = Omit<CreatePatientInput, "guardians"> & { guardians: GuardianView[] };
 import { FormField } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -14,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { PHONE, useMediaQuery } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
-import { TagInput } from "./tag-input";
+import { TagInput, reservedTagReason } from "./tag-input";
 
 const newGuardian = (isPrimary: boolean) => ({
   id: crypto.randomUUID(),
@@ -24,9 +27,10 @@ const newGuardian = (isPrimary: boolean) => ({
   isPrimary,
 });
 
-const EMPTY: CreatePatientInput = {
+const EMPTY: PatientFormValues = {
   firstName: "",
   lastName: "",
+  nickname: "",
   birthDate: "",
   sex: "female",
   address: "",
@@ -36,8 +40,12 @@ const EMPTY: CreatePatientInput = {
   medicalConditions: [],
   medications: [],
   alerts: [],
+  tags: [],
   dentalHistory: { previousClinic: "", notes: "" },
+  profile: {},
 };
+
+const NOT_KNOWN = "unknown"; // Radix Select can't hold an empty value
 
 /** An empty optional input arrives as "", which `.email()` would reject. */
 const blankToUndefined = (v: string) => v || undefined;
@@ -47,14 +55,20 @@ const blankToUndefined = (v: string) => v || undefined;
  * from the button). Every section stays mounted, so nothing typed is lost between steps; desktop shows
  * them all. `fields` are what Next validates before moving on.
  */
-const STEPS: { title: string; fields: FieldPath<CreatePatientInput>[] }[] = [
-  { title: "Child", fields: ["firstName", "lastName", "birthDate", "sex", "address"] },
+const STEPS: { title: string; fields: FieldPath<PatientFormValues>[] }[] = [
+  { title: "Child", fields: ["firstName", "lastName", "nickname", "birthDate", "sex", "address", "tags", "profile.school", "profile.referredBy"] },
   { title: "Guardians", fields: ["guardians"] },
   { title: "Emergency contact", fields: ["emergencyContact"] },
-  { title: "Medical", fields: ["allergies", "medicalConditions", "medications", "alerts"] },
-  { title: "Dental history", fields: ["dentalHistory"] },
+  {
+    title: "Medical",
+    fields: ["allergies", "medicalConditions", "medications", "alerts", "profile.bloodType", "profile.hmo", "profile.familyDoctor"],
+  },
+  {
+    title: "Dental history",
+    fields: ["dentalHistory", "profile.diet", "profile.brushing", "profile.badDentalExperience", "profile.fluorideHistory"],
+  },
 ];
-const stepOf = (errors: FieldErrors<CreatePatientInput>) =>
+const stepOf = (errors: FieldErrors<PatientFormValues>) =>
   Math.max(0, STEPS.findIndex((s) => s.fields.some((f) => f in errors)));
 
 function Section({ title, description, hidden, children }: { title: string; description?: string; hidden?: boolean; children: ReactNode }) {
@@ -83,14 +97,22 @@ export function PatientForm({
   pending,
   cancelHref,
   onSubmit,
+  hideContacts = false,
 }: {
-  defaultValues?: CreatePatientInput;
+  defaultValues?: PatientFormValues;
   submitLabel: string;
   pending: boolean;
   cancelHref: string;
-  onSubmit: (input: CreatePatientInput) => void;
+  onSubmit: (input: PatientFormValues) => void;
+  /**
+   * Editing without patients.contact (a dentist): the API never sent guardian phones, emails, the emergency contact
+   * or the address, so none are shown and none are sent. The server keeps the stored ones (EditPatientWithoutContactsInput).
+   */
+  hideContacts?: boolean;
 }) {
-  const form = useForm<CreatePatientInput>({ resolver: zodResolver(CreatePatientInput), defaultValues });
+  // Both schemas' outputs fit PatientFormValues; the cast is only because Resolver is invariant in its values type.
+  const resolver = zodResolver(hideContacts ? EditPatientWithoutContactsInput : CreatePatientInput) as unknown as Resolver<PatientFormValues>;
+  const form = useForm<PatientFormValues>({ resolver, defaultValues });
   const { register, control, setValue, getValues } = form;
   const guardians = useFieldArray({ control, name: "guardians" });
   const guardiansError: string | undefined =
@@ -138,6 +160,9 @@ export function PatientForm({
             <FormField name="lastName" label="Last name">
               <Input autoComplete="off" {...register("lastName")} />
             </FormField>
+            <FormField name="nickname" label="Nickname (optional)">
+              <Input autoComplete="off" placeholder="What the child likes to be called" {...register("nickname")} />
+            </FormField>
             <FormField name="birthDate" label="Date of birth">
               <Input type="date" {...register("birthDate")} />
             </FormField>
@@ -161,8 +186,29 @@ export function PatientForm({
               )}
             </FormField>
           </div>
-          <FormField name="address" label="Address">
-            <Input autoComplete="street-address" {...register("address")} />
+          {!hideContacts && (
+            <FormField name="address" label="Address">
+              <Input autoComplete="street-address" {...register("address")} />
+            </FormField>
+          )}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField name="profile.school" label="School (optional)">
+              <Input autoComplete="off" {...register("profile.school")} />
+            </FormField>
+            <FormField name="profile.referredBy" label="Referred by (optional)">
+              <Input autoComplete="off" placeholder="e.g. Dr. Ramos, a friend, Facebook" {...register("profile.referredBy")} />
+            </FormField>
+          </div>
+          <FormField name="tags" label="Tags (optional)">
+            {(props) => (
+              <Controller
+                control={control}
+                name="tags"
+                render={({ field }) => (
+                  <TagInput {...props} value={field.value ?? []} onChange={field.onChange} placeholder="e.g. Anxious" reject={reservedTagReason} />
+                )}
+              />
+            )}
           </FormField>
         </Section>
 
@@ -176,12 +222,16 @@ export function PatientForm({
                 <FormField name={`guardians.${i}.relationship`} label="Relationship">
                   <Input placeholder="Mother, father, grandparent…" {...register(`guardians.${i}.relationship`)} />
                 </FormField>
-                <FormField name={`guardians.${i}.phone`} label="Phone">
-                  <Input type="tel" inputMode="tel" autoComplete="off" placeholder="0917 123 4567" {...register(`guardians.${i}.phone`)} />
-                </FormField>
-                <FormField name={`guardians.${i}.email`} label="Email (optional)">
-                  <Input type="email" {...register(`guardians.${i}.email`, { setValueAs: blankToUndefined })} />
-                </FormField>
+                {!hideContacts && (
+                  <>
+                    <FormField name={`guardians.${i}.phone`} label="Phone">
+                      <Input type="tel" inputMode="tel" autoComplete="off" placeholder="0917 123 4567" {...register(`guardians.${i}.phone`)} />
+                    </FormField>
+                    <FormField name={`guardians.${i}.email`} label="Email (optional)">
+                      <Input type="email" {...register(`guardians.${i}.email`, { setValueAs: blankToUndefined })} />
+                    </FormField>
+                  </>
+                )}
               </div>
               <div className="flex items-center justify-between gap-3">
                 <Controller
@@ -207,20 +257,28 @@ export function PatientForm({
             </div>
           ))}
           {guardiansError && <p className="text-sm text-danger">{guardiansError}</p>}
-          <Button type="button" variant="outline" onClick={() => guardians.append(newGuardian(false))}>
-            <PlusIcon /> Add guardian
-          </Button>
+          {hideContacts ? (
+            <p className="text-sm text-ink-muted">Phone numbers and new guardians are handled by front desk and admin.</p>
+          ) : (
+            <Button type="button" variant="outline" onClick={() => guardians.append(newGuardian(false))}>
+              <PlusIcon /> Add guardian
+            </Button>
+          )}
         </Section>
 
         <Section title="Emergency contact (optional)" description="Someone to call if the guardians can't be reached." hidden={!shown(2)}>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField name="emergencyContact.name" label="Name">
-              <Input {...register("emergencyContact.name")} />
-            </FormField>
-            <FormField name="emergencyContact.phone" label="Phone">
-              <Input type="tel" inputMode="tel" autoComplete="off" {...register("emergencyContact.phone")} />
-            </FormField>
-          </div>
+          {hideContacts ? (
+            <p className="text-sm text-ink-muted">Contact details are visible to front desk and admin.</p>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField name="emergencyContact.name" label="Name">
+                <Input {...register("emergencyContact.name")} />
+              </FormField>
+              <FormField name="emergencyContact.phone" label="Phone">
+                <Input type="tel" inputMode="tel" autoComplete="off" {...register("emergencyContact.phone")} />
+              </FormField>
+            </div>
+          )}
         </Section>
 
         <Section title="Medical" description="Shown on every patient screen. Press Enter after each item." hidden={!shown(3)}>
@@ -239,6 +297,37 @@ export function PatientForm({
               </FormField>
             ))}
           </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField name="profile.bloodType" label="Blood type (optional)">
+              {(props) => (
+                <Controller
+                  control={control}
+                  name="profile.bloodType"
+                  render={({ field }) => (
+                    <Select value={field.value ?? NOT_KNOWN} onValueChange={(v) => field.onChange(v === NOT_KNOWN ? undefined : v)}>
+                      <SelectTrigger {...props} className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NOT_KNOWN}>Not known</SelectItem>
+                        {BloodType.options.map((b) => (
+                          <SelectItem key={b} value={b}>
+                            {b}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              )}
+            </FormField>
+            <FormField name="profile.hmo" label="HMO / insurance (optional)">
+              <Input autoComplete="off" placeholder="Provider and member number" {...register("profile.hmo")} />
+            </FormField>
+            <FormField name="profile.familyDoctor" label="Family doctor (optional)">
+              <Input autoComplete="off" {...register("profile.familyDoctor")} />
+            </FormField>
+          </div>
         </Section>
 
         <Section title="Previous dental history" hidden={!shown(4)}>
@@ -248,6 +337,20 @@ export function PatientForm({
           <FormField name="dentalHistory.notes" label="Notes">
             <Textarea rows={3} {...register("dentalHistory.notes")} />
           </FormField>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField name="profile.diet" label="Diet (optional)">
+              <Textarea rows={2} placeholder="Sweets, juice, bottle at night…" {...register("profile.diet")} />
+            </FormField>
+            <FormField name="profile.brushing" label="Brushing habits (optional)">
+              <Textarea rows={2} {...register("profile.brushing")} />
+            </FormField>
+            <FormField name="profile.badDentalExperience" label="Bad past dental experience (optional)">
+              <Textarea rows={2} {...register("profile.badDentalExperience")} />
+            </FormField>
+            <FormField name="profile.fluorideHistory" label="Fluoride history (optional)">
+              <Textarea rows={2} {...register("profile.fluorideHistory")} />
+            </FormField>
+          </div>
         </Section>
 
         {/* Pinned to the bottom so saving never needs a scroll back down a long form. */}
@@ -261,12 +364,14 @@ export function PatientForm({
               <Link href={cancelHref}>Cancel</Link>
             </Button>
           )}
+          {/* Separate keys: one reused element would turn into the submit button while Next's tap is still being
+              handled, and the browser would submit from step 4 straight past step 5. */}
           {isPhone && !last ? (
-            <Button type="button" onClick={next}>
+            <Button key="next" type="button" onClick={next}>
               Next <ChevronRightIcon />
             </Button>
           ) : (
-            <Button type="submit" disabled={pending}>
+            <Button key="submit" type="submit" disabled={pending}>
               {pending ? "Saving…" : submitLabel}
             </Button>
           )}

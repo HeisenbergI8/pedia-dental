@@ -38,13 +38,16 @@
 ## 2. Decisions
 
 **Resolved 2026-10-03: the user accepted every recommendation below** (personality as stated, both avoid-rules, no dark mode, the module order, yes to 5a/5b/5c, kiosk out of scope).
+**Superseded 2026-10-03: item 3 (dark mode).** The legacy-lessons brief (item 18) asks for Light, Dark and System. Built by
+`.claude/plans/legacy-lessons/feature-theme-staff-switch-plan`: dark tokens in `globals.css`, screen-only, so receipts print
+white and PDFs stay white. The logo sits on a white plate in dark rather than being recoloured. DESIGN_SYSTEM.md §2a has the rules.
 
 The brief's brand fields were placeholders, so these are my assumptions, drawn from the Kidsmile logo and Facebook page:
 
 1. **Brand personality:** *warm, playful, gentle, trustworthy, clean.* Correct?
 2. **Avoid:** anything that feels like a hospital (cold grey-blue, clinical sterility) **and** cartoon chrome on
    staff screens (bouncy cards, mascots, playful fonts on data). Correct?
-3. **Dark mode:** I recommend **not now**. Clinics are bright rooms, receipts and documents print on white, and the
+3. **Dark mode** *(superseded 2026-10-03, see above)*: I recommend **not now**. Clinics are bright rooms, receipts and documents print on white, and the
    logo artwork is drawn for white. Tokens stay semantic, so it can be added later. Agree?
 4. **Module order** (highest traffic first): Appointments → Patient record and Chart → Patients list and intake →
    Billing → Recalls → Messages → Dashboard → Documents and Settings → Portal. Correct?
@@ -345,6 +348,10 @@ This is the same Playwright and axe sweep as section 1, on a fresh production bu
 \* At 390 px, Day and Week render the agenda list. The remaining small text is 12 px labels and chips, which the
 type rules allow.
 \*\* Month day numbers in the desktop grid. On phones Month isn't offered (the agenda replaces it).
+**Superseded 2026-10-03 (legacy-lessons plan 3):** phones now get Month as a count-per-day grid (`month-count-grid.tsx`,
+44 px day buttons, one-letter weekday headers with full names for screen readers); tapping a day opens its list. This is
+the §6 Month-view fix as first proposed. Closed days are data (`CLOSED_WEEKDAYS`), and a day with appointments is never
+shown as closed.
 \*\*\* What remains is **inline text links** (patient names, receipt numbers, phone numbers inside a sentence, 19–24
 px tall). WCAG 2.5.8 exempts them, and giving them a 44 px hit area would overlap the neighbouring link. Chart teeth
 in Mixed mode on a phone are 39×75 px: a tall target, slightly under 44 px wide.

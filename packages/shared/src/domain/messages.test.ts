@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MessageTemplate } from "../schemas/message";
-import { messageVars, renderMessage, reminderSendAt, unknownPlaceholders } from "./messages";
+import { birthdayGreeting, isBirthdayOn, messageVars, renderMessage, reminderSendAt, unknownPlaceholders } from "./messages";
 
 const bea = { firstName: "Bea", lastName: "Mendoza", guardians: [{ id: "g1", fullName: "Rosa Mendoza", relationship: "Mother", phone: "09171234567", isPrimary: true }] };
 const startsAt = new Date(2030, 0, 8, 10, 30).toISOString(); // Tue Jan 8 2030, 10:30 AM local
@@ -30,5 +30,17 @@ describe("parent messages", () => {
     expect(reminderSendAt(startsAt, new Date(2030, 0, 1))).toBe(new Date(2030, 0, 7, 9, 0).toISOString());
     const late = new Date(2030, 0, 7, 15, 0);
     expect(reminderSendAt(startsAt, late)).toBe(late.toISOString());
+  });
+});
+
+describe("birthday rule (shared by the daily job and Send greeting)", () => {
+  it("matches month and day only", () => {
+    expect(isBirthdayOn("2019-10-03", "2026-10-03")).toBe(true);
+    expect(isBirthdayOn("2019-10-04", "2026-10-03")).toBe(false);
+  });
+  it("finds this year's greeting, not last year's", () => {
+    const m = (createdAt: string) => ({ patientId: "p", kind: "birthday" as const, createdAt });
+    expect(birthdayGreeting([m("2025-10-03T01:00:00.000Z")], "p", "2026-10-03")).toBeUndefined();
+    expect(birthdayGreeting([m("2026-10-03T01:00:00.000Z")], "p", "2026-10-03")).toBeDefined();
   });
 });

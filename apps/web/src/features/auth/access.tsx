@@ -23,7 +23,7 @@ export const ROLE_HOME: Record<Role, string> = {
  * this, and ROLE_PERMISSIONS says who holds each permission.
  */
 export const ROUTE_ACCESS: [RegExp, Permission][] = [
-  [/^\/dashboard/, "dashboard.view"],
+  [/^\/dashboard/, "today.view"], // every staff role; the finance part inside checks dashboard.view
   [/^\/appointments/, "appointments.view"],
   [/^\/patients\/new/, "patients.write"],
   [/^\/patients\/[^/]+\/edit/, "patients.write"],

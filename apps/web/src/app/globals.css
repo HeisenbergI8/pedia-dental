@@ -1,6 +1,17 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* `dark:` follows the app's theme choice (data-theme on <html>, set by ThemeSync), not the OS setting, and
+   never applies in print. Tailwind's default `dark:` is prefers-color-scheme, which used to apply shadcn's
+   dark fills over the light palette on any phone set to dark. */
+@custom-variant dark {
+  @media screen {
+    &:where([data-theme="dark"], [data-theme="dark"] *) {
+      @slot;
+    }
+  }
+}
+
 /* Design tokens. Change the palette here, not in components.
    Brand: Kidsmile Pediatric Dental Clinic. The logo's "smile" teal is the brand hue; its crayon
    colours (orange K, purple i, lime d, yellow handle, pink bristles) are decoration only. */
@@ -17,6 +28,10 @@
   --color-brand-subtle: #e3f3f3; /* selected nav, active rows */
   --color-brand-soft: #7ec4c6; /* the logo teal itself: fills and accents, never text */
   --color-surface-raised: #ffffff; /* cards that sit above surface (popovers, sticky bars); paired with --shadow-raised */
+  /* Always white, in both themes: the plate behind the logo artwork (drawn for white), the brush highlight and
+     bubbles in the animated mark, the split line over photos. Never a page or card surface. */
+  --color-paper: #ffffff;
+  --color-photo-backdrop: #16282b; /* behind photos, in both themes: photos read best on near-black */
 
   /* Secondary brand: the logo's purple "i". Secondary emphasis and kid moments, never status. */
   --color-plum: #694ab4; /* 6.5:1 on white */
@@ -41,6 +56,7 @@
   --color-danger: #a12622; /* 6.4:1 on danger-bg */
   --color-danger-bg: #fbe9e8;
   --color-danger-line: #efb8b5;
+  --color-danger-ink: #ffffff; /* text on a solid danger fill (destructive button): 7.5:1 on danger */
   --color-success: #1d6b3a; /* 5.7:1 on success-bg */
   --color-success-bg: #e4f3e9;
   --color-success-line: #a9d7b8;
@@ -68,8 +84,11 @@
   --color-tooth-pulpotomy: #6b3fa0;
   --color-tooth-pulpotomy-bg: #ece3f7;
 
-  /* Charts (dashboard). One series per chart, so one hue. */
+  /* Charts (dashboard). One hue per series. chart-bar is the single-series hue; the new/returning mix has its own
+     validated pair (dataviz validator, 2026-10-03: lightness, chroma, CVD ΔE 15.9, normal ΔE 22.1, contrast). */
   --color-chart-bar: #17686e; /* = brand: 6.5:1 on white */
+  --color-chart-returning: #00939a;
+  --color-chart-new: #694ab4; /* = plum, the app's "new" marker */
   --color-chart-negative: #a12622; /* = danger: net refunds */
   --color-chart-grid: #e4efef;
 
@@ -92,6 +111,7 @@
 
 /* Tokens that aren't Tailwind theme namespaces: used as h-(--control-h), z-(--z-header), duration-(--duration-base). */
 :root {
+  color-scheme: light; /* native controls (date inputs, scrollbars) match the theme; dark sets its own below */
   --duration-fast: 120ms;
   --duration-base: 200ms;
   --duration-slow: 320ms;
@@ -127,6 +147,57 @@
   :root {
     --text-sm: 1rem;
     --text-sm--line-height: 1.5rem;
+  }
+}
+
+/* Dark theme: the same tokens, redefined. Applied by data-theme="dark" on <html> (stores/theme-store.ts).
+   Screen only, so printing (receipts) always uses the light values above, and PDFs never read CSS at all.
+   Text pairs measured 2026-10-03. Crayons keep their colours (decoration), and the outline reverses so the
+   hand-drawn line still shows on a dark ground. Tooth colours are unchanged: teeth stay white with their
+   conventional fills, and the chart's codes and patterns sit on those fills, not on the page. */
+@media screen {
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --color-ground: #0f1a1c;
+    --color-surface: #152325;
+    --color-surface-raised: #1c2e31; /* lighter than surface: on dark, elevation reads as lightness, not shadow */
+    --color-ink: #e6f0f0; /* 13.9:1 on surface, 15.3:1 on ground */
+    --color-ink-muted: #a3b8ba; /* 7.8:1 on surface, 6.8:1 on surface-raised */
+    --color-line: #2a3e41;
+    --color-line-strong: #3d5558;
+    --color-input-border: #6f8b8e; /* 4.4:1 on surface (WCAG 1.4.11 needs 3:1) */
+    --color-brand: #5fc2c7; /* 7.7:1 on surface */
+    --color-brand-ink: #0b2224; /* 7.9:1 on brand: primary buttons get dark text in dark mode */
+    --color-brand-subtle: #17393c; /* ink 10.7:1, brand 5.9:1 */
+    --color-brand-soft: #3f8f92;
+    --color-plum: #bba6ef; /* 7.6:1 on surface */
+    --color-plum-bg: #2a2342; /* plum 6.9:1 */
+    --color-sunny: #2f2915; /* ink 12.5:1, ink-muted 7.0:1 */
+    --color-crayon-outline: #dfe9e9; /* the logo's ink line, reversed */
+    --color-alert: #f7b57e; /* 8.5:1 on alert-bg */
+    --color-alert-bg: #36220f;
+    --color-alert-line: #6e4521;
+    --color-danger: #ff9e97; /* 7.9:1 on danger-bg, 8.2:1 on surface */
+    --color-danger-bg: #3b1917;
+    --color-danger-line: #7a3431;
+    --color-danger-ink: #2a0d0b; /* 9.1:1 on danger */
+    --color-success: #82d6a0; /* 8.2:1 on success-bg */
+    --color-success-bg: #13301f;
+    --color-success-line: #2f6a44;
+    --color-info: #a0c6f3; /* 8.6:1 on info-bg */
+    --color-info-bg: #16263c;
+    --color-info-line: #35567f;
+    --color-warning: #f2c96d; /* 9.2:1 on warning-bg */
+    --color-warning-bg: #33280c;
+    --color-warning-line: #6e5418;
+    --color-chart-bar: #5fc2c7; /* = dark brand */
+    --color-chart-returning: #25a0a7; /* validated pair on dark surface: CVD ΔE 11.3, normal ΔE 20.0 */
+    --color-chart-new: #8f6fe0;
+    --color-chart-negative: #ff9e97; /* = dark danger */
+    --color-chart-grid: #223538;
+    --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+    --shadow-raised: 0 2px 8px -2px rgb(0 0 0 / 0.5), 0 1px 2px 0 rgb(0 0 0 / 0.3);
+    --shadow-overlay: 0 16px 40px -12px rgb(0 0 0 / 0.7), 0 2px 6px 0 rgb(0 0 0 / 0.4);
   }
 }
 
@@ -551,4 +622,23 @@ body {
 }
 .calendar .rbc-month-view .rbc-today {
   background: var(--color-brand-subtle);
+}
+
+/* The library's own hard-coded colours (react-big-calendar.css, dragAndDrop/styles.css), on tokens so the
+   calendar reads in dark too. */
+.calendar .rbc-time-view-resources .rbc-time-gutter,
+.calendar .rbc-time-view-resources .rbc-time-header-gutter {
+  background-color: var(--color-surface);
+  border-color: var(--color-line);
+}
+.calendar .rbc-selected-cell,
+.calendar .rbc-addons-dnd .rbc-addons-dnd-over {
+  background-color: var(--color-brand-subtle);
+}
+.calendar .rbc-slot-selection {
+  background-color: var(--color-brand);
+  color: var(--color-brand-ink);
+}
+.calendar .rbc-show-more {
+  background-color: transparent;
 }

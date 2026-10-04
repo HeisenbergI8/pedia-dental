@@ -387,3 +387,23 @@ everything ─ 18 Polish & deploy
 
 Chunks 5–6 (the chart) carry the most risk. If time gets tight, cut scope from 17 (portal) and 13
 (dashboard), not from the chart.
+
+---
+
+# Legacy lessons (from the MyMedsPH review)
+
+Plans in `.claude/plans/legacy-lessons/`. Status as of 2026-10-03:
+
+- ✅ Theme Light / Dark / System and a PIN staff switch (items 18–19).
+- ✅ Dashboard: Today at a glance for all staff, today's appointments, birthdays with Send greeting, new vs returning
+  chart (items 1–4).
+- ✅ Patient list: one-tap filters, Recall due / Balance due / No contact labels, last visit and balance, paging and
+  sort (items 5–7).
+- ✅ Patient record: photo, nickname, header facts, quick update, optional profile, services and prices on notes,
+  notes report PDF (items 8–14).
+- ✅ Dental chart: exam checkbox sections, one finding on several teeth (items 15–16).
+- ✅ Calendar: month counts on phones; a booked day is never shown as closed (item 17).
+- ✅ Part B sweep (2026-10-04).
+- ✅ Contact details are left out of every patient response for roles without `patients.contact` (2026-10-04).
+- ✅ A completed checkup or cleaning closes a due 6-month recall (2026-10-04).
+

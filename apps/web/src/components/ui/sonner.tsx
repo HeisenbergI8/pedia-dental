@@ -8,11 +8,13 @@ import {
   TriangleAlertIcon,
 } from "lucide-react"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
+import { useThemeStore } from "@/stores/theme-store"
 
 const Toaster = ({ ...props }: ToasterProps) => {
+  const theme = useThemeStore((s) => s.preference)
   return (
     <Sonner
-      theme="light"
+      theme={theme}
       richColors
       className="toaster group"
       icons={{

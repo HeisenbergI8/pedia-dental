@@ -1,3 +1,4 @@
+import { format } from "date-fns";
 import type { Appointment, AppointmentStatus } from "../schemas/appointment";
 
 /** booked → confirmed → arrived → in chair → done, or no-show / cancelled before arrival. */
@@ -15,10 +16,42 @@ export function canTransition(from: AppointmentStatus, to: AppointmentStatus): b
   return NEXT[from].includes(to);
 }
 
+/** Weekdays the clinic is closed, 0 = Sunday. Data, so a Saturday half-day or a second branch is a list change. */
+export const CLOSED_WEEKDAYS: readonly number[] = [0];
+
+/** Closed only when nothing is booked: a day with appointments is never shown as closed. */
+export function isClosedDay(day: Date, appointmentCount: number): boolean {
+  return appointmentCount === 0 && CLOSED_WEEKDAYS.includes(day.getDay());
+}
+
+/** Live appointments per local day ("2026-10-07" → 3). Cancelled ones don't count; no-shows do (they held the slot). */
+export function countByDay(appointments: Pick<Appointment, "startsAt" | "status">[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const a of appointments) {
+    if (a.status === "cancelled") continue;
+    const key = format(new Date(a.startsAt), "yyyy-MM-dd");
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+}
+
 /** Only appointments that haven't started can be moved. */
 export function canReschedule(status: AppointmentStatus): boolean {
   return status === "booked" || status === "confirmed";
 }
+
+/** Today's counts and the calendar's ?status= filter: one map, so a count and its list always agree. */
+export const STATUS_GROUPS = {
+  upcoming: ["booked", "confirmed"],
+  waiting: ["arrived"], // arrived, not yet in the chair
+  in_chair: ["in_chair"],
+  done: ["done"],
+  missed: ["no_show", "cancelled"],
+} as const satisfies Record<string, readonly AppointmentStatus[]>;
+export type StatusGroup = keyof typeof STATUS_GROUPS;
+export const isStatusGroup = (v: unknown): v is StatusGroup => typeof v === "string" && Object.hasOwn(STATUS_GROUPS, v);
+export const inStatusGroup = (group: StatusGroup, status: AppointmentStatus) =>
+  (STATUS_GROUPS[group] as readonly AppointmentStatus[]).includes(status);
 
 type Slot = Pick<Appointment, "id" | "dentistId" | "chairId" | "startsAt" | "durationMin" | "status">;
 

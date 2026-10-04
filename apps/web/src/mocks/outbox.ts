@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import { reminderSendAt, type Appointment, type Message } from "@pedia/shared";
+import { birthdayGreeting, isBirthdayOn, reminderSendAt, type Appointment, type Message } from "@pedia/shared";
 import { db } from "./db";
 import { composeMessage, type MessageEvent } from "./message-templates";
 import { CLINIC_ID } from "./seed";
@@ -30,9 +30,8 @@ export function cancelQueued(appointmentId: string) {
 export function runDailyJobs(today = format(new Date(), "yyyy-MM-dd")): number {
   let queued = 0;
   for (const p of db.patients) {
-    if (p.birthDate.slice(5) !== today.slice(5)) continue;
-    const greeted = db.messages.some((m) => m.patientId === p.id && m.kind === "birthday" && m.createdAt.startsWith(today.slice(0, 4)));
-    if (!greeted && queueMessage({ kind: "birthday", patientId: p.id, sendAt: new Date().toISOString() })) queued++;
+    if (!isBirthdayOn(p.birthDate, today) || birthdayGreeting(db.messages, p.id, today)) continue;
+    if (queueMessage({ kind: "birthday", patientId: p.id, sendAt: new Date().toISOString() })) queued++;
   }
   return queued;
 }

@@ -1,6 +1,6 @@
 "use client";
-import { ChevronsUpDownIcon, LogOutIcon, RotateCcwIcon } from "lucide-react";
-import { toast } from "sonner";
+import { useState } from "react";
+import { ChevronsUpDownIcon, LogOutIcon, RotateCcwIcon, UsersIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -12,8 +12,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { env } from "@/lib/env";
 import { cn } from "@/lib/utils";
-import { ROLE_LABEL, useSession } from "../access";
-import { useDemoAccounts, useSignIn, useSignOut } from "../api";
+import { Can, ROLE_LABEL, useSession } from "../access";
+import { useSignOut } from "../api";
+import { AppearanceItems } from "./appearance-items";
+import { SwitchUserDialog } from "./switch-user-dialog";
 
 /** Reseeds the mock database. Imported lazily, like providers.tsx, so mocks stay out of the bundle. */
 function resetDemoData() {
@@ -21,64 +23,79 @@ function resetDemoData() {
   void import("@/mocks/db").then((m) => m.resetDb());
 }
 
+const withoutTitle = (name: string) => name.replace(/^Dr\.\s*/, "");
 const initials = (name: string) =>
-  name
-    .replace(/^Dr\.\s*/, "")
+  withoutTitle(name)
     .split(/\s+/)
     .map((w) => w[0])
     .slice(0, 2)
     .join("");
+const firstName = (name: string) => withoutTitle(name).split(/\s+/)[0];
 
-/** Who is signed in, with sign out and (in the demo) one-click account switching. */
-export function AccountMenu({ compact = false }: { compact?: boolean }) {
+/**
+ * Who is acting on this device, always visible, with switch user (staff, own PIN), appearance and sign out.
+ * `full`: sidebar and phone menu sheet. `bar`: phone and portal top bars. `rail`: the tablet icon rail.
+ */
+export function AccountMenu({ variant = "full" }: { variant?: "full" | "bar" | "rail" }) {
   const session = useSession();
-  const demo = useDemoAccounts();
-  const signIn = useSignIn();
   const signOut = useSignOut();
+  const [switching, setSwitching] = useState(false);
   if (!session) return null;
   const { user } = session;
-  const others = (demo.data?.accounts ?? []).filter((a) => a.id !== user.id);
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className={cn("h-auto min-h-11 justify-start gap-3 px-2 text-left", !compact && "w-full")}>
-          <span aria-hidden className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-subtle text-sm font-semibold text-brand">
-            {initials(user.name)}
-          </span>
-          <span className={cn("min-w-0 flex-1", compact && "sr-only")}>
-            <span className="block truncate text-sm font-medium">{user.name}</span>
-            <span className="block text-xs font-normal text-ink-muted">{ROLE_LABEL[user.role]}</span>
-          </span>
-          <ChevronsUpDownIcon className="size-4 text-ink-muted" aria-hidden />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-72">
-        {env.apiMocking && others.length > 0 && (
-          <>
-            <DropdownMenuLabel>Switch account</DropdownMenuLabel>
-            {others.map((a) => (
-              <DropdownMenuItem
-                key={a.id}
-                disabled={signIn.isPending}
-                onSelect={() =>
-                  signIn.mutate({ email: a.email, password: demo.data?.password ?? "" }, { onError: (e) => toast.error(e.message) })
-                }
-              >
-                <span className="min-w-0 flex-1 truncate">{a.name}</span>
-                <span className="text-xs text-ink-muted">{ROLE_LABEL[a.role]}</span>
-              </DropdownMenuItem>
-            ))}
-            <DropdownMenuSeparator />
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            aria-label={`${user.name}, ${ROLE_LABEL[user.role]}. Account menu`}
+            className={cn(
+              "h-auto min-h-11 text-left",
+              variant === "full" && "w-full justify-start gap-3 px-2",
+              variant === "bar" && "gap-2 px-2",
+              variant === "rail" && "w-full flex-col gap-1 px-1 py-1.5",
+            )}
+          >
+            <span aria-hidden className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-subtle text-sm font-semibold text-brand">
+              {initials(user.name)}
+            </span>
+            {variant === "full" && (
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium">{user.name}</span>
+                <span className="block text-xs font-normal text-ink-muted">{ROLE_LABEL[user.role]}</span>
+              </span>
+            )}
+            {variant === "bar" && <span className="max-w-24 truncate text-sm font-medium">{firstName(user.name)}</span>}
+            {variant === "rail" && <span className="w-full truncate text-center text-xs font-medium">{firstName(user.name)}</span>}
+            {variant !== "rail" && <ChevronsUpDownIcon className="size-4 text-ink-muted" aria-hidden />}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-72">
+          <DropdownMenuLabel className="font-normal">
+            <span className="block font-medium">{user.name}</span>
+            <span className="block text-xs text-ink-muted">{ROLE_LABEL[user.role]}</span>
+          </DropdownMenuLabel>
+          <Can permission="session.switch">
+            <DropdownMenuItem onSelect={() => setSwitching(true)}>
+              <UsersIcon /> Switch user…
+            </DropdownMenuItem>
+          </Can>
+          {env.apiMocking && (
             <DropdownMenuItem onSelect={resetDemoData}>
               <RotateCcwIcon /> Reset demo data
             </DropdownMenuItem>
-          </>
-        )}
-        <DropdownMenuItem onSelect={signOut}>
-          <LogOutIcon /> Sign out
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          )}
+          <DropdownMenuSeparator />
+          <AppearanceItems />
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={signOut}>
+            <LogOutIcon /> Sign out
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {/* Outside the menu, so the menu's focus handling doesn't fight the dialog's focus trap. */}
+      <SwitchUserDialog open={switching} onOpenChange={setSwitching} />
+    </>
   );
 }

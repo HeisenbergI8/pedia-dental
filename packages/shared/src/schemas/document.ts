@@ -13,6 +13,7 @@ export const DocumentType = z.enum([
   "prescription",
   "receipt",
   "patient_summary",
+  "notes_report",
 ]);
 export type DocumentType = z.infer<typeof DocumentType>;
 

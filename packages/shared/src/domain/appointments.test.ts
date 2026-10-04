@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canTransition, findConflict } from "./appointments";
+import { canTransition, countByDay, findConflict, isClosedDay } from "./appointments";
 
 const at = (time: string, extra: Partial<Parameters<typeof findConflict>[0]> = {}) => ({
   id: time,
@@ -41,5 +41,18 @@ describe("double-booking", () => {
 
   it("ignores the appointment being moved", () => {
     expect(findConflict(at("09:15", { id: "09:00" }), [at("09:00")])).toBeUndefined();
+  });
+});
+
+describe("calendar days", () => {
+  const sunday = new Date(2026, 9, 4); // Oct 4, 2026 is a Sunday
+  it("shows a Sunday as closed only when nothing is booked", () => {
+    expect(isClosedDay(sunday, 0)).toBe(true);
+    expect(isClosedDay(sunday, 1)).toBe(false);
+    expect(isClosedDay(new Date(2026, 9, 5), 0)).toBe(false);
+  });
+  it("counts live appointments per local day", () => {
+    const at = (h: number, status: "booked" | "cancelled" = "booked") => ({ startsAt: new Date(2026, 9, 5, h).toISOString(), status });
+    expect(countByDay([at(9), at(10), at(11, "cancelled")]).get("2026-10-05")).toBe(2);
   });
 });

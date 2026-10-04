@@ -10,7 +10,7 @@ import {
   dentitionStage,
   habitTimeline,
   type GrowthRecord,
-  type Patient,
+  type PatientView,
   type Visit,
 } from "@pedia/shared";
 import { Badge } from "@/components/ui/badge";
@@ -45,7 +45,7 @@ const HABIT_LABEL: Record<OralHabit, string> = {
 const STAGE_LABEL = { primary: "Primary dentition", mixed: "Mixed dentition", permanent: "Permanent dentition" };
 const day = (d: string) => format(parseISO(d), "MMM d, yyyy");
 
-export function GrowthCard({ patient }: { patient: Patient }) {
+export function GrowthCard({ patient }: { patient: PatientView }) {
   const { data: records = [], isLoading, error, refetch, isRefetching } = useGrowth(patient.id);
   const visits = useVisits(patient.id).data ?? [];
   const current = useCurrentVisit(patient.id);
@@ -130,7 +130,7 @@ export function GrowthCard({ patient }: { patient: Patient }) {
 }
 
 type Row = { habit: OralHabit; on: boolean; startedOn: string; stoppedOn: string };
-type GrowthProps = { patient: Patient; visit: Visit; records: GrowthRecord[]; existing?: GrowthRecord };
+type GrowthProps = { patient: PatientView; visit: Visit; records: GrowthRecord[]; existing?: GrowthRecord };
 
 function GrowthDialog(props: GrowthProps) {
   const [open, setOpen] = useState(false);

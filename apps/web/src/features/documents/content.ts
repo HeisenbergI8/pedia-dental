@@ -7,9 +7,12 @@ import {
   deriveChart,
   findDrug,
   formatPeso,
+  groupFields,
   messageVars,
+  noteServices,
   planProgress,
   renderMessage,
+  roleCan,
   type ChartEntry,
   type ClinicalNote,
   type ConsentScope,
@@ -17,7 +20,7 @@ import {
   type Invoice,
   type MessageTemplate,
   type NoteTemplate,
-  type Patient,
+  type PatientView,
   type Payment,
   type PlanItem,
   type Procedure,
@@ -41,7 +44,7 @@ export type DocContent = { title: string; subtitle: string; blocks: DocBlock[]; 
 
 /** Everything a document can draw on: one patient's record plus reference data. */
 export type DocSources = {
-  patient: Patient;
+  patient: PatientView;
   staff: StaffMember[];
   procedures: Procedure[];
   visits: Visit[];
@@ -228,6 +231,45 @@ export function buildDocument(choice: GenerateDocumentInput, src: DocSources, no
       const invoice = need(src.invoices.find((i) => i.id === payment.invoiceId), "That payment's invoice");
       const r = receiptContent({ patient, invoice, payment, payments: src.payments, staff: src.staff });
       return doc([{ kind: "rows", rows: r.rows }], { title: r.title, subtitle: r.subtitle, footnote: r.footnote });
+    }
+    case "notes_report": {
+      // Guardian contacts (the address) only when the issuer holds patients.contact; names stay (identity).
+      const showContacts = !!issuer && roleCan(issuer.role, "patients.contact");
+      const reportRows = showContacts ? patientRows : patientRows.filter(([label]) => label !== "Address");
+      const signed = src.notes.filter((n) => n.signedAt).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      const blocks: DocBlock[] = [{ kind: "rows", rows: reportRows }, medical];
+      for (const n of signed) {
+        const template = src.noteTemplates.find((t) => t.id === n.templateId);
+        const visit = src.visits.find((v) => v.id === n.visitId);
+        const author = src.staff.find((s) => s.id === n.authorId)?.fullName ?? "Dentist";
+        // The same grouping as the note card: one row per section, only what was recorded.
+        const rows: Row[] = groupFields(template?.fields ?? []).flatMap((g) => {
+          const shown = g.fields.flatMap((f) => {
+            const v = n.values[f.key];
+            if (f.type === "checkbox") return v === true ? [f.label] : [];
+            if (f.type === "teeth") return Array.isArray(v) && v.length ? [`${f.label}: ${v.join(", ")}`] : [];
+            return typeof v === "string" && v.trim() ? [g.section ? `${f.label}: ${v}` : v] : [];
+          });
+          return shown.length ? [[g.section ?? g.fields[0].label, shown.join(", ")] as Row] : [];
+        });
+        blocks.push({
+          kind: "rows",
+          heading: `${template?.name ?? "Note"} · ${formatDate(visit?.date ?? n.createdAt.slice(0, 10))} · ${author}`,
+          rows: rows.length ? rows : [["Findings", NONE]],
+        });
+        const services = noteServices(n, src.plan, src.invoices, src.procedures);
+        if (services.length) {
+          blocks.push({
+            kind: "table",
+            head: ["Service", "Tooth", "Price"],
+            rows: services.map((s) => [s.name, s.tooth ? String(s.tooth) : "", `${formatPeso(s.amount)}${s.billed ? "" : " (not billed yet)"}`]),
+            numeric: [2],
+          });
+        }
+      }
+      if (!signed.length) blocks.push({ kind: "text", paragraphs: ["No signed clinical notes yet."] });
+      blocks.push({ kind: "signatures", lines: [{ label: "Prepared by", name: issuer?.fullName }] });
+      return doc(blocks, { footnote: "Prices are before any invoice discount. Draft notes are not included." });
     }
     case "patient_summary": {
       const { done, total } = planProgress(src.plan);

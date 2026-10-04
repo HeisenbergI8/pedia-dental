@@ -3,25 +3,27 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useDeferredValue, useEffect, useState } from "react";
 import { CalendarDaysIcon, SearchIcon, TriangleAlertIcon } from "lucide-react";
-import type { Patient } from "@pedia/shared";
+import type { PatientView } from "@pedia/shared";
 import { Loading } from "@/components/brand";
 import { ErrorState } from "@/components/error-state";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { useCan } from "@/features/auth/access";
 import { MetaLine } from "@/components/meta-line";
 import { formatDate, formatPhone, initials } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { usePatients } from "../api";
 import { formatAge } from "../age";
 
-const alertsOf = (p: Patient) => [...p.allergies, ...p.medicalConditions, ...p.alerts];
+const alertsOf = (p: PatientView) => [...p.allergies, ...p.medicalConditions, ...p.alerts];
 
 /**
  * Find a patient from anywhere: ⌘K / Ctrl-K, or the search button in the shell. Each result shows two
  * identifiers (name + age and date of birth) and the alerts, so the wrong child isn't opened.
  */
 export function PatientSearch({ variant }: { variant: "field" | "icon" | "rail" }) {
+  const canContact = useCan()("patients.contact"); // phone search: admin and front desk only
   const [open, setOpen] = useState(false);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -63,7 +65,7 @@ export function PatientSearch({ variant }: { variant: "field" | "icon" | "rail" 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="gap-3 sm:top-24 sm:max-w-xl sm:translate-y-0">
           <DialogTitle>Find a patient</DialogTitle>
-          <DialogDescription>Search by child, guardian or phone number.</DialogDescription>
+          <DialogDescription>{canContact ? "Search by child, guardian or phone number." : "Search by child or guardian name."}</DialogDescription>
           {open && <SearchBody onDone={() => setOpen(false)} />}
         </DialogContent>
       </Dialog>
@@ -76,6 +78,7 @@ function SearchBody({ onDone }: { onDone: () => void }) {
   const [q, setQ] = useState("");
   const query = useDeferredValue(q.trim());
   const { data = [], isLoading, error, refetch, isRefetching } = usePatients(query);
+  const canContact = useCan()("patients.contact"); // guardian phones: admin and front desk only
   const results = query ? data.slice(0, 8) : [];
   const go = (href: string) => {
     onDone();
@@ -90,7 +93,7 @@ function SearchBody({ onDone }: { onDone: () => void }) {
           type="search"
           autoFocus
           aria-label="Search patients"
-          placeholder="e.g. Cruz, Ana, or 0917…"
+          placeholder={canContact ? "e.g. Cruz, Ana, or 0917…" : "e.g. Cruz or Ana"}
           className="pl-9"
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -114,7 +117,7 @@ function SearchBody({ onDone }: { onDone: () => void }) {
       ) : error ? (
         <ErrorState compact what="patients" onRetry={() => refetch()} retrying={isRefetching} />
       ) : results.length === 0 ? (
-        <p className="px-1 py-4 text-sm text-ink-muted">No patient matches &ldquo;{query}&rdquo;. Check the spelling, or search by a guardian&apos;s phone.</p>
+        <p className="px-1 py-4 text-sm text-ink-muted">No patient matches &ldquo;{query}&rdquo;. Check the spelling{canContact ? ", or search by a guardian's phone" : ""}.</p>
       ) : (
         <ul aria-label="Matching patients" className="-mx-2 space-y-0.5">
           {results.map((p) => {
@@ -138,7 +141,7 @@ function SearchBody({ onDone }: { onDone: () => void }) {
                       items={[
                         formatAge(p.birthDate),
                         `born ${formatDate(p.birthDate)}`,
-                        guardian && `${guardian.fullName} ${formatPhone(guardian.phone)}`,
+                        guardian && (canContact && guardian.phone ? `${guardian.fullName} ${formatPhone(guardian.phone)}` : guardian.fullName),
                       ]}
                     />
                     {alerts.length > 0 && (

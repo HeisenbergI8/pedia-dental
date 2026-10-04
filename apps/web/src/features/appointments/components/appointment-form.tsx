@@ -24,6 +24,7 @@ const FormValues = z.object({
   date: IsoDate,
   time: z.string().regex(/^\d{2}:\d{2}$/, "Pick a time"),
   durationMin: z.number({ error: "Enter minutes" }).int().positive("Enter minutes"),
+  procedureCode: z.string().optional(), // set by the Procedure picker; the reason is the wording
 });
 type FormValues = z.infer<typeof FormValues>;
 
@@ -95,6 +96,7 @@ export function AppointmentForm({ draft, onClose }: { draft: AppointmentDraft | 
       toast.success(message);
       onClose();
     };
+    // A move keeps what the visit is for: RescheduleAppointmentInput has no procedureCode, so the server ignores it.
     if (editing) reschedule.mutate({ id: editing.id, ...input }, { onSuccess: saved("Appointment moved"), onError });
     else book.mutate({ ...input, patientId, sourceRuleId: draft?.sourceRuleId }, { onSuccess: saved("Appointment booked"), onError });
   }
@@ -126,6 +128,7 @@ export function AppointmentForm({ draft, onClose }: { draft: AppointmentDraft | 
                   onValueChange={(code) => {
                     const p = procedures.data?.find((x) => x.code === code);
                     if (!p) return;
+                    form.setValue("procedureCode", p.code);
                     form.setValue("reason", p.name, { shouldValidate: true });
                     form.setValue("durationMin", p.defaultDurationMin, { shouldValidate: true });
                   }}

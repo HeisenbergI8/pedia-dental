@@ -35,6 +35,11 @@ export async function getBlob(id: string): Promise<Blob | undefined> {
   return request((await store("readonly")).get(id) as IDBRequest<Blob | undefined>);
 }
 
+export async function deleteBlob(id: string): Promise<void> {
+  if (!hasIdb) return void memory.delete(id);
+  await request((await store("readwrite")).delete(id));
+}
+
 export async function clearBlobs(): Promise<void> {
   if (!hasIdb) return memory.clear();
   await request(indexedDB.deleteDatabase(DB_NAME));

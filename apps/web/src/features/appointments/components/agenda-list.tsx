@@ -1,5 +1,5 @@
 import { format, isSameDay } from "date-fns";
-import type { Appointment } from "@pedia/shared";
+import { isClosedDay, type Appointment } from "@pedia/shared";
 import { StatusChip } from "./status-chip";
 
 export type AgendaItem = { appointment: Appointment; title: string; start: Date; end: Date; chairName: string };
@@ -8,7 +8,18 @@ export type AgendaItem = { appointment: Appointment; title: string; start: Date;
  * Appointments as a list, one group per day: the phone layout for Day and Week, and the List view
  * everywhere. Readable at 360px, keyboard- and screen-reader-friendly where the calendar grid isn't.
  */
-export function AgendaList({ items, days, onOpen }: { items: AgendaItem[]; days: Date[]; onOpen: (id: string) => void }) {
+/** `counts`: every live appointment per day, unfiltered, so a filtered-empty day is never called closed. */
+export function AgendaList({
+  items,
+  days,
+  onOpen,
+  counts,
+}: {
+  items: AgendaItem[];
+  days: Date[];
+  onOpen: (id: string) => void;
+  counts?: Map<string, number>;
+}) {
   return (
     <div className="space-y-5">
       {days.map((day) => {
@@ -25,7 +36,7 @@ export function AgendaList({ items, days, onOpen }: { items: AgendaItem[]; days:
             )}
             {today.length === 0 ? (
               <p className="rounded-xl border border-dashed border-line-strong px-4 py-5 text-sm text-ink-muted">
-                {format(day, "EEEE") === "Sunday" ? "Closed on Sundays." : "No appointments."}
+                {isClosedDay(day, counts?.get(format(day, "yyyy-MM-dd")) ?? today.length) ? "The clinic is closed." : "No appointments."}
               </p>
             ) : (
               <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
@@ -42,7 +53,8 @@ export function AgendaList({ items, days, onOpen }: { items: AgendaItem[]; days:
                       </span>
                       <span className="min-w-0 flex-1 space-y-1">
                         <span className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                          <span className={i.appointment.status === "no_show" ? "font-semibold line-through" : "font-semibold"}>{i.title}</span>
+                          {/* No strikethrough: the status chip beside it says "No-show". */}
+                          <span className={i.appointment.status === "no_show" ? "font-semibold text-ink-muted" : "font-semibold"}>{i.title}</span>
                           <StatusChip status={i.appointment.status} />
                         </span>
                         <span className="block text-sm text-ink-muted">

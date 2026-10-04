@@ -18,7 +18,8 @@ export function AppointmentRequests() {
   if (requests.length === 0) return null;
 
   return (
-    <>
+    // The dashboard's "Booking requests" tile links here.
+    <div id="requests" className="scroll-mt-24">
       <SectionCard title={`Requests from parents (${requests.length})`} description="Call the parent, book a slot, then mark the request handled.">
         <ul className="divide-y divide-line">
           {requests.map((r) => {
@@ -53,6 +54,6 @@ export function AppointmentRequests() {
         </ul>
       </SectionCard>
       <AppointmentForm draft={draft} onClose={() => setDraft(null)} />
-    </>
+    </div>
   );
 }

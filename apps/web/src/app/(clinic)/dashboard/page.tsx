@@ -1,5 +1,5 @@
-import { FinanceDashboard } from "@/features/dashboard/components/finance-dashboard";
+import { DashboardScreen } from "@/features/dashboard/components/dashboard-screen";
 
 export default function Page() {
-  return <FinanceDashboard />;
+  return <DashboardScreen />;
 }

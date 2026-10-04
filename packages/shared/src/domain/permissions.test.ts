@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Permission } from "../schemas/auth";
 import { Role } from "../schemas/common";
-import { permissionScope, roleCan } from "./permissions";
+import { STAFF_ROLES, permissionScope, roleCan } from "./permissions";
 
 const PARENT_ONLY = ["appointments.request", "uploads.create"];
 
@@ -12,8 +12,18 @@ describe("ROLE_PERMISSIONS", () => {
     }
   });
 
+  it("lets every staff role switch user on a shared device, and never a parent", () => {
+    expect(Role.options.filter((r) => roleCan(r, "session.switch"))).toEqual([...STAFF_ROLES]);
+  });
+
   it("keeps the finance dashboard admin-only", () => {
     expect(Role.options.filter((r) => roleCan(r, "dashboard.view"))).toEqual(["admin"]);
+  });
+
+  it("shows today at a glance to every staff role, and every family's contacts only to admin and front desk", () => {
+    expect(Role.options.filter((r) => roleCan(r, "today.view"))).toEqual(["admin", "dentist", "front_desk"]);
+    expect(Role.options.filter((r) => roleCan(r, "patients.contact", "all"))).toEqual(["admin", "front_desk"]);
+    expect(permissionScope("parent", "patients.contact")).toBe("own");
   });
 
   it("lets front desk read clinical records but not write them", () => {

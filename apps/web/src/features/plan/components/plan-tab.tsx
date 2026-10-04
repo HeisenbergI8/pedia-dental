@@ -83,7 +83,7 @@ export function PlanTab({ patientId }: { patientId: string }) {
               <li key={i.id} className="flex flex-wrap items-center gap-3 py-2.5">
                 <Checkbox checked={i.status === "done"} disabled aria-label={`${PLAN_STATUS_LABEL[i.status]}`} />
                 <div className="min-w-0 flex-1">
-                  <p className={cn("font-medium", i.status === "declined" && "text-ink-muted line-through")}>
+                  <p className={cn("font-medium", i.status === "declined" && "text-ink-muted")}>
                     {procedureName(i.procedureCode)}
                     {i.tooth && <span className="font-normal"> · tooth {i.tooth}</span>}
                   </p>

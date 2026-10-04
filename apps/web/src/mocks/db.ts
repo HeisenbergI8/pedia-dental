@@ -18,6 +18,7 @@ import type {
   PlanItem,
   Procedure,
   StaffMember,
+  StaffPin,
   Visit,
 } from "@pedia/shared";
 import { clearBlobs } from "./blob-store";
@@ -48,10 +49,11 @@ export type Db = {
   documents: PatientDocument[]; // the generated-documents log; append-only, PDFs aren't stored
   appointmentRequests: AppointmentRequest[]; // from the parent portal; staff mark them handled
   auditEvents: AuditEvent[]; // who touched which personal data (RA 10173); append-only, written by mocks/access.ts
+  staffPins: StaffPin[]; // each staff member's own PIN for switching user on a shared device; never served
 };
 
-// v15: the auditEvents collection, and a data privacy consent on most seeded patients.
-const KEY = "pedia-dental:mock-db:v15";
+// v19: appointments carry procedureCode, so a completed checkup or cleaning closes a due recall.
+const KEY = "pedia-dental:mock-db:v19";
 
 function load(): Db {
   if (typeof window === "undefined") return seed();

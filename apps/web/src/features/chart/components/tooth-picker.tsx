@@ -1,5 +1,5 @@
 "use client";
-import { deriveChart, type Patient, type ToothNumber } from "@pedia/shared";
+import { deriveChart, type PatientView, type ToothNumber } from "@pedia/shared";
 import { useChartEntries } from "../api";
 import { DentalChart, defaultChartMode } from "./dental-chart";
 
@@ -9,7 +9,7 @@ export function ToothPicker({
   value,
   onChange,
 }: {
-  patient: Patient;
+  patient: PatientView;
   value: ToothNumber[];
   onChange: (teeth: ToothNumber[]) => void;
 }) {

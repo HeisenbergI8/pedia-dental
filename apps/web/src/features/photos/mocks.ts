@@ -73,6 +73,13 @@ export const photoHandlers = [
     }
     const blob = photo && (await getBlob(photo.id));
     if (!photo || !blob) return new HttpResponse("Photo not found", { status: 404 });
-    return new HttpResponse(blob, { headers: { "Content-Type": photo.contentType } });
+    // A readable name if saved, never the record id: "mendoza-bea-intraoral-74-2026-10-02.jpg".
+    const patient = db.patients.find((p) => p.id === photo.patientId);
+    const name = [patient?.lastName, patient?.firstName, photo.type, photo.tooth, photo.takenOn]
+      .filter(Boolean)
+      .join("-")
+      .replace(/[^\w.-]+/g, "-")
+      .toLowerCase();
+    return new HttpResponse(blob, { headers: { "Content-Type": photo.contentType, "Content-Disposition": `inline; filename="${name}.jpg"` } });
   }),
 ];

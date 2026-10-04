@@ -17,6 +17,7 @@ export const ROLE_PERMISSIONS: Record<Role, Grants> = {
   admin: grant("all", ...Permission.options.filter((p) => !PARENT_ONLY.includes(p))),
   dentist: grant(
     "all",
+    "today.view",
     "patients.view",
     "patients.write",
     "appointments.view",
@@ -30,12 +31,15 @@ export const ROLE_PERMISSIONS: Record<Role, Grants> = {
     "documents.issue",
     "clinic.view",
     "settings.view",
+    "session.switch",
   ),
   // Reads every clinical record (allergies, chart, plan) but doesn't write them.
   front_desk: grant(
     "all",
+    "today.view",
     "patients.view",
     "patients.write",
+    "patients.contact", // calls parents, books, chases balances
     "appointments.view",
     "appointments.manage",
     "appointments.confirm",
@@ -49,12 +53,14 @@ export const ROLE_PERMISSIONS: Record<Role, Grants> = {
     "documents.issue",
     "clinic.view",
     "settings.view",
+    "session.switch",
   ),
   // Only their own children. Clinic reference data (dentist names, procedure names) is not patient data.
   parent: {
     ...grant(
       "own",
       "patients.view",
+      "patients.contact", // their own family's phones, email and address (their own data)
       "appointments.view",
       "appointments.confirm",
       "appointments.request",

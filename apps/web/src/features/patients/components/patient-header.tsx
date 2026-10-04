@@ -1,14 +1,18 @@
 "use client";
 import Link from "next/link";
-import { AlertTriangleIcon, ChevronLeftIcon, HeartPulseIcon, InfoIcon, PhoneIcon, UsersIcon } from "lucide-react";
+import { AlertTriangleIcon, ChevronLeftIcon, CircleDollarSignIcon, HeartPulseIcon, InfoIcon, PhoneIcon, UsersIcon } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { Patient } from "@pedia/shared";
-import { formatDate, formatPhone, initials } from "@/lib/format";
+import { format, isThisYear, parseISO } from "date-fns";
+import { formatPeso, type PatientView, type PatientHeaderSummary } from "@pedia/shared";
+import { useCan } from "@/features/auth/access";
+import { formatDate, formatPhone } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { usePatient, usePatients } from "../api";
+import { usePatient, usePatientSummary } from "../api";
 import { formatAge } from "../age";
 import { Loading } from "@/components/brand";
 import { MetaLine } from "@/components/meta-line";
+import { PatientAvatar } from "./patient-avatar";
+import { PatientPhotoDialog } from "./patient-photo-dialog";
 
 const SEX_LABEL = { female: "Female", male: "Male" } as const;
 
@@ -32,9 +36,11 @@ function AlertChip({ icon: Icon, label, strong }: { icon: LucideIcon; label: str
  */
 export function PatientHeader({ patientId }: { patientId: string }) {
   const { data: p, isLoading } = usePatient(patientId);
-  // Same guardian phone = sibling: named in the header so the wrong child is hard to chart on.
-  const all = usePatients().data ?? [];
-  const siblings = p ? all.filter((x) => x.id !== p.id && x.guardians.some((g) => p.guardians.some((h) => h.phone === g.phone))) : [];
+  const summary = usePatientSummary(patientId).data;
+  const canEdit = useCan()("patients.write");
+  // Same guardian phone = sibling, worked out by the server (phones never reach a dentist): named in the header so
+  // the wrong child is hard to chart on.
+  const siblings = summary?.siblings ?? [];
 
   return (
     <header
@@ -52,15 +58,12 @@ export function PatientHeader({ patientId }: { patientId: string }) {
       ) : (
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-6">
           <div className="flex min-w-0 items-center gap-3">
-            <span
-              aria-hidden
-              className="flex size-11 shrink-0 items-center justify-center rounded-full bg-brand text-base font-semibold text-brand-ink"
-            >
-              {initials(p.firstName, p.lastName)}
-            </span>
+            {canEdit ? <PatientPhotoDialog patient={p} /> : <PatientAvatar patient={p} />}
             <div className="min-w-0">
               <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
                 {p.firstName} {p.lastName}
+                {/* Next to the name, never instead of it: the legal name stays the identifier. */}
+                {p.nickname && <span className="font-normal text-ink-muted"> “{p.nickname}”</span>}
               </h1>
               <MetaLine
                 items={[
@@ -69,6 +72,7 @@ export function PatientHeader({ patientId }: { patientId: string }) {
                   `Born ${formatDate(p.birthDate)}`,
                 ]}
               />
+              {summary && <RecordFacts summary={summary} />}
               {siblings.length > 0 && (
                 <p className="mt-1 inline-flex items-center gap-1 rounded-md border border-info-line bg-info-bg px-2 py-0.5 text-xs font-medium text-info">
                   <UsersIcon className="size-3 shrink-0" aria-hidden />
@@ -91,7 +95,36 @@ export function PatientHeader({ patientId }: { patientId: string }) {
   );
 }
 
-function PrimaryGuardian({ guardians }: { guardians: Patient["guardians"] }) {
+const shortDate = (iso: string) => format(parseISO(iso), isThisYear(parseISO(iso)) ? "MMM d" : "MMM d, yyyy");
+
+/** One line of reference facts, adding at most one line to the pinned header. Money only when there is some. */
+function RecordFacts({ summary: s }: { summary: PatientHeaderSummary }) {
+  return (
+    <MetaLine
+      items={[
+        <span key="no" className="tabular-nums">
+          <span className="sr-only">Patient number </span>
+          {s.patientNo}
+        </span>,
+        s.lastVisitOn ? `Last visit ${shortDate(s.lastVisitOn)}` : "No visits yet",
+        !!s.balance && s.balance > 0 && (
+          <span key="due" className="inline-flex items-center gap-1 font-medium whitespace-nowrap text-warning tabular-nums">
+            <CircleDollarSignIcon className="size-3.5" aria-hidden />
+            {formatPeso(s.balance)} due
+          </span>
+        ),
+        !!s.credit && s.credit > 0 && (
+          <span key="credit" className="font-medium whitespace-nowrap text-success tabular-nums">
+            {formatPeso(s.credit)} credit
+          </span>
+        ),
+      ]}
+    />
+  );
+}
+
+function PrimaryGuardian({ guardians }: { guardians: PatientView["guardians"] }) {
+  const canContact = useCan()("patients.contact"); // phone numbers: admin and front desk only
   const g = guardians.find((x) => x.isPrimary) ?? guardians[0];
   if (!g) return null;
   return (
@@ -99,10 +132,12 @@ function PrimaryGuardian({ guardians }: { guardians: Patient["guardians"] }) {
     <p className="hidden text-sm sm:block md:text-right">
       <span className="text-ink-muted">{g.relationship}: </span>
       <span className="font-medium">{g.fullName}</span>
-      <a href={`tel:${g.phone}`} className="ml-2 inline-flex items-center gap-1 rounded-sm text-brand tabular-nums hover:underline">
-        <PhoneIcon className="size-3.5" aria-hidden />
-        {formatPhone(g.phone)}
-      </a>
+      {canContact && g.phone && (
+        <a href={`tel:${g.phone}`} className="ml-2 inline-flex items-center gap-1 rounded-sm text-brand tabular-nums hover:underline">
+          <PhoneIcon className="size-3.5" aria-hidden />
+          {formatPhone(g.phone)}
+        </a>
+      )}
     </p>
   );
 }

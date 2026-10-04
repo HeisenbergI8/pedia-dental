@@ -1,15 +1,17 @@
 import { faker } from "@faker-js/faker";
-import { addDays, addMinutes, differenceInYears, format, parseISO, setHours, startOfDay, subDays, subMonths } from "date-fns";
+import { addDays, addMinutes, addMonths, differenceInYears, format, min, parseISO, setHours, startOfDay, startOfWeek, subDays, subMinutes, subMonths, subYears } from "date-fns";
 import {
   PERMANENT_TEETH,
   PRIMARY_TEETH,
   PaymentMethod,
   dueItemFor,
+  formatPatientNo,
   isAnterior,
   pesos,
   reminderSendAt,
   surfacesFor,
   type Appointment,
+  type AppointmentRequest,
   type AuditEvent,
   type Chair,
   type ChartEntry,
@@ -37,6 +39,14 @@ const STAFF: StaffMember[] = [
   { id: "staff_cruz", clinicId: CLINIC_ID, fullName: "Liza Cruz", role: "front_desk" },
   { id: "staff_delacruz", clinicId: CLINIC_ID, fullName: "Carmen Dela Cruz", role: "admin" },
 ];
+
+/** Each staff member's own demo PIN, shown on the login screen. Different for everyone: there are no shared logins. */
+const STAFF_PINS: Record<string, string> = {
+  staff_reyes: "2580",
+  staff_santos: "1357",
+  staff_cruz: "2468",
+  staff_delacruz: "1793",
+};
 
 const CHAIRS: Chair[] = ["Chair 1", "Chair 2", "Chair 3"].map((name, i) => ({
   id: `chair_${i + 1}`,
@@ -69,42 +79,51 @@ const PROCEDURES: Procedure[] = (
   perTooth,
 }));
 
+/**
+ * One child and their primary guardian, from the shared faker sequence. Every seeded child comes from here,
+ * the first 24 and the roster alike, so a new profile field is added once.
+ * Adding a faker call here re-rolls every later record: add new fields at the END of this body, and expect
+ * seed.test.ts's "unchanged first patients" check to need its names updated deliberately.
+ */
+function seedPatient(): Patient {
+  const lastName = faker.person.lastName();
+  const sex = faker.helpers.arrayElement(["male", "female"] as const);
+  const guardianId = faker.string.uuid();
+  const createdAt = faker.date.past({ years: 2 }).toISOString();
+  return {
+    id: faker.string.uuid(),
+    patientNo: "", // numbered by seedProfiles once every patient exists
+    clinicId: CLINIC_ID,
+    firstName: faker.person.firstName(sex),
+    lastName,
+    birthDate: faker.date.birthdate({ mode: "age", min: 2, max: 14 }).toISOString().slice(0, 10),
+    sex,
+    address: `${faker.location.streetAddress()}, Cavite`,
+    guardians: [
+      {
+        id: guardianId,
+        fullName: `${faker.person.firstName("female")} ${lastName}`,
+        relationship: "Mother",
+        phone: `09${faker.string.numeric(9)}`,
+        isPrimary: true,
+      },
+    ],
+    allergies: faker.helpers.maybe(() => ["Penicillin"], { probability: 0.15 }) ?? [],
+    medicalConditions: faker.helpers.maybe(() => ["Asthma"], { probability: 0.1 }) ?? [],
+    medications: [],
+    alerts: faker.helpers.maybe(() => ["Gag reflex: use small films"], { probability: 0.1 }) ?? [],
+    dentalHistory: faker.helpers.maybe(
+      () => ({ previousClinic: "Smile Kids Dental, Imus", notes: "Two fillings, no complications." }),
+      { probability: 0.3 },
+    ) ?? { previousClinic: "", notes: "" },
+    consents: [{ id: faker.string.uuid(), guardianId, scope: "general_treatment", date: createdAt.slice(0, 10) }],
+    createdAt,
+  };
+}
+
 export function seed(): Db {
   faker.seed(42); // same fake data on every machine
-  const patients: Patient[] = Array.from({ length: 24 }, () => {
-    const lastName = faker.person.lastName();
-    const sex = faker.helpers.arrayElement(["male", "female"] as const);
-    const guardianId = faker.string.uuid();
-    const createdAt = faker.date.past({ years: 2 }).toISOString();
-    return {
-      id: faker.string.uuid(),
-      clinicId: CLINIC_ID,
-      firstName: faker.person.firstName(sex),
-      lastName,
-      birthDate: faker.date.birthdate({ mode: "age", min: 2, max: 14 }).toISOString().slice(0, 10),
-      sex,
-      address: `${faker.location.streetAddress()}, Cavite`,
-      guardians: [
-        {
-          id: guardianId,
-          fullName: `${faker.person.firstName("female")} ${lastName}`,
-          relationship: "Mother",
-          phone: `09${faker.string.numeric(9)}`,
-          isPrimary: true,
-        },
-      ],
-      allergies: faker.helpers.maybe(() => ["Penicillin"], { probability: 0.15 }) ?? [],
-      medicalConditions: faker.helpers.maybe(() => ["Asthma"], { probability: 0.1 }) ?? [],
-      medications: [],
-      alerts: faker.helpers.maybe(() => ["Gag reflex: use small films"], { probability: 0.1 }) ?? [],
-      dentalHistory: faker.helpers.maybe(
-        () => ({ previousClinic: "Smile Kids Dental, Imus", notes: "Two fillings, no complications." }),
-        { probability: 0.3 },
-      ) ?? { previousClinic: "", notes: "" },
-      consents: [{ id: faker.string.uuid(), guardianId, scope: "general_treatment", date: createdAt.slice(0, 10) }],
-      createdAt,
-    };
-  });
+  const patients: Patient[] = Array.from({ length: 24 }, seedPatient);
   // Every sixth child has no data privacy consent yet, so the overview's "missing" notice has examples.
   patients.forEach((p, i) => {
     if (i % 6 === 5) return;
@@ -162,29 +181,131 @@ export function seed(): Db {
   const billing = seedBilling(appointments, example.planItems[0]?.patientId);
   const messageTemplates = defaultMessageTemplates(CLINIC_ID, new Date().toISOString());
   const family = seedSibling(patients, example.planItems[0]?.patientId);
+  // After every other faker consumer, so the records above stay exactly as they were.
+  const roster = seedRoster(billing.payments.length, { templates: messageTemplates, staff: STAFF });
+  const allVisits = [...visits, ...roster.visits];
+  const allNotes = [...notes, ...example.notes, ...roster.notes];
 
   return {
-    patients: [...patients, ...family.patients],
+    patients: seedProfiles([...patients, ...family.patients, ...roster.patients]),
     staff: STAFF,
     chairs: CHAIRS,
     procedures: PROCEDURES,
-    visits,
+    visits: allVisits,
     chartEntries: [...chartEntries, ...example.chartEntries],
     noteTemplates: NOTE_TEMPLATES,
-    notes: [...notes, ...example.notes],
+    notes: seedExamFindings(allNotes),
     growth: [],
     planItems: example.planItems,
-    appointments: [...appointments, ...family.appointments],
+    appointments: [...appointments, ...family.appointments, ...roster.appointments],
     photos: [],
-    dueItems: seedDueItems(visits, [...notes, ...example.notes]),
-    invoices: billing.invoices,
-    payments: billing.payments,
+    dueItems: seedDueItems(allVisits, allNotes),
+    invoices: [...billing.invoices, ...roster.invoices],
+    payments: [...billing.payments, ...roster.payments],
     messageTemplates,
-    messages: seedMessages(appointments, { templates: messageTemplates, patients, staff: STAFF }),
+    messages: [...seedMessages(appointments, { templates: messageTemplates, patients, staff: STAFF }), ...roster.messages],
     documents: [],
-    appointmentRequests: [],
+    appointmentRequests: roster.requests,
     auditEvents: seedAudit(patients, example.planItems[0]?.patientId),
+    staffPins: STAFF.map((s) => ({ clinicId: CLINIC_ID, staffId: s.id, pin: STAFF_PINS[s.id], failedAt: [] })),
   };
+}
+
+const ROSTER_SIZE = 36;
+/** Last exam, by i % 6. With a 6-month recall that is: not due, not due, not due, due in ~32 days (not yet flagged), due in 2–6 days, overdue. */
+const LAST_EXAM_DAYS_AGO = [40, 75, 110, 150, 178, 250] as const;
+/** First visits this week (i ≥ 33): Monday, Tuesday and Wednesday (clamped to today), on chair 3 outside the seeded hours. */
+const NEW_PATIENT_TIMES = [[0, 8, 0], [1, 8, 30], [2, 12, 0]] as const; // [day of week, hour, minute]
+
+/**
+ * Patients 26–61: enough to page through, and a spread the patient-list filters can tell apart (the first 25 have
+ * all been seen in the last fortnight). Shape comes from the index, so the proportions are known:
+ * - i % 6 sets the last exam (LAST_EXAM_DAYS_AGO): i % 6 ∈ {4, 5} is Recall due (10 of 33)
+ * - i % 12 = 0: half-paid exam and cleaning, ₱1,200 owed, 40 days ago, inside the dashboard's 6-month window (3)
+ * - i % 9 = 4: the last recall text failed, so "No contact" (4)
+ * - i = 1 and 7: birthday today, turning 6 and 9
+ * - i ≥ 33: new patients, first visit this week, no history (3)
+ * - requests from i = 2 and 8 (pending) and 14 (handled)
+ * Faker calls only inside seedPatient(). Everything else is derived from `i` and today.
+ */
+function seedRoster(paymentsSoFar: number, refs: Pick<MessageRefs, "templates" | "staff">) {
+  const now = new Date();
+  const today = startOfDay(now);
+  const at = (day: Date, h: number, m = 0) => addMinutes(setHours(day, h), m);
+  const patients = Array.from({ length: ROSTER_SIZE }, seedPatient);
+  const out = {
+    patients, visits: [] as Visit[], notes: [] as ClinicalNote[], appointments: [] as Appointment[],
+    invoices: [] as Invoice[], payments: [] as Payment[], messages: [] as Message[], requests: [] as AppointmentRequest[],
+  };
+  const exam = PROCEDURES.find((p) => p.code === "oral_exam")!;
+  const cleaning = PROCEDURES.find((p) => p.code === "prophylaxis")!;
+
+  patients.forEach((p, i) => {
+    const n = i + 1;
+    p.id = `patient_roster_${n}`;
+    if (i === 1 || i === 7) p.birthDate = format(subYears(today, i === 1 ? 6 : 9), "yyyy-MM-dd");
+
+    if (i >= 33) {
+      const [dow, h, m] = NEW_PATIENT_TIMES[i - 33];
+      const start = at(min([addDays(startOfWeek(today, { weekStartsOn: 1 }), dow), today]), h, m);
+      p.createdAt = subMinutes(start, 20).toISOString();
+      p.consents = p.consents.map((c) => ({ ...c, date: format(start, "yyyy-MM-dd") }));
+      const status = addMinutes(start, exam.defaultDurationMin) <= now ? "done" : "booked";
+      out.appointments.push({
+        id: `appointment_roster_${n}`, clinicId: CLINIC_ID, patientId: p.id, dentistId: "staff_santos", chairId: "chair_3",
+        startsAt: start.toISOString(), durationMin: exam.defaultDurationMin, reason: exam.name, procedureCode: exam.code, status,
+      });
+      return;
+    }
+
+    const day = subDays(today, LAST_EXAM_DAYS_AGO[i % 6]);
+    if (parseISO(p.createdAt) > day) p.createdAt = subDays(day, 30).toISOString();
+    const visit: Visit = {
+      id: `visit_roster_${n}`, clinicId: CLINIC_ID, patientId: p.id, dentistId: i % 2 ? "staff_santos" : "staff_reyes",
+      date: format(day, "yyyy-MM-dd"), status: "completed", startedAt: at(day, 10).toISOString(), completedAt: at(day, 10, 45).toISOString(),
+    };
+    out.visits.push(visit);
+    const note: ClinicalNote = {
+      id: `note_roster_${n}`, clinicId: CLINIC_ID, patientId: p.id, visitId: visit.id, templateId: "tpl_oral_exam",
+      values: { oral_hygiene: "Good", plaque: "Mild", caries_risk: "Low", facial_asymmetry: false, lymph: false, trismus: false },
+      behavior: ["cooperative"], authorId: visit.dentistId, createdAt: at(day, 10, 5).toISOString(), signedAt: at(day, 10, 40).toISOString(),
+    };
+    out.notes.push(note); // seedDueItems turns it into the routine recall, due 6 months after `day`
+
+    if (i % 12 === 0) {
+      const invoice: Invoice = {
+        id: `inv_seed_roster_${n}`, clinicId: CLINIC_ID, patientId: p.id, visitId: visit.id, discount: 0, issuedAt: at(day, 10, 50).toISOString(),
+        lines: [exam, cleaning].map((x) => ({ procedureCode: x.code, description: x.name, amount: x.fee })),
+      };
+      out.invoices.push(invoice);
+      const k = paymentsSoFar + out.payments.length + 1;
+      out.payments.push({
+        id: `pay_seed_roster_${n}`, // still "pay_seed_": the financial dashboard test's seeded-only guard holds
+        clinicId: CLINIC_ID, patientId: p.id, invoiceId: invoice.id, amount: exam.fee, method: "cash",
+        receiptNo: `AR-${String(k).padStart(6, "0")}`, receivedBy: "staff_cruz", receivedAt: at(day, 10, 55).toISOString(),
+      });
+    }
+
+    if (i % 9 === 4) {
+      const sendAt = at(subDays(today, 3), 10).toISOString();
+      const m = composeMessage(
+        { kind: "recall", patientId: p.id, dueOn: format(addMonths(day, 6), "yyyy-MM-dd"), sendAt },
+        { ...refs, patients },
+        { id: `msg_roster_${n}`, clinicId: CLINIC_ID, createdAt: sendAt },
+      );
+      if (m) out.messages.push({ ...m, status: "failed", failureReason: "Number unreachable (simulated)" });
+    }
+  });
+
+  for (const [i, days, status] of [[2, 3, "pending"], [8, 5, "pending"], [14, 4, "handled"]] as const) {
+    const p = patients[i];
+    out.requests.push({
+      id: `request_roster_${i + 1}`, clinicId: CLINIC_ID, patientId: p.id, guardianId: p.guardians[0].id,
+      preferredDate: format(addDays(today, days), "yyyy-MM-dd"), timeOfDay: i === 8 ? "afternoon" : "morning",
+      reason: "Check-up and cleaning", status, createdAt: at(subDays(today, 1), 19).toISOString(),
+    });
+  }
+  return out;
 }
 
 /** Teeth a child of this age plausibly has: primary until ~12, first molars and incisors from ~6. */
@@ -360,6 +481,7 @@ function seedAppointments(patients: Patient[]): Appointment[] {
           startsAt: start.toISOString(),
           durationMin: procedure.defaultDurationMin,
           reason: procedure.name,
+          procedureCode: procedure.code,
           status,
           ...(status === "cancelled" && { cancelReason: "Child is sick" }),
         });
@@ -454,6 +576,7 @@ function seedSibling(patients: Patient[], olderId: string | undefined) {
   const guardian = older.guardians[0];
   const sibling: Patient = {
     id: "patient_sibling",
+    patientNo: "", // numbered by seedProfiles
     clinicId: CLINIC_ID,
     firstName: "Mika",
     lastName: older.lastName,
@@ -481,6 +604,7 @@ function seedSibling(patients: Patient[], olderId: string | undefined) {
     startsAt: setHours(day, 17).toISOString(),
     durationMin: exam.defaultDurationMin,
     reason: exam.name,
+    procedureCode: exam.code,
     status: "booked",
   };
   return { patients: [sibling], appointments: [appointment] };
@@ -533,3 +657,61 @@ function seedAudit(patients: Patient[], exampleId: string | undefined): AuditEve
     return { id: `audit_seed_${i}`, clinicId: CLINIC_ID, at: at.toISOString(), ...actors[actor], action, record, patientId };
   });
 }
+
+/** Filipino pet names, the kind parents give at home. Index-chosen, so some children have one and most don't. */
+const NICKNAMES = ["Bea", "Migs", "Pia", "Jojo", "Kaye", "Bong", "Tin", "Luke", "Gab", "Nikki"];
+const SCHOOLS = ["St. Paul College, Imus", "Imus Pilot Elementary School", "Little Einstein Learning Center", "De La Salle Dasmariñas"];
+const HMOS = ["Maxicare · 1203-4471-55", "Intellicare · IC-778201", "PhilCare · 55-0193-22"];
+const DOCTORS = ["Dr. Celia Ramos (pediatrician)", "Dr. Paolo Lim (pediatrician)"];
+const REFERRALS = ["Another parent", "Facebook page", "Dr. Celia Ramos", "Walk-in"];
+
+/**
+ * Patient numbers in registration order, plus nicknames, tags and profile details on some children so the
+ * record shows both the filled and the empty state. Index-based, with no faker calls: adding it changes
+ * no other seeded record.
+ */
+function seedProfiles(patients: Patient[]): Patient[] {
+  const byCreated = [...patients].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+  const numberOf = new Map(byCreated.map((p, i) => [p.id, formatPatientNo(i + 1)]));
+  return patients.map((p, i) => {
+    const nickname = NICKNAMES[(i / 3) % NICKNAMES.length];
+    return {
+      ...p,
+      patientNo: numberOf.get(p.id)!,
+      ...(i % 3 === 0 && nickname !== p.firstName && { nickname }),
+      ...(i % 4 === 1 && { tags: i % 8 === 1 ? ["Anxious"] : ["HMO", "Prefers Filipino"] }),
+      ...(i % 2 === 0 && {
+        profile: {
+          school: SCHOOLS[i % SCHOOLS.length],
+          ...(i % 4 === 0 && { hmo: HMOS[i % HMOS.length], bloodType: (["O+", "A+", "B+", "AB+"] as const)[(i / 4) % 4] }),
+          ...(i % 6 === 0 && { familyDoctor: DOCTORS[i % DOCTORS.length] }),
+          referredBy: REFERRALS[i % REFERRALS.length],
+          ...(i % 4 === 2 && { diet: "Sweet drinks most days; juice at bedtime", brushing: "Twice a day, parent helps at night" }),
+          ...(i % 8 === 0 && {
+            badDentalExperience: "Cried through an extraction at another clinic (2024)",
+            fluorideHistory: "Varnish every 6 months since age 3",
+          }),
+        },
+      }),
+    };
+  });
+}
+
+/** Bite, TMJ and gum findings on some seeded oral exams, by index (no faker calls), so note cards show the sections. */
+function seedExamFindings(notes: ClinicalNote[]): ClinicalNote[] {
+  let exam = 0;
+  return notes.map((n) => {
+    if (n.templateId !== "tpl_oral_exam") return n;
+    const i = exam++;
+    return {
+      ...n,
+      values: {
+        ...n.values,
+        ...(i % 3 === 0 && { molar_class: "Class I" }),
+        ...(i % 5 === 0 && { gingivitis: "Mild", periodontitis: "None" }),
+        ...(i % 7 === 0 && { crossbite: true, tmj_clicking: true }),
+      },
+    };
+  });
+}
+

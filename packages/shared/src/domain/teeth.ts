@@ -46,3 +46,9 @@ export function toothName(t: ToothNumber): string {
   const names = dentition === "primary" ? PRIMARY_NAME : PERMANENT_NAME;
   return `${side} ${dentition === "primary" ? "primary " : ""}${names[(t % 10) - 1]}`;
 }
+
+/** Surfaces every one of these teeth has: front teeth have I, back teeth O, so a mixed pick shares only M, D, B, L. */
+export function commonSurfaces(teeth: ToothNumber[]): Surface[] {
+  if (!teeth.length) return [];
+  return SURFACES.filter((s) => teeth.every((t) => surfacesFor(t).includes(s)));
+}

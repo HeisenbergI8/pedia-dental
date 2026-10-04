@@ -15,10 +15,11 @@ import {
   UsersIcon,
   type LucideIcon,
 } from "lucide-react";
+import type { Role } from "@pedia/shared";
 import { KidsmileLogo, PageLoading } from "@/components/brand";
 import { useNavigationPending } from "@/components/navigation-pending";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { routePermission, useCan } from "@/features/auth/access";
+import { routePermission, useCan, useSession } from "@/features/auth/access";
 import { AccountMenu } from "@/features/auth/components/account-menu";
 import { NoAccess } from "@/features/auth/components/access-gate";
 import { PatientSearch } from "@/features/patients/components/patient-search";
@@ -57,6 +58,14 @@ function useNavItems() {
 }
 
 const isActive = (pathname: string, href: string) => pathname.startsWith(href);
+
+/**
+ * The phone bar's four shortcuts, where a role's daily work differs from menu order. Front desk lands on
+ * Appointments and makes recall calls daily; Today at a glance stays one tap away under More. Data, not `if`s.
+ */
+const BOTTOM_NAV: Partial<Record<Role, string[]>> = {
+  front_desk: ["/appointments", "/patients", "/recall", "/billing"],
+};
 
 /** The full list: the desktop sidebar and the phone "More" drawer. */
 function Nav({ onNavigate }: { onNavigate?: () => void }) {
@@ -128,7 +137,7 @@ function Rail() {
         </ul>
       </nav>
       <div className="flex justify-center">
-        <AccountMenu compact />
+        <AccountMenu variant="rail" />
       </div>
     </aside>
   );
@@ -138,8 +147,9 @@ function Rail() {
 function BottomNav({ onMore, moreOpen }: { onMore: () => void; moreOpen: boolean }) {
   const pathname = usePathname();
   const items = useNavItems();
-  const primary = items.slice(0, 4);
-  const overflow = items.slice(4);
+  const pinned = BOTTOM_NAV[useSession()?.user.role ?? "parent"];
+  const primary = pinned ? pinned.flatMap((href) => items.filter((n) => n.href === href)) : items.slice(0, 4);
+  const overflow = items.filter((n) => !primary.includes(n));
   const inOverflow = overflow.some((n) => isActive(pathname, n.href));
   const tab = "flex min-h-14 flex-1 flex-col items-center justify-center gap-1 rounded-lg text-xs font-medium transition-colors duration-(--duration-fast)";
   return (
@@ -191,6 +201,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const navigating = useNavigationPending();
   const can = useCan();
   const canSearch = can("patients.view");
+  // A new person on this device gets a fresh page: nothing half-typed carries over under their name.
+  const userId = useSession()?.user.id;
 
   return (
     <div className="min-h-screen md:grid md:grid-cols-[6.5rem_1fr] lg:grid-cols-[15rem_1fr] print:block">
@@ -222,7 +234,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <Brand className="w-28" />
         <div className="ml-auto flex items-center gap-1">
           {canSearch && <PatientSearch variant="icon" />}
-          <AccountMenu compact />
+          <AccountMenu variant="bar" />
         </div>
       </header>
 
@@ -230,7 +242,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {navigating && <PageLoading />}
         {/* Hidden, not unmounted, so a navigation that doesn't land leaves the page as it was. */}
         <div hidden={navigating} className="contents">
-          <RouteGate>{children}</RouteGate>
+          <RouteGate key={userId}>{children}</RouteGate>
         </div>
         {/* Keeps the end of the page clear of the bottom nav. */}
         <div aria-hidden className="h-(--bottom-nav-h)" />

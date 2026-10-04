@@ -5,7 +5,12 @@ import logo from "../../public/brand/kidsmile-logo.png";
 
 /** The clinic's real logo artwork. Use it wherever the clinic introduces itself. */
 export function KidsmileLogo({ className, priority }: { className?: string; priority?: boolean }) {
-  return <Image src={logo} alt="Kidsmile Pediatric Dental Clinic" priority={priority} className={cn("h-auto w-40", className)} />;
+  // The artwork is drawn for white. In dark (screen only) it sits on a white plate rather than being recoloured.
+  return (
+    <span className="inline-flex dark:rounded-xl dark:bg-paper dark:px-3 dark:py-2 dark:shadow-card">
+      <Image src={logo} alt="Kidsmile Pediatric Dental Clinic" priority={priority} className={cn("h-auto w-40", className)} />
+    </span>
+  );
 }
 
 /** The wordmark's letters and their crayon colours, as drawn in the logo. */
@@ -39,7 +44,7 @@ export function KidsmileMark({ className }: { className?: string }) {
         <g className="ks-brush-body">
           {/* Handle: white top, yellow underside, like the logo's. */}
           <rect x="4" y="28" width="392" height="16" rx="8" fill="var(--color-crayon-yellow)" />
-          <rect x="10" y="29.5" width="380" height="6" rx="3" fill="var(--color-surface)" />
+          <rect x="10" y="29.5" width="380" height="6" rx="3" fill="var(--color-paper)" />
           <rect x="4" y="28" width="392" height="16" rx="8" stroke="var(--color-crayon-outline)" strokeWidth="3" />
           {/* Bristle head. */}
           <path
@@ -62,7 +67,7 @@ export function KidsmileMark({ className }: { className?: string }) {
               cx={cx}
               cy={cy}
               r={r}
-              fill="var(--color-surface)"
+              fill="var(--color-paper)"
               stroke="var(--color-brand-soft)"
               strokeWidth="2.5"
               style={{ animationDelay: `${delay}s` }}

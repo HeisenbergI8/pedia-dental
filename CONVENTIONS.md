@@ -35,7 +35,7 @@ TanStack Query · React Hook Form + Zod 4 · Zustand (UI state, plus the demo se
 | Features | `apps/web/src/features/<name>/` | `api.ts` (Query hooks), `mocks.ts` (MSW handlers), `components/` |
 | Fake backend | `apps/web/src/mocks/` | MSW setup, localStorage-backed `db`, deterministic `seed` |
 | HTTP | `apps/web/src/lib/api-client.ts` | The only `fetch` in the app |
-| Access rules | `packages/shared/src/domain/permissions.ts` | `ROLE_PERMISSIONS`: who may do what. The only place access is decided |
+| Access rules | `packages/shared/src/domain/permissions.ts` | `ROLE_PERMISSIONS`: who may do what. The only place access is decided. `today.view` = Today at a glance (all staff); `dashboard.view` = finance (admin); `patients.contact` = guardian phones and emails, emergency contact and address, **left out of every patient response** without it (admin and front desk: all; a parent: their own family). Responses parse with `PatientView`; the stored record is `Patient` |
 | Access gate | `apps/web/src/mocks/access.ts` | Route → permission (`RULES`), 401 / 403, parent ownership |
 
 **Read this first:** `apps/web/src/features/patients/`. Every new feature copies its shape.
@@ -90,8 +90,11 @@ MSW handler (now) or NestJS (later).
   and only import `@/mocks/browser` dynamically from `app/providers.tsx`.
 - `NEXT_PUBLIC_*` env vars are inlined at build time. Changing `.env.local` needs a dev-server restart.
 - Mock data lives in `localStorage`. After changing `seed()` or `Db`, bump the key in `mocks/db.ts`
-  or clear storage, or you'll keep seeing old data. The key is `pedia-dental:mock-db:v15`; each bump gets a
+  or clear storage, or you'll keep seeing old data. The key is `pedia-dental:mock-db:v19`; each bump gets a
   one-line comment above it saying why.
+- Seed shape is asserted by `mocks/seed.test.ts`. New seed patients come from `seedPatient()` after the last faker
+  consumer (`seedRoster`). Adding a faker call inside `seedPatient()` re-rolls every later record, so update that
+  test's first-patient names deliberately, never to make it pass.
 - `describe` order in `mocks/handlers.test.ts` matters: the tests share one seeded db.
   `describe("financial dashboard")` must stay before `describe("billing")`, because its totals only hold while
   every payment is a seeded one (the `pay_seed_` guard fails loudly if moved).
@@ -106,6 +109,17 @@ MSW handler (now) or NestJS (later).
 - `@pedia/shared` ships TypeScript source (`transpilePackages`). Don't add a build step for it.
 - react-big-calendar's stylesheet loads after `globals.css`, so an unscoped `.rbc-*` override silently loses.
   Scope calendar overrides under `.calendar` (the wrapper in `appointment-calendar.tsx`).
+- Dark mode is `data-theme="dark"` on `<html>` (set before paint by `THEME_SCRIPT` in `app/layout.tsx`, kept in sync by
+  `ThemeSync` in `app/providers.tsx`; preference per device in `stores/theme-store.ts`). `dark:` is a custom variant tied
+  to that attribute and to `@media screen`, **not** the OS setting. Never add a colour that only works on white:
+  `bg-white`, `text-black` and Recharts or react-big-calendar defaults all break in dark. Printing always uses the
+  light tokens.
+- A shared device changes person through **Switch user** (`POST /auth/switch`, own 4-digit PIN, `session.switch`),
+  never a one-tap account list. It reuses `signIn(session)`, drops cached queries, and `AppShell` keys the page by
+  user id, so unsaved form state is cleared. `/auth/*` is outside the access gate, so the handler checks the
+  session and permission itself. PIN lockout is `pinLockout` / `PIN_POLICY` in `packages/shared/src/domain/pin.ts`.
+- `lib/theme.ts` has no `"use client"`: the server `layout.tsx` imports the script string from it. Importing it from a
+  `"use client"` module would give the layout a client reference, not the string.
 - Validation wording: give user-facing schema fields their own message (`min(1, "Enter the child's first name")`).
   Anything unworded falls back to `plainLanguageError`, installed in `app/providers.tsx`.
 
@@ -114,7 +128,7 @@ MSW handler (now) or NestJS (later).
 ## Reporting rules
 
 - **A deferral is not a gap.** Deliberately deferred for the prototype: real authentication (the demo
-  login is a demo control: anyone can sign in as any account with the shown password; the token is the account id), the NestJS backend, real SMS/email sending, real file storage, BIR
+  login is a demo control: anyone can sign in as any account with the shown password; the token is the account id; staff PINs are stored as typed and listed in the Switch user dialog's "Demo PINs" hint), the NestJS backend, real SMS/email sending, real file storage, BIR
   official receipts, and every screen that currently renders `ComingSoon`. Their absence is intentional.
 - **A claim that ages carries the date it was measured.** Any count or "every / all / none" statement
   written into something durable says when it was measured.

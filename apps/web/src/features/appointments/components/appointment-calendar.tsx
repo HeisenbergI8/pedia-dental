@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Calendar, dateFnsLocalizer } from "react-big-calendar";
+import { Calendar, dateFnsLocalizer, type DateHeaderProps } from "react-big-calendar";
 import withDragAndDrop, { type EventInteractionArgs } from "react-big-calendar/lib/addons/dragAndDrop";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import "react-big-calendar/lib/addons/dragAndDrop/styles.css";
@@ -24,7 +24,7 @@ import {
 import { enUS } from "date-fns/locale";
 import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from "lucide-react";
 import { toast } from "sonner";
-import { canReschedule, type Appointment, type AppointmentStatus, type Chair } from "@pedia/shared";
+import { canReschedule, countByDay, inStatusGroup, isStatusGroup, type Appointment, type AppointmentStatus, type Chair, type StatusGroup } from "@pedia/shared";
 import { ErrorState } from "@/components/error-state";
 import { PageHeader } from "@/components/page-header";
 import { Loading } from "@/components/brand";
@@ -37,6 +37,7 @@ import { STATUS_LABEL, useAppointments, useRescheduleAppointment } from "../api"
 import { AgendaList } from "./agenda-list";
 import { AppointmentForm, type AppointmentDraft } from "./appointment-form";
 import { AppointmentSheet } from "./appointment-sheet";
+import { MonthCountGrid } from "./month-count-grid";
 
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales: { "en-US": enUS } });
 
@@ -66,7 +67,7 @@ const STATUS_CLASS: Record<AppointmentStatus, string> = {
   arrived: "!bg-warning-bg !text-warning !border-warning-line",
   in_chair: "!bg-info-bg !text-info !border-info-line",
   done: "!bg-ground !text-ink-muted !border-line",
-  no_show: "!bg-surface !text-danger !border-danger-line line-through",
+  no_show: "!bg-surface !text-danger !border-danger-line", // the label says "No-show"; no strikethrough
   cancelled: "",
 };
 
@@ -97,6 +98,15 @@ const isView = (v: string | null): v is CalendarView => !!v && v in VIEWS;
  * The date and view live in the URL (?date=2026-10-05&view=week), so refresh, back and a shared link
  * keep the place. Replaced, not pushed: stepping through days shouldn't fill the back button.
  */
+/** Display copy for ?status= (the dashboard's tiles), so it stays out of the shared package. */
+const GROUP_LABEL: Record<StatusGroup, string> = {
+  upcoming: "still to come",
+  waiting: "waiting",
+  in_chair: "in the chair",
+  done: "done",
+  missed: "cancelled or no-show",
+};
+
 function useCalendarPlace() {
   const params = useSearchParams();
   const router = useRouter();
@@ -110,16 +120,34 @@ function useCalendarPlace() {
     q.set("view", next.view ?? view);
     router.replace(`${pathname}?${q}`, { scroll: false });
   };
-  return { date, view, setDate: (d: Date) => set({ date: d }), setView: (v: CalendarView) => set({ view: v }) };
+  // ?status= narrows the view to one dashboard group (STATUS_GROUPS); set() keeps it while paging days.
+  const rawStatus = params.get("status");
+  const status: StatusGroup | undefined = isStatusGroup(rawStatus) ? rawStatus : undefined;
+  const clearStatus = () => {
+    const q = new URLSearchParams(params);
+    q.delete("status");
+    router.replace(`${pathname}?${q}`, { scroll: false });
+  };
+  return {
+    date,
+    view,
+    status,
+    clearStatus,
+    // One URL change for date and view together: two replace() calls in a row race and lose the first.
+    go: set,
+    setDate: (d: Date) => set({ date: d }),
+    setView: (v: CalendarView) => set({ view: v }),
+  };
 }
 
 export function AppointmentCalendar() {
-  const { date, view, setDate, setView } = useCalendarPlace();
-  // Phones: Day and Week as lists (chair columns and seven day columns don't fit 360px); no month grid.
+  const { date, view, status, clearStatus, go, setDate, setView } = useCalendarPlace();
+  // Phones: Day and Week as lists (chair columns and seven day columns don't fit 360px); Month as a count grid.
   const isPhone = useMediaQuery(PHONE);
-  const offered: CalendarView[] = isPhone ? ["day", "week"] : ["day", "week", "month", "agenda"];
-  const asList = view === "agenda" || isPhone;
-  const listDays = view === "week" || (isPhone && view === "month") ? Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(date), i)) : [date];
+  const offered: CalendarView[] = isPhone ? ["day", "week", "month"] : ["day", "week", "month", "agenda"];
+  const phoneMonth = isPhone && view === "month";
+  const asList = !phoneMonth && (view === "agenda" || isPhone);
+  const listDays = view === "week" ? Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(date), i)) : [date];
   const [selectedId, setSelectedId] = useState<string>();
   const [draft, setDraft] = useState<AppointmentDraft | null>(null);
 
@@ -137,7 +165,8 @@ export function AppointmentCalendar() {
       return p ? `${p.firstName} ${p.lastName}` : "…";
     };
     return (appointments.data ?? [])
-      .filter((a) => a.status !== "cancelled")
+      // Cancelled ones stay hidden unless the filter asks for them (the dashboard's "Cancelled or no-show").
+      .filter((a) => (status ? inStatusGroup(status, a.status) : a.status !== "cancelled"))
       .map((a) => ({
         appointment: a,
         title: name(a.patientId),
@@ -146,7 +175,7 @@ export function AppointmentCalendar() {
         resourceId: a.chairId,
         chairName: chairs.data?.find((c) => c.id === a.chairId)?.name ?? "",
       }));
-  }, [appointments.data, patients.data, chairs.data]);
+  }, [appointments.data, patients.data, chairs.data, status]);
 
   function move({ event, start, end, resourceId }: EventInteractionArgs<CalendarEvent>) {
     const a = event.appointment;
@@ -164,7 +193,27 @@ export function AppointmentCalendar() {
   }
 
   const selected = appointments.data?.find((a) => a.id === selectedId);
-  const components = useMemo(() => ({ event: EventLabel, month: { event: MonthEventLabel } }), []);
+  // Unfiltered live counts per day: the month numbers, and what decides whether a day can read as closed.
+  const counts = useMemo(() => countByDay(appointments.data ?? []), [appointments.data]);
+  const components = useMemo(
+    () => ({
+      event: EventLabel,
+      month: {
+        event: MonthEventLabel,
+        // The day number plus how many appointments it has, so a busy day reads before its "+N more".
+        dateHeader: ({ date: d, label }: DateHeaderProps) => {
+          const n = counts.get(format(d, "yyyy-MM-dd")) ?? 0;
+          return (
+            <span className="flex items-center justify-between gap-1">
+              <span>{label}</span>
+              {n > 0 && <span className="text-xs font-semibold text-ink-muted tabular-nums">{n} appt{n === 1 ? "" : "s"}</span>}
+            </span>
+          );
+        },
+      },
+    }),
+    [counts],
+  );
 
   return (
     <div className="space-y-4">
@@ -197,12 +246,12 @@ export function AppointmentCalendar() {
             <button
               key={v}
               type="button"
-              aria-pressed={v === view || (isPhone && view !== "day" && v === "week")}
+              aria-pressed={v === view || (isPhone && view === "agenda" && v === "day")}
               onClick={() => setView(v)}
               className={cn(
                 "h-(--control-h-sm) flex-1 rounded-md px-3 text-sm font-medium transition-colors duration-(--duration-fast) sm:flex-none",
                 "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-                v === view || (isPhone && view !== "day" && v === "week") ? "bg-surface text-ink shadow-card" : "text-ink-muted hover:text-ink",
+                v === view || (isPhone && view === "agenda" && v === "day") ? "bg-surface text-ink shadow-card" : "text-ink-muted hover:text-ink",
               )}
             >
               {VIEWS[v].label}
@@ -210,11 +259,25 @@ export function AppointmentCalendar() {
           ))}
         </div>
       </div>
-      {asList ? (
+      {status && (
+        <p className="flex flex-wrap items-center gap-2 text-sm" role="status">
+          Showing only <strong className="font-semibold">{GROUP_LABEL[status]}</strong>
+          <Button variant="outline" size="sm" onClick={clearStatus}>
+            Show all
+          </Button>
+        </p>
+      )}
+      {phoneMonth ? (
         appointments.isLoading ? (
           <Loading label="Loading appointments…" rows={4} />
         ) : (
-          <AgendaList items={events} days={listDays} onOpen={setSelectedId} />
+          <MonthCountGrid month={date} counts={counts} onPick={(d) => go({ date: d, view: "day" })} />
+        )
+      ) : asList ? (
+        appointments.isLoading ? (
+          <Loading label="Loading appointments…" rows={4} />
+        ) : (
+          <AgendaList items={events} days={listDays} onOpen={setSelectedId} counts={counts} />
         )
       ) : (
         <div className={`calendar calendar-${view} overflow-x-auto rounded-xl border border-line bg-surface p-3 shadow-card`}>

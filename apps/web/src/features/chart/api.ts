@@ -1,7 +1,7 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
-import { ChartEntry, CreateChartEntryInput } from "@pedia/shared";
+import { ChartEntry, CreateChartEntryInput, type CreateChartBatchInput } from "@pedia/shared";
 import { api } from "@/lib/api-client";
 
 export const chartKeys = {
@@ -22,6 +22,16 @@ export function useRecordChartEntry(patientId: string) {
   return useMutation({
     mutationFn: (input: CreateChartEntryInput) =>
       api(`/patients/${patientId}/chart`, ChartEntry, { method: "POST", body: JSON.stringify(input) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: chartKeys.forPatient(patientId) }),
+  });
+}
+
+/** One finding on several teeth: one entry each, all or none. */
+export function useRecordChartBatch(patientId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateChartBatchInput) =>
+      api(`/patients/${patientId}/chart/batch`, z.array(ChartEntry), { method: "POST", body: JSON.stringify(input) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: chartKeys.forPatient(patientId) }),
   });
 }

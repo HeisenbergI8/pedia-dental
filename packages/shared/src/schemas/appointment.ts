@@ -20,6 +20,8 @@ export const Appointment = ClinicScoped.extend({
   startsAt: IsoDateTime,
   durationMin: z.number().int().positive(),
   reason: z.string(),
+  /** The Procedure.code this visit is for, as a real field (the reason is the readable wording). Optional for older rows. */
+  procedureCode: z.string().optional(),
   status: AppointmentStatus,
   cancelReason: z.string().optional(),
   /** Set when this appointment was created from a follow-up or recall rule. */
@@ -34,12 +36,13 @@ export const BookAppointmentInput = Appointment.pick({
   startsAt: true,
   durationMin: true,
   reason: true,
+  procedureCode: true,
   sourceRuleId: true,
 });
 export type BookAppointmentInput = z.infer<typeof BookAppointmentInput>;
 
 /** Moving an appointment: new time, length, chair or dentist. The patient never changes. */
-export const RescheduleAppointmentInput = BookAppointmentInput.omit({ patientId: true, sourceRuleId: true });
+export const RescheduleAppointmentInput = BookAppointmentInput.omit({ patientId: true, sourceRuleId: true, procedureCode: true });
 export type RescheduleAppointmentInput = z.infer<typeof RescheduleAppointmentInput>;
 
 /**

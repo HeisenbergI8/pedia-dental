@@ -35,4 +35,15 @@ describe("follow-up rules", () => {
     expect(isDueItemOpen(item, [{ id: "a1", status: "no_show" }])).toBe(true);
     expect(isDueItemOpen({ closedAt: "2026-10-03T00:00:00Z" }, [])).toBe(false);
   });
+
+  it("closes a 6-month recall once the child has a completed checkup or cleaning after it, booked from the list or not", () => {
+    const item = { patientId: "p", ruleId: "routine", createdAt: "2026-04-01T02:00:00.000Z" };
+    const appt = (procedureCode: string, status: "done" | "booked", startsAt = "2026-09-30T02:00:00.000Z") => ({ id: "x", patientId: "p", procedureCode, status, startsAt });
+    expect(isDueItemOpen(item, [appt("prophylaxis", "done")])).toBe(false);
+    expect(isDueItemOpen(item, [appt("oral_exam", "done")])).toBe(false);
+    expect(isDueItemOpen(item, [appt("oral_exam", "booked")])).toBe(true); // not done yet
+    expect(isDueItemOpen(item, [appt("extraction", "done")])).toBe(true); // an emergency isn't a checkup
+    expect(isDueItemOpen(item, [appt("oral_exam", "done", "2026-03-01T02:00:00.000Z")])).toBe(true); // before the item
+    expect(isDueItemOpen({ ...item, ruleId: "extraction" }, [appt("oral_exam", "done")])).toBe(true); // follow-ups need their own visit
+  });
 });

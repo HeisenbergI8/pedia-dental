@@ -6,7 +6,7 @@ import { buildDocument, type DocSources } from "./content";
 const at = "2026-09-30T02:00:00.000Z";
 const src: DocSources = {
   patient: {
-    id: "p1", clinicId: "c", firstName: "Bea", lastName: "Mendoza", birthDate: "2020-07-02", sex: "female", address: "12 Mabini St, Imus",
+    id: "p1", clinicId: "c", patientNo: "KS-00001", firstName: "Bea", lastName: "Mendoza", birthDate: "2020-07-02", sex: "female", address: "12 Mabini St, Imus",
     guardians: [{ id: "g1", fullName: "Rosa Mendoza", relationship: "Mother", phone: "09171234567", isPrimary: true }],
     allergies: ["Latex"], medicalConditions: [], medications: [], alerts: [], dentalHistory: { previousClinic: "", notes: "" }, consents: [], createdAt: at,
   },
@@ -41,7 +41,7 @@ describe("document content", () => {
     expect(t).toContain(JSON.stringify(["Balance after this", formatPeso(0)]));
   });
 
-  it("builds all nine types with no gaps", () => {
+  it("builds every type with no gaps", () => {
     const choices: Record<DocumentType, Partial<GenerateDocumentInput>> = {
       dental_certificate: { sourceId: "v1" },
       treatment_plan: {},
@@ -52,11 +52,22 @@ describe("document content", () => {
       prescription: { items: [{ drugId: "paracetamol_120_syr", sig: "Give 5 mL by mouth every 6 hours as needed.", quantity: "1 bottle" }] },
       receipt: { sourceId: "pay1" },
       patient_summary: {},
+      notes_report: {},
     };
     for (const type of DocumentType.options) {
       const t = text({ ...choices[type], type });
       expect(t, type).not.toMatch(/undefined|NaN|\{\w+\}/);
       expect(JSON.parse(t).fileName, type).toMatch(/^[a-z0-9-]+-mendoza-bea-\d{4}-\d{2}-\d{2}\.pdf$/);
     }
+  });
+
+  it("leaves the guardian's address out of a dentist-issued notes report", () => {
+    expect(text({ type: "notes_report", issuedBy: "staff_reyes" })).not.toContain("12 Mabini St");
+    expect(text({ type: "notes_report", issuedBy: "staff_cruz" })).toContain("12 Mabini St");
+  });
+
+  it("reports signed notes with their services and prices", () => {
+    const t = text({ type: "notes_report" });
+    for (const expected of ["Clinical notes report", "Fluoride application", formatPeso(pesos(800)), "Dr. Ana Reyes"]) expect(t).toContain(expected);
   });
 });

@@ -40,14 +40,14 @@ function BeforeAfter({ before, after }: { before: ClinicalPhoto; after: Clinical
         <div className="grid gap-3 sm:grid-cols-2">
           {[before, after].map((p) => (
             <figure key={p.id} className="space-y-1">
-              <img src={photoFileUrl(p.id)} alt={describe(p)} className="aspect-[4/3] w-full rounded-md bg-ink object-contain" />
+              <img src={photoFileUrl(p.id)} alt={describe(p)} className="aspect-[4/3] w-full rounded-md bg-photo-backdrop object-contain" />
               <figcaption className="text-sm text-ink-muted">{describe(p)}</figcaption>
             </figure>
           ))}
         </div>
       ) : (
         <figure className="space-y-2">
-          <div className="relative aspect-[4/3] overflow-hidden rounded-md bg-ink select-none">
+          <div className="relative aspect-[4/3] overflow-hidden rounded-md bg-photo-backdrop select-none">
             <img src={photoFileUrl(after.id)} alt={describe(after)} className="absolute inset-0 size-full object-contain" />
             <img
               src={photoFileUrl(before.id)}
@@ -55,9 +55,9 @@ function BeforeAfter({ before, after }: { before: ClinicalPhoto; after: Clinical
               className="absolute inset-0 size-full object-contain"
               style={{ clipPath: `inset(0 ${100 - split}% 0 0)` }}
             />
-            <div aria-hidden className="absolute inset-y-0 w-0.5 bg-white" style={{ left: `${split}%` }} />
-            <span className="absolute top-2 left-2 rounded bg-white/90 px-2 py-0.5 text-sm font-medium">Before</span>
-            <span className="absolute top-2 right-2 rounded bg-white/90 px-2 py-0.5 text-sm font-medium">After</span>
+            <div aria-hidden className="absolute inset-y-0 w-0.5 bg-paper" style={{ left: `${split}%` }} />
+            <span className="absolute top-2 left-2 rounded bg-surface/90 px-2 py-0.5 text-sm font-medium text-ink">Before</span>
+            <span className="absolute top-2 right-2 rounded bg-surface/90 px-2 py-0.5 text-sm font-medium text-ink">After</span>
           </div>
           <input
             type="range"

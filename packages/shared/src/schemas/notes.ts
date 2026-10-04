@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { ClinicScoped, Id, IsoDateTime } from "./common";
 
-const fieldBase = { key: z.string(), label: z.string(), required: z.boolean().optional() };
+/** `section` groups consecutive fields under one heading ("Bite and occlusion"). Absent = ungrouped. */
+const fieldBase = { key: z.string(), label: z.string(), required: z.boolean().optional(), section: z.string().optional() };
 
 /** Note templates are data, so a new procedure template needs no code change. */
 export const TemplateField = z.discriminatedUnion("type", [

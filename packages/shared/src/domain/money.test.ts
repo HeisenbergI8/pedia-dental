@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Payment } from "../schemas/billing";
 import type { PlanItem } from "../schemas/plan";
-import { accountSummary, formatPeso, invoiceBalance, invoiceTotal, pesos, unbilledItems } from "./money";
+import { accountCredit, accountSummary, formatPeso, invoiceBalance, invoiceTotal, pesos, unbilledItems } from "./money";
 
 describe("money", () => {
   it("matches the spec example: 8,500 total, 5,000 paid, 3,500 balance", () => {
@@ -39,5 +39,13 @@ describe("money", () => {
     const items = [item("billed", "done"), item("open", "planned"), item("ready", "done")];
     const invoices = [{ lines: [{ planItemId: "billed", procedureCode: "fluoride", description: "x", amount: pesos(800) }] }];
     expect(unbilledItems(items, invoices).map((i) => i.id)).toEqual(["ready"]);
+  });
+
+  it("counts an overpaid invoice as credit, never a paid or part-paid one", () => {
+    const inv = { id: "A", lines: [{ procedureCode: "x", description: "x", amount: pesos(500) }], discount: 0 };
+    const pay = (amount: number): Payment => ({ id: String(amount), clinicId: "c", patientId: "p", invoiceId: "A", amount, method: "cash", receiptNo: "AR-1", receivedBy: "s", receivedAt: "2026-10-01T00:00:00.000Z" });
+    expect(accountCredit([inv], [pay(pesos(500))])).toBe(0);
+    expect(accountCredit([inv], [pay(pesos(200))])).toBe(0);
+    expect(accountCredit([inv], [pay(pesos(700))])).toBe(pesos(200));
   });
 });

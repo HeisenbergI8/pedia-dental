@@ -1,9 +1,9 @@
 import { format, parseISO } from "date-fns";
-import { formatPeso, invoiceBalance, invoiceTotal, type Invoice, type Patient, type Payment, type StaffMember } from "@pedia/shared";
+import { formatPeso, invoiceBalance, invoiceTotal, type Invoice, type PatientView, type Payment, type StaffMember } from "@pedia/shared";
 import { METHOD_LABEL } from "./api";
 
 /** What an acknowledgment receipt says, on screen and in the PDF. `payments` is the patient's full history. */
-export function receiptContent({ patient, invoice, payment, payments, staff }: { patient: Patient; invoice: Invoice; payment: Payment; payments: Payment[]; staff: StaffMember[] }) {
+export function receiptContent({ patient, invoice, payment, payments, staff }: { patient: PatientView; invoice: Invoice; payment: Payment; payments: Payment[]; staff: StaffMember[] }) {
   const refund = payment.amount < 0;
   const after = invoiceBalance(invoice, payments.filter((p) => p.receivedAt <= payment.receivedAt)); // as it stood then
   const guardian = patient.guardians.find((g) => g.isPrimary);

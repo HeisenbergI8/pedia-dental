@@ -9,6 +9,8 @@ import { GrowthCard } from "@/features/growth/components/growth-card";
 import { PlanTab } from "@/features/plan/components/plan-tab";
 import { BehaviorTrend } from "@/features/notes/components/behavior-trend";
 import { NotesTab } from "@/features/notes/components/notes-tab";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PatientAppointments } from "@/features/appointments/components/patient-appointments";
 import { PhotosTab } from "@/features/photos/components/photos-tab";
@@ -21,6 +23,22 @@ const TAB_TRIGGER = "h-11 flex-none rounded-none px-3 data-[state=active]:text-b
 
 const TABS = ["overview", "chart", "notes", "plan", "photos", "billing", "documents"] as const;
 type Tab = (typeof TABS)[number];
+
+const LABEL: Record<Tab, string> = {
+  overview: "Overview",
+  chart: "Chart",
+  notes: "Notes",
+  plan: "Plan",
+  photos: "Photos",
+  billing: "Billing",
+  documents: "Documents",
+};
+/** Phone grouping: every section one tap away in a labelled picker, never hidden off the side of a strip. */
+const GROUPS: { label: string; tabs: Tab[] }[] = [
+  { label: "Record", tabs: ["overview"] },
+  { label: "Clinical", tabs: ["chart", "notes", "plan", "photos"] },
+  { label: "Admin", tabs: ["billing", "documents"] },
+];
 
 /** The open tab lives in the URL (?tab=chart), so refresh, back and a shared link land on it. */
 function useTab() {
@@ -42,7 +60,7 @@ export function PatientRecord({ patientId }: { patientId: string }) {
   const { data: patient, error, refetch, isRefetching } = usePatient(patientId);
   const [tab, setTab] = useTab();
   const strip = useRef<HTMLDivElement>(null);
-  // A tab opened from a link may sit off screen in the phone's scrolling strip: bring it into view.
+  // A tab opened from a link may sit off screen in a narrow tablet's scrolling strip: bring it into view.
   // Only the strip scrolls: scrollIntoView would also move the page.
   useEffect(() => {
     const el = strip.current;
@@ -59,16 +77,37 @@ export function PatientRecord({ patientId }: { patientId: string }) {
     <div className="space-y-5">
       <VisitBanner patientId={patientId} />
       <Tabs value={tab} onValueChange={setTab} className="gap-0">
-        {/* Scrolls sideways on a phone rather than wrapping; the edge fade says there is more. */}
-        <div ref={strip} className="scroll-fade-x -mx-4 overflow-x-auto border-b border-line px-4 sm:mx-0 sm:px-0">
+        {/* Phones: one Section picker, so no section hides off screen. */}
+        <div className="flex items-center gap-3 sm:hidden">
+          <Label htmlFor="record-section" className="shrink-0">
+            Section
+          </Label>
+          <Select value={tab} onValueChange={setTab}>
+            <SelectTrigger id="record-section" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {GROUPS.map((g) => (
+                <SelectGroup key={g.label}>
+                  <SelectLabel>{g.label}</SelectLabel>
+                  {g.tabs.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {LABEL[t]}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {/* sm and up: tabs. All seven fit from 640 px; a narrow tablet may still scroll them, with the edge fade. */}
+        <div ref={strip} className="scroll-fade-x hidden overflow-x-auto border-b border-line sm:block">
           <TabsList variant="line" className="h-11 w-max gap-0 p-0">
-            <TabsTrigger value="overview" className={TAB_TRIGGER}>Overview</TabsTrigger>
-            <TabsTrigger value="chart" className={TAB_TRIGGER}>Chart</TabsTrigger>
-            <TabsTrigger value="notes" className={TAB_TRIGGER}>Notes</TabsTrigger>
-            <TabsTrigger value="plan" className={TAB_TRIGGER}>Plan</TabsTrigger>
-            <TabsTrigger value="photos" className={TAB_TRIGGER}>Photos</TabsTrigger>
-            <TabsTrigger value="billing" className={TAB_TRIGGER}>Billing</TabsTrigger>
-            <TabsTrigger value="documents" className={TAB_TRIGGER}>Documents</TabsTrigger>
+            {TABS.map((t) => (
+              <TabsTrigger key={t} value={t} className={TAB_TRIGGER}>
+                {LABEL[t]}
+              </TabsTrigger>
+            ))}
           </TabsList>
         </div>
         <TabsContent value="overview" className="pt-5">

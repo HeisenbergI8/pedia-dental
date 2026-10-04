@@ -31,7 +31,7 @@ export const STATUS_TONE: Record<AppointmentStatus, string> = {
   in_chair: "border-info-line bg-info-bg text-info",
   done: "border-success-line bg-success-bg text-success",
   no_show: "border-danger-line bg-danger-bg text-danger",
-  cancelled: "border-line bg-ground text-ink-muted line-through",
+  cancelled: "border-line bg-ground text-ink-muted", // muted with the word "Cancelled": never struck through
 };
 
 export function StatusChip({ status, className }: { status: AppointmentStatus; className?: string }) {

@@ -9,6 +9,7 @@ import {
   ClinicalNote,
   ClinicalPhoto,
   DemoAccounts,
+  DuplicateMatch,
   DueItem,
   FinanceSummary,
   GrowthRecord,
@@ -19,15 +20,20 @@ import {
   Patient,
   Payment,
   PatientDocument,
+  PatientHeaderSummary,
+  PatientPage,
+  PatientView,
   PlanItem,
   Procedure,
   Session,
   SessionUser,
+  TodaySummary,
   Visit,
   accountSummary,
   deriveChart,
   dueBucket,
   findConflict,
+  inStatusGroup,
   habitTimeline,
   invoiceBalance,
   invoiceTotal,
@@ -130,6 +136,199 @@ describe("patients", () => {
       status: 400,
     });
   });
+
+  it("numbers new patients and tidies all-lower names", async () => {
+    const a = await api("/patients", Patient, send("POST", { ...newPatient, firstName: "juan", lastName: "dela cruz" }));
+    const b = await api("/patients", Patient, send("POST", newPatient));
+    expect(a.firstName).toBe("Juan");
+    expect(a.lastName).toBe("Dela Cruz");
+    expect(Number(b.patientNo.slice(3))).toBe(Number(a.patientNo.slice(3)) + 1);
+    const edited = await api(`/patients/${a.id}`, Patient, send("PUT", { ...newPatient, nickname: "Jun" }));
+    expect(edited.patientNo).toBe(a.patientNo); // PUT never renumbers
+  });
+
+  it("quick-updates phone, nickname, tags and alerts, and the phone follows the guardian to siblings", async () => {
+    const g = { ...newPatient.guardians[0], id: "g_quick" };
+    const older = await api("/patients", Patient, send("POST", { ...newPatient, guardians: [g] }));
+    const younger = await api("/patients", Patient, send("POST", { ...newPatient, firstName: "Mia", guardians: [g] }));
+    const input = { phone: "09998887777", nickname: "Bebe", tags: ["Anxious"], alerts: ["Strong gag reflex"] };
+    const updated = await api(`/patients/${older.id}`, Patient, send("PATCH", input));
+    expect(updated).toMatchObject({ nickname: "Bebe", tags: ["Anxious"], alerts: ["Strong gag reflex"] });
+    expect((await api(`/patients/${younger.id}`, Patient)).guardians[0].phone).toBe("09998887777");
+  });
+
+  it("lets a dentist quick-update everything but the phone", async () => {
+    const p = await api("/patients", Patient, send("POST", newPatient));
+    signIn("demo.staff_reyes");
+    try {
+      const ok = await api(`/patients/${p.id}`, PatientView, send("PATCH", { nickname: "Bebe", tags: [], alerts: [] }));
+      expect(ok.nickname).toBe("Bebe");
+      await expect(api(`/patients/${p.id}`, Patient, send("PATCH", { phone: "09998887777", tags: [], alerts: [] }))).rejects.toMatchObject({ status: 403 });
+    } finally {
+      signIn(ADMIN);
+    }
+  });
+
+  it("refuses a computed label or a repeated tag", async () => {
+    const p = await api("/patients", Patient, send("POST", newPatient));
+    const base = { phone: "09171234567", tags: [], alerts: [] };
+    await expect(api(`/patients/${p.id}`, Patient, send("PATCH", { ...base, tags: ["Balance due"] }))).rejects.toMatchObject({ status: 400 });
+    await expect(api(`/patients/${p.id}`, Patient, send("PATCH", { ...base, tags: ["HMO", "hmo"] }))).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("warns about a child already registered with the same name and birth date", async () => {
+    await api("/patients", Patient, send("POST", newPatient));
+    const q = new URLSearchParams({ firstName: "BEA", lastName: "mendoza", birthDate: newPatient.birthDate });
+    const raw = await (await fetch(`${process.env.NEXT_PUBLIC_API_URL}/patient-duplicates?${q}`)).json();
+    expect(raw.length).toBeGreaterThan(0);
+    expect(JSON.stringify(raw)).not.toContain("09171234567"); // no phones in the match
+    q.set("birthDate", "2019-01-01");
+    expect(await api(`/patient-duplicates?${q}`, z.array(DuplicateMatch))).toEqual([]);
+  });
+
+  it("summarises number, last visit, balance and credit", async () => {
+    const p = await api("/patients", Patient, send("POST", newPatient));
+    const empty = await api(`/patients/${p.id}/summary`, PatientHeaderSummary);
+    expect(empty).toEqual({ patientId: p.id, patientNo: p.patientNo, balance: 0, credit: 0, siblings: expect.any(Array) });
+    const visit = await api(`/patients/${p.id}/visits`, Visit, send("POST", { dentistId: "staff_reyes" }));
+    await api(`/visits/${visit.id}/complete`, Visit, { method: "POST" });
+    expect((await api(`/patients/${p.id}/summary`, PatientHeaderSummary)).lastVisitOn).toBe(visit.date);
+  });
+
+  it("names siblings in the header summary, computed by the server, for a dentist too", async () => {
+    const g = { ...newPatient.guardians[0], id: "g_header_sib", phone: "09175550101" };
+    const older = await api("/patients", Patient, send("POST", { ...newPatient, firstName: "Ana", guardians: [g] }));
+    const younger = await api("/patients", Patient, send("POST", { ...newPatient, firstName: "Lia", guardians: [g] }));
+    signIn("demo.staff_reyes");
+    try {
+      const s = await api(`/patients/${older.id}/summary`, PatientHeaderSummary);
+      expect(s.siblings).toEqual([{ id: younger.id, firstName: "Lia" }]);
+    } finally {
+      signIn(ADMIN);
+    }
+  });
+
+  const withContacts = {
+    ...newPatient,
+    address: "12 Mabini St, Quezon City",
+    emergencyContact: { name: "Lola Mendoza", phone: "09180001111" },
+    guardians: [{ ...newPatient.guardians[0], email: "rosa@example.com" }],
+  };
+
+  it("sends a dentist no guardian phone, email, emergency contact or address, from any patient endpoint", async () => {
+    const p = await api("/patients", Patient, send("POST", withContacts));
+    signIn("demo.staff_reyes");
+    try {
+      const responses = [
+        await api(`/patients/${p.id}`, PatientView),
+        ...(await api(`/patients?q=${encodeURIComponent("Bea Mendoza")}`, z.array(PatientView))),
+        await api(`/patients/${p.id}`, PatientView, send("PATCH", { nickname: "Bebe", tags: [], alerts: [] })),
+        await api(`/patients/${p.id}/consents`, PatientView, send("POST", { guardianId: "g_mother", scope: "radiographs", date: "2026-10-04" })),
+        await api("/patients", PatientView, send("POST", withContacts)), // even what they just typed
+      ];
+      expect(JSON.stringify(responses)).not.toMatch(/0917|0918|Mabini|example\.com|Lola/);
+    } finally {
+      signIn(ADMIN);
+    }
+    signIn("demo.staff_cruz"); // front desk still gets everything, in the strict shape
+    try {
+      expect(await api(`/patients/${p.id}`, Patient)).toMatchObject({ address: withContacts.address, emergencyContact: withContacts.emergencyContact });
+    } finally {
+      signIn(ADMIN);
+    }
+  });
+
+  it("keeps the stored contacts when a dentist saves a profile they were sent without them", async () => {
+    const p = await api("/patients", Patient, send("POST", withContacts));
+    signIn("demo.staff_reyes");
+    try {
+      const seen = await api(`/patients/${p.id}`, PatientView);
+      await api(`/patients/${p.id}`, PatientView, send("PUT", { ...seen, allergies: ["Latex", "Penicillin"] }));
+      // Contacts sent anyway are stripped, not stored.
+      const forged = { ...seen, allergies: ["Latex", "Penicillin"], address: "Elsewhere", guardians: seen.guardians.map((g) => ({ ...g, phone: "09990000000" })) };
+      await api(`/patients/${p.id}`, PatientView, send("PUT", forged));
+      // A new guardian needs a phone, which only front desk and admin can give.
+      const uncle = { id: "g_uncle", fullName: "Tito Mendoza", relationship: "Uncle", isPrimary: false };
+      await expect(api(`/patients/${p.id}`, PatientView, send("PUT", { ...seen, guardians: [...seen.guardians, uncle] }))).rejects.toMatchObject({ status: 403 });
+    } finally {
+      signIn(ADMIN);
+    }
+    const after = await api(`/patients/${p.id}`, Patient);
+    expect(after.allergies).toEqual(["Latex", "Penicillin"]);
+    expect(after).toMatchObject({ address: withContacts.address, emergencyContact: withContacts.emergencyContact });
+    expect(after.guardians).toEqual([expect.objectContaining({ phone: "09171234567", email: "rosa@example.com" })]);
+  });
+
+  it("stores, serves and removes the child's photo", async () => {
+    const p = await api("/patients", Patient, send("POST", newPatient));
+    const body = new FormData();
+    body.set("file", new Blob(["fake-jpeg"], { type: "image/jpeg" }));
+    const withPhoto = await api(`/patients/${p.id}/photo`, Patient, { method: "PUT", body });
+    expect(withPhoto.photoUpdatedAt).toBeDefined();
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/patients/${p.id}/photo`);
+    expect(res.headers.get("content-disposition")).toContain("mendoza-bea-photo.jpg");
+    const removed = await api(`/patients/${p.id}/photo`, Patient, { method: "DELETE" });
+    expect(removed.photoUpdatedAt).toBeUndefined();
+    expect((await fetch(`${process.env.NEXT_PUBLIC_API_URL}/patients/${p.id}/photo`)).status).toBe(404);
+  });
+});
+
+describe("patient list", () => {
+  const today = format(new Date(), "yyyy-MM-dd");
+  const page = (qs = "") => api(`/patient-summaries?today=${today}${qs}`, PatientPage);
+  const everyRow = async (qs = "") => {
+    const first = await page(`${qs}&pageSize=100`);
+    return first.rows;
+  };
+
+  it("pages with a total, and clamps a page past the end", async () => {
+    const p1 = await page("&pageSize=20");
+    expect(p1.rows).toHaveLength(20);
+    expect(p1.total).toBe(db.patients.length); // admin sees everyone; earlier tests added a few Beas
+    const last = await page("&pageSize=20&page=99");
+    expect(last.page).toBe(Math.ceil(p1.total / 20));
+    expect(last.rows.length).toBeGreaterThan(0);
+  });
+
+  it("counts every filter, and each filter returns exactly its count", async () => {
+    const { counts } = await page();
+    for (const filter of ["needs_attention", "recent_visit", "balance_due", "recall_due"] as const) {
+      expect((await page(`&filter=${filter}&pageSize=100`)).total, filter).toBe(counts[filter]);
+      expect(counts[filter], filter).toBeGreaterThan(0);
+      expect(counts[filter], filter).toBeLessThan(counts.all); // no label flags everyone
+    }
+  });
+
+  it("balances agree with the financial dashboard: same patients, same total", async () => {
+    const report = await api(`/reports/finance?today=${today}`, FinanceSummary);
+    const owing = (await everyRow("&filter=balance_due")).map((r) => [r.id, r.balance] as const);
+    expect(new Map(owing)).toEqual(new Map(report.outstanding.map((o) => [o.patientId, o.balance])));
+  });
+
+  it("recall due matches the /recall overdue and this-week items", async () => {
+    const due = (await api("/due-items", z.array(DueItem))).filter((i) => ["overdue", "this_week"].includes(dueBucket(i.dueOn, today) ?? ""));
+    const flagged = (await everyRow("&filter=recall_due")).map((r) => r.id).sort();
+    expect(flagged).toEqual([...new Set(due.map((i) => i.patientId))].sort());
+  });
+
+  it("sorts by balance and by last visit, stable across pages", async () => {
+    const byBalance = await everyRow("&sort=balance");
+    expect(byBalance.map((r) => r.balance ?? 0)).toEqual([...byBalance.map((r) => r.balance ?? 0)].sort((a, b) => b - a));
+    const p1 = await page("&sort=last_visit&pageSize=10");
+    const p2 = await page("&sort=last_visit&pageSize=10&page=2");
+    expect(new Set([...p1.rows, ...p2.rows].map((r) => r.id)).size).toBe(20); // no row on two pages
+  });
+
+  it("shows guardian phones to front desk, not to a dentist, and phone search only to front desk", async () => {
+    const phone = db.patients[0].guardians[0].phone;
+    signIn("demo.staff_cruz");
+    expect((await page()).rows.every((r) => r.guardianPhone)).toBe(true);
+    expect((await page(`&q=${phone}`)).total).toBeGreaterThan(0);
+    signIn("demo.staff_reyes");
+    expect((await page()).rows.some((r) => r.guardianPhone)).toBe(false);
+    expect((await page(`&q=${phone}`)).total).toBe(0);
+    signIn(ADMIN);
+  });
 });
 
 describe("visits", () => {
@@ -165,6 +364,26 @@ describe("visits", () => {
 });
 
 describe("chart", () => {
+  it("records one finding on several teeth as one entry each, or none at all", async () => {
+    const patient = await api("/patients", Patient, send("POST", newPatient));
+    const chart = `/patients/${patient.id}/chart`;
+    const visit = await api(`/patients/${patient.id}/visits`, Visit, send("POST", { dentistId: "staff_reyes" }));
+
+    const rows = await api(`${chart}/batch`, z.array(ChartEntry), send("POST", { visitId: visit.id, teeth: [74, 84, 75], surfaces: ["O"], condition: "caries" }));
+    expect(rows.map((e) => e.tooth)).toEqual([74, 84, 75]);
+    const derived = deriveChart(await api(chart, z.array(ChartEntry)));
+    expect([74, 84, 75].map((t) => derived.get(t)?.surfaces.O)).toEqual(["caries", "caries", "caries"]);
+
+    // 85 is extracted: the whole batch is refused and 54 gets nothing.
+    await api(chart, ChartEntry, send("POST", { visitId: visit.id, tooth: 85, surfaces: [], condition: "extracted" }));
+    const before = (await api(chart, z.array(ChartEntry))).length;
+    await expect(api(`${chart}/batch`, z.array(ChartEntry), send("POST", { visitId: visit.id, teeth: [54, 85], surfaces: [], condition: "sealant" }))).rejects.toMatchObject({ status: 409 });
+    expect(await api(chart, z.array(ChartEntry))).toHaveLength(before);
+
+    // 51 (front) has no occlusal surface, so O on 51 + 74 is refused.
+    await expect(api(`${chart}/batch`, z.array(ChartEntry), send("POST", { visitId: visit.id, teeth: [51, 74], surfaces: ["O"], condition: "caries" }))).rejects.toMatchObject({ status: 400 });
+  });
+
   it("serves seeded entries in the shared schema, on surfaces the tooth has", async () => {
     const patients = await api("/patients?q=", z.array(Patient));
     const charts = await Promise.all(patients.map((p) => api(`/patients/${p.id}/chart`, z.array(ChartEntry))));
@@ -556,6 +775,56 @@ describe("parent messages", () => {
   });
 });
 
+describe("today at a glance", () => {
+  const today = format(new Date(), "yyyy-MM-dd");
+  const summary = () => api(`/reports/today?today=${today}`, TodaySummary);
+
+  it("counts agree with the calendar for today, group by group", async () => {
+    const from = startOfDay(new Date()).toISOString();
+    const to = addDays(startOfDay(new Date()), 1).toISOString();
+    const appts = await api(`/appointments?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, z.array(Appointment));
+    const s = await summary();
+    expect(s.counts.total).toBe(appts.length);
+    expect(s.counts.waiting).toBe(appts.filter((a) => inStatusGroup("waiting", a.status)).length);
+    expect(s.counts.done).toBe(appts.filter((a) => inStatusGroup("done", a.status)).length);
+    expect(s.counts.missed).toBe(appts.filter((a) => inStatusGroup("missed", a.status)).length);
+    expect(s.appointments.map((a) => a.id).sort()).toEqual(appts.map((a) => a.id).sort());
+  });
+
+  it("counts the same pending requests the requests card lists", async () => {
+    const pending = await api("/appointment-requests?status=pending", z.array(AppointmentRequest));
+    expect((await summary()).counts.requests).toBe(pending.length);
+    expect(pending.length).toBeGreaterThan(0); // the roster seeds two
+  });
+
+  it("is the same on a second load", async () => {
+    expect(await summary()).toEqual(await summary());
+  });
+
+  it("sends a birthday greeting once, and the daily job doesn't send another", async () => {
+    const birthDate = format(subYears(new Date(), 7), "yyyy-MM-dd");
+    const patient = await api("/patients", Patient, send("POST", { ...newPatient, birthDate }));
+    const listed = async () => (await summary()).birthdays.find((b) => b.patientId === patient.id);
+    const before = await listed();
+    expect(before?.turning).toBe(7);
+    expect(before?.greeting).toBeUndefined(); // not greeted yet: JSON drops the key, so the button shows
+
+    const sent = await api(`/patients/${patient.id}/birthday-greeting`, Message, { method: "POST" });
+    expect(sent).toMatchObject({ kind: "birthday", status: "queued", to: "09171234567" });
+    expect((await listed())?.greeting).toBe("queued");
+    await expect(api(`/patients/${patient.id}/birthday-greeting`, Message, { method: "POST" })).rejects.toMatchObject({ status: 409 });
+
+    const log = await api(`/messages?patientId=${patient.id}`, z.array(Message)); // runs the daily job
+    expect(log.filter((m) => m.kind === "birthday")).toHaveLength(1);
+  });
+
+  it("refuses a greeting on any other day", async () => {
+    const patient = await api("/patients", Patient, send("POST", newPatient)); // born 2020-07-02
+    if (format(new Date(), "MM-dd") === "07-02") return;
+    await expect(api(`/patients/${patient.id}/birthday-greeting`, Message, { method: "POST" })).rejects.toMatchObject({ status: 409 });
+  });
+});
+
 describe("financial dashboard", () => {
   // Runs before describe("billing"), so every payment in the db is still a seeded one.
   const today = format(new Date(), "yyyy-MM-dd");
@@ -676,6 +945,14 @@ describe("billing", () => {
 });
 
 describe("documents", () => {
+  it("logs a notes report issued by front desk (not a dentist-signed document)", async () => {
+    const patient = await api("/patients", Patient, send("POST", newPatient));
+    const doc = await api(`/patients/${patient.id}/documents`, PatientDocument, send("POST", { type: "notes_report", issuedBy: "staff_cruz" }));
+    expect(doc.title).toBe("Clinical notes report · Bea Mendoza");
+    const log = await api(`/patients/${patient.id}/documents`, z.array(PatientDocument));
+    expect(log[0].id).toBe(doc.id);
+  });
+
   /** A child with a completed visit (a signed fluoride note) and a paid ₱800 invoice. */
   async function treatedAndPaid(extra: Partial<CreatePatientInput> = {}) {
     const patient = await api("/patients", Patient, send("POST", { ...newPatient, ...extra }));
@@ -722,8 +999,89 @@ describe("documents", () => {
   });
 });
 
+describe("staff switch", () => {
+  afterAll(() => signIn(ADMIN));
+  const DESK = "demo.staff_cruz";
+  const pinOf = (staffId: string) => db.staffPins.find((p) => p.staffId === staffId)!.pin;
+  const switchTo = (accountId: string, pin: string) => api("/auth/switch", Session, send("POST", { accountId, pin }));
+
+  it("gives every staff member their own PIN, shows it on the demo login, and gives parents none", async () => {
+    expect(db.staffPins.map((p) => p.staffId).sort()).toEqual(db.staff.map((s) => s.id).sort());
+    const pins = db.staffPins.map((p) => p.pin);
+    expect(new Set(pins).size).toBe(pins.length);
+    const { accounts } = await api("/auth/demo-accounts", DemoAccounts);
+    for (const a of accounts) expect(Boolean(a.pin), a.name).toBe(a.role !== "parent");
+  });
+
+  it("switches to another staff member with their own PIN, and logs who left and who arrived", async () => {
+    signIn(DESK);
+    const before = db.auditEvents.length;
+    const session = await switchTo("staff_reyes", pinOf("staff_reyes"));
+    expect(session.user).toMatchObject({ id: "staff_reyes", role: "dentist" });
+    expect(db.auditEvents.slice(before).map((e) => [e.actorId, e.action, e.record])).toEqual([
+      ["staff_cruz", "sign_out", "Session (switched user)"],
+      ["staff_reyes", "sign_in", "Session (PIN switch)"],
+    ]);
+    signIn(session.token);
+    expect(await api("/auth/me", SessionUser)).toMatchObject({ id: "staff_reyes" });
+  });
+
+  it("refuses a wrong PIN with the tries left, then locks that person after five, even with the right PIN", async () => {
+    signIn(DESK);
+    const wrong = () => switchTo("staff_santos", "0000");
+    for (const left of ["4 tries", "3 tries", "2 tries", "1 try"]) {
+      await expect(wrong()).rejects.toMatchObject({ status: 401, message: expect.stringContaining(`${left} left`) });
+    }
+    await expect(wrong()).rejects.toMatchObject({ status: 429 });
+    await expect(switchTo("staff_santos", pinOf("staff_santos"))).rejects.toMatchObject({ status: 429 });
+    const pinEvents = db.auditEvents.filter((e) => e.actorId === "staff_santos" && e.record === "Session (PIN switch)");
+    expect(pinEvents.map((e) => e.action)).toEqual([...Array(5).fill("sign_in_failed"), "denied"]);
+    // Someone else's PIN still works: the lock is per person, not per device.
+    expect((await switchTo("staff_delacruz", pinOf("staff_delacruz"))).user.role).toBe("admin");
+  });
+
+  it("never switches to a parent, never from a parent, and never without a session", async () => {
+    signIn(DESK);
+    const { accounts } = await api("/auth/demo-accounts", DemoAccounts);
+    const parent = accounts.find((a) => a.role === "parent")!;
+    await expect(switchTo(parent.id, "1234")).rejects.toMatchObject({ status: 400 });
+    signIn(`demo.${parent.id}`);
+    await expect(switchTo("staff_cruz", pinOf("staff_cruz"))).rejects.toMatchObject({ status: 403 });
+    signIn(null);
+    await expect(switchTo("staff_cruz", pinOf("staff_cruz"))).rejects.toMatchObject({ status: 401 });
+  });
+});
+
 describe("access control", () => {
   afterAll(() => signIn(ADMIN));
+
+  it("lets front desk quick-update a child, and refuses a parent the quick update and the duplicate check", async () => {
+    const p = db.patients.find((x) => x.id === "patient_sibling")!;
+    signIn("demo.staff_cruz");
+    expect((await api(`/patients/${p.id}`, Patient, send("PATCH", { nickname: "Miks", tags: [], alerts: p.alerts }))).nickname).toBe("Miks");
+    signIn(`demo.guardian.${p.guardians[0].id}`);
+    await expect(api(`/patients/${p.id}`, Patient, send("PATCH", { nickname: "X", tags: [], alerts: [] }))).rejects.toMatchObject({ status: 403 });
+    await expect(api(`/patient-duplicates?firstName=a&lastName=b&birthDate=2020-01-01`, z.array(DuplicateMatch))).rejects.toMatchObject({ status: 403 });
+    signIn(ADMIN);
+  });
+
+  it("shows today at a glance to every staff role but not to parents; only front desk and admin greet", async () => {
+    const bday = db.patients.find((p) => p.id.startsWith("patient_roster_"))!.id; // any patient: the 403 comes first
+    for (const token of ["demo.staff_reyes", "demo.staff_cruz"]) {
+      signIn(token);
+      expect((await api("/reports/today", TodaySummary)).counts.total).toBeGreaterThanOrEqual(0);
+    }
+    signIn("demo.staff_reyes");
+    await expect(api(`/patients/${bday}/birthday-greeting`, Message, { method: "POST" })).rejects.toMatchObject({ status: 403 });
+    // Token format as signInAsFamily(): demo.<account id>, and a parent's account id is guardian.<guardian id>.
+    const guardianId = db.patients.find((p) => p.id === "patient_sibling")!.guardians[0].id;
+    signIn(`demo.guardian.${guardianId}`);
+    await expect(api("/reports/today", TodaySummary)).rejects.toMatchObject({ status: 403 });
+    const mine = await api("/patient-summaries?pageSize=100", PatientPage);
+    expect(mine.rows.map((r) => r.id).sort()).toEqual(db.patients.filter((p) => p.guardians.some((g) => g.id === guardianId)).map((p) => p.id).sort());
+    expect(mine.rows.every((r) => r.guardianPhone)).toBe(true); // patients.contact at "own" scope: their own family's phones
+    signIn(ADMIN);
+  });
 
   it("refuses the API without a session, but serves the login endpoints", async () => {
     signIn(null);
@@ -807,6 +1165,12 @@ describe("parent portal", () => {
     const other = db.patients.find((p) => !mine.some((m) => m.id === p.id))!;
     return { family, mine, other };
   }
+
+  it("sends a parent their own family's contacts and nobody else's", async () => {
+    const { mine, other } = await signInAsFamily(); // parsed with the strict Patient: phones present
+    expect(mine.every((p) => p.guardians.every((g) => g.phone))).toBe(true);
+    await expect(api(`/patients/${other.id}`, PatientView)).rejects.toMatchObject({ status: 403 }); // not theirs at all
+  });
 
   it("shows a parent only their own children, and 403 for another child's (Chunk 17 done-when)", async () => {
     const { mine, other } = await signInAsFamily();

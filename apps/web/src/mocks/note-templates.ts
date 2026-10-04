@@ -16,6 +16,12 @@ const NOTES: TemplateField = { type: "text", key: "notes", label: "Notes", multi
 const teeth = (label = "Teeth treated"): TemplateField => ({ type: "teeth", key: "teeth", label, required: true });
 
 /** One template per procedure in the catalog. `procedure` is the Procedure.code. */
+/** Sections of the oral examination, as headings on the form and the note card. */
+const BITE = "Bite and occlusion";
+const TMJ = "TMJ";
+const PERIO = "Gum and periodontal screening";
+const APPLIANCES = "Intra-oral appliances";
+
 export const NOTE_TEMPLATES: NoteTemplate[] = [
   {
     id: "tpl_oral_exam",
@@ -24,14 +30,31 @@ export const NOTE_TEMPLATES: NoteTemplate[] = [
     // Mirrors the clinic's paper Oral Examination Chart.
     fields: [
       { type: "select", key: "oral_hygiene", label: "Oral hygiene", options: ["Good", "Fair", "Poor"], required: true },
-      { type: "select", key: "gingivitis", label: "Gingivitis", options: ["Mild", "Moderate", "Severe"] },
       { type: "select", key: "plaque", label: "Plaque", options: ["Mild", "Moderate", "Severe"] },
       { type: "select", key: "caries_risk", label: "Caries risk assessment", options: ["Low", "Mid", "High"], required: true },
       { type: "text", key: "health_changes", label: "Changes in health since last appointment", multiline: true },
       { type: "text", key: "current_medications", label: "Current medications" },
       { type: "checkbox", key: "facial_asymmetry", label: "Facial asymmetry" },
       { type: "checkbox", key: "lymph", label: "Lymphadenitis / lymphadenopathy" },
-      { type: "checkbox", key: "trismus", label: "Trismus" },
+      // Bite and occlusion. Class I/II/III exclude each other, so they are one select.
+      { type: "select", key: "molar_class", label: "Molar class", options: ["Class I", "Class II", "Class III"], section: BITE },
+      { type: "checkbox", key: "overbite", label: "Deep overbite", section: BITE },
+      { type: "checkbox", key: "overjet", label: "Increased overjet", section: BITE },
+      { type: "checkbox", key: "crossbite", label: "Crossbite", section: BITE },
+      { type: "checkbox", key: "open_bite", label: "Open bite", section: BITE },
+      { type: "checkbox", key: "midline_deviation", label: "Midline deviation", section: BITE },
+      // TMJ. trismus keeps its key, so earlier notes still show it.
+      { type: "checkbox", key: "tmj_clicking", label: "Clicking", section: TMJ },
+      { type: "checkbox", key: "clenching", label: "Clenching / bruxism", section: TMJ },
+      { type: "checkbox", key: "trismus", label: "Trismus", section: TMJ },
+      { type: "checkbox", key: "muscle_spasm", label: "Muscle spasm", section: TMJ },
+      // Gum and periodontal screening. gingivitis keeps its key and options.
+      { type: "select", key: "gingivitis", label: "Gingivitis", options: ["Mild", "Moderate", "Severe"], section: PERIO },
+      { type: "select", key: "periodontitis", label: "Periodontitis", options: ["None", "Early", "Moderate", "Advanced"], section: PERIO },
+      { type: "checkbox", key: "appliance_space_maintainer", label: "Space maintainer", section: APPLIANCES },
+      { type: "checkbox", key: "appliance_ortho", label: "Orthodontic appliance", section: APPLIANCES },
+      { type: "checkbox", key: "appliance_habit", label: "Habit-breaking appliance", section: APPLIANCES },
+      { type: "text", key: "appliance_other", label: "Other appliance", section: APPLIANCES },
       { type: "text", key: "others", label: "Others" },
     ],
   },

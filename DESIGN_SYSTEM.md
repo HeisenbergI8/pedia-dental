@@ -6,8 +6,7 @@ a screen.** UI_AUDIT.md records why each rule exists.
 
 **Personality:** warm, playful, gentle, trustworthy, clean.
 **Never:** anything cold or hospital-like, and no cartoon chrome on staff screens.
-**Dark mode:** not supported, by decision (bright clinic rooms, print-on-white documents, logo drawn for white).
-The tokens are semantic, so it can be added later.
+**Dark mode:** Light, Dark or System, chosen per device in the account menu. See §2a.
 
 ## 1. Where warmth goes
 
@@ -32,9 +31,26 @@ Every text pair below passes WCAG AA, measured.
 | **Status** (fg / bg / line) | `success*`, `info*`, `warning*`, `danger*` | Status only, always with an icon and a word |
 | **Clinical alert** | `alert*` | Allergies, conditions and patient alerts **only** |
 | Crayons | `crayon-*` | Logo, loader, brand strip, illustrations. **Decoration only.** |
+| Charts | `chart-bar`, `chart-returning` + `chart-new` | `chart-bar` for one series. The new/returning pair was run through the dataviz validator in both themes (2026-10-03). A new series needs a validated token, light and dark. |
 
 **Do:** show arrived as `warning` (someone is waiting) and "Not billed" as `warning` with an icon.
 **Don't:** use `alert` for anything that isn't clinical, or orange crayon for status. That's alarm fatigue.
+
+## 2a. Dark mode
+
+- **All or nothing.** Every screen, dialog, sheet, toast, chart, table and the calendar goes dark together. A screen
+  that can't go dark is a bug, not an exception.
+- **Tokens only.** Dark redefines the same tokens under `:root[data-theme="dark"]` in `globals.css`. A component never
+  picks a dark colour itself. `dark:` utilities follow the app's choice (not the OS) and never apply in print.
+- **Paper stays white.** Printing always uses the light palette (the dark block is `@media screen`), so receipts print
+  white. PDFs draw their own colours and are always white.
+- **The logo is never recoloured.** On dark, the logo artwork sits on a white `paper` plate. The rail mark has its own
+  white tile. The animated mark keeps its crayon fills, and its outline reverses to light.
+- **Constant tokens** (`paper`, `photo-backdrop`) are the same in both themes. Use them only for artwork and photos.
+- **Teeth stay white** with their conventional fills in both themes.
+- **Measured pairs (2026-10-03):** ink 13.9:1 on surface, ink-muted 6.8:1 on surface-raised, brand 7.7:1 on surface,
+  every status text 7.9:1 or more on its own background, input border 4.4:1.
+- **Charts:** spread `TOOLTIP` from `features/dashboard/components/charts.tsx`. Recharts' default tooltip is white.
 
 ## 3. Type
 
@@ -94,24 +110,29 @@ Every text pair below passes WCAG AA, measured.
 | **ErrorState** | Any failed query | Plain words for what failed, plus **Try again** (refetch). `compact` for cards. |
 | **EmptyState** | First use and no results | The hand-drawn badge, a Fredoka title, what's missing, and the next step |
 | **StatusChip** | Appointment status | Icon + word + tone. Never colour alone. |
-| **Toast** | Saved, failed, queued | Status colours (`richColors`). Sits above the phone bottom nav. |
+| **FlagChip** (patient list) | Computed patient labels | Icon + word. Recall due = `info`, Balance due and No contact = `warning`. Never `alert`. Driven by `domain/patient-list.ts` rules, never set by hand. |
+| **Toast** | Saved, failed, queued | Status colours (`richColors`). Top centre, so it never covers a dialog, sheet or bottom-nav action (Part B). |
 
 ## 9. Patterns
 
 - **Destructive or final actions** get a specific confirm that names the consequence ("This can't be undone,
   and it sends Aliya Lynch a 'missed appointment' text"). Cancel needs a reason.
-- **Where you are** lives in the URL: patient tab (`?tab=chart`) and calendar (`?date=…&view=…`). Refresh,
-  back and shared links land in the same place.
+- **Where you are** lives in the URL: patient tab (`?tab=chart`), calendar (`?date=…&view=…&status=…`) and the patient
+  list (`?q=&filter=&sort=&page=`). Refresh, back and shared links land in the same place.
 - **Long forms on phones are steps** (patient intake: 5 steps with progress). Next validates only that step,
   nothing typed is lost, and a submit error jumps to its step. Desktop shows one page.
-- **Calendar on phones is an agenda list.** The grid is for tablet and desktop.
+- **Calendar on phones:** Day and Week are agenda lists; Month is a count-per-day grid (tap a day for its list).
+  The time grid is for tablet and desktop. A day with appointments is never shown as closed (`isClosedDay`).
 - **Dental chart on phones shows one side of the mouth** at a time, so teeth stay full-size targets.
-- **Sideways-scrolling strips** (record tabs, message filters) fade at the edge (`.scroll-fade-x`).
+- **Patient record sections on phones** are a grouped "Section" picker (Record / Clinical / Admin); tabs from `sm` up.
+- **Sideways-scrolling strips** that remain (message and patient-list filters, record tabs on a narrow tablet) fade at
+  the edge (`.scroll-fade-x`).
 - **Every list, table, chart and form** has designed loading, empty and error states.
 
 ## 10. Checklist for a new screen
 
 - [ ] Tokens only. No hex, no `text-[13px]`.
+- [ ] Checked in dark at 375 / 768 / 1280: no white panel, invisible text or invisible border.
 - [ ] One primary action. Patient identity and alerts visible if it's a patient screen.
 - [ ] A phone layout on purpose (DataList, agenda, steps), with no page-level sideways scroll at 360 px.
 - [ ] Loading (skeleton), empty (EmptyState) and error (ErrorState with retry) states.

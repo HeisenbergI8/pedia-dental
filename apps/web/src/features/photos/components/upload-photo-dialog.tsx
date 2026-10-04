@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { CameraIcon, ImageIcon } from "lucide-react";
 import { Controller, FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format, parseISO } from "date-fns";
@@ -120,15 +121,7 @@ export function UploadPhotoDialog({ patientId }: { patientId: string }) {
                 <Controller
                   control={form.control}
                   name="file"
-                  render={({ field }) => (
-                    <Input
-                      {...props}
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      onChange={(e) => field.onChange(e.target.files?.[0])}
-                    />
-                  )}
+                  render={({ field }) => <PhotoPicker controlProps={props} value={field.value} onChange={field.onChange} />}
                 />
               )}
             </FormField>
@@ -169,5 +162,52 @@ export function UploadPhotoDialog({ patientId }: { patientId: string }) {
         </FormProvider>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Two buttons, not one input: with `capture`, a phone opens only the camera and hides the library. The chosen
+ * file shows as a thumbnail with its own name, never a hashed one.
+ */
+function PhotoPicker({
+  controlProps,
+  value,
+  onChange,
+}: {
+  controlProps: { id: string; "aria-invalid": boolean; "aria-describedby"?: string };
+  value: File | undefined;
+  onChange: (file: File | undefined) => void;
+}) {
+  const camera = useRef<HTMLInputElement>(null);
+  const library = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<string>();
+  useEffect(() => {
+    if (!value) return setPreview(undefined);
+    const url = URL.createObjectURL(value);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [value]);
+  const pick = (e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.files?.[0]);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        <Button {...controlProps} type="button" variant="outline" onClick={() => camera.current?.click()}>
+          <CameraIcon aria-hidden /> Take photo
+        </Button>
+        <Button type="button" variant="outline" onClick={() => library.current?.click()}>
+          <ImageIcon aria-hidden /> Choose file
+        </Button>
+      </div>
+      <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={pick} />
+      <input ref={library} type="file" accept="image/*" hidden onChange={pick} />
+      {value && (
+        <p className="flex items-center gap-3 text-sm text-ink-muted">
+          {/* eslint-disable-next-line @next/next/no-img-element -- a local object URL, not a static asset */}
+          {preview && <img src={preview} alt="" className="size-12 rounded-md bg-photo-backdrop object-cover" />}
+          <span className="min-w-0 break-all">{value.name}</span>
+        </p>
+      )}
+    </div>
   );
 }

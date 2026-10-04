@@ -2,17 +2,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
-import { LockIcon, ReceiptIcon } from "lucide-react";
+import { ReceiptIcon } from "lucide-react";
 import { formatPeso } from "@pedia/shared";
-import { EmptyState } from "@/components/empty-state";
-import { PageHeader } from "@/components/page-header";
 import { SectionCard } from "@/components/section-card";
 import { Button } from "@/components/ui/button";
 import { METHOD_LABEL } from "@/features/billing/api";
-import { useCan } from "@/features/auth/access";
 import { useProcedures } from "@/features/clinic/api";
 import { usePatients } from "@/features/patients/api";
-import { env } from "@/lib/env";
 import { formatDate } from "@/lib/format";
 import { useFinanceSummary } from "../api";
 import { RankBars, TimeBars } from "./charts";
@@ -36,29 +32,23 @@ function Tile({ label, value, hint }: { label: string; value: string; hint?: str
 }
 
 
-export function FinanceDashboard() {
-  const isAdmin = useCan()("dashboard.view");
-  const today = format(new Date(), "yyyy-MM-dd");
-  const { data: s, isLoading, error, refetch, isRefetching } = useFinanceSummary(today, isAdmin);
+/** The admin's money view. Rendered inside <Can permission="dashboard.view"> by DashboardScreen. */
+export function FinanceDashboard({ today }: { today: string }) {
+  const { data: s, isLoading, error, refetch, isRefetching } = useFinanceSummary(today, true);
   const patients = usePatients().data ?? [];
   const procedures = useProcedures().data ?? [];
   const [period, setPeriod] = useState<Period>("day");
   const [allUnpaid, setAllUnpaid] = useState(false);
   const [allOwing, setAllOwing] = useState(false);
-  const header = <PageHeader title="Dashboard" description={`Computed from invoices and payments as of ${formatDate(today)}. Collections are net of refunds.`} />;
+  const header = (
+    <div className="space-y-0.5 pt-2">
+      <h2 className="text-lg font-semibold">Finance</h2>
+      <p className="text-sm text-ink-muted">Computed from invoices and payments as of {formatDate(today)}. Collections are net of refunds.</p>
+    </div>
+  );
 
-  if (!isAdmin) {
-    return (
-      <div className="space-y-5">
-        {header}
-        <EmptyState icon={LockIcon} title="The dashboard is for clinic admins">
-          {env.apiMocking ? "Sign in as the clinic admin to see it." : "Ask a clinic admin for these figures."}
-        </EmptyState>
-      </div>
-    );
-  }
-  if (isLoading) return <div className="space-y-5">{header}<Loading label="Loading the dashboard…" /></div>;
-  if (error || !s) return <div className="space-y-5">{header}<ErrorState what="the dashboard" onRetry={() => refetch()} retrying={isRefetching} /></div>;
+  if (isLoading) return <section aria-label="Finance" className="space-y-5">{header}<Loading label="Loading the finance figures…" /></section>;
+  if (error || !s) return <section aria-label="Finance" className="space-y-5">{header}<ErrorState what="the finance figures" onRetry={() => refetch()} retrying={isRefetching} /></section>;
 
   const patientLink = (id: string) => {
     const p = patients.find((x) => x.id === id);
@@ -72,7 +62,7 @@ export function FinanceDashboard() {
   const owing = `${s.outstanding.length} patient${s.outstanding.length === 1 ? "" : "s"}`;
 
   return (
-    <div className="space-y-5">
+    <section aria-label="Finance" className="space-y-5">
       {header}
       <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Tile label="Collected today" value={formatPeso(s.collected.today)} />
@@ -166,6 +156,6 @@ export function FinanceDashboard() {
           )}
         </SectionCard>
       </div>
-    </div>
+    </section>
   );
 }

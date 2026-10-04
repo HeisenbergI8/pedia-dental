@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { StartVisitInput, Visit } from "@pedia/shared";
 import { appointmentKeys } from "@/features/appointments/api";
+import { patientKeys } from "@/features/patients/api";
 import { api } from "@/lib/api-client";
 
 export const visitKeys = {
@@ -30,6 +31,7 @@ function useInvalidateVisits(patientId: string) {
     Promise.all([
       qc.invalidateQueries({ queryKey: visitKeys.forPatient(patientId) }),
       qc.invalidateQueries({ queryKey: appointmentKeys.all }),
+      qc.invalidateQueries({ queryKey: patientKeys.summaries }), // the header's "last visit"
     ]);
 }
 

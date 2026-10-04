@@ -112,7 +112,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
             <KidsmileLogo priority className="w-36 sm:w-44" />
           </Link>
           <div className="ml-auto">
-            <AccountMenu compact />
+            <AccountMenu variant="bar" />
           </div>
         </div>
         {/* Tablets and up: the sections as tabs under the logo. Phones use the bottom tab bar. */}

@@ -6,10 +6,11 @@ import { z } from "zod";
 import { toast } from "sonner";
 import {
   BehaviorRating,
+  groupFields,
   noteValuesSchema,
   type ClinicalNote,
   type NoteTemplate,
-  type Patient,
+  type PatientView,
   type TemplateField,
   type Visit,
 } from "@pedia/shared";
@@ -50,7 +51,7 @@ export function NoteDialog({
   note,
   trigger,
 }: {
-  patient: Patient;
+  patient: PatientView;
   visit?: Visit;
   note?: ClinicalNote;
   trigger: ReactNode;
@@ -120,7 +121,7 @@ function NoteFields({
   note,
   onDone,
 }: {
-  patient: Patient;
+  patient: PatientView;
   template: NoteTemplate;
   visit?: Visit;
   note?: ClinicalNote;
@@ -159,9 +160,23 @@ function NoteFields({
   return (
     <FormProvider {...form}>
       <form noValidate className="min-w-0 space-y-4" onSubmit={form.handleSubmit((v) => submit(v, false))}>
-        {template.fields.map((f) => (
-          <TemplateInput key={f.key} field={f} patient={patient} />
-        ))}
+        {groupFields(template.fields).map((g) =>
+          g.section ? (
+            // min-w-0: a fieldset grows to its content on a phone, like the teeth fieldset.
+            <fieldset key={g.section} className="min-w-0 space-y-3 border-t border-line pt-4">
+              <legend className="pt-4 font-medium">{g.section}</legend>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                {g.fields.map((f) => (
+                  <div key={f.key} className={f.type === "checkbox" ? undefined : "col-span-2"}>
+                    <TemplateInput field={f} patient={patient} />
+                  </div>
+                ))}
+              </div>
+            </fieldset>
+          ) : (
+            <TemplateInput key={g.fields[0].key} field={g.fields[0]} patient={patient} />
+          ),
+        )}
 
         <Controller
           control={form.control}
@@ -201,7 +216,7 @@ function NoteFields({
 }
 
 /** One input per template field type. Adding a template needs no code; adding a field type does. */
-function TemplateInput({ field: f, patient }: { field: TemplateField; patient: Patient }) {
+function TemplateInput({ field: f, patient }: { field: TemplateField; patient: PatientView }) {
   const { control, register } = useFormContext<NoteForm>();
   const name = `values.${f.key}` as const;
   const label = f.required ? `${f.label} *` : f.label;

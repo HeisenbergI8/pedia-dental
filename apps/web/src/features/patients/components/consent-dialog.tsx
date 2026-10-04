@@ -4,7 +4,7 @@ import { Controller, FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { AddConsentInput, ConsentScope, type Patient } from "@pedia/shared";
+import { AddConsentInput, ConsentScope, type PatientView } from "@pedia/shared";
 import { FormField } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CONSENT_LABEL, useAddConsent } from "../api";
 
-export function ConsentDialog({ patient }: { patient: Patient }) {
+export function ConsentDialog({ patient }: { patient: PatientView }) {
   const [open, setOpen] = useState(false);
   const addConsent = useAddConsent(patient.id);
   const primary = patient.guardians.find((g) => g.isPrimary) ?? patient.guardians[0];
