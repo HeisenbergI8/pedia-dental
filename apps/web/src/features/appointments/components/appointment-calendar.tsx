@@ -201,6 +201,8 @@ export function AppointmentCalendar() {
   const selected = appointments.data?.find((a) => a.id === selectedId);
   // Unfiltered live counts per day: the month numbers, and what decides whether a day can read as closed.
   const counts = useMemo(() => countByDay(appointments.data ?? []), [appointments.data]);
+  // A string, not the Date: `date` is rebuilt every render, which would remount the header components below.
+  const shownDay = format(date, "yyyy-MM-dd");
   const components = useMemo(
     () => ({
       event: EventLabel,
@@ -219,8 +221,7 @@ export function AppointmentCalendar() {
       },
       // Day view: each chair's column names how full it is, from the events already loaded.
       resourceHeader: ({ label, resource }: ResourceHeaderProps<Chair>) => {
-        const day = format(date, "yyyy-MM-dd");
-        const n = events.filter((e) => e.resourceId === resource.id && format(e.start, "yyyy-MM-dd") === day).length;
+        const n = events.filter((e) => e.resourceId === resource.id && format(e.start, "yyyy-MM-dd") === shownDay).length;
         return (
           <span className="flex items-center justify-between gap-2 px-1">
             <span className="font-title font-semibold">{label}</span>
@@ -229,7 +230,7 @@ export function AppointmentCalendar() {
         );
       },
     }),
-    [counts, events, date],
+    [counts, events, shownDay],
   );
 
   return (

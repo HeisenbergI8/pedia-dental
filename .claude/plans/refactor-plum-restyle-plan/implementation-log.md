@@ -112,3 +112,17 @@ direction stays readable as history.
 
 - Q1 (c)–(f): Start visit inside the identity card, phone week strip, "Next up" line, nav request badge.
 - Minor, open: in the desktop sidebar's bordered account card, a long name ("Carmen Dela Cruz") truncates by a few letters.
+
+## Follow-up from tester and auditor — 2026-10-04
+
+Tester: no regressions (all workflows, 66 page loads across themes and widths, print). Auditor: 73/100, one defect.
+**Fixed:**
+- Mark handled on the dashboard requests card left the banner's request count and summary stale.
+  `useMarkRequestHandled` now also invalidates `["appointments","today"]`. Verified in the browser: 2 → 1 in the
+  cell and the summary without a reload.
+- Patient header scroll padding: the floating card reaches ~245px when stuck at 820px wide (193px at 1440), above the
+  old 13rem (208px). Raised to 16rem (WCAG 2.4.11).
+- Loading skeleton draws the same number of cells as the loaded banner (no layout shift).
+- Calendar header components memo keyed on the shown day string, not the Date rebuilt every render.
+- Two over-indented lines in `app-shell.tsx`.
+**Gate:** `pnpm run check` → shared 99, web 190 passed; lint 0 errors (1 pre-existing warning).
