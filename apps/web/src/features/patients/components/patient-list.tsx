@@ -23,6 +23,7 @@ import { Can, useCan } from "@/features/auth/access";
 import { formatDate, formatPhone, initials } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { usePatientPage } from "../api";
+import { avatarTone } from "./patient-avatar";
 import { formatAge } from "../age";
 import { Loading } from "@/components/brand";
 import { ErrorState } from "@/components/error-state";
@@ -59,7 +60,7 @@ function useListPlace() {
 
 function Avatar({ p }: { p: PatientSummary }) {
   return (
-    <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-subtle text-sm font-semibold text-brand">
+    <span aria-hidden className={cn("flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-bold", avatarTone(p.id))}>
       {initials(p.firstName, p.lastName)}
     </span>
   );
@@ -76,13 +77,13 @@ function Alerts({ p }: { p: PatientSummary }) {
   );
 }
 
-const CHIP = "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium whitespace-nowrap";
+const CHIP = "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap";
 
 /** Siblings share a guardian (by phone) and usually a surname: the classic wrong-patient mix-up. */
 function SiblingChip({ names }: { names: string[] }) {
   if (!names.length) return null;
   return (
-    <span className={cn(CHIP, "border-info-line bg-info-bg text-info")}>
+    <span className={cn(CHIP, "bg-info-bg text-info")}>
       <UsersIcon className="size-3 shrink-0" aria-hidden />
       Sibling of {names.join(", ")}
     </span>
@@ -94,17 +95,17 @@ function FlagChips({ p }: { p: PatientSummary }) {
   return (
     <>
       {p.flags.recallDue && (
-        <span className={cn(CHIP, "border-info-line bg-info-bg text-info")}>
+        <span className={cn(CHIP, "bg-info-bg text-info")}>
           <CalendarClockIcon className="size-3 shrink-0" aria-hidden /> Recall due{p.recallDueOn && ` · ${formatDate(p.recallDueOn)}`}
         </span>
       )}
       {p.flags.balanceDue && (
-        <span className={cn(CHIP, "border-warning-line bg-warning-bg text-warning")}>
+        <span className={cn(CHIP, "bg-warning-bg text-warning")}>
           <ReceiptIcon className="size-3 shrink-0" aria-hidden /> Balance due
         </span>
       )}
       {p.flags.noContact && (
-        <span className={cn(CHIP, "border-warning-line bg-warning-bg text-warning")} title="The last text to this family failed">
+        <span className={cn(CHIP, "bg-warning-bg text-warning")} title="The last text to this family failed">
           <PhoneOffIcon className="size-3 shrink-0" aria-hidden /> No contact
         </span>
       )}

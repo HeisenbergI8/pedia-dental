@@ -67,6 +67,9 @@ carries it into every module**, rather than starting over.
 
 ### Palette (all pairs to pass AA; ratios measured on white unless noted)
 
+> **Superseded 2026-10-04 (§9):** plum is now the brand colour and teal the secondary accent; the table below is the
+> 2026-10-03 direction, kept as history.
+
 | Role | Token | Value | Use |
 | --- | --- | --- | --- |
 | Primary | `brand` | `#17686e` (6.5:1) | Primary buttons, selection, links. The logo's teal, deepened for text. |
@@ -396,3 +399,43 @@ fine. The chart boxes now clip, so a resize or rotation can't scroll the page ei
 - **Not device-verified:** real iOS and Android keyboards over the sticky form bar (the steps make the form short,
   and the bar is offset above the bottom nav), OS-level large text, and 200% zoom (layouts are fluid and use rem
   throughout, but this was checked by reasoning, not on a device).
+
+## 9. Restyle: "Option C refined" (2026-10-04)
+
+The UX held up; the look read as dated and templated. The user compared three directions on a design board (Ink sidebar,
+Porcelain, Brand header), chose the Brand header refined, and picked **plum** as the main colour from a colour picker.
+Plan and log: `.claude/plans/refactor-plum-restyle-plan/`.
+
+### Why: the dated cues
+
+- **Ink outlines.** Tailwind v4's bare `border` is `currentColor`, and `globals.css` set no default, so every outline
+  button and sheet edge drew in near-black ink. `globals.css` now makes `line` the default border colour.
+- **Crayon strip on staff chrome**, Fredoka on every title, **dashed boxes** for empty states and notes, and a
+  **tinted nav item with a side bar**.
+- A mint-tinted ground with teal on every link, button and selection, so nothing stood out.
+
+### What changed
+
+- Plum brand (#5b3fa8) and teal secondary (`second`); warm-grey ground; new roles `brand-deep`, `brand-ring`,
+  `brand-tint-ink`, `on-deep*`, `selected`, `track`, `control-border`, `line-soft`, `scrim`. `plum`, `plum-bg` and
+  `brand-soft` retired.
+- Bricolage Grotesque titles; Fredoka and the crayon strip only on login and the portal.
+- Buttons: white secondary with a hairline, primary with a lift, ink `strong` for sign out. Shared `Segmented` replaces
+  five hand-built toggles. `Dialog size="confirm"` (bottom sheet on phones). Quiet empty states for staff.
+- Shell: no strip; neutral pill + brand icon + bold for the current page; a top-edge bar on the phone tab.
+- Dashboard: brand-deep banner with a greeting, a one-line summary and glass count cells; the existing requests list
+  (with its own Book and Mark handled) also shown on the dashboard. No existing feature, flow or permission changed.
+- Calendar: confirmed = brand tint + ring, booked = white + hairline, every tile leads with its status icon; chair
+  headers show their count.
+- Guards in `apps/web/src/design/` keep it that way (contrast in both themes, no raw hex, no dashed outlines, warmth
+  only on login and portal).
+
+### Deviations from the mockups
+
+- **Status icon instead of the mockup's coloured dot** on calendar tiles (the dot was colour alone).
+- **Birthdays on `sunny`**, and patient-list avatars in plum / teal / neutral, not the mockup's amber and blue (those
+  are the warning and info hues).
+- **Fields keep `input-border` at 3.5:1**; the mockup's #e3e2dc edge (1.3:1) is used only on labelled controls.
+- **Not built:** the phone week strip, the "Next up" line (not in `TodaySummary`), the nav request badge and moving
+  "Start visit" into the patient card (a flow change). The banner keeps the "Booking requests" count so its shortcut stays.
+- Dark chart pair settled at #8a6fe0 / #3aa898 (validator: all checks pass).

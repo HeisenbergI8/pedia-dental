@@ -87,11 +87,9 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
                 aria-current={t === type ? "true" : undefined}
                 className={cn(
                   "relative w-full rounded-lg px-3 py-2 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-                  t === type ? "bg-brand-subtle text-brand" : "hover:bg-ground",
+                  t === type ? "bg-selected text-ink [&>span:first-child]:font-bold" : "hover:bg-selected",
                 )}
               >
-                {/* A bar as well as colour, like the NAV, so the selection doesn't rely on hue alone. */}
-                {t === type && <span aria-hidden className="absolute inset-y-2 left-0 w-1 rounded-r-full bg-brand" />}
                 <span className="block text-sm font-medium">{DOCUMENT_TYPE_LABEL[t]}</span>
                 <span className="block text-xs text-ink-muted">{DESCRIPTION[t]}</span>
               </button>
@@ -111,7 +109,7 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
             {preview ? (
               <DocumentPreview content={preview} />
             ) : (
-              <p className="self-start rounded-lg border border-dashed border-line-strong p-6 text-center text-sm text-ink-muted">
+              <p className="self-start rounded-2xl border border-line bg-surface p-6 text-center text-sm text-ink-muted">
                 Choose the options on the left to see the document.
               </p>
             )}

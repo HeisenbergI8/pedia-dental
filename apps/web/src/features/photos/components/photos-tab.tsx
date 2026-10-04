@@ -6,9 +6,9 @@ import { useState } from "react";
 import { format, parseISO } from "date-fns";
 import { CameraIcon } from "lucide-react";
 import { PhotoType, type ClinicalPhoto } from "@pedia/shared";
+import { Segmented } from "@/components/segmented";
 import { EmptyState } from "@/components/empty-state";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Can } from "@/features/auth/access";
@@ -29,13 +29,15 @@ function BeforeAfter({ before, after }: { before: ClinicalPhoto; after: Clinical
   const [mode, setMode] = useState<"slider" | "side">("slider");
   return (
     <div className="max-w-3xl space-y-3">
-      <div className="flex gap-1" role="group" aria-label="Comparison layout">
-        {(["slider", "side"] as const).map((m) => (
-          <Button key={m} size="sm" variant={m === mode ? "default" : "outline"} aria-pressed={m === mode} onClick={() => setMode(m)}>
-            {m === "slider" ? "Slider" : "Side by side"}
-          </Button>
-        ))}
-      </div>
+      <Segmented
+        label="Comparison layout"
+        value={mode}
+        onChange={setMode}
+        options={[
+          { value: "slider", label: "Slider" },
+          { value: "side", label: "Side by side" },
+        ]}
+      />
       {mode === "side" ? (
         <div className="grid gap-3 sm:grid-cols-2">
           {[before, after].map((p) => (

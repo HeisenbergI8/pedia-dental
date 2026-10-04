@@ -99,7 +99,8 @@
   /* Charts (dashboard). One hue per series. chart-bar is the single-series hue; the new/returning mix has its own
      validated pair (dataviz validator, 2026-10-03: lightness, chroma, CVD ΔE 15.9, normal ΔE 22.1, contrast). */
   --color-chart-bar: #5b3fa8; /* = brand */
-  --color-chart-returning: #5b3fa8; /* = brand. Pair revalidated in Phase 6 */
+  /* new/returning pair: dataviz validator 2026-10-04, all checks pass (CVD ΔE 23.1, normal ΔE 27.6, contrast). */
+  --color-chart-returning: #5b3fa8; /* = brand */
   --color-chart-new: #2a9d8f; /* = the teal secondary, 3.3:1 on white */
   --color-chart-negative: #a12622; /* = danger: net refunds */
   --color-chart-grid: #f2f1ed;
@@ -218,8 +219,9 @@
     --color-warning-bg: #33280c;
     --color-warning-line: #6e5418;
     --color-chart-bar: #b7a3f5; /* = dark brand */
-    --color-chart-returning: #9f88ec; /* provisional: revalidated with chart-new in Phase 6 */
-    --color-chart-new: #3db5a5;
+    /* validated pair on dark surface (2026-10-04): CVD ΔE 15.6, normal ΔE above floor, lightness band, contrast */
+    --color-chart-returning: #8a6fe0;
+    --color-chart-new: #3aa898;
     --color-chart-negative: #ff9e97; /* = dark danger */
     --color-chart-grid: #262928;
     --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.4);
@@ -498,7 +500,7 @@ body {
   padding: 0.5rem 0.25rem;
   font-size: 0.8125rem; /* the library's 90% made headers 11.7px; labels stay >= 12px */
   font-weight: 600;
-  border-color: var(--color-line) !important;
+  border-color: var(--color-line-soft) !important;
 }
 
 .calendar .rbc-time-view,
@@ -521,8 +523,10 @@ body {
   border-color: var(--color-line) !important;
 }
 
+/* The dotted slot lines are the inner grid: softer than the outer frame. */
 .calendar .rbc-day-slot .rbc-time-slot {
   border-top-style: dotted;
+  border-color: var(--color-line-soft) !important;
 }
 
 .calendar .rbc-label {
@@ -655,7 +659,7 @@ body {
   border-radius: 9999px;
 }
 .calendar .rbc-date-cell .rbc-button-link:hover {
-  background: var(--color-brand-subtle);
+  background: var(--color-selected);
 }
 
 .calendar .rbc-row-segment {

@@ -33,30 +33,29 @@ function PortalBottomNav() {
   const primary = SECTIONS.filter((s) => PRIMARY.includes(s.href));
   const more = SECTIONS.filter((s) => !PRIMARY.includes(s.href));
   const inMore = more.some((s) => isActive(pathname, s.href));
-  const tab = "flex min-h-14 flex-1 flex-col items-center justify-center gap-1 text-xs font-medium";
-  const pill = (on: boolean) => cn("flex h-7 w-12 items-center justify-center rounded-full", on && "bg-brand-subtle");
+  const tab = "relative flex min-h-14 flex-1 flex-col items-center justify-center gap-1 text-xs";
+  /** The current tab, as in the staff shell: a bar on the top edge, a brand icon and a bold label (not hue alone). */
+  const marker = <span aria-hidden className="absolute inset-x-4 top-0 h-[3px] rounded-b-full bg-brand" />;
   return (
     <>
-      <nav aria-label="Portal" data-bottom-nav className="pb-safe fixed inset-x-0 bottom-0 z-(--z-header) border-t border-line bg-surface/95 px-2 pt-1 backdrop-blur md:hidden">
+      <nav aria-label="Portal" data-bottom-nav className="pb-safe fixed inset-x-0 bottom-0 z-(--z-header) border-t border-line bg-surface/95 px-2 backdrop-blur md:hidden">
         <ul className="flex gap-1">
           {primary.map(({ href, label, icon: Icon }) => {
             const on = isActive(pathname, href);
             return (
               <li key={href} className="flex flex-1">
-                <Link href={href} aria-current={on ? "page" : undefined} className={cn(tab, on ? "text-brand" : "text-ink-muted")}>
-                  <span className={pill(on)}>
-                    <Icon className="size-5" aria-hidden />
-                  </span>
+                <Link href={href} aria-current={on ? "page" : undefined} className={cn(tab, on ? "font-bold text-ink" : "font-medium text-ink-muted")}>
+                  {on && marker}
+                  <Icon className={cn("size-5", on && "text-brand")} aria-hidden />
                   {label}
                 </Link>
               </li>
             );
           })}
           <li className="flex flex-1">
-            <button type="button" onClick={() => setMoreOpen(true)} aria-expanded={moreOpen} className={cn(tab, inMore ? "text-brand" : "text-ink-muted")}>
-              <span className={pill(inMore)}>
-                <MenuIcon className="size-5" aria-hidden />
-              </span>
+            <button type="button" onClick={() => setMoreOpen(true)} aria-expanded={moreOpen} className={cn(tab, inMore ? "font-bold text-ink" : "font-medium text-ink-muted")}>
+              {inMore && marker}
+              <MenuIcon className={cn("size-5", inMore && "text-brand")} aria-hidden />
               More
             </button>
           </li>
@@ -77,7 +76,7 @@ function PortalBottomNav() {
                   aria-current={isActive(pathname, href) ? "page" : undefined}
                   className={cn(
                     "flex min-h-12 items-center gap-3 rounded-lg px-3 text-base font-medium",
-                    isActive(pathname, href) ? "bg-brand-subtle text-brand" : "hover:bg-ground",
+                    isActive(pathname, href) ? "bg-selected font-bold text-ink" : "hover:bg-selected",
                   )}
                 >
                   <Icon className="size-5" aria-hidden />
@@ -127,7 +126,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
                     aria-current={active ? "page" : undefined}
                     className={cn(
                       "flex min-h-11 items-center gap-2 border-b-2 px-3 text-sm font-medium transition-colors",
-                      active ? "border-brand text-brand" : "border-transparent text-ink-muted hover:text-ink",
+                      active ? "border-brand font-semibold text-ink" : "border-transparent text-ink-muted hover:text-ink",
                     )}
                   >
                     <Icon className="size-4" aria-hidden />
@@ -155,7 +154,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
         ) : error ? (
           <ErrorState what="your family's records" onRetry={() => refetch()} retrying={isRefetching} />
         ) : !child ? (
-          <EmptyState icon={SmileIcon} title="No children are linked to your account">
+          <EmptyState tone="warm" icon={SmileIcon} title="No children are linked to your account">
             Ask the clinic to add you as your child&apos;s guardian.
           </EmptyState>
         ) : (

@@ -32,14 +32,14 @@ export function VisitBanner({ patientId }: { patientId: string }) {
     return (
       <div
         role="status"
-        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand bg-brand-subtle px-4 py-3"
+        className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand-ring bg-brand-subtle px-4 py-3"
       >
         <p className="flex items-center gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand text-brand-ink">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-deep text-on-deep">
             <StethoscopeIcon className="size-4.5" aria-hidden />
           </span>
           <span>
-            <span className="block font-semibold text-brand">Visit in progress</span>
+            <span className="block font-semibold text-brand-tint-ink">Visit in progress</span>
             <span className="block text-sm text-ink-muted">
               Started {format(parseISO(current.startedAt), "h:mm a")} with {dentist}. New records attach to this visit.
             </span>
@@ -61,7 +61,7 @@ export function VisitBanner({ patientId }: { patientId: string }) {
   if (!canWrite) return null; // front desk: "visit in progress" is shown above; there's nothing to start
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-xl border border-dashed border-line-strong px-4 py-2.5">
+    <div className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface px-4 py-2.5 shadow-card">
       {/* One line on a phone: the tabs, not the banner, should own the first screen. */}
       <p className="text-sm text-ink-muted">
         No visit in progress.<span className="hidden sm:inline"> Start one to chart, write notes or take photos.</span>

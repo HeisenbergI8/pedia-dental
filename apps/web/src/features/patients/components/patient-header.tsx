@@ -21,7 +21,7 @@ function AlertChip({ icon: Icon, label, strong }: { icon: LucideIcon; label: str
     <li
       className={cn(
         "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-sm",
-        strong ? "border-alert-line bg-alert-bg font-semibold text-alert" : "border-line bg-ground text-ink",
+        strong ? "border-alert-line bg-alert-bg font-semibold text-alert" : "border-transparent bg-selected text-ink",
       )}
     >
       <Icon className="size-3.5 shrink-0" aria-hidden />
@@ -45,7 +45,7 @@ export function PatientHeader({ patientId }: { patientId: string }) {
   return (
     <header
       data-patient-header
-      className="sticky top-14 z-(--z-sticky) -mx-4 border-b border-line bg-ground/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 md:top-0 lg:-mx-8 lg:px-8"
+      className="sticky top-14 z-(--z-sticky) -mx-4 border-b border-line bg-surface/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 md:top-3 md:mx-0 md:rounded-2xl md:border md:px-5 md:py-4 md:shadow-card"
     >
       <Link
         href="/patients"
@@ -74,7 +74,7 @@ export function PatientHeader({ patientId }: { patientId: string }) {
               />
               {summary && <RecordFacts summary={summary} />}
               {siblings.length > 0 && (
-                <p className="mt-1 inline-flex items-center gap-1 rounded-md border border-info-line bg-info-bg px-2 py-0.5 text-xs font-medium text-info">
+                <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-info-bg px-2 py-0.5 text-xs font-semibold text-info">
                   <UsersIcon className="size-3 shrink-0" aria-hidden />
                   Sibling of{" "}
                   {siblings.map((x, i) => (
@@ -108,7 +108,7 @@ function RecordFacts({ summary: s }: { summary: PatientHeaderSummary }) {
         </span>,
         s.lastVisitOn ? `Last visit ${shortDate(s.lastVisitOn)}` : "No visits yet",
         !!s.balance && s.balance > 0 && (
-          <span key="due" className="inline-flex items-center gap-1 font-medium whitespace-nowrap text-warning tabular-nums">
+          <span key="due" className="inline-flex items-center gap-1 rounded-full bg-warning-bg px-2 py-0.5 text-xs font-semibold whitespace-nowrap text-warning tabular-nums">
             <CircleDollarSignIcon className="size-3.5" aria-hidden />
             {formatPeso(s.balance)} due
           </span>

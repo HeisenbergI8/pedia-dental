@@ -81,7 +81,7 @@ export function LoginScreen() {
             {session && !signingIn && (
               <p role="status" className="rounded-lg border border-line bg-surface px-4 py-3 text-sm">
                 You&apos;re signed in as <strong>{session.user.name}</strong> ({ROLE_LABEL[session.user.role]}).{" "}
-                <Link href={ROLE_HOME[session.user.role]} className="font-medium text-brand underline-offset-2 hover:underline">
+                <Link href={ROLE_HOME[session.user.role]} className="font-semibold text-brand underline-offset-2 hover:underline">
                   Continue
                 </Link>{" "}
                 or sign in as someone else.

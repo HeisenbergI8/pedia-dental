@@ -45,6 +45,8 @@ const PAIRS: [string, string, number][] = [
   ["on-deep-label", "brand-deep", 4.5],
   ["second", "second-bg", 4.5],
   ["second", "surface", 4.5],
+  ["ink-muted", "second-bg", 4.5],
+  ["ink-muted", "brand-subtle", 4.5],
   ["ink", "sunny", 4.5],
   ["ink-muted", "sunny", 4.5],
   ["input-border", "surface", 3],
@@ -62,6 +64,9 @@ describe.each([
     expect(t[fg], `--color-${fg} is missing or not #rrggbb`).toBeDefined();
     expect(t[bg], `--color-${bg} is missing or not #rrggbb`).toBeDefined();
     expect(ratio(t[fg], t[bg])).toBeGreaterThanOrEqual(min);
+  });
+  it("the stacked series differ in lightness, not hue alone", () => {
+    expect(ratio(t["chart-returning"], t["chart-new"])).toBeGreaterThanOrEqual(1.3);
   });
 });
 

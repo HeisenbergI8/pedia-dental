@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { env } from "@/lib/env";
+import { firstName, withoutTitle } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Can, ROLE_LABEL, useSession } from "../access";
 import { useSignOut } from "../api";
@@ -24,14 +25,12 @@ function resetDemoData() {
   void import("@/mocks/db").then((m) => m.resetDb());
 }
 
-const withoutTitle = (name: string) => name.replace(/^Dr\.\s*/, "");
 const initials = (name: string) =>
   withoutTitle(name)
     .split(/\s+/)
     .map((w) => w[0])
     .slice(0, 2)
     .join("");
-const firstName = (name: string) => withoutTitle(name).split(/\s+/)[0];
 
 /**
  * Who is acting on this device, always visible, with switch user (staff, own PIN), appearance and sign out.
