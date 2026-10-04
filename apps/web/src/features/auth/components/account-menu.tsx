@@ -53,7 +53,8 @@ export function AccountMenu({ variant = "full" }: { variant?: "full" | "bar" | "
             aria-label={`${user.name}, ${ROLE_LABEL[user.role]}. Account menu`}
             className={cn(
               "h-auto min-h-11 text-left text-ink", // ghost is muted by default; the account name is not
-              variant === "full" && "w-full justify-start gap-3 rounded-xl border border-line bg-surface p-2 hover:bg-selected",
+              // A long name wraps to a second line rather than being cut off (a name is identity).
+              variant === "full" && "w-full justify-start gap-2.5 rounded-xl border border-line bg-surface p-2 whitespace-normal hover:bg-selected",
               variant === "bar" && "gap-2 px-2",
               variant === "rail" && "w-full flex-col gap-1 px-1 py-1.5",
             )}
@@ -63,13 +64,13 @@ export function AccountMenu({ variant = "full" }: { variant?: "full" | "bar" | "
             </span>
             {variant === "full" && (
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold">{user.name}</span>
+                <span className="block text-sm leading-snug font-semibold break-words">{user.name}</span>
                 <span className="block text-xs font-normal text-ink-muted">{ROLE_LABEL[user.role]}</span>
               </span>
             )}
             {variant === "bar" && <span className="max-w-24 truncate text-sm font-medium">{firstName(user.name)}</span>}
             {variant === "rail" && <span className="w-full truncate text-center text-xs font-medium">{firstName(user.name)}</span>}
-            {variant !== "rail" && <ChevronsUpDownIcon className="size-4 text-ink-muted" aria-hidden />}
+            {variant !== "rail" && <ChevronsUpDownIcon className="size-4 shrink-0 text-ink-muted" aria-hidden />}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-72">
