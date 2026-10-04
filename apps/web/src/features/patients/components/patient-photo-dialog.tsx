@@ -63,7 +63,7 @@ export function PatientPhotoDialog({ patient: p }: { patient: PatientView }) {
           <DialogFooter className="gap-2 sm:justify-between">
             {/* Away from the primary actions, and behind a confirm. */}
             {p.photoUpdatedAt ? (
-              <Button variant="ghost" className="text-danger sm:mr-auto" onClick={() => setConfirmRemove(true)}>Remove…</Button>
+              <Button variant="ghost" className="text-danger sm:mr-auto" onClick={() => setConfirmRemove(true)}>Remove</Button>
             ) : <span />}
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" disabled={set.isPending} onClick={() => file.current?.click()}>

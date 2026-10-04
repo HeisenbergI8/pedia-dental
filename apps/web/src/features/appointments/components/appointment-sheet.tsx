@@ -122,10 +122,10 @@ function Details({ appointment: a, onReschedule }: { appointment: Appointment; o
             <Button variant="outline" disabled={busy} onClick={onReschedule}>Reschedule</Button>
           )}
           {canTransition(a.status, "no_show") && (
-            <Button variant="outline" disabled={busy} onClick={() => setConfirmNoShow(true)}>No-show…</Button>
+            <Button variant="outline" disabled={busy} onClick={() => setConfirmNoShow(true)}>No-show</Button>
           )}
           {canTransition(a.status, "cancelled") && (
-            <Button variant="outline" disabled={busy} onClick={() => setCancelReason("")}>Cancel…</Button>
+            <Button variant="outline" disabled={busy} onClick={() => setCancelReason("")}>Cancel appointment</Button>
           )}
         </SheetFooter>
       )}

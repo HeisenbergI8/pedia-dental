@@ -44,7 +44,7 @@ export function AppointmentRequests({ look = "strip" }: { look?: "strip" | "card
                 </div>
                 <span className="flex gap-2">
                   <Button size="sm" onClick={() => setDraft({ patientId: r.patientId, reason: r.reason, start: start < new Date() ? new Date() : start })}>
-                    Book…
+                    Book
                   </Button>
                   <Button
                     size="sm"

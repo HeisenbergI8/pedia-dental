@@ -66,7 +66,7 @@ export function BillingTab({ patientId }: { patientId: string }) {
                 canCollect && (
                   <>
                     {paid > 0 && (
-                      <Button variant="ghost" size="sm" className="text-ink-muted" onClick={() => setPaying({ invoice: inv, refund: true })}>Refund…</Button>
+                      <Button variant="ghost" size="sm" className="text-ink-muted" onClick={() => setPaying({ invoice: inv, refund: true })}>Refund</Button>
                     )}
                     {balance > 0 && <Button size="sm" onClick={() => setPaying({ invoice: inv, refund: false })}>Record payment</Button>}
                   </>
