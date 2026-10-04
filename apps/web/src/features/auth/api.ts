@@ -1,12 +1,12 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { z } from "zod";
-import { DemoAccounts, Session, roleCan, type LoginInput, type LogoutInput, type SwitchUserInput } from "@pedia/shared";
+import { DemoAccounts, Session, type LoginInput, type LogoutInput, type SwitchUserInput } from "@pedia/shared";
 import { api } from "@/lib/api-client";
 import { useSessionStore } from "@/stores/session-store";
-import { ROLE_HOME, routePermission } from "./access";
+import { ROLE_HOME } from "./access";
 
 export const authKeys = { demo: ["auth", "demo-accounts"] as const, signIn: ["auth", "sign-in"] as const };
 
@@ -42,21 +42,19 @@ export function useSignIn() {
 /**
  * Hands this device to another staff member after they enter their own PIN. Like signing in, it drops every cached
  * query, so nothing the last person opened is shown to the next one and the next reads are audited as the new
- * person. It stays on this page when the new person may open it, otherwise it goes to their home. The page itself
- * remounts (AppShell keys it by user), so a half-filled form is cleared.
+ * person. It then goes to the new person's home page, whatever page the last person had open, so a dentist always
+ * starts on their appointments. The page itself remounts (AppShell keys it by user), so a half-filled form is cleared.
  */
 export function useSwitchUser() {
   const qc = useQueryClient();
   const router = useRouter();
-  const pathname = usePathname();
   const signIn = useSessionStore((s) => s.signIn);
   return useMutation({
     mutationFn: (input: SwitchUserInput) => api("/auth/switch", Session, { method: "POST", body: JSON.stringify(input) }),
     onSuccess: (session) => {
       signIn(session);
       qc.removeQueries({ predicate: (q) => q.queryKey[0] !== authKeys.demo[0] });
-      const needs = routePermission(pathname);
-      if (needs && !roleCan(session.user.role, needs)) router.replace(ROLE_HOME[session.user.role]);
+      router.replace(ROLE_HOME[session.user.role]);
     },
   });
 }
