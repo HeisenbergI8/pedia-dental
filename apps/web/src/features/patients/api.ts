@@ -59,6 +59,7 @@ export function usePatient(id: string) {
   return useQuery({
     queryKey: patientKeys.detail(id),
     queryFn: () => api(`/patients/${id}`, PatientView),
+    enabled: !!id, // the booking form asks before a patient is picked
   });
 }
 
@@ -83,12 +84,20 @@ export function useQuickUpdatePatient(id: string) {
   });
 }
 
-/** Asked once, on "Create patient": an action, so a mutation rather than a query that runs while typing. */
-export function useCheckDuplicates() {
-  return useMutation({
-    // Only the three fields: the caller may pass the whole form.
-    mutationFn: ({ firstName, lastName, birthDate }: Pick<CreatePatientInput, "firstName" | "lastName" | "birthDate">) =>
-      api(`/patient-duplicates?${new URLSearchParams({ firstName, lastName, birthDate })}`, z.array(DuplicateMatch)),
+type DuplicateCandidate = Pick<CreatePatientInput, "firstName" | "lastName" | "birthDate">;
+
+/** One definition for the live check and the one on save. Only the three fields: callers may pass the whole form. */
+export const duplicateQuery = ({ firstName, lastName, birthDate }: DuplicateCandidate) => ({
+  queryKey: [...patientKeys.all, "duplicates", firstName.trim(), lastName.trim(), birthDate] as const,
+  queryFn: () => api(`/patient-duplicates?${new URLSearchParams({ firstName, lastName, birthDate })}`, z.array(DuplicateMatch)),
+});
+
+/** Live while registering: runs once both names and a whole birth date are in. No candidate = idle. */
+export function useDuplicateMatches(candidate: DuplicateCandidate | undefined) {
+  return useQuery({
+    ...duplicateQuery(candidate ?? { firstName: "", lastName: "", birthDate: "" }),
+    enabled: !!candidate,
+    placeholderData: keepPreviousData,
   });
 }
 

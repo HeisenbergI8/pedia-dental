@@ -1,11 +1,14 @@
 import { createElement as h, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { InboxIcon } from "lucide-react";
+import { FormProvider, useForm } from "react-hook-form";
 import { describe, expect, it } from "vitest";
 import { EmptyState } from "@/components/empty-state";
+import { FormField } from "@/components/form-field";
 import { SectionCard } from "@/components/section-card";
 import { Segmented } from "@/components/segmented";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { read } from "./source";
 
@@ -49,4 +52,19 @@ it("line tabs underline in brand", () => {
 
 it("overlays use the scrim token, not black", () => {
   expect(read("components/ui/dialog.tsx") + read("components/ui/sheet.tsx")).not.toContain("bg-black");
+});
+
+function InForm({ children }: { children: ReactElement }) {
+  return h(FormProvider, { ...useForm(), children });
+}
+
+describe("FormField", () => {
+  it("marks optional fields in words and wires the hint to the control", () => {
+    const out = html(h(InForm, null, h(FormField, { name: "school", label: "School", optional: true, hint: "Where the child studies", children: h(Input) })));
+    expect(out).toContain("(optional)");
+    expect(out).toMatch(/<input[^>]*aria-describedby="[^"]*-hint"/);
+  });
+  it("a required field says nothing extra", () => {
+    expect(html(h(InForm, null, h(FormField, { name: "firstName", label: "First name", children: h(Input) })))).not.toContain("optional");
+  });
 });

@@ -106,6 +106,12 @@ describe("patients", () => {
     expect(await api(`/patients/${created.id}`, Patient)).toEqual(created);
   });
 
+  it("records the medical answers, and refuses an answer that contradicts the lists", async () => {
+    await expect(api("/patients", Patient, send("POST", { ...newPatient, noKnownAllergies: true }))).rejects.toMatchObject({ status: 400 });
+    const created = await api("/patients", Patient, send("POST", { ...newPatient, noKnownAllergies: false, noKnownConditions: true }));
+    expect(created).toMatchObject({ noKnownAllergies: false, noKnownConditions: true });
+  });
+
   it("rejects a patient without exactly one primary guardian", async () => {
     const noPrimary = { ...newPatient, guardians: [{ ...newPatient.guardians[0], isPrimary: false }] };
     await expect(api("/patients", Patient, send("POST", noPrimary))).rejects.toMatchObject({ status: 400 });

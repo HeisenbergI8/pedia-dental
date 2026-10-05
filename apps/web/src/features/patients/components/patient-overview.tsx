@@ -22,6 +22,9 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 const listOrNone = (items: string[]) => (items.length ? items.join(", ") : <span className="text-ink-muted">None recorded</span>);
+/** A medical list with its intake answer: an empty list reads "None known" only when someone asked. */
+const answered = (items: string[], noneKnown: boolean | undefined) =>
+  items.length ? items.join(", ") : <span className="text-ink-muted">{noneKnown ? "None known" : "Not asked yet"}</span>;
 
 /** The reference column of the overview: medical, contacts, history and consents. */
 export function PatientOverview({ patient: p }: { patient: PatientView }) {
@@ -48,9 +51,9 @@ export function PatientOverview({ patient: p }: { patient: PatientView }) {
         }
       >
         <dl className="space-y-3">
-          <Field label="Allergies">{listOrNone(p.allergies)}</Field>
-          <Field label="Medical conditions">{listOrNone(p.medicalConditions)}</Field>
-          <Field label="Medications">{listOrNone(p.medications)}</Field>
+          <Field label="Allergies">{answered(p.allergies, p.noKnownAllergies)}</Field>
+          <Field label="Medical conditions">{answered(p.medicalConditions, p.noKnownConditions)}</Field>
+          <Field label="Medications">{answered(p.medications, p.noKnownConditions)}</Field>
           <Field label="Notes and alerts">{listOrNone(p.alerts)}</Field>
         </dl>
       </SectionCard>

@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,17 @@ const UPCOMING = new Set(["booked", "confirmed", "arrived", "in_chair"]);
 export function PatientAppointments({ patientId }: { patientId: string }) {
   const { data, isLoading, error, refetch, isRefetching } = usePatientAppointments(patientId);
   const [draft, setDraft] = useState<AppointmentDraft | null>(null);
+  // "Save and book appointment" on New patient lands here with ?book=1: open booking once, then drop the param.
+  const params = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  useEffect(() => {
+    if (params.get("book") !== "1") return;
+    setDraft({ patientId });
+    const q = new URLSearchParams(params);
+    q.delete("book");
+    router.replace(q.size ? `${pathname}?${q}` : pathname, { scroll: false });
+  }, [params, patientId, pathname, router]);
   const noShows = data?.filter((a) => a.status === "no_show").length ?? 0;
   const upcoming = data?.filter((a) => UPCOMING.has(a.status)) ?? [];
 

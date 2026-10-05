@@ -1,20 +1,23 @@
 "use client";
-import { useEffect } from "react";
-import { Controller, FormProvider, useForm, useFormContext } from "react-hook-form";
+import { useEffect, useMemo, useState } from "react";
+import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { format } from "date-fns";
+import { addDays, format, isValid, parseISO, startOfDay } from "date-fns";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { z } from "zod";
-import { IsoDate, outsideClinicHours, type Appointment } from "@pedia/shared";
+import { IsoDate, bookableStart, findFreeSlots, outsideClinicHours, type Appointment } from "@pedia/shared";
 import { FormField } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useSession } from "@/features/auth/access";
 import { useChairs, useProcedures, useStaff } from "@/features/clinic/api";
-import { usePatients } from "@/features/patients/api";
-import { useBookAppointment, useRescheduleAppointment } from "../api";
+import { usePatient } from "@/features/patients/api";
+import { useVisits } from "@/features/visits/api";
+import { useAppointments, useBookAppointment, useRescheduleAppointment } from "../api";
+import { bookLabel } from "../booking";
+import { DentistPicker, PatientPicker, ProcedurePicker, SelectField, SlotPicker, TimeFields } from "./booking-pickers";
 
 const FormValues = z
   .object({
@@ -33,6 +36,7 @@ const FormValues = z
     if (why) ctx.addIssue({ code: "custom", message: why, path: ["time"] });
   });
 type FormValues = z.infer<typeof FormValues>;
+export type BookingValues = FormValues;
 
 /** Where the form opens: a slot picked on the calendar, or an appointment being moved. */
 export type AppointmentDraft = Partial<Pick<Appointment, "patientId" | "chairId" | "dentistId" | "reason" | "durationMin" | "sourceRuleId" | "procedureCode">> & {
@@ -40,49 +44,28 @@ export type AppointmentDraft = Partial<Pick<Appointment, "patientId" | "chairId"
   appointment?: Appointment;
 };
 
-function toValues({ appointment, start, ...rest }: AppointmentDraft): FormValues {
+/** `myDentistId`: the signed-in dentist, the default when the draft names none. */
+function toValues({ appointment, start, ...rest }: AppointmentDraft, myDentistId?: string): FormValues {
   const merged = { ...rest, ...appointment };
-  const at = appointment ? new Date(appointment.startsAt) : (start ?? new Date());
+  const durationMin = merged.durationMin ?? 30;
+  // A move keeps its time; a new booking opens on a bookable one (a calendar day arrives as 00:00).
+  const at = appointment ? new Date(appointment.startsAt) : bookableStart(start, new Date(), durationMin);
   return {
     patientId: merged.patientId ?? "",
     reason: merged.reason ?? "",
-    dentistId: merged.dentistId ?? "",
+    dentistId: merged.dentistId ?? myDentistId ?? "",
     chairId: merged.chairId ?? "",
     date: format(at, "yyyy-MM-dd"),
     time: format(at, "HH:mm"),
-    durationMin: merged.durationMin ?? 30,
+    durationMin,
     procedureCode: merged.procedureCode,
   };
 }
 
-function SelectField({ name, label, options }: { name: keyof FormValues; label: string; options: { value: string; label: string }[] }) {
-  const { control } = useFormContext<FormValues>();
-  return (
-    <FormField name={name} label={label}>
-      {(props) => (
-        <Controller
-          control={control}
-          name={name}
-          render={({ field }) => (
-            <Select value={String(field.value)} onValueChange={field.onChange}>
-              <SelectTrigger {...props} className="w-full">
-                <SelectValue placeholder="Choose" />
-              </SelectTrigger>
-              <SelectContent>
-                {options.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        />
-      )}
-    </FormField>
-  );
-}
-
 export function AppointmentForm({ draft, onClose }: { draft: AppointmentDraft | null; onClose: () => void }) {
-  const patients = usePatients();
+  const router = useRouter();
+  const me = useSession()?.user;
+  const myDentistId = me?.role === "dentist" ? me.staffId : undefined;
   const staff = useStaff();
   const chairs = useChairs();
   const procedures = useProcedures();
@@ -91,10 +74,55 @@ export function AppointmentForm({ draft, onClose }: { draft: AppointmentDraft | 
   const form = useForm<FormValues>({ resolver: zodResolver(FormValues), defaultValues: toValues({}) });
   const editing = draft?.appointment;
   const patientFixed = !!(editing ?? draft?.patientId);
+  const dentists = (staff.data ?? []).filter((s) => s.role === "dentist");
+  // Set by "Pick another date or time": from then on the user owns the time, and slots stop following the dentist.
+  const [custom, setCustom] = useState(false);
 
   useEffect(() => {
-    if (draft) form.reset(toValues(draft));
-  }, [draft, form]);
+    if (!draft) return;
+    form.reset(toValues(draft, myDentistId));
+    setCustom(false);
+  }, [draft, form, myDentistId]);
+
+  const [patientId, dentistId, durationMin, date, time] = form.watch(["patientId", "dentistId", "durationMin", "date", "time"]);
+  const patient = usePatient(patientId).data;
+
+  // No dentist from the draft or the session: the one who saw this child last, until the user picks one.
+  const lastDentistId = useVisits(patientId).data?.[0]?.dentistId; // newest first
+  useEffect(() => {
+    if (!draft || draft.appointment || draft.dentistId || myDentistId || !lastDentistId) return;
+    if (form.getFieldState("dentistId").isDirty) return;
+    form.setValue("dentistId", lastDentistId);
+  }, [draft, myDentistId, lastDentistId, form]);
+
+  // Who is booked over the next two weeks: for open slots and to rank the patient search.
+  // Strings from `today`, so the query key is stable across renders (as recall-list.tsx does).
+  const today = format(new Date(), "yyyy-MM-dd");
+  const booked = useAppointments(startOfDay(parseISO(today)).toISOString(), addDays(parseISO(today), 15).toISOString());
+  const bookedIds = useMemo(
+    () => [...new Set((booked.data ?? []).filter((a) => a.status !== "cancelled").sort((a, b) => a.startsAt.localeCompare(b.startsAt)).map((a) => a.patientId))],
+    [booked.data],
+  );
+
+  // A draft's chair (a clicked calendar slot, a recall) goes first, then the rest in order.
+  const chairKey = [draft?.chairId, ...(chairs.data ?? []).map((c) => c.id)].filter((c, i, a): c is string => !!c && a.indexOf(c) === i).join();
+  const from = useMemo(() => (draft && !draft.appointment ? bookableStart(draft.start, new Date(), draft.durationMin ?? 30) : undefined), [draft]);
+  const slots = useMemo(
+    () =>
+      from && dentistId && chairKey && booked.data && Number.isFinite(durationMin) && durationMin > 0
+        ? findFreeSlots({ from, durationMin, dentistId, chairIds: chairKey.split(",") }, booked.data, 3)
+        : [],
+    [from, dentistId, durationMin, chairKey, booked.data],
+  );
+  const noSlots = !!dentistId && !!booked.data && slots.length === 0;
+
+  // Until the user takes the time into their own hands, it follows the first open slot (dentist or length changed).
+  useEffect(() => {
+    if (custom || editing || !slots[0]) return;
+    form.setValue("date", format(slots[0].startsAt, "yyyy-MM-dd"));
+    form.setValue("time", format(slots[0].startsAt, "HH:mm"));
+    form.setValue("chairId", slots[0].chairId);
+  }, [slots, custom, editing, form]);
 
   function onSubmit({ patientId, date, time, ...rest }: FormValues) {
     const input = { ...rest, startsAt: new Date(`${date}T${time}`).toISOString() };
@@ -108,76 +136,54 @@ export function AppointmentForm({ draft, onClose }: { draft: AppointmentDraft | 
     else book.mutate({ ...input, patientId, sourceRuleId: draft?.sourceRuleId }, { onSuccess: saved("Appointment booked"), onError });
   }
 
-  const patientName = (id: string) => {
-    const p = patients.data?.find((x) => x.id === id);
-    return p ? `${p.lastName}, ${p.firstName}` : "";
-  };
-  const patientOptions = (patients.data ?? [])
-    .map((p) => ({ value: p.id, label: patientName(p.id) }))
-    .sort((a, b) => a.label.localeCompare(b.label));
+  const when = new Date(`${date}T${time}`);
+  const submitLabel = editing ? "Move appointment" : isValid(when) ? bookLabel(when) : "Book appointment";
 
   return (
     <Dialog open={!!draft} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{editing ? "Reschedule appointment" : "New appointment"}</DialogTitle>
           <DialogDescription>
-            {patientFixed ? patientName(form.watch("patientId")) : "A chair or dentist can't be double-booked."}
+            {patientFixed && patient ? `${patient.lastName}, ${patient.firstName}` : "A chair or dentist can't be double-booked."}
           </DialogDescription>
         </DialogHeader>
         <FormProvider {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="space-y-4">
-            {!patientFixed && <SelectField name="patientId" label="Patient" options={patientOptions} />}
-            {!editing && (
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="appt-procedure">Procedure (fills reason and length)</Label>
-                {/* Controlled, so a procedure prefilled by the recall list shows as selected. */}
-                <Select
-                  value={form.watch("procedureCode") ?? ""}
-                  onValueChange={(code) => {
-                    const p = procedures.data?.find((x) => x.code === code);
-                    if (!p) return;
-                    form.setValue("procedureCode", p.code);
-                    form.setValue("reason", p.name, { shouldValidate: true });
-                    form.setValue("durationMin", p.defaultDurationMin, { shouldValidate: true });
-                  }}
-                >
-                  <SelectTrigger id="appt-procedure" className="w-full">
-                    <SelectValue placeholder="Choose" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {procedures.data?.map((p) => (
-                      <SelectItem key={p.code} value={p.code}>{p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+          <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="space-y-5">
+            {editing ? (
+              <>
+                <FormField name="reason" label="Reason">
+                  <Input {...form.register("reason")} />
+                </FormField>
+                <SelectField name="dentistId" label="Dentist" options={dentists.map((s) => ({ value: s.id, label: s.fullName }))} />
+                <TimeFields chairs={chairs.data ?? []} />
+              </>
+            ) : (
+              <>
+                {!patientFixed && (
+                  <PatientPicker
+                    bookedIds={bookedIds}
+                    onRegister={(q) => {
+                      onClose();
+                      router.push(`/patients/new?name=${encodeURIComponent(q)}`);
+                    }}
+                  />
+                )}
+                <ProcedurePicker procedures={procedures.data ?? []} />
+                <DentistPicker dentists={dentists} myId={myDentistId} lastId={lastDentistId} childName={patient?.firstName} />
+                {custom || noSlots ? (
+                  <>
+                    {noSlots && !custom && <p className="text-sm text-ink-muted">No open time in the next 2 weeks for this dentist. Pick a date and time.</p>}
+                    <TimeFields chairs={chairs.data ?? []} />
+                  </>
+                ) : (
+                  <SlotPicker slots={slots} chairs={chairs.data ?? []} dentistChosen={!!dentistId} onCustom={() => setCustom(true)} />
+                )}
+              </>
             )}
-            <FormField name="reason" label="Reason">
-              <Input {...form.register("reason")} />
-            </FormField>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <SelectField
-                name="dentistId"
-                label="Dentist"
-                options={(staff.data ?? []).filter((s) => s.role === "dentist").map((s) => ({ value: s.id, label: s.fullName }))}
-              />
-              <SelectField name="chairId" label="Chair" options={(chairs.data ?? []).map((c) => ({ value: c.id, label: c.name }))} />
-            </div>
-            <div className="grid gap-4 sm:grid-cols-3">
-              <FormField name="date" label="Date">
-                <Input type="date" {...form.register("date")} />
-              </FormField>
-              <FormField name="time" label="Start">
-                <Input type="time" step={900} {...form.register("time")} />
-              </FormField>
-              <FormField name="durationMin" label="Minutes">
-                <Input type="number" min={5} step={5} {...form.register("durationMin", { valueAsNumber: true })} />
-              </FormField>
-            </div>
             <DialogFooter>
               <Button type="submit" disabled={book.isPending || reschedule.isPending}>
-                {editing ? "Move appointment" : "Book appointment"}
+                {submitLabel}
               </Button>
             </DialogFooter>
           </form>

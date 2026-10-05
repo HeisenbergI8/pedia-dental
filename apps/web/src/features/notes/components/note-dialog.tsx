@@ -32,6 +32,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ToothPicker } from "@/features/chart/components/tooth-picker";
+import { usePatientAppointments } from "@/features/appointments/api";
 import { useNoteTemplates, useSaveNote, useSignNote } from "../api";
 
 export const BEHAVIOR_LABEL: Record<BehaviorRating, string> = {
@@ -61,7 +62,11 @@ export function NoteDialog({
   const [open, setOpen] = useState(false);
   const templates = useNoteTemplates();
   const [templateId, setTemplateId] = useState(note?.templateId);
-  const template = templates.data?.find((t) => t.id === templateId);
+  // A new note during a booked visit starts on that visit's procedure; the user can still pick another.
+  const booked = usePatientAppointments(patient.id).data?.find((a) => a.id === visit?.appointmentId);
+  const suggestedId = note ? undefined : templates.data?.find((t) => t.procedure === booked?.procedureCode)?.id;
+  const shownId = templateId ?? suggestedId;
+  const template = templates.data?.find((t) => t.id === shownId);
 
   return (
     <Dialog
@@ -80,7 +85,7 @@ export function NoteDialog({
         {!note && (
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="note-template">Template</Label>
-            <Select value={templateId} onValueChange={setTemplateId}>
+            <Select value={shownId} onValueChange={setTemplateId}>
               <SelectTrigger id="note-template" className="w-full">
                 <SelectValue placeholder="Choose a procedure" />
               </SelectTrigger>

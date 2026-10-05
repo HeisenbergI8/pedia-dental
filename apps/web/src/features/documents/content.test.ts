@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DocumentType, formatPeso, pesos, type GenerateDocumentInput } from "@pedia/shared";
 import { formatDate } from "@/lib/format";
 import { buildDocument, type DocSources } from "./content";
+import { initialDraft } from "./components/documents-tab";
 
 const at = "2026-09-30T02:00:00.000Z";
 const src: DocSources = {
@@ -86,5 +87,18 @@ describe("document content", () => {
     expect(t).toContain(JSON.stringify(["For", "Deposit on account"]));
     expect(t).toContain(JSON.stringify(["Deposit after this", formatPeso(pesos(1000))]));
     expect(text({ type: "receipt", sourceId: "pay1", issuedBy: "staff_cruz" })).toContain(JSON.stringify(["Balance after this", formatPeso(0)]));
+  });
+});
+
+describe("initialDraft", () => {
+  it("a dentist signs their own documents; anyone else gets the dentist who saw the child last", () => {
+    expect(initialDraft("dental_certificate", src, "staff_reyes").issuedBy).toBe("staff_reyes");
+    expect(initialDraft("dental_certificate", src, "staff_cruz").issuedBy).toBe("staff_reyes");
+    expect(initialDraft("receipt", src, "staff_cruz").issuedBy).toBe("staff_cruz");
+  });
+  it("preselects the clearance procedure only when one treatment is planned", () => {
+    const item = (id: string, procedureCode: string) => ({ ...src.plan[0], id, procedureCode, status: "planned" as const });
+    expect(initialDraft("clearance", { ...src, plan: [item("i1", "extraction")] }).details).toEqual({ procedure: "extraction" });
+    expect(initialDraft("clearance", { ...src, plan: [item("i1", "extraction"), item("i2", "pulpotomy")] }).details).toEqual({});
   });
 });

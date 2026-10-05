@@ -24,24 +24,28 @@ export function ConsentDialog({ patient }: { patient: PatientView }) {
   const [open, setOpen] = useState(false);
   const addConsent = useAddConsent(patient.id);
   const primary = patient.guardians.find((g) => g.isPrimary) ?? patient.guardians[0];
-  const form = useForm<AddConsentInput>({
-    resolver: zodResolver(AddConsentInput),
-    defaultValues: { guardianId: primary.id, scope: "general_treatment", date: format(new Date(), "yyyy-MM-dd") },
-  });
+  // Today as of opening: the page may have been open since yesterday, and reset() would restore a stale default.
+  const fresh = (): AddConsentInput => ({ guardianId: primary.id, scope: "general_treatment", date: format(new Date(), "yyyy-MM-dd") });
+  const form = useForm<AddConsentInput>({ resolver: zodResolver(AddConsentInput), defaultValues: fresh() });
 
   function onSubmit(input: AddConsentInput) {
     addConsent.mutate(input, {
       onSuccess: () => {
         toast.success("Consent recorded");
         setOpen(false);
-        form.reset();
       },
       onError: (e) => toast.error(e.message),
     });
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (o) form.reset(fresh());
+        setOpen(o);
+      }}
+    >
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">Record consent</Button>
       </DialogTrigger>

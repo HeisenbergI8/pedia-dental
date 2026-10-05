@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { AlertTriangleIcon, ChevronLeftIcon, CircleDollarSignIcon, HeartPulseIcon, InfoIcon, PhoneIcon, UsersIcon } from "lucide-react";
+import { AlertTriangleIcon, ChevronLeftIcon, CircleHelpIcon, CircleDollarSignIcon, HeartPulseIcon, InfoIcon, PhoneIcon, UsersIcon } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { format, isThisYear, parseISO } from "date-fns";
 import { formatPeso, type PatientView, type PatientHeaderSummary } from "@pedia/shared";
@@ -90,7 +90,7 @@ export function PatientHeader({ patientId }: { patientId: string }) {
           <PrimaryGuardian guardians={p.guardians} />
         </div>
       )}
-      {p && <MedicalAlerts allergies={p.allergies} conditions={p.medicalConditions} alerts={p.alerts} />}
+      {p && <MedicalAlerts allergies={p.allergies} noKnownAllergies={p.noKnownAllergies} conditions={p.medicalConditions} alerts={p.alerts} />}
     </header>
   );
 }
@@ -142,14 +142,27 @@ function PrimaryGuardian({ guardians }: { guardians: PatientView["guardians"] })
   );
 }
 
-function MedicalAlerts({ allergies, conditions, alerts }: { allergies: string[]; conditions: string[]; alerts: string[] }) {
-  const none = allergies.length + conditions.length + alerts.length === 0;
+function MedicalAlerts({
+  allergies,
+  noKnownAllergies,
+  conditions,
+  alerts,
+}: {
+  allergies: string[];
+  noKnownAllergies?: boolean;
+  conditions: string[];
+  alerts: string[];
+}) {
+  // Empty and never asked is not the same as none: say so, so nobody reads silence as "no allergies".
+  const unasked = allergies.length === 0 && noKnownAllergies !== true;
+  const none = allergies.length + conditions.length + alerts.length === 0 && !unasked;
   return (
     <section aria-label="Medical alerts" className="mt-3">
       {none ? (
-        <p className="text-sm text-ink-muted">No allergies, conditions or alerts recorded.</p>
+        <p className="text-sm text-ink-muted">No known allergies. No conditions or alerts recorded.</p>
       ) : (
         <ul className="flex flex-wrap gap-1.5">
+          {unasked && <AlertChip icon={CircleHelpIcon} label="Allergies not asked yet" />}
           {allergies.map((a) => (
             <AlertChip key={`a-${a}`} icon={AlertTriangleIcon} label={`Allergy: ${a}`} strong />
           ))}

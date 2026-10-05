@@ -2,6 +2,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Session } from "@pedia/shared";
+import { clearAllDrafts } from "@/lib/form-draft";
 
 /** Read by the mock API (mocks/access.ts). NestJS will set its own httpOnly cookie instead (Q4). */
 const COOKIE = "pd_session";
@@ -25,10 +26,12 @@ export const useSessionStore = create<SessionState>()(
       session: null,
       activeChildId: null,
       signIn: (session) => {
+        clearAllDrafts(); // Switch user reuses signIn: the next person never sees the last one's typing
         writeCookie(session.token);
         set({ session, activeChildId: null });
       },
       signOut: () => {
+        clearAllDrafts();
         writeCookie(null);
         set({ session: null, activeChildId: null });
       },
