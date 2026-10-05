@@ -34,3 +34,4 @@ export * from "./domain/patients";
 export * from "./domain/today";
 export * from "./domain/permissions";
 export * from "./domain/pin";
+export * from "./domain/photos";

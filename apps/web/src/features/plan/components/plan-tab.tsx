@@ -68,7 +68,7 @@ export function PlanTab({ patientId }: { patientId: string }) {
             aria-valuemin={0}
             aria-valuemax={total}
             aria-valuenow={done}
-            className="h-2.5 overflow-hidden rounded-full bg-ground"
+            className="h-2.5 overflow-hidden rounded-full bg-track ring-1 ring-line-strong ring-inset"
           >
             <div className="h-full rounded-full bg-brand" style={{ width: `${total ? (done / total) * 100 : 0}%` }} />
           </div>

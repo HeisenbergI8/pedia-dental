@@ -3,7 +3,7 @@ import { addDays, addMinutes, addMonths, differenceInYears, format, min, parseIS
 import {
   PERMANENT_TEETH,
   PRIMARY_TEETH,
-  PaymentMethod,
+  MONEY_METHODS,
   dueItemFor,
   formatPatientNo,
   isAnterior,
@@ -17,6 +17,7 @@ import {
   type ChartEntry,
   type ClinicalNote,
   type DueItem,
+  type GrowthRecord,
   type Invoice,
   type Message,
   type Patient,
@@ -121,6 +122,37 @@ function seedPatient(): Patient {
   };
 }
 
+/**
+ * Growth examples on the first three base patients with two completed visits: an explicit stop, an ongoing habit,
+ * and one unticked at the later visit (an inferred stop). No faker calls, so every other record stays the same.
+ */
+function seedGrowth(patients: Patient[], visits: Visit[]): GrowthRecord[] {
+  const pairs = patients
+    .map((p) => visits.filter((v) => v.patientId === p.id && v.completedAt))
+    .filter((vs) => vs.length >= 2)
+    .slice(0, 3)
+    .map((vs) => [vs[0], vs[1]] as const);
+  const record = (v: Visit, habits: GrowthRecord["habits"], speech?: string): GrowthRecord => ({
+    id: `growth_${v.id}`,
+    clinicId: CLINIC_ID,
+    patientId: v.patientId,
+    visitId: v.id,
+    habits,
+    speech,
+    // Noon on the visit's own day: seeded visit dates are UTC days, so completedAt can fall on the next local day.
+    recordedAt: `${v.date}T04:00:00.000Z`,
+  });
+  const examples: ((a: Visit, b: Visit) => GrowthRecord[])[] = [
+    (a, b) => [
+      record(a, [{ habit: "thumb_sucking", startedOn: a.date }], "Lisps on /s/"),
+      record(b, [{ habit: "thumb_sucking", startedOn: a.date, stoppedOn: b.date }]),
+    ],
+    (a, b) => [record(a, [{ habit: "pacifier" }]), record(b, [{ habit: "pacifier" }])],
+    (a, b) => [record(a, [{ habit: "mouth_breathing" }]), record(b, [])],
+  ];
+  return pairs.flatMap(([a, b], i) => examples[i](a, b));
+}
+
 export function seed(): Db {
   faker.seed(42); // same fake data on every machine
   const patients: Patient[] = Array.from({ length: 24 }, seedPatient);
@@ -195,7 +227,7 @@ export function seed(): Db {
     chartEntries: [...chartEntries, ...example.chartEntries],
     noteTemplates: NOTE_TEMPLATES,
     notes: seedExamFindings(allNotes),
-    growth: [],
+    growth: seedGrowth(patients, visits),
     planItems: example.planItems,
     appointments: [...appointments, ...family.appointments, ...roster.appointments],
     photos: [],
@@ -435,9 +467,10 @@ function seedDueItems(visits: Visit[], notes: ClinicalNote[]): DueItem[] {
   for (const n of [...notes].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
     const procedure = NOTE_TEMPLATES.find((t) => t.id === n.templateId)?.procedure ?? "";
     const visit = visits.find((v) => v.id === n.visitId);
-    const due = n.signedAt && visit && dueItemFor(procedure, visit.date);
+    const due = n.signedAt && visit && dueItemFor(procedure, visit.date, n.values);
     if (!due || !n.signedAt) continue;
-    latest.set(`${n.patientId}:${due.ruleId}`, {
+    // One open recall per procedure, as the sign handler keeps it (a high-risk exam replaces the 6-month one).
+    latest.set(`${n.patientId}:${procedure}`, {
       ...due,
       id: `due_${n.id}`,
       clinicId: CLINIC_ID,
@@ -547,7 +580,7 @@ function seedBilling(appointments: Appointment[], skipPatientId?: string) {
       issuedAt: end.toISOString(),
     };
     invoices.push(invoice);
-    const method = PaymentMethod.options[i % PaymentMethod.options.length];
+    const method = MONEY_METHODS[i % MONEY_METHODS.length]; // real money only, so seeded payments are unchanged
     const n = payments.length + 1;
     payments.push({
       id: `pay_seed_${n}`,

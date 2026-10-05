@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { differenceInYears, format, parseISO } from "date-fns";
-import { findConflict, matchesFilter, needsAttention, patientStanding } from "@pedia/shared";
+import { findConflict, habitTimeline, matchesFilter, needsAttention, patientStanding } from "@pedia/shared";
 import { seed } from "./seed";
 
 const today = format(new Date(), "yyyy-MM-dd");
@@ -45,5 +45,17 @@ describe("seed", () => {
 
   it("never double-books a chair or a dentist", () => {
     for (const a of db.appointments) expect(findConflict(a, db.appointments), a.id).toBeUndefined();
+  });
+
+  it("has growth examples: an explicit stop, an ongoing habit and an inferred stop", () => {
+    const db = seed();
+    expect(db.growth).toHaveLength(6);
+    expect(db.growth.every((g) => db.visits.some((v) => v.id === g.visitId))).toBe(true);
+    const third = db.growth.slice(4);
+    expect(habitTimeline(third)[0]).toMatchObject({ habit: "mouth_breathing", stopInferred: true });
+  });
+
+  it("seeds 3-month recalls for high caries risk exams", () => {
+    expect(seed().dueItems.some((i) => i.ruleId === "routine_high_risk")).toBe(true);
   });
 });

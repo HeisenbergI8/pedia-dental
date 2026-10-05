@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
 import { z } from "zod";
-import { IsoDate, PhotoType, isValidTooth } from "@pedia/shared";
+import { IsoDate, PhotoType, isValidTooth, UPLOAD_RULES, uploadProblem } from "@pedia/shared";
 import { FormField } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,6 +41,10 @@ const FormValues = z.object({
   visitId: z.string(),
   takenOn: IsoDate,
   caption: z.string(),
+}).superRefine((v, ctx) => {
+  // The server's rule (uploadProblem): a PDF only for a medical or referral document, under 10 MB.
+  const why = uploadProblem(v.type, v.file);
+  if (why) ctx.addIssue({ code: "custom", message: why, path: ["file"] });
 });
 type FormValues = z.infer<typeof FormValues>;
 
@@ -121,7 +125,7 @@ export function UploadPhotoDialog({ patientId }: { patientId: string }) {
                 <Controller
                   control={form.control}
                   name="file"
-                  render={({ field }) => <PhotoPicker controlProps={props} value={field.value} onChange={field.onChange} />}
+                  render={({ field }) => <PhotoPicker controlProps={props} value={field.value} onChange={field.onChange} allowPdf={UPLOAD_RULES.pdfTypes.includes(form.watch("type"))} />}
                 />
               )}
             </FormField>
@@ -173,16 +177,19 @@ function PhotoPicker({
   controlProps,
   value,
   onChange,
+  allowPdf,
 }: {
   controlProps: { id: string; "aria-invalid": boolean; "aria-describedby"?: string };
   value: File | undefined;
   onChange: (file: File | undefined) => void;
+  /** A document or referral may be a PDF; the camera always takes a photo. */
+  allowPdf: boolean;
 }) {
   const camera = useRef<HTMLInputElement>(null);
   const library = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string>();
   useEffect(() => {
-    if (!value) return setPreview(undefined);
+    if (!value || !value.type.startsWith("image/")) return setPreview(undefined); // a PDF shows its name only
     const url = URL.createObjectURL(value);
     setPreview(url);
     return () => URL.revokeObjectURL(url);
@@ -200,7 +207,7 @@ function PhotoPicker({
         </Button>
       </div>
       <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={pick} />
-      <input ref={library} type="file" accept="image/*" hidden onChange={pick} />
+      <input ref={library} type="file" accept={allowPdf ? "image/*,application/pdf" : "image/*"} hidden onChange={pick} />
       {value && (
         <p className="flex items-center gap-3 text-sm text-ink-muted">
           {/* eslint-disable-next-line @next/next/no-img-element -- a local object URL, not a static asset */}

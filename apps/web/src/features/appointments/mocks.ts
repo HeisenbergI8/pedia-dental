@@ -10,6 +10,7 @@ import {
   canTransition,
   findConflict,
   isDueItemOpen,
+  outsideClinicHours,
   roleCan,
   type Appointment,
   type AppointmentRequest,
@@ -23,12 +24,14 @@ import { CLINIC_ID } from "@/mocks/seed";
 const url = (p: string) => `${env.apiUrl}${p}`;
 const byStart = (a: Appointment, b: Appointment) => a.startsAt.localeCompare(b.startsAt);
 
-/** 400 for unknown references, 409 for a double-booking. Undefined when the slot is free. */
+/** 400 for unknown references or a time the clinic is closed, 409 for a double-booking. Undefined when the slot is free. */
 function rejectSlot(slot: Appointment) {
   if (!db.staff.some((s) => s.id === slot.dentistId && s.role === "dentist")) {
     return new HttpResponse("Unknown dentist", { status: 400 });
   }
   if (!db.chairs.some((c) => c.id === slot.chairId)) return new HttpResponse("Unknown chair", { status: 400 });
+  const closed = outsideClinicHours(slot.startsAt, slot.durationMin);
+  if (closed) return new HttpResponse(closed, { status: 400 });
   const conflict = findConflict(slot, db.appointments);
   if (!conflict) return undefined;
   const who =

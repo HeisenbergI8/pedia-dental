@@ -1,8 +1,8 @@
 import { addDays, addMonths, addWeeks, format, parseISO, startOfMonth, startOfWeek, subDays } from "date-fns";
 import type { Appointment } from "../schemas/appointment";
-import { PaymentMethod, type Invoice, type Payment } from "../schemas/billing";
+import { MONEY_METHODS, type Invoice, type Payment } from "../schemas/billing";
 import type { FinanceSummary } from "../schemas/finance";
-import { accountSummary, invoiceBalance } from "./money";
+import { accountSummary, depositBalance, invoiceBalance, isMoneyIn } from "./money";
 
 const ymd = (d: Date) => format(d, "yyyy-MM-dd");
 /** The clinic-local day of a timestamp, the same rule as GET /payments?date=. */
@@ -20,7 +20,8 @@ export function financeSummary({ invoices, payments, appointments }: Inputs, tod
   const t = parseISO(today);
   const monthStart = ymd(startOfMonth(t));
   const collectedBetween = (from: string, to: string) =>
-    payments.filter((p) => dayOf(p.receivedAt) >= from && dayOf(p.receivedAt) <= to).reduce((s, p) => s + p.amount, 0);
+    // Real money only: applying a deposit to an invoice moves money already counted on the day it was received.
+    payments.filter((p) => isMoneyIn(p) && dayOf(p.receivedAt) >= from && dayOf(p.receivedAt) <= to).reduce((s, p) => s + p.amount, 0);
   const series = (starts: Date[], next: (d: Date) => Date) =>
     starts.map((d) => ({ start: ymd(d), amount: collectedBetween(ymd(d), ymd(subDays(next(d), 1))) }));
   const inMonth = (iso: string) => dayOf(iso) >= monthStart && dayOf(iso) <= today;
@@ -38,6 +39,12 @@ export function financeSummary({ invoices, payments, appointments }: Inputs, tod
     .map((patientId) => ({ patientId, balance: accountSummary(invoices.filter((i) => i.patientId === patientId), payments).balance }))
     .filter((r) => r.balance > 0)
     .sort((a, b) => b.balance - a.balance);
+
+  // Deposits not yet applied: owed to parents until used, so they're not netted against outstanding balances.
+  const depositsHeld = [...new Set(payments.filter((p) => !p.invoiceId).map((p) => p.patientId))].reduce(
+    (s, id) => s + Math.max(0, depositBalance(payments, id)),
+    0,
+  );
 
   const since = ymd(subDays(t, 30));
   const unpaidAppointments = appointments
@@ -61,7 +68,7 @@ export function financeSummary({ invoices, payments, appointments }: Inputs, tod
     byDay: series(Array.from({ length: 14 }, (_, i) => subDays(t, 13 - i)), (d) => addDays(d, 1)),
     byWeek: series(Array.from({ length: 8 }, (_, i) => addWeeks(startOfWeek(t, WEEK), i - 7)), (d) => addWeeks(d, 1)),
     byMonth: series(Array.from({ length: 6 }, (_, i) => addMonths(startOfMonth(t), i - 5)), (d) => addMonths(d, 1)),
-    byMethod: PaymentMethod.options.map((method) => ({
+    byMethod: MONEY_METHODS.map((method) => ({
       method,
       amount: payments.filter((p) => p.method === method && inMonth(p.receivedAt)).reduce((s, p) => s + p.amount, 0),
     })),
@@ -69,6 +76,7 @@ export function financeSummary({ invoices, payments, appointments }: Inputs, tod
     discounts: monthInvoices.reduce((s, i) => s + i.discount, 0),
     outstanding,
     outstandingTotal: outstanding.reduce((s, r) => s + r.balance, 0),
+    depositsHeld,
     unpaidAppointments,
   };
 }

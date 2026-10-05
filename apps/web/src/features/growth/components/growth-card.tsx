@@ -94,7 +94,7 @@ export function GrowthCard({ patient }: { patient: PatientView }) {
               <span className="font-medium">{HABIT_LABEL[h.habit]}</span>
               <span className="text-sm">
                 {h.startedOn ? `since ${day(h.startedOn)}` : "start unknown"}
-                {h.stoppedOn && ` → stopped ${day(h.stoppedOn)}`}
+                {h.stoppedOn && (h.stopInferred ? ` → not ticked at the ${day(h.stoppedOn)} visit` : ` → stopped ${day(h.stoppedOn)}`)}
                 <Badge variant={h.stoppedOn ? "outline" : "default"} className="ml-2">
                   {h.stoppedOn ? "Stopped" : "Ongoing"}
                 </Badge>
@@ -120,6 +120,7 @@ export function GrowthCard({ patient }: { patient: PatientView }) {
                   </p>
                 ))}
                 {r.speech && <p><span className="text-ink-muted">Speech:</span> {r.speech}</p>}
+                {r.habits.length === 0 && !r.speech && <p className="text-ink-muted">No habits noted</p>}
               </li>
             );
           })}
@@ -155,7 +156,8 @@ function GrowthForm({ patient, visit, records, existing, onSaved }: GrowthProps 
   const save = useSaveGrowth(patient.id);
   const [errors, setErrors] = useState<Partial<Record<OralHabit, string>>>({});
   // Start from this visit's record, else carry forward what earlier visits recorded.
-  const known = existing?.habits ?? habitTimeline(records);
+  // An unticked habit stays unticked at the next visit; an explicit stop still carries its dates, as before.
+  const known = existing?.habits ?? habitTimeline(records).filter((h) => !h.stopInferred);
   const form = useForm({
     defaultValues: {
       rows: OralHabit.options.map((habit): Row => {

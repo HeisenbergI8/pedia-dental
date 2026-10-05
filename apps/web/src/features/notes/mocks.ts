@@ -84,10 +84,11 @@ export const noteHandlers = [
 
     // Signing is also what makes a follow-up or recall fall due (DEFAULT_FOLLOW_UP_RULES).
     const visit = db.visits.find((v) => v.id === note.visitId);
-    const due = visit && dueItemFor(procedure, visit.date);
+    const due = visit && dueItemFor(procedure, visit.date, note.values);
     if (due) {
       for (const old of db.dueItems) {
-        if (old.patientId === note.patientId && old.ruleId === due.ruleId && !old.closedAt) old.closedAt = signedAt;
+        // Same procedure, any rule: a high-risk exam replaces the open 6-month recall, and the reverse.
+        if (old.patientId === note.patientId && old.procedure === procedure && !old.closedAt) old.closedAt = signedAt;
       }
       db.dueItems.push({
         ...due,

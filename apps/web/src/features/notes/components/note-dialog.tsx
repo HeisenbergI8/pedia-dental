@@ -13,6 +13,8 @@ import {
   type PatientView,
   type TemplateField,
   type Visit,
+  BEHAVIOR_NOTE_MAX,
+  UpdateNoteInput,
 } from "@pedia/shared";
 import { FormField } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
@@ -130,7 +132,7 @@ function NoteFields({
   const save = useSaveNote(patient.id);
   const sign = useSignNote(patient.id);
   const schema = useMemo(
-    () => z.object({ values: noteValuesSchema(template), behavior: z.array(BehaviorRating), behaviorNote: z.string().optional() }),
+    () => z.object({ values: noteValuesSchema(template), behavior: z.array(BehaviorRating), behaviorNote: UpdateNoteInput.shape.behaviorNote }),
     [template],
   );
   const form = useForm<NoteForm>({
@@ -199,7 +201,7 @@ function NoteFields({
           )}
         />
         <FormField name="behaviorNote" label="Behavior note (optional)">
-          <Input {...form.register("behaviorNote")} />
+          <Input maxLength={BEHAVIOR_NOTE_MAX} {...form.register("behaviorNote")} />
         </FormField>
 
         <div className="flex flex-wrap justify-end gap-2 pt-2">

@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/empty-state";
 import { SectionCard } from "@/components/section-card";
 import { Button } from "@/components/ui/button";
 import { usePatients } from "@/features/patients/api";
+import { PatientName } from "@/features/patients/components/patient-name";
 import { formatPhone } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { KIND_LABEL, MESSAGE_STATUS_LABEL, useMessages } from "../api";
@@ -41,7 +42,8 @@ function MessageBody({ body }: { body: string }) {
 
 export function MessageLog() {
   const { data: rows = [], isLoading, error, refetch, isRefetching } = useMessages();
-  const patients = usePatients().data ?? [];
+  const patientsQuery = usePatients();
+  const patients = patientsQuery.data ?? [];
   const [status, setStatus] = useState<MessageStatus | "all">("all");
   const [limit, setLimit] = useState(PAGE);
 
@@ -75,7 +77,7 @@ export function MessageLog() {
       </div>
       {shown.length === 0 ? (
         <EmptyState icon={MessageSquareIcon} title={status === "all" ? "No messages yet" : `No ${MESSAGE_STATUS_LABEL[status].toLowerCase()} messages`}>
-          Booking an appointment, a no-show or a signed extraction note queues a message here.
+          Booking an appointment, a no-show or a signed extraction note queues a message here. Booking an extraction or pulpotomy also queues pre-treatment instructions.
         </EmptyState>
       ) : (
         <ul className="divide-y divide-line">
@@ -87,7 +89,7 @@ export function MessageLog() {
                   <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", STATUS_TONE[m.status])}>{MESSAGE_STATUS_LABEL[m.status]}</span>
                   <span className="font-medium">{KIND_LABEL[m.kind]}</span>
                   <Link href={`/patients/${m.patientId}`} className="text-brand underline-offset-2 hover:underline">
-                    {p ? `${p.lastName}, ${p.firstName}` : "Patient"}
+                    <PatientName patient={p} loading={patientsQuery.isLoading} />
                   </Link>
                   <span className="text-ink-muted">
                     to {m.recipientName} · <span className="whitespace-nowrap">{formatPhone(m.to)}</span>

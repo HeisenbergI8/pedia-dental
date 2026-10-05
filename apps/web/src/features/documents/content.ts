@@ -197,6 +197,25 @@ export function buildDocument(choice: GenerateDocumentInput, src: DocSources, no
         { kind: "signatures", lines: [{ label: "Physician", name: physician || undefined }, dentistLine] },
       ]);
     }
+    case "dental_clearance": {
+      // Placeholder wording for the dentist's review (like the other clinical templates).
+      const visit = need(src.visits.find((v) => v.id === choice.sourceId), "That visit");
+      const pending = src.plan.filter((i) => i.status === "planned" || i.status === "in_progress");
+      const pendingText = pending.map((i) => `${procedureName(i.procedureCode)}${i.tooth ? ` (tooth ${i.tooth})` : ""}`);
+      return doc([
+        { kind: "text", paragraphs: [`This is to certify that ${child}, aged ${age}, was examined at ${CLINIC_NAME} on ${formatDate(visit.date)}.`] },
+        { kind: "rows", rows: [...patientRows, ["Cleared for", choice.details?.purpose ?? ""], ["Dental treatment still planned", list(pendingText)]] },
+        {
+          kind: "text",
+          paragraphs: [
+            pending.length
+              ? `From a dental point of view ${child} may proceed. The treatment listed above is still planned.`
+              : `From a dental point of view ${child} is cleared. No dental treatment is pending.`,
+          ],
+        },
+        { kind: "signatures", lines: [dentistLine] },
+      ]);
+    }
     case "post_op_instructions": {
       const note = need(src.notes.find((n) => n.id === choice.sourceId), "That note");
       const template = src.noteTemplates.find((t) => t.id === note.templateId);
@@ -228,7 +247,8 @@ export function buildDocument(choice: GenerateDocumentInput, src: DocSources, no
       );
     case "receipt": {
       const payment = need(src.payments.find((p) => p.id === choice.sourceId), "That payment");
-      const invoice = need(src.invoices.find((i) => i.id === payment.invoiceId), "That payment's invoice");
+      // A deposit has no invoice; a payment that names one must find it.
+      const invoice = payment.invoiceId ? need(src.invoices.find((i) => i.id === payment.invoiceId), "That payment's invoice") : undefined;
       const r = receiptContent({ patient, invoice, payment, payments: src.payments, staff: src.staff });
       return doc([{ kind: "rows", rows: r.rows }], { title: r.title, subtitle: r.subtitle, footnote: r.footnote });
     }

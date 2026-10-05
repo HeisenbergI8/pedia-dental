@@ -46,7 +46,11 @@ export const ClinicalNote = ClinicScoped.extend({
 });
 export type ClinicalNote = z.infer<typeof ClinicalNote>;
 
-export const UpdateNoteInput = ClinicalNote.pick({ values: true, behavior: true, behaviorNote: true });
+export const BEHAVIOR_NOTE_MAX = 300;
+/** The limit is on input only: ClinicalNote also parses stored notes, which are never re-validated. */
+export const UpdateNoteInput = ClinicalNote.pick({ values: true, behavior: true }).extend({
+  behaviorNote: z.string().trim().max(BEHAVIOR_NOTE_MAX, `Keep the behavior note under ${BEHAVIOR_NOTE_MAX} characters`).optional(),
+});
 export type UpdateNoteInput = z.infer<typeof UpdateNoteInput>;
 
 export const CreateNoteInput = UpdateNoteInput.extend(ClinicalNote.pick({ visitId: true, templateId: true }).shape);

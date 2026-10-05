@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupServer } from "msw/node";
 import { z } from "zod";
-import { addDays, format, setHours, startOfDay, startOfMonth, subDays, subYears } from "date-fns";
+import { addDays, addMonths, format, setHours, setMinutes, startOfDay, startOfMonth, subDays, subYears } from "date-fns";
 import {
   Appointment,
   AppointmentRequest,
@@ -37,6 +37,9 @@ import {
   habitTimeline,
   invoiceBalance,
   invoiceTotal,
+  depositBalance,
+  isClosedWeekday,
+  isMoneyIn,
   pesos,
   planProgress,
   reminderSendAt,
@@ -579,6 +582,19 @@ describe("appointments", () => {
   const slot = { dentistId: "staff_reyes", chairId: "chair_3", startsAt: "2030-01-07T01:00:00.000Z", durationMin: 30, reason: "Check-up" };
   const status = (id: string, body: unknown) => api(`/appointments/${id}/status`, Appointment, send("POST", body));
 
+  it("refuses a booking outside clinic hours or on a closed day, and a move there", async () => {
+    const patient = await api("/patients", Patient, send("POST", newPatient));
+    const early = { ...slot, patientId: patient.id, startsAt: "2030-01-14T23:15:00.000Z" }; // Tue 07:15 Manila
+    await expect(api("/appointments", Appointment, send("POST", early))).rejects.toMatchObject({ status: 400 });
+    const sunday = { ...slot, patientId: patient.id, startsAt: "2030-01-13T01:00:00.000Z" }; // Sun 9:00
+    await expect(api("/appointments", Appointment, send("POST", sunday))).rejects.toMatchObject({ status: 400 });
+    const late = { ...slot, patientId: patient.id, startsAt: "2030-01-15T09:45:00.000Z", durationMin: 30 }; // 17:45–18:15
+    await expect(api("/appointments", Appointment, send("POST", late))).rejects.toMatchObject({ status: 400 });
+
+    const booked = await api("/appointments", Appointment, send("POST", { ...slot, patientId: patient.id, startsAt: "2030-01-15T01:00:00.000Z" }));
+    await expect(api(`/appointments/${booked.id}`, Appointment, send("PUT", { ...slot, startsAt: "2030-01-13T01:00:00.000Z" }))).rejects.toMatchObject({ status: 400 });
+  });
+
   it("books, refuses a double-booking, moves, checks in, and finishes through the visit", async () => {
     const patient = await api("/patients", Patient, send("POST", newPatient));
     const booked = await api("/appointments", Appointment, send("POST", { ...slot, patientId: patient.id }));
@@ -660,6 +676,16 @@ describe("photos", () => {
     await expect(upload(patient.id, { ...meta, tooth: 19 })).rejects.toMatchObject({ status: 400 });
     await expect(upload(patient.id, { ...meta, visitId: otherVisit.id })).rejects.toMatchObject({ status: 400 });
   });
+
+  it("takes a PDF for a medical document and serves it as a .pdf, but not as a clinical photo", async () => {
+    const patient = await api("/patients", Patient, send("POST", newPatient));
+    const pdf = new Blob(["%PDF-1.4"], { type: "application/pdf" });
+    const doc = await upload(patient.id, { type: "document", takenOn: "2026-10-02", caption: "Lab result" }, pdf);
+    expect(doc.contentType).toBe("application/pdf");
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/photos/${doc.id}/file`);
+    expect(res.headers.get("content-disposition")).toMatch(/\.pdf"$/);
+    await expect(upload(patient.id, meta, pdf)).rejects.toMatchObject({ status: 400 });
+  });
 });
 
 describe("follow-ups and recalls", () => {
@@ -675,7 +701,7 @@ describe("follow-ups and recalls", () => {
 
     await api(`/notes/${note.id}/sign`, ClinicalNote, { method: "POST" });
     const [due] = await listed();
-    expect(due).toMatchObject({ ruleId: "extraction", kind: "follow_up", dueOn: day(7), sourceNoteId: note.id });
+    expect(due).toMatchObject({ ruleId: "extraction", kind: "follow_up", dueOn: day(7), sourceNoteId: note.id, dentistId: "staff_reyes" });
     expect(dueBucket(due.dueOn, day(0))).toBe("this_week");
 
     // Far from the seeded fortnight around today, so nothing else can clash.
@@ -687,11 +713,29 @@ describe("follow-ups and recalls", () => {
     expect((await listed()).map((i) => i.id)).toEqual([due.id]); // a cancelled booking puts it back
   });
 
-  it("seeds one routine recall per patient, from their latest signed exam", async () => {
+  it("seeds one routine recall per patient, from their latest signed exam, 3-monthly at high caries risk", async () => {
     const items = (await api("/due-items", z.array(DueItem))).filter((i) => i.id.startsWith("due_"));
     expect(items.length).toBeGreaterThan(0);
-    expect(items.every((i) => i.ruleId === "routine" && i.kind === "recall")).toBe(true);
+    expect(items.every((i) => ["routine", "routine_high_risk"].includes(i.ruleId) && i.kind === "recall")).toBe(true);
     expect(new Set(items.map((i) => i.patientId)).size).toBe(items.length);
+  });
+
+  it("makes a high-risk exam due in 3 months and replaces the open 6-month recall", async () => {
+    const patient = await api("/patients", Patient, send("POST", newPatient));
+    const exam = async (caries_risk: string) => {
+      const visit = await api(`/patients/${patient.id}/visits`, Visit, send("POST", { dentistId: "staff_reyes" }));
+      const values = { oral_hygiene: "Good", plaque: "Mild", caries_risk, facial_asymmetry: false, lymph: false, trismus: false };
+      const note = await api(`/patients/${patient.id}/notes`, ClinicalNote, send("POST", { visitId: visit.id, templateId: "tpl_oral_exam", values, behavior: [] }));
+      await api(`/notes/${note.id}/sign`, ClinicalNote, { method: "POST" });
+      await api(`/visits/${visit.id}/complete`, Visit, { method: "POST" });
+    };
+    const open = async () => (await api("/due-items", z.array(DueItem))).filter((i) => i.patientId === patient.id);
+    await exam("Low");
+    expect((await open()).map((i) => i.ruleId)).toEqual(["routine"]);
+    await exam("High");
+    const [item, ...rest] = await open();
+    expect(rest).toEqual([]);
+    expect(item).toMatchObject({ ruleId: "routine_high_risk", dueOn: format(addMonths(new Date(), 3), "yyyy-MM-dd") });
   });
 });
 
@@ -713,6 +757,30 @@ describe("parent messages", () => {
       expect(m!.body).not.toMatch(/\{\w+\}/); // every placeholder filled
     }
     expect(reminder!.sendAt).toBe(reminderSendAt(appt.startsAt)); // 9 AM the day before
+    expect(byKind(rows, "pre_treatment")).toEqual([]); // a checkup needs no preparation
+  });
+
+  it("queues pre-treatment instructions when an extraction is booked, and withdraws them on cancel", async () => {
+    const patient = await api("/patients", Patient, send("POST", newPatient));
+    const appt = await api("/appointments", Appointment, send("POST", { ...booking, patientId: patient.id, procedureCode: "extraction", startsAt: "2030-04-04T01:00:00.000Z" }));
+    const pre = async () => byKind(await messagesFor(patient.id), "pre_treatment").find((m) => m.appointmentId === appt.id);
+    expect(await pre()).toMatchObject({ status: "queued", sendAt: reminderSendAt(appt.startsAt) });
+    await api(`/appointments/${appt.id}/status`, Appointment, send("POST", { status: "cancelled", cancelReason: "Moved abroad" }));
+    expect((await pre())?.status).toBe("cancelled");
+  });
+
+  it("re-queues pre-treatment instructions when an extraction is moved, and withdraws them on a no-show", async () => {
+    const patient = await api("/patients", Patient, send("POST", newPatient));
+    const extraction = { ...booking, patientId: patient.id, procedureCode: "extraction", startsAt: "2030-04-05T01:00:00.000Z" };
+    const appt = await api("/appointments", Appointment, send("POST", extraction));
+    const pre = async () => byKind(await messagesFor(patient.id), "pre_treatment");
+    const moved = await api(`/appointments/${appt.id}`, Appointment, send("PUT", { ...extraction, startsAt: "2030-04-08T01:00:00.000Z" }));
+    const afterMove = await pre();
+    expect(afterMove.map((m) => m.status).sort()).toEqual(["cancelled", "queued"]);
+    expect(afterMove.find((m) => m.status === "queued")?.sendAt).toBe(reminderSendAt(moved.startsAt));
+
+    await api(`/appointments/${appt.id}/status`, Appointment, send("POST", { status: "no_show" }));
+    expect((await pre()).every((m) => m.status === "cancelled")).toBe(true);
   });
 
   it("withdraws the old reminder on a reschedule, and on a no-show queues a missed-appointment message", async () => {
@@ -853,7 +921,10 @@ describe("financial dashboard", () => {
 
   it("lists an appointment as unpaid until its invoice is paid", async () => {
     const patient = await api("/patients", Patient, send("POST", newPatient));
-    const startsAt = setHours(startOfDay(new Date()), 7).toISOString();
+    // The last open day before today, after the seeded day: in clinic hours, in the past, inside the 30-day window.
+    let day = subDays(startOfDay(new Date()), 1);
+    while (isClosedWeekday(day)) day = subDays(day, 1);
+    const startsAt = setMinutes(setHours(day, 17), 30).toISOString();
     const appt = await api("/appointments", Appointment, send("POST", { patientId: patient.id, dentistId: "staff_reyes", chairId: "chair_3", startsAt, durationMin: 15, reason: "Fluoride application" }));
     await api(`/appointments/${appt.id}/status`, Appointment, send("POST", { status: "confirmed" }));
     await api(`/appointments/${appt.id}/status`, Appointment, send("POST", { status: "arrived" }));
@@ -942,6 +1013,49 @@ describe("billing", () => {
     const today = await api(`/payments?date=${format(new Date(), "yyyy-MM-dd")}`, z.array(Payment));
     expect(today.map((p) => p.id)).toContain(refund.id);
   });
+
+  it("holds a deposit, applies part of it to an invoice as a transfer, and moves it back", async () => {
+    const patient = await api("/patients", Patient, send("POST", newPatient));
+    const deposit = (body: object) => api(`/patients/${patient.id}/deposits`, Payment, send("POST", { method: "cash", receivedBy: "staff_cruz", ...body }));
+    const held = async () => depositBalance(await api(`/patients/${patient.id}/payments`, z.array(Payment)), patient.id);
+
+    const paid = await deposit({ amount: pesos(1000) });
+    expect(paid.invoiceId).toBeUndefined();
+    expect(paid.receiptNo).toMatch(/^AR-\d{6}$/);
+    await expect(deposit({ amount: -pesos(1500), note: "Too much" })).rejects.toMatchObject({ status: 409 });
+    await deposit({ amount: -pesos(200), note: "Parent changed plans" });
+    expect(await held()).toBe(pesos(800));
+
+    // A ₱800 invoice from a signed fluoride note.
+    await api(`/patients/${patient.id}/plan`, PlanItem, send("POST", { procedureCode: "fluoride", fee: pesos(800) }));
+    const visit = await api(`/patients/${patient.id}/visits`, Visit, send("POST", { dentistId: "staff_reyes" }));
+    const note = await api(`/patients/${patient.id}/notes`, ClinicalNote, send("POST", { visitId: visit.id, templateId: "tpl_fluoride", values: { agent: "5% NaF varnish", teeth: [] }, behavior: [] }));
+    await api(`/notes/${note.id}/sign`, ClinicalNote, { method: "POST" });
+    const [item] = await api(`/patients/${patient.id}/plan`, z.array(PlanItem));
+    const invoice = await api(`/patients/${patient.id}/invoices`, Invoice, send("POST", { planItemIds: [item.id] }));
+    const apply = (amount: number) => api(`/invoices/${invoice.id}/apply-credit`, Payment, send("POST", { amount, receivedBy: "staff_cruz" }));
+    const balance = async () => invoiceBalance(invoice, await api(`/patients/${patient.id}/payments`, z.array(Payment)));
+
+    await expect(apply(pesos(900))).rejects.toMatchObject({ status: 409 }); // more than the ₱800 held
+    const applied = await apply(pesos(600));
+    expect(applied).toMatchObject({ method: "account_credit", invoiceId: invoice.id, receiptNo: expect.stringMatching(/^CR-/) });
+    expect(await balance()).toBe(pesos(200));
+    expect(await held()).toBe(pesos(200));
+    await expect(apply(pesos(300))).rejects.toMatchObject({ status: 409 }); // only ₱200 held
+    await apply(-pesos(600));
+    expect(await balance()).toBe(pesos(800));
+    expect(await held()).toBe(pesos(800));
+
+    // The day's collections count the real money (₱1,000 in, ₱200 out), never the transfers.
+    const day = await api(`/payments?date=${format(new Date(), "yyyy-MM-dd")}`, z.array(Payment));
+    const mine = day.filter((p) => p.patientId === patient.id);
+    expect(mine.filter(isMoneyIn).reduce((s, p) => s + p.amount, 0)).toBe(pesos(800));
+
+    // With ₱1,300 held, ₱900 is still refused: it is more than the ₱800 invoice balance.
+    await deposit({ amount: pesos(500) });
+    await expect(apply(pesos(900))).rejects.toMatchObject({ status: 409 });
+    expect(await balance()).toBe(pesos(800));
+  });
 });
 
 describe("documents", () => {
@@ -987,6 +1101,15 @@ describe("documents", () => {
     await expect(generate(a.patient.id, { type: "receipt", sourceId: b.payment.id, issuedBy: "staff_cruz" })).rejects.toMatchObject({ status: 400 });
     await expect(generate(a.patient.id, { type: "post_op_instructions", sourceId: a.visit.id, issuedBy: "staff_reyes" })).rejects.toMatchObject({ status: 400 });
     expect(await generate(a.patient.id, { type: "post_op_instructions", sourceId: a.note.id, issuedBy: "staff_reyes" })).toMatchObject({ sourceId: a.note.id });
+  });
+
+  it("issues a dental clearance only through a dentist, from a visit of this child", async () => {
+    const a = await treatedAndPaid();
+    const b = await treatedAndPaid();
+    const clearance = (visitId: string, issuedBy: string) => generate(a.patient.id, { type: "dental_clearance", sourceId: visitId, issuedBy, details: { purpose: "School enrolment" } });
+    await expect(clearance(a.visit.id, "staff_cruz")).rejects.toMatchObject({ status: 400 });
+    await expect(clearance(b.visit.id, "staff_reyes")).rejects.toMatchObject({ status: 400 });
+    expect(await clearance(a.visit.id, "staff_reyes")).toMatchObject({ type: "dental_clearance", title: "Dental clearance · Bea Mendoza" });
   });
 
   it("never prescribes an S2 drug, and stops a prescription that clashes with a recorded allergy", async () => {
@@ -1054,6 +1177,15 @@ describe("staff switch", () => {
 
 describe("access control", () => {
   afterAll(() => signIn(ADMIN));
+
+  it("lets front desk take a deposit and refuses a parent", async () => {
+    signIn(`demo.guardian.${db.patients.find((x) => x.id === "patient_sibling")!.guardians[0].id}`);
+    const body = { amount: pesos(500), method: "cash", receivedBy: "staff_cruz" };
+    await expect(api("/patients/patient_sibling/deposits", Payment, send("POST", body))).rejects.toMatchObject({ status: 403 });
+    signIn("demo.staff_cruz");
+    expect((await api("/patients/patient_sibling/deposits", Payment, send("POST", body))).amount).toBe(pesos(500));
+    signIn(ADMIN);
+  });
 
   it("lets front desk quick-update a child, and refuses a parent the quick update and the duplicate check", async () => {
     const p = db.patients.find((x) => x.id === "patient_sibling")!;
@@ -1246,5 +1378,15 @@ describe("parent portal", () => {
     signIn(ADMIN);
     const all = await api("/patients/patient_sibling/photos", z.array(ClinicalPhoto));
     expect(all.map((p) => p.id).sort()).toEqual([clinical.id, mine.id].sort());
+  });
+
+  it("lets a parent upload a lab result as a PDF", async () => {
+    await signInAsFamily();
+    const body = new FormData();
+    body.set("file", new Blob(["%PDF-1.4"], { type: "application/pdf" }));
+    body.set("meta", JSON.stringify({ type: "document", takenOn: "2026-10-02", caption: "Lab result" }));
+    const pdf = await api("/patients/patient_sibling/photos", ClinicalPhoto, { method: "POST", body });
+    expect(pdf).toMatchObject({ contentType: "application/pdf", uploadedBy: "parent" });
+    signIn(ADMIN);
   });
 });

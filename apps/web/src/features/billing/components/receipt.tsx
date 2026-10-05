@@ -1,5 +1,6 @@
 "use client";
 import { PrinterIcon } from "lucide-react";
+import { isMoneyIn } from "@pedia/shared";
 import { KidsmileLogo, Loading } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { useStaff } from "@/features/clinic/api";
@@ -19,7 +20,8 @@ export function Receipt({ patientId, paymentId }: { patientId: string; paymentId
   const all = payments.data ?? [];
   const payment = all.find((p) => p.id === paymentId);
   const invoice = invoices.data?.find((i) => i.id === payment?.invoiceId);
-  if (!patient.data || !payment || !invoice) return <p className="text-danger">This receipt doesn&apos;t exist for this patient.</p>;
+  // A deposit has no invoice; a payment that names one must find it. Transfers from a deposit get no receipt.
+  if (!patient.data || !payment || !isMoneyIn(payment) || (payment.invoiceId && !invoice)) return <p className="text-danger">This receipt doesn&apos;t exist for this patient.</p>;
 
   const receipt = receiptContent({ patient: patient.data, invoice, payment, payments: all, staff });
 

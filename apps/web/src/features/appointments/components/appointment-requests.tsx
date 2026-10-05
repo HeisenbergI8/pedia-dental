@@ -3,18 +3,21 @@ import Link from "next/link";
 import { useState } from "react";
 import { format, parseISO, setHours } from "date-fns";
 import { toast } from "sonner";
+import { nextOpenStart } from "@pedia/shared";
 import { SectionCard } from "@/components/section-card";
 import { MetaLine } from "@/components/meta-line";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { usePatients } from "@/features/patients/api";
+import { PatientName } from "@/features/patients/components/patient-name";
 import { TIME_OF_DAY_LABEL, useMarkRequestHandled, usePendingRequests } from "../api";
 import { AppointmentForm, type AppointmentDraft } from "./appointment-form";
 
 /** One component, two looks: a teal strip of cards on Appointments, plain rows in a card on the dashboard. */
 export function AppointmentRequests({ look = "strip" }: { look?: "strip" | "card" }) {
   const { data: requests = [] } = usePendingRequests();
-  const patients = usePatients().data ?? [];
+  const patientsQuery = usePatients();
+  const patients = patientsQuery.data ?? [];
   const handled = useMarkRequestHandled();
   const [draft, setDraft] = useState<AppointmentDraft | null>(null);
   if (requests.length === 0) return null;
@@ -36,14 +39,14 @@ export function AppointmentRequests({ look = "strip" }: { look?: "strip" | "card
               <li key={r.id} className={cn("flex flex-wrap items-center justify-between gap-3", look === "strip" ? "rounded-xl border border-line bg-surface p-3 shadow-xs" : "py-3")}>
                 <div className="min-w-0">
                   <Link href={`/patients/${r.patientId}`} className="font-bold text-ink underline-offset-2 hover:underline">
-                    {p ? `${p.lastName}, ${p.firstName}` : "Patient"}
+                    <PatientName patient={p} loading={patientsQuery.isLoading} />
                   </Link>
                   <MetaLine items={[r.reason, format(start, "EEE, MMM d"), TIME_OF_DAY_LABEL[r.timeOfDay]]} />
                   {/* The parent's own words get their own line: free text in a run of facts is hard to read. */}
                   {r.note && <p className="mt-0.5 text-sm text-ink">“{r.note}”</p>}
                 </div>
                 <span className="flex gap-2">
-                  <Button size="sm" onClick={() => setDraft({ patientId: r.patientId, reason: r.reason, start: start < new Date() ? new Date() : start })}>
+                  <Button size="sm" onClick={() => setDraft({ patientId: r.patientId, reason: r.reason, start: nextOpenStart(start < new Date() ? new Date() : start) })}>
                     Book
                   </Button>
                   <Button

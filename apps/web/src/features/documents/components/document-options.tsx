@@ -2,7 +2,7 @@
 import type { ReactNode } from "react";
 import { format, parseISO } from "date-fns";
 import { PlusIcon, TriangleAlertIcon, XIcon } from "lucide-react";
-import { ConsentScope, DENTIST_SIGNED, FORMULARY, NOTE_MESSAGES, findDrug, formatPeso, type DocumentType, type PrescriptionItem } from "@pedia/shared";
+import { ConsentScope, DENTIST_SIGNED, FORMULARY, NOTE_MESSAGES, findDrug, formatPeso, type DocumentType, type PrescriptionItem, isMoneyIn } from "@pedia/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,11 +17,12 @@ export type Draft = { issuedBy: string; sourceId?: string; details: Record<strin
 /** The record choices each type offers, newest first. Shared with the tab, which uses the first as the default. */
 export function sourceOptions(type: DocumentType, src: DocSources): { value: string; label: string }[] {
   const dentist = (id: string) => src.staff.find((s) => s.id === id)?.fullName ?? "";
-  if (type === "dental_certificate") {
+  if (type === "dental_certificate" || type === "dental_clearance") {
     return src.visits.filter((v) => v.status === "completed").map((v) => ({ value: v.id, label: `${formatDate(v.date)} · ${dentist(v.dentistId)}` }));
   }
   if (type === "receipt") {
-    return [...src.payments].reverse().map((p) => ({ value: p.id, label: `${p.receiptNo} · ${formatPeso(p.amount)} · ${format(parseISO(p.receivedAt), "MMM d, yyyy")}` }));
+    // Money received (payments and deposits); a transfer between a deposit and an invoice has no receipt.
+    return [...src.payments].filter(isMoneyIn).reverse().map((p) => ({ value: p.id, label: `${p.receiptNo} · ${formatPeso(p.amount)} · ${format(parseISO(p.receivedAt), "MMM d, yyyy")}` }));
   }
   if (type === "post_op_instructions") {
     return src.notes.flatMap((n) => {
@@ -115,6 +116,18 @@ export function DocumentOptions({ type, src, draft, errors, onChange }: { type: 
         </>
       )}
 
+      {type === "dental_clearance" && (
+        <Field id="doc-purpose" label="Cleared for" hint="e.g. school enrolment, surgery under general anaesthesia" error={errors["details.purpose"]}>
+          <Input
+            id="doc-purpose"
+            value={draft.details.purpose ?? ""}
+            onChange={(e) => detail("purpose", e.target.value)}
+            aria-invalid={!!errors["details.purpose"]}
+            aria-describedby={errors["details.purpose"] ? "doc-purpose-error" : undefined}
+          />
+        </Field>
+      )}
+
       {type === "prescription" && (
         <div className="space-y-3">
           <p className="flex items-start gap-2 rounded-lg border border-alert-line bg-alert-bg p-3 text-sm text-alert">
@@ -164,6 +177,7 @@ export function DocumentOptions({ type, src, draft, errors, onChange }: { type: 
 
 const DOCUMENT_SOURCE_LABEL: Partial<Record<DocumentType, string>> = {
   dental_certificate: "Visit",
+  dental_clearance: "Exam visit",
   receipt: "Payment",
   post_op_instructions: "Treatment",
 };

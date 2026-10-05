@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
-import { accountSummary, formatPeso, planProgress } from "@pedia/shared";
+import { accountSummary, depositBalance, formatPeso, planProgress } from "@pedia/shared";
 import { SectionCard } from "@/components/section-card";
 import { useSession } from "@/features/auth/access";
 import { usePatientAppointments } from "@/features/appointments/api";
@@ -27,6 +27,7 @@ export function PortalHome() {
   const next = nextAppointment(appointments);
   const { done, total } = planProgress(plan);
   const { balance } = accountSummary(invoices, payments);
+  const held = depositBalance(payments, child.id);
 
   return (
     <div className="space-y-5">
@@ -61,6 +62,7 @@ export function PortalHome() {
         </SectionCard>
         <SectionCard title="Bills" action={<Link href="/portal/billing" className={more}>See bills</Link>}>
           <p className="tabular-nums">{balance > 0 ? `Balance ${formatPeso(balance)}` : "Nothing to pay"}</p>
+          {held > 0 && <p className="text-sm text-ink-muted tabular-nums">{formatPeso(held)} on deposit</p>}
         </SectionCard>
       </div>
 

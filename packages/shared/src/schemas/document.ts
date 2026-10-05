@@ -2,13 +2,14 @@ import { z } from "zod";
 import { ClinicScoped, Id, IsoDateTime } from "./common";
 import { DOCUMENT_SOURCE, REQUIRED_DETAILS, findDrug } from "../domain/documents";
 
-/** Feature 13's nine documents. */
+/** Feature 13's documents. */
 export const DocumentType = z.enum([
   "dental_certificate",
   "treatment_plan",
   "consent_form",
   "referral_letter",
   "clearance",
+  "dental_clearance",
   "post_op_instructions",
   "prescription",
   "receipt",

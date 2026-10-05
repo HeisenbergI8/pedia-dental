@@ -21,6 +21,7 @@ const DESCRIPTION: Record<DocumentType, string> = {
   consent_form: "For the parent to sign before treatment",
   referral_letter: "To a specialist, with history and findings",
   clearance: "Asks the child's doctor to clear treatment",
+  dental_clearance: "The clinic clears the child, e.g. for school or surgery",
   post_op_instructions: "Care at home after a treatment",
   prescription: "Medicines, never controlled (S2) drugs",
   receipt: "Acknowledgment receipt for a payment",

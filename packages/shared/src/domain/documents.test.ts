@@ -31,6 +31,11 @@ describe("documents", () => {
     expect(messages({ type: "referral_letter", issuedBy: "staff_reyes", details: { referredTo: "Dr. Lim, orthodontist", reason: "Crossbite" } })).toEqual([]);
     expect(messages({ type: "dental_certificate", issuedBy: "staff_reyes" })).toEqual(["Pick the visit the certificate is for"]);
     expect(messages({ type: "patient_summary", issuedBy: "staff_cruz" })).toEqual([]);
+    expect(messages({ type: "dental_clearance", issuedBy: "staff_reyes" })).toEqual([
+      "Pick the exam visit the clearance is based on",
+      "Say what the child is cleared for, e.g. school enrolment or surgery",
+    ]);
+    expect(messages({ type: "dental_clearance", issuedBy: "staff_reyes", sourceId: "v1", details: { purpose: "School enrolment" } })).toEqual([]);
   });
 
   it("flags a recorded allergy against the prescribed drug", () => {

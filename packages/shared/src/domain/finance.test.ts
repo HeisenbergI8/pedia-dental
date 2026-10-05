@@ -56,3 +56,23 @@ describe("financial dashboard", () => {
     ]);
   });
 });
+
+describe("deposits on the dashboard", () => {
+  // p1 leaves ₱1,000 on deposit today, and ₱600 of it is applied to invoice A (a transfer pair).
+  const withDeposit: Payment[] = [
+    ...payments,
+    { ...base, id: "d1", patientId: "p1", amount: pesos(1000), method: "cash", receivedAt: local(10, 3, 11) },
+    { ...base, id: "c1", patientId: "p1", invoiceId: "A", amount: pesos(600), method: "account_credit", receiptNo: "CR-000001", receivedAt: local(10, 3, 12) },
+    { ...base, id: "c2", patientId: "p1", appliedTo: "A", amount: -pesos(600), method: "account_credit", receiptNo: "CR-000001", receivedAt: local(10, 3, 12) },
+  ];
+  const d = financeSummary({ invoices, payments: withDeposit, appointments }, "2026-10-03");
+  it("counts a deposit as money in on the day, and never counts the transfer", () => {
+    expect(d.collected.today).toBe(s.collected.today + pesos(1000));
+    expect(d.byMethod.map((m) => m.method)).not.toContain("account_credit");
+  });
+  it("lowers the outstanding balance by what was applied, and holds the rest apart", () => {
+    expect(d.outstandingTotal).toBe(s.outstandingTotal - pesos(600));
+    expect(d.depositsHeld).toBe(pesos(400));
+    expect(s.depositsHeld).toBe(0);
+  });
+});

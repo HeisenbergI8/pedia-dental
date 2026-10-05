@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Payment } from "../schemas/billing";
 import type { PlanItem } from "../schemas/plan";
-import { accountCredit, accountSummary, formatPeso, invoiceBalance, invoiceTotal, pesos, unbilledItems } from "./money";
+import { accountCredit, accountSummary, appliedCredit, depositBalance, formatPeso, invoiceBalance, invoiceTotal, isMoneyIn, pesos, unbilledItems } from "./money";
 
 describe("money", () => {
   it("matches the spec example: 8,500 total, 5,000 paid, 3,500 balance", () => {
@@ -47,5 +47,29 @@ describe("money", () => {
     expect(accountCredit([inv], [pay(pesos(500))])).toBe(0);
     expect(accountCredit([inv], [pay(pesos(200))])).toBe(0);
     expect(accountCredit([inv], [pay(pesos(700))])).toBe(pesos(200));
+  });
+});
+
+describe("deposits", () => {
+  const row = (id: string, patientId: string, amount: number, extra: Partial<Payment> = {}): Payment =>
+    ({ id, clinicId: "c", patientId, amount, method: "cash", receiptNo: "AR-1", receivedBy: "s", receivedAt: "2026-10-01T00:00:00.000Z", ...extra });
+  const inv = { id: "INV", lines: [{ procedureCode: "x", description: "x", amount: pesos(800) }], discount: 0 };
+  const rows = [
+    row("d", "p", pesos(1000)), // deposit
+    row("r", "p", -pesos(200), { note: "Changed plans" }), // deposit refund
+    row("a1", "p", pesos(600), { invoiceId: "INV", method: "account_credit" }), // applied: invoice side
+    row("a2", "p", -pesos(600), { appliedTo: "INV", method: "account_credit" }), // applied: deposit side
+    row("x", "other", pesos(5000)), // another child's deposit
+  ];
+  it("holds what was deposited, less refunds and what was applied, per patient", () => {
+    expect(depositBalance(rows, "p")).toBe(pesos(200));
+    expect(depositBalance(rows, "other")).toBe(pesos(5000));
+  });
+  it("pays the invoice with the applied amount, and knows how much can go back", () => {
+    expect(invoiceBalance(inv, rows)).toBe(pesos(200));
+    expect(appliedCredit("INV", rows)).toBe(pesos(600));
+  });
+  it("treats only the transfer as not money in", () => {
+    expect(rows.filter(isMoneyIn).map((p) => p.id)).toEqual(["d", "r", "x"]);
   });
 });

@@ -131,6 +131,8 @@ const RULES: Rule[] = [
   { method: "GET", path: "/patients/:id/payments", permission: "billing.view", owner: byId, audit: "Payments" },
   { method: "GET", path: "/payments", permission: "billing.collect", audit: "Daily collections" },
   { method: "POST", path: "/invoices/:id/payments", permission: "billing.collect", owner: via(() => db.invoices), audit: "Payment" },
+  { method: "POST", path: "/patients/:id/deposits", permission: "billing.collect", audit: "Deposit" },
+  { method: "POST", path: "/invoices/:id/apply-credit", permission: "billing.collect", owner: via(() => db.invoices), audit: "Deposit applied" },
   // Documents and reports
   { method: "GET", path: "/documents", permission: "documents.issue", audit: "Documents log" },
   { method: "GET", path: "/patients/:id/documents", permission: "documents.issue", audit: "Documents" },

@@ -12,7 +12,12 @@ export const recallHandlers = [
     await delay(100);
     const rows = db.dueItems
       .filter((i) => isDueItemOpen(i, db.appointments))
-      .sort((a, b) => a.dueOn.localeCompare(b.dueOn));
+      .sort((a, b) => a.dueOn.localeCompare(b.dueOn))
+      // The visit's dentist (always a dentist; a note can be written by another account), for one-tap booking.
+      .map((i) => {
+        const note = db.notes.find((n) => n.id === i.sourceNoteId);
+        return { ...i, dentistId: db.visits.find((v) => v.id === note?.visitId)?.dentistId };
+      });
     return HttpResponse.json(rows);
   }),
 ];

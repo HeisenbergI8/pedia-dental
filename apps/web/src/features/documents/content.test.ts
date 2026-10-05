@@ -48,6 +48,7 @@ describe("document content", () => {
       consent_form: { details: { scope: "general_treatment" } },
       referral_letter: { details: { referredTo: "Dr. Lim, orthodontist", reason: "an anterior crossbite" } },
       clearance: { details: { procedure: "fluoride" } },
+      dental_clearance: { sourceId: "v1", details: { purpose: "School enrolment" } },
       post_op_instructions: { sourceId: "n1" },
       prescription: { items: [{ drugId: "paracetamol_120_syr", sig: "Give 5 mL by mouth every 6 hours as needed.", quantity: "1 bottle" }] },
       receipt: { sourceId: "pay1" },
@@ -69,5 +70,21 @@ describe("document content", () => {
   it("reports signed notes with their services and prices", () => {
     const t = text({ type: "notes_report" });
     for (const expected of ["Clinical notes report", "Fluoride application", formatPeso(pesos(800)), "Dr. Ana Reyes"]) expect(t).toContain(expected);
+  });
+
+  it("fills a dental clearance from the exam visit and lists any treatment still planned", () => {
+    const t = text({ type: "dental_clearance", sourceId: "v1", details: { purpose: "School enrolment" } });
+    expect(t).toContain(JSON.stringify(["Cleared for", "School enrolment"]));
+    expect(t).toContain("is cleared. No dental treatment is pending.");
+    const planned = JSON.stringify(buildDocument({ type: "dental_clearance", issuedBy: "staff_reyes", sourceId: "v1", details: { purpose: "Surgery" } }, { ...src, plan: [{ ...src.plan[0], status: "planned" }] }));
+    expect(planned).toContain(JSON.stringify(["Dental treatment still planned", "Fluoride application"]));
+  });
+
+  it("words a deposit receipt as held on the account, and leaves an invoice receipt as it was", () => {
+    const deposit = { ...src.payments[0], id: "dep1", invoiceId: undefined, amount: pesos(1000), receiptNo: "AR-000050" };
+    const t = JSON.stringify(buildDocument({ type: "receipt", sourceId: "dep1", issuedBy: "staff_cruz" }, { ...src, payments: [...src.payments, deposit] }));
+    expect(t).toContain(JSON.stringify(["For", "Deposit on account"]));
+    expect(t).toContain(JSON.stringify(["Deposit after this", formatPeso(pesos(1000))]));
+    expect(text({ type: "receipt", sourceId: "pay1", issuedBy: "staff_cruz" })).toContain(JSON.stringify(["Balance after this", formatPeso(0)]));
   });
 });

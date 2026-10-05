@@ -4,13 +4,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { addMinutes, format, parseISO } from "date-fns";
 import { toast } from "sonner";
-import { canReschedule, canTransition, type Appointment, type ChangeAppointmentStatusInput } from "@pedia/shared";
+import { canReschedule, canTransition, ruleLabel, type Appointment, type ChangeAppointmentStatusInput } from "@pedia/shared";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { useCan } from "@/features/auth/access";
-import { useChairs, useStaff } from "@/features/clinic/api";
+import { useChairs, useProcedures, useStaff } from "@/features/clinic/api";
 import { usePatient } from "@/features/patients/api";
 import { useStartVisit } from "@/features/visits/api";
 import { STATUS_LABEL, useChangeAppointmentStatus } from "../api";
@@ -30,6 +30,8 @@ function Details({ appointment: a, onReschedule }: { appointment: Appointment; o
   const patient = usePatient(a.patientId);
   const staff = useStaff();
   const chairs = useChairs();
+  const procedures = useProcedures();
+  const procedureName = (code: string) => procedures.data?.find((p) => p.code === code)?.name ?? code;
   const change = useChangeAppointmentStatus();
   const startVisit = useStartVisit(a.patientId);
   const can = useCan();
@@ -57,6 +59,7 @@ function Details({ appointment: a, onReschedule }: { appointment: Appointment; o
         </Row>
         {a.cancelReason && <Row label="Cancel reason">{a.cancelReason}</Row>}
         <Row label="Reason">{a.reason}</Row>
+        {a.sourceRuleId && <Row label="Booked from">{ruleLabel(a.sourceRuleId, procedureName) ?? "A follow-up rule"}</Row>}
         <Row label="Dentist">{staff.data?.find((s) => s.id === a.dentistId)?.fullName}</Row>
         <Row label="Chair">{chairs.data?.find((c) => c.id === a.chairId)?.name}</Row>
         <Link href={`/patients/${a.patientId}`} className="inline-block text-brand underline">

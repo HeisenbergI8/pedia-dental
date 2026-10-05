@@ -6,6 +6,7 @@ export const DOCUMENT_TYPE_LABEL: Record<DocumentType, string> = {
   consent_form: "Consent form",
   referral_letter: "Referral letter",
   clearance: "Medical clearance request",
+  dental_clearance: "Dental clearance",
   post_op_instructions: "Post-operative instructions",
   prescription: "Prescription",
   receipt: "Acknowledgment receipt",
@@ -20,6 +21,7 @@ export const DENTIST_SIGNED: DocumentType[] = [
   "consent_form",
   "referral_letter",
   "clearance",
+  "dental_clearance",
   "post_op_instructions",
   "prescription",
 ];
@@ -27,6 +29,7 @@ export const DENTIST_SIGNED: DocumentType[] = [
 /** Documents generated from one record: which kind, and the words when it's missing. */
 export const DOCUMENT_SOURCE: Partial<Record<DocumentType, { kind: "visit" | "payment" | "note"; missing: string }>> = {
   dental_certificate: { kind: "visit", missing: "Pick the visit the certificate is for" },
+  dental_clearance: { kind: "visit", missing: "Pick the exam visit the clearance is based on" },
   receipt: { kind: "payment", missing: "Pick the payment" },
   post_op_instructions: { kind: "note", missing: "Pick the signed treatment note" },
 };
@@ -36,6 +39,7 @@ export const REQUIRED_DETAILS: Partial<Record<DocumentType, Record<string, strin
   consent_form: { scope: "Pick what the consent is for" },
   referral_letter: { referredTo: "Say who you're referring the child to", reason: "Give the reason for the referral" },
   clearance: { procedure: "Pick the planned treatment" },
+  dental_clearance: { purpose: "Say what the child is cleared for, e.g. school enrolment or surgery" },
 };
 
 export type Drug = {

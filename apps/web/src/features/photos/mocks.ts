@@ -1,5 +1,5 @@
 import { http, HttpResponse, delay } from "msw";
-import { UploadPhotoInput, roleCan, type ClinicalPhoto, type PhotoType } from "@pedia/shared";
+import { UPLOAD_RULES, UploadPhotoInput, isPdf, roleCan, uploadProblem, type ClinicalPhoto, type PhotoType } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { inScope, sessionOf } from "@/mocks/access";
 import { getBlob, putBlob } from "@/mocks/blob-store";
@@ -7,7 +7,6 @@ import { db, persist } from "@/mocks/db";
 import { CLINIC_ID } from "@/mocks/seed";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
-const MAX_BYTES = 10 * 1024 * 1024;
 /** What a parent may upload from the portal. Clinical imaging (X-rays) is the clinic's. */
 const PARENT_TYPES: PhotoType[] = ["intraoral", "extraoral", "document"];
 
@@ -24,15 +23,12 @@ export const photoHandlers = [
     return HttpResponse.json(rows);
   }),
 
-  // multipart/form-data: `file` (an image) and `meta` (UploadPhotoInput as JSON).
+  // multipart/form-data: `file` (an image, or a PDF for a document or referral) and `meta` (UploadPhotoInput as JSON).
   http.post(url("/patients/:id/photos"), async ({ params, request }) => {
     if (!db.patients.some((p) => p.id === params.id)) return new HttpResponse("Patient not found", { status: 404 });
     const form = await request.formData();
     const file = form.get("file");
-    if (!(file instanceof Blob) || !file.type.startsWith("image/")) {
-      return new HttpResponse("Attach an image file", { status: 400 });
-    }
-    if (file.size > MAX_BYTES) return new HttpResponse("Images must be under 10 MB", { status: 413 });
+    if (!(file instanceof Blob)) return new HttpResponse("Attach a file", { status: 400 });
     let meta: unknown;
     try {
       meta = JSON.parse(String(form.get("meta")));
@@ -41,6 +37,9 @@ export const photoHandlers = [
     }
     const parsed = UploadPhotoInput.safeParse(meta);
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
+    // The file rule depends on the type (a PDF is fine for a document, not a photo), so it runs after meta.
+    const problem = uploadProblem(parsed.data.type, file);
+    if (problem) return new HttpResponse(problem, { status: file.size > UPLOAD_RULES.maxBytes ? 413 : 400 });
     const session = sessionOf(request);
     const fromParent = !(session && roleCan(session.role, "clinical.write"));
     if (fromParent && (!PARENT_TYPES.includes(parsed.data.type) || parsed.data.visitId || parsed.data.stage || parsed.data.tooth)) {
@@ -80,6 +79,7 @@ export const photoHandlers = [
       .join("-")
       .replace(/[^\w.-]+/g, "-")
       .toLowerCase();
-    return new HttpResponse(blob, { headers: { "Content-Type": photo.contentType, "Content-Disposition": `inline; filename="${name}.jpg"` } });
+    const ext = isPdf(photo.contentType) ? "pdf" : "jpg";
+    return new HttpResponse(blob, { headers: { "Content-Type": photo.contentType, "Content-Disposition": `inline; filename="${name}.${ext}"` } });
   }),
 ];
