@@ -52,8 +52,8 @@ export type Db = {
   staffPins: StaffPin[]; // each staff member's own PIN for switching user on a shared device; never served
 };
 
-// v22: seeded growth records fall on their visit's own day.
-const KEY = "pedia-dental:mock-db:v22";
+// v23: seeded patients carry their allergy and condition answers (noKnownAllergies / noKnownConditions).
+const KEY = "pedia-dental:mock-db:v23";
 
 function load(): Db {
   if (typeof window === "undefined") return seed();

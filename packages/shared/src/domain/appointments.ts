@@ -56,6 +56,14 @@ export function nextOpenStart(from: Date, durationMin = 30): Date {
   return t;
 }
 
+/**
+ * Where a new booking opens: the asked-for start (a calendar day at 00:00, a clicked slot) or now, whichever is later,
+ * moved to the first open quarter-hour. Never in the past, never outside clinic hours.
+ */
+export function bookableStart(start: Date | undefined, now: Date, durationMin = 30): Date {
+  return nextOpenStart(start && start > now ? start : now, durationMin);
+}
+
 /** Live appointments per local day ("2026-10-07" → 3). Cancelled ones don't count; no-shows do (they held the slot). */
 export function countByDay(appointments: Pick<Appointment, "startsAt" | "status">[]): Map<string, number> {
   const counts = new Map<string, number>();
@@ -105,20 +113,23 @@ export function findConflict(candidate: Slot, existing: Slot[]): { appointment: 
   return undefined;
 }
 
+type SlotSearch = { from: Date; durationMin: number; dentistId: string; chairIds: string[]; days?: number };
+
 /**
- * The first quarter-hour from `from`, in clinic hours on open days within `days`, where the dentist and one of the
- * chairs (in the order given) are free. Undefined when the window is full.
+ * Up to `count` quarter-hours from `from`, in clinic hours on open days within `days`, where the dentist and one of
+ * the chairs (in the order given, so a preferred chair goes first) are free. Each time appears once, with its chair.
  */
-export function findFreeSlot(
-  { from, durationMin, dentistId, chairIds, days = 14 }: { from: Date; durationMin: number; dentistId: string; chairIds: string[]; days?: number },
-  existing: Slot[],
-): { startsAt: Date; chairId: string } | undefined {
+export function findFreeSlots({ from, durationMin, dentistId, chairIds, days = 14 }: SlotSearch, existing: Slot[], count: number) {
+  const found: { startsAt: Date; chairId: string }[] = [];
   const until = addDays(startOfDay(from), days);
-  for (let t = nextOpenStart(from, durationMin); t < until; t = nextOpenStart(addMinutes(t, 15), durationMin)) {
-    for (const chairId of chairIds) {
-      const candidate: Slot = { id: "", dentistId, chairId, startsAt: t.toISOString(), durationMin, status: "booked" };
-      if (!findConflict(candidate, existing)) return { startsAt: t, chairId };
-    }
+  for (let t = nextOpenStart(from, durationMin); t < until && found.length < count; t = nextOpenStart(addMinutes(t, 15), durationMin)) {
+    const chairId = chairIds.find(
+      (c) => !findConflict({ id: "", dentistId, chairId: c, startsAt: t.toISOString(), durationMin, status: "booked" }, existing),
+    );
+    if (chairId) found.push({ startsAt: t, chairId });
   }
-  return undefined;
+  return found;
 }
+
+/** The first free slot, or undefined when the window is full. */
+export const findFreeSlot = (search: SlotSearch, existing: Slot[]) => findFreeSlots(search, existing, 1)[0];

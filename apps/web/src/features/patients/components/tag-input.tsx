@@ -19,6 +19,7 @@ export function TagInput({
   onChange,
   placeholder,
   reject,
+  suggestions = [],
   ...control
 }: {
   value: string[];
@@ -26,12 +27,15 @@ export function TagInput({
   placeholder?: string;
   /** Why an item can't be added (e.g. a reserved word), said as it's typed rather than on save. */
   reject?: (item: string) => string | undefined;
+  /** Offered as one-tap buttons under the field until used (e.g. TAG_SUGGESTIONS). */
+  suggestions?: readonly string[];
 } & Pick<
   ComponentProps<"input">,
   "id" | "aria-invalid" | "aria-describedby"
 >) {
   const [draft, setDraft] = useState("");
   const [problem, setProblem] = useState<string>();
+  const unused = suggestions.filter((s) => !value.some((v) => sameText(v) === sameText(s)));
 
   function commit() {
     const item = draft.trim();
@@ -80,6 +84,20 @@ export function TagInput({
         <p role="status" className="text-sm text-warning">
           {problem}
         </p>
+      )}
+      {unused.length > 0 && (
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Suggestions">
+          {unused.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => onChange([...value, s])}
+              className="min-h-(--control-h-sm) rounded-md bg-track px-2.5 text-sm text-ink-muted hover:text-ink focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+              + {s}
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );

@@ -15,6 +15,7 @@ export function useVisits(patientId: string) {
   return useQuery({
     queryKey: visitKeys.forPatient(patientId),
     queryFn: () => api(`/patients/${patientId}/visits`, z.array(Visit)),
+    enabled: !!patientId, // the booking form asks before a patient is picked
   });
 }
 

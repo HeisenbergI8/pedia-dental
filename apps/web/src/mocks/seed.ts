@@ -713,6 +713,11 @@ function seedProfiles(patients: Patient[]): Patient[] {
       patientNo: numberOf.get(p.id)!,
       ...(i % 3 === 0 && nickname !== p.firstName && { nickname }),
       ...(i % 4 === 1 && { tags: i % 8 === 1 ? ["Anxious"] : ["HMO", "Prefers Filipino"] }),
+      // Most families were asked at intake; every 10th was not, so "Allergies not asked yet" shows in the demo.
+      ...(i % 10 !== 7 && {
+        noKnownAllergies: p.allergies.length === 0,
+        noKnownConditions: p.medicalConditions.length + p.medications.length === 0,
+      }),
       ...(i % 2 === 0 && {
         profile: {
           school: SCHOOLS[i % SCHOOLS.length],

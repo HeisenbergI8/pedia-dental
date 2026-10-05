@@ -14,6 +14,12 @@ describe("seed", () => {
     expect(db.patients.slice(0, 3).map((p) => p.lastName)).toEqual(["Reynolds-Miller", "Johnson", "Lynch"]);
   });
 
+  it("answers agree with the lists, and some patients were never asked", () => {
+    expect(db.patients.filter((p) => p.noKnownAllergies === true).every((p) => p.allergies.length === 0)).toBe(true);
+    expect(db.patients.filter((p) => p.allergies.length > 0).every((p) => p.noKnownAllergies !== true)).toBe(true);
+    expect(db.patients.some((p) => p.noKnownAllergies === undefined)).toBe(true);
+  });
+
   it("is the same on every load: same patients and the same labels", () => {
     const again = seed();
     expect(again.patients.map((p) => [p.id, p.firstName, p.lastName])).toEqual(db.patients.map((p) => [p.id, p.firstName, p.lastName]));

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { Centavos, ClinicScoped, Id, IsoDate, IsoDateTime, isoDate } from "./common";
 
-export const Sex = z.enum(["male", "female"]);
+export const Sex = z.enum(["male", "female"], { error: "Choose the child's sex" });
 
 export const Guardian = z.object({
   id: Id,
@@ -81,8 +81,12 @@ export const Patient = ClinicScoped.extend({
   guardians: z.array(Guardian).min(1, "Add at least one guardian"),
   emergencyContact: z.object({ name: z.string(), phone: z.string() }).optional(),
   allergies: z.array(z.string()),
+  /** Asked at intake. undefined: never asked (older records); true: none known; false: the list above. */
+  noKnownAllergies: z.boolean().optional(),
   medicalConditions: z.array(z.string()),
   medications: z.array(z.string()),
+  /** The same answer for conditions and medications together. */
+  noKnownConditions: z.boolean().optional(),
   alerts: z.array(z.string()), // shown as a banner on every screen for this child
   tags: z.array(PatientTag).max(8, "Up to 8 tags").optional(),
   dentalHistory: z.object({ previousClinic: z.string(), notes: z.string() }),
@@ -108,6 +112,20 @@ const onePrimary = (p: { guardians: { isPrimary: boolean }[] }) => p.guardians.f
 const PRIMARY_RULE = { message: "Mark exactly one guardian as primary", path: ["guardians"] };
 const TAG_RULE = { message: "That tag is already there", path: ["tags"] };
 
+type MedicalAnswers = Pick<Patient, "allergies" | "noKnownAllergies" | "medicalConditions" | "medications" | "noKnownConditions">;
+/** "None known" with a list, or "has some" with none, contradicts itself. Unanswered is allowed (older records, the API). */
+const answersAgree = (p: MedicalAnswers, ctx: z.RefinementCtx) => {
+  const agree = (answer: boolean | undefined, count: number) => answer === undefined || answer === (count === 0);
+  if (!agree(p.noKnownAllergies, p.allergies.length))
+    ctx.addIssue({ code: "custom", path: ["allergies"], message: p.noKnownAllergies ? "Remove the allergies, or choose Has allergies" : "Add the allergy, or choose None known" });
+  if (!agree(p.noKnownConditions, p.medicalConditions.length + p.medications.length))
+    ctx.addIssue({
+      code: "custom",
+      path: ["medicalConditions"],
+      message: p.noKnownConditions ? "Remove the conditions and medicines, or choose Has some" : "Add a condition or medicine, or choose None known",
+    });
+};
+
 // Unrefined, because zod 4 refuses .omit() on a refined object (the edit input below omits from it).
 const PatientInputBase = Patient.omit({
   id: true,
@@ -119,7 +137,9 @@ const PatientInputBase = Patient.omit({
 });
 
 /** Used for create, and for edit by a caller holding patients.contact (PUT replaces the whole record except consents). */
-export const CreatePatientInput = PatientInputBase.refine(onePrimary, PRIMARY_RULE).refine((p) => uniqueTags(p.tags), TAG_RULE);
+export const CreatePatientInput = PatientInputBase.refine(onePrimary, PRIMARY_RULE)
+  .refine((p) => uniqueTags(p.tags), TAG_RULE)
+  .superRefine(answersAgree);
 export type CreatePatientInput = z.infer<typeof CreatePatientInput>;
 
 /**
@@ -130,7 +150,8 @@ export type CreatePatientInput = z.infer<typeof CreatePatientInput>;
 export const EditPatientWithoutContactsInput = PatientInputBase.omit({ address: true, emergencyContact: true })
   .extend({ guardians: z.array(Guardian.omit({ phone: true, email: true })).min(1, "Add at least one guardian") })
   .refine(onePrimary, PRIMARY_RULE)
-  .refine((p) => uniqueTags(p.tags), TAG_RULE);
+  .refine((p) => uniqueTags(p.tags), TAG_RULE)
+  .superRefine(answersAgree);
 export type EditPatientWithoutContactsInput = z.infer<typeof EditPatientWithoutContactsInput>;
 
 /**

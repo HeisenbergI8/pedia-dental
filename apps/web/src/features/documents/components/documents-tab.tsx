@@ -5,6 +5,7 @@ import { FileTextIcon } from "lucide-react";
 import { DENTIST_SIGNED, DOCUMENT_TYPE_LABEL, DocumentType, GenerateDocumentInput } from "@pedia/shared";
 import { EmptyState } from "@/components/empty-state";
 import { SectionCard } from "@/components/section-card";
+import { useSession } from "@/features/auth/access";
 import { cn } from "@/lib/utils";
 import { useDocumentSources, usePatientDocuments } from "../api";
 import { buildDocument, type DocContent, type DocSources } from "../content";
@@ -29,14 +30,19 @@ const DESCRIPTION: Record<DocumentType, string> = {
   notes_report: "Every signed clinical note, with the services done and their prices",
 };
 
-/** Sensible defaults: the latest record to generate from, and the dentist who saw the child last. */
-function initialDraft(type: DocumentType, src: DocSources): Draft {
-  const dentist = src.visits[0]?.dentistId ?? src.staff.find((s) => s.role === "dentist")?.id ?? "";
-  const desk = src.staff.find((s) => s.role === "front_desk")?.id ?? dentist;
+/**
+ * Sensible defaults: the latest record to generate from; the signed-in dentist, else the dentist who saw the child
+ * last; and for a clearance, the procedure when only one is planned.
+ */
+export function initialDraft(type: DocumentType, src: DocSources, myStaffId?: string): Draft {
+  const me = src.staff.find((s) => s.id === myStaffId);
+  const dentist = me?.role === "dentist" ? me.id : (src.visits[0]?.dentistId ?? src.staff.find((s) => s.role === "dentist")?.id ?? "");
+  const desk = me?.id ?? src.staff.find((s) => s.role === "front_desk")?.id ?? dentist;
+  const planned = [...new Set(src.plan.filter((i) => i.status === "planned" || i.status === "in_progress").map((i) => i.procedureCode))];
   return {
     issuedBy: DENTIST_SIGNED.includes(type) ? dentist : desk,
     sourceId: sourceOptions(type, src)[0]?.value,
-    details: {},
+    details: type === "clearance" && planned.length === 1 ? { procedure: planned[0] } : {},
     items: type === "prescription" ? [{ drugId: "", sig: "", quantity: "" }] : [],
   };
 }
@@ -53,6 +59,7 @@ function toInput(type: DocumentType, d: Draft) {
 
 export function DocumentsTab({ patientId }: { patientId: string }) {
   const sources = useDocumentSources(patientId);
+  const myStaffId = useSession()?.user.staffId;
   const [type, setType] = useState<DocumentType>("dental_certificate");
   const [draft, setDraft] = useState<Draft | null>(null);
   const [showErrors, setShowErrors] = useState(false);
@@ -60,7 +67,7 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
   if (sources.error) return <ErrorState what="this patient's record" onRetry={() => sources.refetch()} retrying={sources.isRefetching} />;
   if (!sources.data) return <Loading label="Loading documents" />;
   const src = sources.data;
-  const current = draft ?? initialDraft(type, src);
+  const current = draft ?? initialDraft(type, src, myStaffId);
   const parsed = toInput(type, current);
   const errors = parsed.success ? {} : Object.fromEntries(parsed.error.issues.map((i) => [i.path.join("."), i.message]));
   let preview: DocContent | undefined;
@@ -72,7 +79,7 @@ export function DocumentsTab({ patientId }: { patientId: string }) {
 
   function pick(t: DocumentType) {
     setType(t);
-    setDraft(initialDraft(t, src));
+    setDraft(initialDraft(t, src, myStaffId));
     setShowErrors(false);
   }
 
