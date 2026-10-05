@@ -45,9 +45,10 @@ it("Segmented presses exactly one option", () => {
   expect(out).toContain("bg-track");
 });
 
-it("line tabs underline in brand", () => {
+it("line tabs mark the current tab with a raised chip, not an underline", () => {
   const out = html(h(Tabs, { defaultValue: "a" }, h(TabsList, { variant: "line" }, h(TabsTrigger, { value: "a" }, "A"))));
-  expect(out).toContain("after:bg-brand");
+  expect(out).toContain("group-data-[variant=line]/tabs-list:data-[state=active]:shadow-xs");
+  expect(out).not.toContain("after:bg-brand");
 });
 
 it("overlays use the scrim token, not black", () => {

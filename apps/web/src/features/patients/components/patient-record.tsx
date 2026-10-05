@@ -19,7 +19,7 @@ import { VisitList } from "@/features/visits/components/visit-list";
 import { usePatient } from "../api";
 import { PatientOverview } from "./patient-overview";
 
-const TAB_TRIGGER = "h-11 flex-none rounded-none px-3";
+const TAB_TRIGGER = "h-9 flex-none px-3.5";
 
 const TABS = ["overview", "chart", "notes", "plan", "photos", "billing", "documents"] as const;
 type Tab = (typeof TABS)[number];
@@ -102,7 +102,7 @@ export function PatientRecord({ patientId }: { patientId: string }) {
         </div>
         {/* sm and up: tabs. All seven fit from 640 px; a narrow tablet may still scroll them, with the edge fade. */}
         <div ref={strip} className="scroll-fade-x hidden overflow-x-auto border-b border-line sm:block">
-          <TabsList variant="line" className="h-11 w-max gap-0 p-0">
+          <TabsList variant="line" className="h-13 w-max gap-1 px-0 py-2">
             {TABS.map((t) => (
               <TabsTrigger key={t} value={t} className={TAB_TRIGGER}>
                 {LABEL[t]}

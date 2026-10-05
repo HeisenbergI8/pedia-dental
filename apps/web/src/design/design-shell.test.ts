@@ -8,7 +8,11 @@ describe("staff shell", () => {
     expect(shell).not.toMatch(/bg-brand-subtle|left-0 w-1/);
     expect(shell).toContain("bg-selected font-bold");
   });
-  it("marks the phone tab with a top-edge bar", () => expect(shell).toContain("h-[3px]"));
+  it("marks the phone tab with an icon pill, not an edge bar", () => {
+    expect(shell).not.toContain("h-[3px]");
+    expect(shell).toContain("<BottomTabIcon");
+    expect(read("components/bottom-tab.tsx")).toContain("bg-selected text-brand");
+  });
 });
 
 describe("sign out", () => {
