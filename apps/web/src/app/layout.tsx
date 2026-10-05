@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Bricolage_Grotesque, Figtree, Fredoka } from "next/font/google";
+import { Bricolage_Grotesque, Figtree, Fredoka, Outfit } from "next/font/google";
 import { THEME_SCRIPT } from "@/lib/theme";
 import { Providers } from "./providers";
 import "./globals.css";
@@ -8,12 +8,15 @@ const figtree = Figtree({ subsets: ["latin"], variable: "--font-figtree" });
 const fredoka = Fredoka({ subsets: ["latin"], weight: ["500", "600"], variable: "--font-fredoka" });
 // Variable font: weight plus optical size, so 600 titles tighten at display sizes.
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"], axes: ["opsz"], variable: "--font-bricolage" });
+// The Primoral name in the logo (components/brand.tsx).
+// Variable font, so the logo can use its exact weight (560).
+const outfit = Outfit({ subsets: ["latin"], variable: "--font-outfit" });
 
 export const metadata: Metadata = {
-  title: "Kidsmile Pediatric Dental Clinic",
-  description: "Clinic management for Kidsmile Pediatric Dental Clinic",
+  title: "Primoral Pediatric Dental Clinic",
+  description: "Clinic management for Primoral Pediatric Dental Clinic",
   // The home-screen label on iOS, which otherwise truncates the full title.
-  appleWebApp: { title: "Kidsmile", capable: true, statusBarStyle: "default" },
+  appleWebApp: { title: "Primoral", capable: true, statusBarStyle: "default" },
 };
 
 /**
@@ -26,7 +29,7 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, view
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     // suppressHydrationWarning: THEME_SCRIPT sets data-theme before React hydrates, and the server can't know it.
-    <html lang="en" className={`${figtree.variable} ${fredoka.variable} ${bricolage.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${figtree.variable} ${fredoka.variable} ${bricolage.variable} ${outfit.variable}`} suppressHydrationWarning>
       <head>
         {/* The saved theme, applied before first paint. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />

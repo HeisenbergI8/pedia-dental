@@ -1,4 +1,4 @@
-# UI audit: Kidsmile clinic app
+# UI audit: Primoral clinic app (audited under its former Kidsmile brand)
 
 **Status:** all four steps done 2026-10-03 (audit → foundation → modules → final pass). Results in section 8.
 **Audited:** 2026-10-03, production build (`next build` + `next start`), with seeded demo data.

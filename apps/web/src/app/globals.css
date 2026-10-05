@@ -13,8 +13,8 @@
 }
 
 /* Design tokens. Change the palette here, not in components.
-   Brand: Kidsmile Pediatric Dental Clinic. Plum (the logo's purple "i", deepened) is the brand hue and the logo's
-   teal is the secondary accent ("Option C refined", 2026-10-04). Crayon colours are decoration only. */
+   Brand: Primoral Pediatric Dental Clinic. Plum (close to the logo's P, deepened for contrast) is the brand hue and
+   the logo's teal smile is the secondary accent. Crayon colours are decoration only. */
 @theme {
   --color-ground: #f7f7f4;
   --color-surface: #ffffff;
@@ -40,8 +40,8 @@
   --color-on-deep-label: #cdbef7; /* banner and stat-cell labels */
   --color-scrim: rgb(17 28 30 / 0.45); /* behind dialogs and sheets */
   --color-surface-raised: #ffffff; /* cards that sit above surface (popovers, sticky bars); paired with --shadow-raised */
-  /* Always white, in both themes: the plate behind the logo artwork (drawn for white), the brush highlight and
-     bubbles in the animated mark, the split line over photos. Never a page or card surface. */
+  /* Always white, in both themes: the split line over photos and other marks that must stay white.
+     Never a page or card surface. */
   --color-paper: #ffffff;
   --color-photo-backdrop: #111c1e; /* behind photos, in both themes: photos read best on near-black */
 
@@ -50,6 +50,13 @@
   --color-second-bg: #e6f3f1;
   /* Warm surface for celebrations, empty states and the portal welcome. Never status. */
   --color-sunny: #fff6dc; /* ink 14.2:1, ink-muted 6.0:1 */
+
+  /* The Primoral logo (components/brand.tsx): the P, its smile and the name. Logo only, never UI state. */
+  --color-logo-hi: #655389; /* the P's gradient, top-left */
+  --color-logo-lo: #53447d; /* to bottom-right */
+  --color-logo: #5b4982; /* the P as one flat colour (brand strip) */
+  --color-logo-smile: #5b908e;
+  --color-logo-ink: #221a4f;
 
   /* Logo crayons. Decorative only (logo, loader, brand strips, portal illustration). Never status:
      orange would compete with the clinical alert colours. */
@@ -110,6 +117,8 @@
   --font-title: var(--font-bricolage), var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
   /* Fredoka echoes the logo's rounded letters. Warm moments only (login hero, portal greeting), set explicitly. */
   --font-display: var(--font-fredoka), var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
+  /* Outfit: the Primoral name in the logo and loading screen. Nowhere else. */
+  --font-brand: var(--font-outfit), var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
   --shadow-card: 0 1px 2px 0 rgb(16 24 40 / 0.04);
   --shadow-xs: 0 1px 2px 0 rgb(16 24 40 / 0.05); /* secondary buttons, booked tiles */
   /* Primary button: a top highlight and a soft brand-coloured drop. */
@@ -202,6 +211,11 @@
     --color-second-bg: #15312e;
     --color-sunny: #2f2915; /* ink 12.5:1, ink-muted 7.0:1 */
     --color-crayon-outline: #dfe9e9; /* the logo's ink line, reversed */
+    --color-logo-hi: #b3a0ef; /* lifted so the P holds its shape on a dark ground */
+    --color-logo-lo: #9a84e0;
+    --color-logo: #a690e6;
+    --color-logo-smile: #7fcfc9;
+    --color-logo-ink: #f1edff;
     --color-alert: #f7b57e; /* 8.5:1 on alert-bg */
     --color-alert-bg: #36220f;
     --color-alert-line: #6e4521;
@@ -366,109 +380,46 @@ body {
   }
 }
 
-/* A strip of the logo's crayon colours: the brand's signature, used once per surface. */
+/* A strip of the logo's two colours, plum into teal: the brand's signature, used once per surface. */
 .brand-strip {
-  background: linear-gradient(
-    90deg,
-    var(--color-crayon-orange) 0 20%,
-    var(--color-crayon-purple) 20% 40%,
-    var(--color-crayon-lime) 40% 60%,
-    var(--color-crayon-teal) 60% 80%,
-    var(--color-crayon-yellow) 80% 100%
-  );
+  background: linear-gradient(90deg, var(--color-logo) 0%, var(--color-logo) 55%, var(--color-logo-smile) 100%);
 }
 
-/* ---- KidsmileMark: the animated logo (components/brand.tsx) ---- */
-.ks-letter {
-  display: inline-block;
-  font-family: var(--font-display);
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: -0.01em;
-  color: var(--ks-fill);
-  /* An ink outline under the fill and an offset crayon shadow, as in the hand-drawn logo. */
-  -webkit-text-stroke: 0.1em var(--color-crayon-outline);
-  paint-order: stroke fill;
-  text-shadow: 0.06em 0.05em 0 var(--ks-shadow);
-  transform-origin: 50% 100%;
-  animation: ks-hop 1.6s cubic-bezier(0.3, 0.7, 0.4, 1) infinite;
+/* ---- PrimoralMark, animated (components/brand.tsx): the P bobs and the smile draws itself ---- */
+.pm-bob {
+  animation: pm-bob 1.8s cubic-bezier(0.45, 0, 0.55, 1) infinite;
 }
-.ks-letter[data-crayon="orange"] {
-  --ks-fill: var(--color-crayon-orange);
-  --ks-shadow: color-mix(in oklab, var(--color-crayon-orange) 45%, white);
+.pm-smile {
+  stroke-dasharray: 1;
+  animation: pm-smile 1.8s cubic-bezier(0.3, 0.7, 0.4, 1) infinite;
 }
-.ks-letter[data-crayon="purple"] {
-  --ks-fill: var(--color-crayon-purple);
-  --ks-shadow: color-mix(in oklab, var(--color-crayon-purple) 40%, white);
-}
-.ks-letter[data-crayon="lime"] {
-  --ks-fill: var(--color-crayon-lime);
-  --ks-shadow: color-mix(in oklab, var(--color-crayon-lime) 50%, white);
-}
-.ks-letter[data-crayon="teal"] {
-  --ks-fill: var(--color-crayon-teal);
-  --ks-shadow: color-mix(in oklab, var(--color-crayon-teal) 50%, white);
-}
-/* Room after the "e" for the bristle head, as in the logo. The brush takes the word's width
-   (w-0 min-w-full), so the two scale together. */
-.ks-word {
-  padding-right: 1.2em;
-  padding-left: 0.05em;
-}
-.ks-brush {
-  margin-top: -0.2em; /* the handle runs just under the letters, as in the logo */
-}
-.ks-brush-body {
-  animation: ks-scrub 0.8s ease-in-out infinite alternate;
-}
-.ks-bubble {
-  transform-box: fill-box;
-  transform-origin: center;
-  opacity: 0;
-  animation: ks-bubble 1.35s ease-out infinite;
-}
-.ks-fade-in {
-  animation: ks-fade-in 0.2s ease-out 0.15s both;
+.pm-fade-in {
+  animation: pm-fade-in 0.2s ease-out 0.15s both;
 }
 
-@keyframes ks-hop {
+@keyframes pm-bob {
   0%,
-  55%,
   100% {
-    transform: translateY(0) scale(1, 1);
+    transform: translateY(0);
   }
-  15% {
-    transform: translateY(-0.28em) scale(0.96, 1.05);
-  }
-  30% {
-    transform: translateY(0) scale(1.06, 0.92);
-  }
-  40% {
-    transform: translateY(-0.06em) scale(1, 1);
+  50% {
+    transform: translateY(-6%);
   }
 }
-@keyframes ks-scrub {
-  from {
-    transform: translateX(-4%);
-  }
-  to {
-    transform: translateX(4%);
-  }
-}
-@keyframes ks-bubble {
+/* The smile draws in from the left, holds, then lets go before the next one. */
+@keyframes pm-smile {
   0% {
-    opacity: 0;
-    transform: translateY(6px) scale(0.3);
+    stroke-dashoffset: 1;
   }
-  25% {
-    opacity: 1;
+  45%,
+  85% {
+    stroke-dashoffset: 0;
   }
   100% {
-    opacity: 0;
-    transform: translateY(-22px) scale(1);
+    stroke-dashoffset: -1;
   }
 }
-@keyframes ks-fade-in {
+@keyframes pm-fade-in {
   from {
     opacity: 0;
   }
@@ -477,15 +428,15 @@ body {
   }
 }
 
-/* Reduced motion: the logo stands still rather than flickering through 0.01ms loops. */
+/* Reduced motion: the mark stands still, smiling, rather than flickering through 0.01ms loops. */
 @media (prefers-reduced-motion: reduce) {
-  .ks-letter,
-  .ks-brush-body,
-  .ks-fade-in {
+  .pm-bob,
+  .pm-smile,
+  .pm-fade-in {
     animation: none !important;
   }
-  .ks-bubble {
-    display: none;
+  .pm-smile {
+    stroke-dashoffset: 0;
   }
 }
 
