@@ -1,3 +1,4 @@
+import { format, parseISO } from "date-fns";
 import type { GrowthRecord, OralHabit } from "../schemas/growth";
 import type { ToothState } from "./chart";
 import { dentitionOf, type ToothNumber } from "./teeth";
@@ -6,23 +7,32 @@ export type HabitHistory = {
   habit: OralHabit;
   startedOn?: string;
   stoppedOn?: string;
+  /** The stop date is the visit where the habit was unticked, not a date the parent gave. */
+  stopInferred?: boolean;
   /** Visits at which the habit was recorded, oldest first. */
   visitIds: string[];
 };
 
 /**
  * One line per habit across all visits. A later record's dates win, but a start date recorded once
- * isn't lost when a later visit only adds the stop date.
+ * isn't lost when a later visit only adds the stop date. The form saves only ticked habits, so a habit
+ * missing from a later record was unticked there: stopped by that visit (stopInferred), until ticked again.
  */
 export function habitTimeline(records: GrowthRecord[]): HabitHistory[] {
   const byHabit = new Map<OralHabit, HabitHistory>();
   for (const r of [...records].sort((a, b) => a.recordedAt.localeCompare(b.recordedAt))) {
+    const day = format(parseISO(r.recordedAt), "yyyy-MM-dd");
+    const ticked = new Set(r.habits.map((h) => h.habit));
+    for (const [habit, prev] of byHabit) {
+      if (!ticked.has(habit) && !prev.stoppedOn) byHabit.set(habit, { ...prev, stoppedOn: day, stopInferred: true });
+    }
     for (const h of r.habits) {
       const prev = byHabit.get(h.habit) ?? { habit: h.habit, visitIds: [] };
       byHabit.set(h.habit, {
         habit: h.habit,
         startedOn: h.startedOn ?? prev.startedOn,
         stoppedOn: h.stoppedOn,
+        stopInferred: undefined,
         visitIds: [...prev.visitIds, r.visitId],
       });
     }

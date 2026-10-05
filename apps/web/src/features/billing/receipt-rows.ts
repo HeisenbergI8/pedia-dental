@@ -1,11 +1,14 @@
 import { format, parseISO } from "date-fns";
-import { formatPeso, invoiceBalance, invoiceTotal, type Invoice, type PatientView, type Payment, type StaffMember } from "@pedia/shared";
+import { depositBalance, formatPeso, invoiceBalance, invoiceTotal, type Invoice, type PatientView, type Payment, type StaffMember } from "@pedia/shared";
 import { METHOD_LABEL } from "./api";
 
-/** What an acknowledgment receipt says, on screen and in the PDF. `payments` is the patient's full history. */
-export function receiptContent({ patient, invoice, payment, payments, staff }: { patient: PatientView; invoice: Invoice; payment: Payment; payments: Payment[]; staff: StaffMember[] }) {
+/**
+ * What an acknowledgment receipt says, on screen and in the PDF. `payments` is the patient's full history.
+ * Without an invoice the payment is a deposit (or a deposit refund), held on the account.
+ */
+export function receiptContent({ patient, invoice, payment, payments, staff }: { patient: PatientView; invoice?: Invoice; payment: Payment; payments: Payment[]; staff: StaffMember[] }) {
   const refund = payment.amount < 0;
-  const after = invoiceBalance(invoice, payments.filter((p) => p.receivedAt <= payment.receivedAt)); // as it stood then
+  const upTo = payments.filter((p) => p.receivedAt <= payment.receivedAt); // as it stood then
   const guardian = patient.guardians.find((g) => g.isPrimary);
   const rows: [string, string][] = [
     ["Patient", `${patient.firstName} ${patient.lastName}`],
@@ -13,9 +16,16 @@ export function receiptContent({ patient, invoice, payment, payments, staff }: {
     ["Amount", formatPeso(Math.abs(payment.amount))],
     ["Method", `${METHOD_LABEL[payment.method]}${payment.referenceNo ? ` · ref ${payment.referenceNo}` : ""}`],
     ...(payment.note ? [["Reason", payment.note] as [string, string]] : []),
-    ["For", invoice.lines.map((l) => `${l.description}${l.tooth ? ` (${l.tooth})` : ""}`).join(", ")],
-    ["Invoice total", formatPeso(invoiceTotal(invoice))],
-    ["Balance after this", formatPeso(after)],
+    ...((invoice
+      ? [
+          ["For", invoice.lines.map((l) => `${l.description}${l.tooth ? ` (${l.tooth})` : ""}`).join(", ")],
+          ["Invoice total", formatPeso(invoiceTotal(invoice))],
+          ["Balance after this", formatPeso(invoiceBalance(invoice, upTo))],
+        ]
+      : [
+          ["For", refund ? "Deposit refund" : "Deposit on account"],
+          ["Deposit after this", formatPeso(depositBalance(upTo, patient.id))],
+        ]) as [string, string][]),
     [refund ? "Refunded by" : "Received by", staff.find((s) => s.id === payment.receivedBy)?.fullName ?? payment.receivedBy],
   ];
   return {

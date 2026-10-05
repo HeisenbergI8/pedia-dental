@@ -1,7 +1,7 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
-import { Invoice, Payment, type CreateInvoiceInput, type PaymentMethod, type RecordPaymentInput } from "@pedia/shared";
+import { Invoice, Payment, type ApplyCreditInput, type CreateInvoiceInput, type PaymentMethod, type RecordPaymentInput } from "@pedia/shared";
 import { api } from "@/lib/api-client";
 import { patientKeys } from "@/features/patients/api";
 
@@ -18,6 +18,7 @@ export const METHOD_LABEL: Record<PaymentMethod, string> = {
   maya: "Maya",
   card: "Card",
   bank_transfer: "Bank transfer",
+  account_credit: "From deposit",
 };
 
 /** Oldest first. */
@@ -57,4 +58,39 @@ export function useRecordPayment() {
       qc.invalidateQueries({ queryKey: patientKeys.all }); // the header's balance and the list's Balance due
     },
   });
+}
+
+/** Money taken before treatment is billed (a positive amount), or a deposit refund (negative). */
+export function useRecordDeposit(patientId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: RecordPaymentInput) => api(`/patients/${patientId}/deposits`, Payment, { method: "POST", body: JSON.stringify(input) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: billingKeys.all });
+      qc.invalidateQueries({ queryKey: patientKeys.all });
+    },
+  });
+}
+
+/** Moves deposit money onto an invoice (positive) or back to the deposit (negative). */
+export function useApplyCredit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ invoiceId, ...input }: ApplyCreditInput & { invoiceId: string }) =>
+      api(`/invoices/${invoiceId}/apply-credit`, Payment, { method: "POST", body: JSON.stringify(input) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: billingKeys.all });
+      qc.invalidateQueries({ queryKey: patientKeys.all }); // the header's balance and the list's Balance due
+    },
+  });
+}
+
+/** How a row reads in a history: "Cash payment", "GCash refund", "Deposit", "Deposit refund", "Paid from deposit"… */
+export function paymentLabel(p: Payment): string {
+  if (p.method === "account_credit") {
+    if (p.invoiceId) return p.amount > 0 ? "Paid from deposit" : "Returned to deposit";
+    return p.amount < 0 ? "Applied to an invoice" : "Returned from an invoice";
+  }
+  if (!p.invoiceId) return `${METHOD_LABEL[p.method]} deposit${p.amount < 0 ? " refund" : ""}`;
+  return `${METHOD_LABEL[p.method]} ${p.amount < 0 ? "refund" : "payment"}`;
 }

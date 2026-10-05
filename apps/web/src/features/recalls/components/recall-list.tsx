@@ -2,17 +2,19 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import Link from "next/link";
-import { format, parseISO, setHours } from "date-fns";
+import { addDays, format, parseISO, setHours, startOfDay } from "date-fns";
 import { BellRingIcon } from "lucide-react";
-import { DEFAULT_FOLLOW_UP_RULES, dueBucket, type DueBucket, type DueItem } from "@pedia/shared";
+import { dueBucket, findFreeSlot, nextOpenStart, ruleLabel, type DueBucket, type DueItem } from "@pedia/shared";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { SectionCard } from "@/components/section-card";
 import { Button } from "@/components/ui/button";
+import { useAppointments } from "@/features/appointments/api";
 import { AppointmentForm, type AppointmentDraft } from "@/features/appointments/components/appointment-form";
-import { useProcedures } from "@/features/clinic/api";
+import { useChairs, useProcedures, useStaff } from "@/features/clinic/api";
 import { useQueueDueMessage } from "@/features/messages/api";
 import { usePatients } from "@/features/patients/api";
+import { PatientName } from "@/features/patients/components/patient-name";
 import { formatDate, formatPhone } from "@/lib/format";
 import { useDueItems } from "../api";
 import { Loading } from "@/components/brand";
@@ -28,29 +30,39 @@ const SECTIONS: { bucket: DueBucket; title: string; empty: string }[] = [
 /** Follow-ups and recalls due within 30 days. Booking one opens the appointment form already filled in. */
 export function RecallList() {
   const { data: items, isLoading, error, refetch, isRefetching } = useDueItems();
-  const patients = usePatients().data ?? [];
+  const patientsQuery = usePatients();
+  const patients = patientsQuery.data ?? [];
   const procedures = useProcedures().data ?? [];
   const [draft, setDraft] = useState<AppointmentDraft | null>(null);
   const remind = useQueueDueMessage();
   const today = format(new Date(), "yyyy-MM-dd");
+  // 30 days of due items plus a 14-day slot search. Strings from `today`, so the query key is stable across renders.
+  const booked = useAppointments(startOfDay(parseISO(today)).toISOString(), addDays(parseISO(today), 45).toISOString());
+  const chairs = useChairs().data ?? [];
+  const dentists = (useStaff().data ?? []).filter((s) => s.role === "dentist");
 
   const procedureName = (code: string) => procedures.find((p) => p.code === code)?.name ?? code;
-  /** "Follow-up after extraction" or "6-month recall", worded from the rule. */
-  const what = (i: DueItem) => {
-    if (i.kind === "follow_up") return `Follow-up after ${procedureName(i.procedure).toLowerCase()}`;
-    const months = DEFAULT_FOLLOW_UP_RULES.find((r) => r.id === i.ruleId)?.interval.months;
-    return months ? `${months}-month recall` : "Recall";
-  };
+  /** "Follow-up after extraction" or "6-month recall", worded from the rule (shared with the appointment sheet). */
+  const what = (i: DueItem) => ruleLabel(i.ruleId, procedureName) ?? "Recall";
 
   function book(i: DueItem) {
     const visitCode = i.kind === "follow_up" ? "follow_up" : "oral_exam";
+    const durationMin = procedures.find((p) => p.code === visitCode)?.defaultDurationMin ?? 30;
+    // 9 AM on the due day, never in the past, never outside clinic hours or on a closed day.
     const due = setHours(parseISO(i.dueOn), 9);
+    const from = nextOpenStart(due < new Date() ? new Date() : due, durationMin);
+    // The child's dentist from the visit that made this due; any dentist if that's unknown.
+    const dentistId = i.dentistId ?? dentists[0]?.id;
+    const slot = dentistId && booked.data ? findFreeSlot({ from, durationMin, dentistId, chairIds: chairs.map((c) => c.id) }, booked.data) : undefined;
     setDraft({
       patientId: i.patientId,
       reason: what(i),
-      durationMin: procedures.find((p) => p.code === visitCode)?.defaultDurationMin,
+      durationMin,
       sourceRuleId: i.ruleId,
-      start: due < new Date() ? new Date() : due, // overdue: offer now, never a past slot
+      procedureCode: visitCode,
+      dentistId,
+      chairId: slot?.chairId,
+      start: slot?.startsAt ?? from, // no free slot in 14 days: the open slot, and the server's 409 explains a clash
     });
   }
 
@@ -82,13 +94,14 @@ export function RecallList() {
                 <ul className="divide-y divide-line">
                   {rows.map((i) => {
                     const p = patients.find((x) => x.id === i.patientId);
-                    const name = p ? `${p.lastName}, ${p.firstName}` : "Patient";
+                    // aria-labels need a string; the visible link uses PatientName.
+                    const name = p ? `${p.lastName}, ${p.firstName}` : "this patient";
                     const phone = p?.guardians.find((g) => g.isPrimary)?.phone;
                     return (
                       <li key={i.id} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:gap-4">
                         <div className="min-w-0 flex-1">
                           <Link href={`/patients/${i.patientId}`} className="font-medium text-brand underline-offset-2 hover:underline">
-                            {name}
+                            <PatientName patient={p} loading={patientsQuery.isLoading} />
                           </Link>
                           <MetaLine
                             items={[

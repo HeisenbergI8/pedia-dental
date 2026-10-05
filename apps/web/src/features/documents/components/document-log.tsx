@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { useStaff } from "@/features/clinic/api";
 import { usePatients } from "@/features/patients/api";
+import { PatientName } from "@/features/patients/components/patient-name";
 import { useDocumentLog } from "../api";
 import { Loading } from "@/components/brand";
 import { ErrorState } from "@/components/error-state";
@@ -15,7 +16,8 @@ import { DataList } from "@/components/data-list";
 /** Every document issued across the clinic. Documents are created from a patient's Documents tab. */
 export function DocumentLog() {
   const { data: docs = [], isLoading, error, refetch, isRefetching } = useDocumentLog();
-  const patients = usePatients().data ?? [];
+  const patientsQuery = usePatients();
+  const patients = patientsQuery.data ?? [];
   const staff = useStaff().data ?? [];
   return (
     <div className="space-y-5">
@@ -41,7 +43,7 @@ export function DocumentLog() {
                 const p = patients.find((x) => x.id === d.patientId);
                 return (
                   <Link href={`/patients/${d.patientId}`} className="text-brand underline-offset-2 hover:underline">
-                    {p ? `${p.lastName}, ${p.firstName}` : "Patient"}
+                    <PatientName patient={p} loading={patientsQuery.isLoading} />
                   </Link>
                 );
               },

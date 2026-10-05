@@ -1,8 +1,11 @@
 import { http, HttpResponse, delay } from "msw";
 import { format } from "date-fns";
 import {
+  ApplyCreditInput,
   CreateInvoiceInput,
   RecordPaymentInput,
+  appliedCredit,
+  depositBalance,
   formatPeso,
   invoiceBalance,
   invoiceTotal,
@@ -16,6 +19,9 @@ import { CLINIC_ID } from "@/mocks/seed";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 const byReceived = (a: Payment, b: Payment) => a.receivedAt.localeCompare(b.receivedAt);
+/** AR for money received, CR for a deposit applied to an invoice. Counted per prefix, so neither sequence skips. */
+const nextNo = (prefix: "AR" | "CR") =>
+  `${prefix}-${String(db.payments.filter((p) => p.receiptNo.startsWith(prefix)).length + 1).padStart(6, "0")}`;
 
 /** API contract for apps/api's BillingController. Balances are computed from payments, never stored. */
 export const billingHandlers = [
@@ -78,7 +84,8 @@ export const billingHandlers = [
     if (!db.staff.some((s) => s.id === parsed.data.receivedBy)) return new HttpResponse("Unknown staff member", { status: 400 });
 
     const balance = invoiceBalance(invoice, db.payments);
-    const paid = invoiceTotal(invoice) - balance;
+    // Real money on this invoice: an applied deposit goes back through apply-credit, not as a cash refund.
+    const paid = invoiceTotal(invoice) - balance - appliedCredit(invoice.id, db.payments);
     if (parsed.data.amount > balance) return new HttpResponse(`That's more than the ${formatPeso(balance)} balance`, { status: 409 });
     if (-parsed.data.amount > paid) return new HttpResponse(`A refund can't be more than the ${formatPeso(paid)} paid`, { status: 409 });
 
@@ -88,11 +95,47 @@ export const billingHandlers = [
       clinicId: CLINIC_ID,
       patientId: invoice.patientId,
       invoiceId: invoice.id,
-      receiptNo: `AR-${String(db.payments.length + 1).padStart(6, "0")}`, // payments are append-only, so this never repeats
+      receiptNo: nextNo("AR"), // payments are append-only, so this never repeats
       receivedAt: new Date().toISOString(),
     };
     db.payments.push(payment);
     persist();
     return HttpResponse.json(payment, { status: 201 });
+  }),
+
+  // Money taken before treatment is billed (+), or a deposit refund (−). Applied to invoices later.
+  http.post(url("/patients/:id/deposits"), async ({ params, request }) => {
+    const patientId = String(params.id);
+    if (!db.patients.some((p) => p.id === patientId)) return new HttpResponse("Patient not found", { status: 404 });
+    const parsed = RecordPaymentInput.safeParse(await request.json());
+    if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
+    if (!db.staff.some((s) => s.id === parsed.data.receivedBy)) return new HttpResponse("Unknown staff member", { status: 400 });
+    const held = depositBalance(db.payments, patientId);
+    if (-parsed.data.amount > held) return new HttpResponse(`A refund can't be more than the ${formatPeso(held)} deposit`, { status: 409 });
+    const payment: Payment = { ...parsed.data, id: crypto.randomUUID(), clinicId: CLINIC_ID, patientId, receiptNo: nextNo("AR"), receivedAt: new Date().toISOString() };
+    db.payments.push(payment);
+    persist();
+    return HttpResponse.json(payment, { status: 201 });
+  }),
+
+  // Moves deposit money onto this invoice (+) or back (−) as a pair of rows; returns the invoice-side row.
+  http.post(url("/invoices/:id/apply-credit"), async ({ params, request }) => {
+    const invoice = db.invoices.find((i) => i.id === params.id);
+    if (!invoice) return new HttpResponse("Invoice not found", { status: 404 });
+    const parsed = ApplyCreditInput.safeParse(await request.json());
+    if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
+    if (!db.staff.some((s) => s.id === parsed.data.receivedBy)) return new HttpResponse("Unknown staff member", { status: 400 });
+    const { amount, receivedBy } = parsed.data;
+    const held = depositBalance(db.payments, invoice.patientId);
+    const balance = invoiceBalance(invoice, db.payments);
+    if (amount > held) return new HttpResponse(`Only ${formatPeso(held)} is on deposit`, { status: 409 });
+    if (amount > balance) return new HttpResponse(`That's more than the ${formatPeso(balance)} balance`, { status: 409 });
+    if (-amount > appliedCredit(invoice.id, db.payments)) return new HttpResponse("That's more than was applied from the deposit", { status: 409 });
+    const base = { clinicId: CLINIC_ID, patientId: invoice.patientId, method: "account_credit" as const, receivedBy, receiptNo: nextNo("CR"), receivedAt: new Date().toISOString() };
+    const onInvoice: Payment = { ...base, id: crypto.randomUUID(), invoiceId: invoice.id, amount, note: amount > 0 ? "Paid from deposit" : "Returned to deposit" };
+    const onDeposit: Payment = { ...base, id: crypto.randomUUID(), appliedTo: invoice.id, amount: -amount };
+    db.payments.push(onInvoice, onDeposit);
+    persist();
+    return HttpResponse.json(onInvoice, { status: 201 });
   }),
 ];

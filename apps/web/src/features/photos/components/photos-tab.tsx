@@ -5,7 +5,7 @@
 import { useState } from "react";
 import { format, parseISO } from "date-fns";
 import { CameraIcon } from "lucide-react";
-import { PhotoType, type ClinicalPhoto } from "@pedia/shared";
+import { groupPhotos, isPdf, type ClinicalPhoto } from "@pedia/shared";
 import { Segmented } from "@/components/segmented";
 import { EmptyState } from "@/components/empty-state";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,7 @@ import { Can } from "@/features/auth/access";
 import { useStaff } from "@/features/clinic/api";
 import { useVisits } from "@/features/visits/api";
 import { photoFileUrl, usePhotos } from "../api";
+import { FileCard } from "./file-card";
 import { TYPE_LABEL, UploadPhotoDialog } from "./upload-photo-dialog";
 import { Loading } from "@/components/brand";
 import { ErrorState } from "@/components/error-state";
@@ -88,7 +89,7 @@ export function PhotosTab({ patientId }: { patientId: string }) {
   // Teeth with both a before and an after photo. Photos arrive newest first, so the first match is the latest.
   const pairs = new Map<number, { before?: ClinicalPhoto; after?: ClinicalPhoto }>();
   for (const p of photos ?? []) {
-    if (!p.tooth || !p.stage) continue;
+    if (!p.tooth || !p.stage || isPdf(p.contentType)) continue; // a PDF can't be compared on a slider
     const pair = pairs.get(p.tooth) ?? {};
     pair[p.stage] ??= p;
     pairs.set(p.tooth, pair);
@@ -97,10 +98,8 @@ export function PhotosTab({ patientId }: { patientId: string }) {
   const shown = tooth && comparable.includes(Number(tooth)) ? Number(tooth) : comparable[0];
   const pair = shown ? pairs.get(shown) : undefined;
 
-  // patient → visit → type. Photos with no visit form their own group at the end.
-  const byVisit = new Map<string, ClinicalPhoto[]>();
-  for (const p of photos ?? []) byVisit.set(p.visitId ?? "", [...(byVisit.get(p.visitId ?? "") ?? []), p]);
-  const groups = [...byVisit].sort(([a], [b]) => Number(a === "") - Number(b === ""));
+  // patient → visit → date → type. Photos with no visit form their own group at the end.
+  const groups = groupPhotos(photos ?? [], (id) => visits.data?.find((v) => v.id === id)?.date);
   const visitLabel = (visitId: string) => {
     const v = visits.data?.find((x) => x.id === visitId);
     if (!v) return "Not linked to a visit";
@@ -146,27 +145,32 @@ export function PhotosTab({ patientId }: { patientId: string }) {
         </section>
       )}
 
-      {groups.map(([visitId, inVisit]) => (
-        <section key={visitId} className="space-y-4 rounded-xl border border-line bg-surface p-4 shadow-card sm:p-5">
-          <h3 className="font-semibold">{visitLabel(visitId)}</h3>
-          {PhotoType.options
-            .filter((t) => inVisit.some((p) => p.type === t))
-            .map((t) => (
+      {groups.map((g) => (
+        <section key={g.visitId ?? "unlinked"} className="space-y-4 rounded-xl border border-line bg-surface p-4 shadow-card sm:p-5">
+          <h3 className="font-semibold">{visitLabel(g.visitId ?? "")}</h3>
+          {g.days.map((d) => (
+            <div key={d.date} className="space-y-3">
+              {/* The date level: always for unlinked uploads, and inside a visit only when it spans more than one day. */}
+              {(!g.visitId || g.days.length > 1) && <h4 className="text-sm font-medium">{format(parseISO(d.date), "MMM d, yyyy")}</h4>}
+              {d.types.map(({ type: t, photos: ofType }) => (
               <div key={t} className="space-y-2">
                 <p className="text-sm text-ink-muted">{TYPE_LABEL[t]}</p>
                 <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                  {inVisit
-                    .filter((p) => p.type === t)
+                  {ofType
                     .map((p) => (
                       <li key={p.id}>
-                        <a href={photoFileUrl(p.id)} target="_blank" rel="noreferrer" className="block">
-                          <img
-                            src={photoFileUrl(p.id)}
-                            alt={describe(p)}
-                            loading="lazy"
-                            className="aspect-square w-full rounded-md bg-ground object-cover"
-                          />
-                        </a>
+                        {isPdf(p.contentType) ? (
+                          <FileCard photo={p} label={TYPE_LABEL[p.type]} />
+                        ) : (
+                          <a href={photoFileUrl(p.id)} target="_blank" rel="noreferrer" className="block">
+                            <img
+                              src={photoFileUrl(p.id)}
+                              alt={describe(p)}
+                              loading="lazy"
+                              className="aspect-square w-full rounded-md bg-ground object-cover"
+                            />
+                          </a>
+                        )}
                         <p className="mt-1 text-sm">
                           {p.stage && <Badge variant="outline" className="mr-1 capitalize">{p.stage}</Badge>}
                           {p.tooth && <span className="font-medium">Tooth {p.tooth} · </span>}
@@ -177,7 +181,9 @@ export function PhotosTab({ patientId }: { patientId: string }) {
                     ))}
                 </ul>
               </div>
-            ))}
+              ))}
+            </div>
+          ))}
         </section>
       ))}
     </div>

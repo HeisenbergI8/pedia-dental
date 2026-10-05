@@ -3,7 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
 import { ReceiptIcon } from "lucide-react";
-import { accountSummary, formatPeso, invoiceBalance, invoiceTotal, type Invoice } from "@pedia/shared";
+import { accountSummary, appliedCredit, depositBalance, formatPeso, invoiceBalance, invoiceTotal, isMoneyIn, type Invoice, type Payment } from "@pedia/shared";
 import { EmptyState } from "@/components/empty-state";
 import { MetaLine } from "@/components/meta-line";
 import { SectionCard } from "@/components/section-card";
@@ -11,9 +11,11 @@ import { Button } from "@/components/ui/button";
 import { useCan } from "@/features/auth/access";
 import { usePlan } from "@/features/plan/api";
 import { formatDate } from "@/lib/format";
-import { METHOD_LABEL, useInvoices, usePayments } from "../api";
+import { cn } from "@/lib/utils";
+import { paymentLabel, useInvoices, usePayments } from "../api";
+import { ApplyCreditDialog } from "./apply-credit-dialog";
 import { CreateInvoice } from "./create-invoice";
-import { PaymentDialog } from "./payment-dialog";
+import { PaymentDialog, type PaymentTarget } from "./payment-dialog";
 import { Loading } from "@/components/brand";
 import { ErrorState } from "@/components/error-state";
 
@@ -21,7 +23,8 @@ export function BillingTab({ patientId }: { patientId: string }) {
   const invoices = useInvoices(patientId);
   const payments = usePayments(patientId);
   const plan = usePlan(patientId);
-  const [paying, setPaying] = useState<{ invoice: Invoice; refund: boolean } | null>(null);
+  const [paying, setPaying] = useState<PaymentTarget | null>(null);
+  const [crediting, setCrediting] = useState<{ invoice: Invoice; mode: "apply" | "return" } | null>(null);
   const canCollect = useCan()("billing.collect");
 
   if (invoices.isLoading || payments.isLoading || plan.isLoading) return <Loading label="Loading billing" />;
@@ -29,12 +32,29 @@ export function BillingTab({ patientId }: { patientId: string }) {
   const allInvoices = invoices.data ?? [];
   const allPayments = payments.data ?? [];
   const summary = accountSummary(allInvoices, allPayments);
-  const totals = [["Total billed", summary.total], ["Paid", summary.paid], ["Balance", summary.balance]] as const;
+  const held = depositBalance(allPayments, patientId);
+  const depositRows = allPayments.filter((p) => !p.invoiceId);
+  const totals: [string, number][] = [["Total billed", summary.total], ["Paid", summary.paid], ["Balance", summary.balance]];
+  // Only once the family has used deposits: otherwise two zero rows on every statement.
+  if (depositRows.length) totals.push(["Deposit on account", held], ["Due after deposit", Math.max(0, summary.balance - held)]);
 
   return (
     <div className="space-y-5">
-      <SectionCard title="Statement" description="Balances are worked out from the payments received.">
-        <dl className="grid grid-cols-3 gap-4">
+      <SectionCard
+        title="Statement"
+        description="Balances are worked out from the payments received."
+        action={
+          canCollect && (
+            <>
+              {held > 0 && (
+                <Button variant="ghost" size="sm" className="text-ink-muted" onClick={() => setPaying({ deposit: true, patientId, held, refund: true })}>Refund deposit</Button>
+              )}
+              <Button variant="outline" size="sm" onClick={() => setPaying({ deposit: true, patientId, held, refund: false })}>Take deposit</Button>
+            </>
+          )
+        }
+      >
+        <dl className={depositRows.length ? "grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5" : "grid grid-cols-3 gap-4"}>
           {totals.map(([label, value]) => (
             <div key={label}>
               <dt className="text-sm text-ink-muted">{label}</dt>
@@ -65,8 +85,14 @@ export function BillingTab({ patientId }: { patientId: string }) {
               action={
                 canCollect && (
                   <>
-                    {paid > 0 && (
+                    {appliedCredit(inv.id, allPayments) > 0 && (
+                      <Button variant="ghost" size="sm" className="text-ink-muted" onClick={() => setCrediting({ invoice: inv, mode: "return" })}>Return to deposit</Button>
+                    )}
+                    {paid - appliedCredit(inv.id, allPayments) > 0 && (
                       <Button variant="ghost" size="sm" className="text-ink-muted" onClick={() => setPaying({ invoice: inv, refund: true })}>Refund</Button>
+                    )}
+                    {balance > 0 && held > 0 && (
+                      <Button variant="outline" size="sm" onClick={() => setCrediting({ invoice: inv, mode: "apply" })}>Pay from deposit</Button>
                     )}
                     {balance > 0 && <Button size="sm" onClick={() => setPaying({ invoice: inv, refund: false })}>Record payment</Button>}
                   </>
@@ -93,34 +119,56 @@ export function BillingTab({ patientId }: { patientId: string }) {
                   </tr>
                 </tbody>
               </table>
-              {own.length > 0 && (
-                <ul className="space-y-3 border-t border-line pt-3 text-sm">
-                  {own.map((p) => (
-                    <li key={p.id}>
-                      {/* What and how much first; when, reference and receipt on the line below. */}
-                      <div className="flex items-baseline justify-between gap-3">
-                        <span>{METHOD_LABEL[p.method]} {p.amount < 0 ? "refund" : "payment"}</span>
-                        <span className="tabular-nums whitespace-nowrap">{formatPeso(p.amount)}</span>
-                      </div>
-                      <MetaLine
-                        items={[
-                          <span key="at" className="tabular-nums">{format(parseISO(p.receivedAt), "MMM d, yyyy h:mm a")}</span>,
-                          p.referenceNo && `ref ${p.referenceNo}`,
-                          <Link key="receipt" href={`/patients/${patientId}/receipts/${p.id}`} className="text-brand underline">Receipt {p.receiptNo}</Link>,
-                        ]}
-                      />
-                    </li>
-                  ))}
-                </ul>
-              )}
+              {own.length > 0 && <PaymentHistory rows={own} patientId={patientId} invoices={allInvoices} />}
             </SectionCard>
           );
         })
       )}
 
+      {depositRows.length > 0 && (
+        <SectionCard title="Deposit" headingLevel={3} description={`${formatPeso(held)} on account, applied to invoices as they're paid.`}>
+          <PaymentHistory rows={depositRows} patientId={patientId} invoices={allInvoices} />
+        </SectionCard>
+      )}
+
       {paying && (
-        <PaymentDialog key={`${paying.invoice.id}-${paying.refund}`} target={paying} payments={allPayments} onClose={() => setPaying(null)} />
+        <PaymentDialog key={`${"invoice" in paying ? paying.invoice.id : "deposit"}-${paying.refund}`} target={paying} payments={allPayments} onClose={() => setPaying(null)} />
+      )}
+      {crediting && (
+        <ApplyCreditDialog key={`${crediting.invoice.id}-${crediting.mode}`} invoice={crediting.invoice} payments={allPayments} mode={crediting.mode} onClose={() => setCrediting(null)} />
       )}
     </div>
+  );
+}
+
+/** Payments, refunds and deposit moves, oldest first. A transfer has no acknowledgment receipt, only its CR number. */
+function PaymentHistory({ rows, patientId, invoices }: { rows: Payment[]; patientId: string; invoices: Invoice[] }) {
+  const invoiceOf = (id?: string) => invoices.find((i) => i.id === id);
+  return (
+    <ul className="space-y-3 border-t border-line pt-3 text-sm">
+      {rows.map((p) => {
+        const to = invoiceOf(p.appliedTo);
+        return (
+          <li key={p.id}>
+            {/* What and how much first; when, reference and receipt on the line below. */}
+            <div className="flex items-baseline justify-between gap-3">
+              <span>{to ? `${paymentLabel(p)} of ${formatDate(to.issuedAt)}` : paymentLabel(p)}</span>
+              <span className={cn("tabular-nums whitespace-nowrap", p.amount < 0 && isMoneyIn(p) && "text-danger")}>{formatPeso(p.amount)}</span>
+            </div>
+            <MetaLine
+              items={[
+                <span key="at" className="tabular-nums">{format(parseISO(p.receivedAt), "MMM d, yyyy h:mm a")}</span>,
+                p.referenceNo && `ref ${p.referenceNo}`,
+                isMoneyIn(p) ? (
+                  <Link key="receipt" href={`/patients/${patientId}/receipts/${p.id}`} className="text-brand underline">Receipt {p.receiptNo}</Link>
+                ) : (
+                  `Transfer ${p.receiptNo}`
+                ),
+              ]}
+            />
+          </li>
+        );
+      })}
+    </ul>
   );
 }

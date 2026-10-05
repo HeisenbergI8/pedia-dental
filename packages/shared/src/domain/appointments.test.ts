@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canTransition, countByDay, findConflict, isClosedDay } from "./appointments";
+import { canTransition, countByDay, findConflict, findFreeSlot, isClosedDay, nextOpenStart, outsideClinicHours } from "./appointments";
 
 const at = (time: string, extra: Partial<Parameters<typeof findConflict>[0]> = {}) => ({
   id: time,
@@ -54,5 +54,53 @@ describe("calendar days", () => {
   it("counts live appointments per local day", () => {
     const at = (h: number, status: "booked" | "cancelled" = "booked") => ({ startsAt: new Date(2026, 9, 5, h).toISOString(), status });
     expect(countByDay([at(9), at(10), at(11, "cancelled")]).get("2026-10-05")).toBe(2);
+  });
+});
+
+describe("outsideClinicHours", () => {
+  it("accepts a booking inside opening hours, including one ending at closing", () => {
+    expect(outsideClinicHours(new Date(2026, 9, 5, 8, 0), 30)).toBeUndefined();
+    expect(outsideClinicHours(new Date(2026, 9, 5, 17, 30), 30)).toBeUndefined();
+  });
+  it("refuses a start before opening or an end after closing", () => {
+    expect(outsideClinicHours(new Date(2026, 9, 5, 7, 15), 30)).toMatch(/between 8:00 AM and 6:00 PM/);
+    expect(outsideClinicHours(new Date(2026, 9, 5, 17, 45), 30)).toMatch(/between/);
+  });
+  it("refuses a closed weekday", () => {
+    expect(outsideClinicHours(new Date(2026, 9, 11, 9, 0), 30)).toMatch(/closed on Sundays/);
+  });
+});
+
+describe("nextOpenStart", () => {
+  it("keeps an open slot, rounding up to the quarter hour", () => {
+    expect(nextOpenStart(new Date(2026, 9, 5, 9, 5))).toEqual(new Date(2026, 9, 5, 9, 15));
+  });
+  it("moves a Sunday due date to Monday's opening", () => {
+    expect(nextOpenStart(new Date(2026, 9, 11, 9, 0))).toEqual(new Date(2026, 9, 12, 8, 0));
+  });
+  it("moves an evening to the next open morning, skipping Sunday", () => {
+    expect(nextOpenStart(new Date(2026, 9, 10, 17, 50), 30)).toEqual(new Date(2026, 9, 12, 8, 0)); // Sat evening → Mon
+  });
+  it("moves an early start to opening", () => {
+    expect(nextOpenStart(new Date(2026, 9, 5, 6, 0))).toEqual(new Date(2026, 9, 5, 8, 0));
+  });
+});
+
+describe("findFreeSlot", () => {
+  const busy = (id: string, chairId: string, dentistId: string, at: Date, durationMin = 60) =>
+    ({ id, chairId, dentistId, startsAt: at.toISOString(), durationMin, status: "booked" as const });
+  const ask = { from: new Date(2026, 9, 5, 8, 0), durationMin: 30, dentistId: "d1", chairIds: ["c1", "c2"] };
+  it("takes the opening and the first chair on an empty day", () => {
+    expect(findFreeSlot(ask, [])).toEqual({ startsAt: new Date(2026, 9, 5, 8, 0), chairId: "c1" });
+  });
+  it("moves to the next chair when the first is taken", () => {
+    expect(findFreeSlot(ask, [busy("a", "c1", "d2", new Date(2026, 9, 5, 8, 0))])).toEqual({ startsAt: new Date(2026, 9, 5, 8, 0), chairId: "c2" });
+  });
+  it("waits for the dentist, whichever chair they are in", () => {
+    expect(findFreeSlot(ask, [busy("a", "c2", "d1", new Date(2026, 9, 5, 8, 0))])?.startsAt).toEqual(new Date(2026, 9, 5, 9, 0));
+  });
+  it("starts a Sunday request on Monday, and is undefined when the window is full", () => {
+    expect(findFreeSlot({ ...ask, from: new Date(2026, 9, 11, 9, 0) }, [])?.startsAt).toEqual(new Date(2026, 9, 12, 8, 0));
+    expect(findFreeSlot({ ...ask, days: 1 }, [busy("a", "c1", "d1", new Date(2026, 9, 5, 8, 0), 600)])).toBeUndefined();
   });
 });

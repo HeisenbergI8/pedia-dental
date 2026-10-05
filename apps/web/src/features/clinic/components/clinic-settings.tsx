@@ -1,6 +1,6 @@
 "use client";
 import type { ReactNode } from "react";
-import { findRule, formatPeso, type FollowUpRule } from "@pedia/shared";
+import { rulesFor, formatPeso, type FollowUpRule } from "@pedia/shared";
 import { DataList } from "@/components/data-list";
 import { PageHeader } from "@/components/page-header";
 import { useChairs, useProcedures, useStaff } from "../api";
@@ -72,7 +72,13 @@ export function ClinicSettings() {
               ),
             },
             { key: "duration", header: "Duration", mobile: "meta", numeric: true, cell: (p) => `${p.defaultDurationMin} min` },
-            { key: "followUp", header: "Follow-up", mobile: "meta", cell: (p) => describeRule(findRule(p.code)) },
+            {
+              key: "followUp",
+              header: "Follow-up",
+              mobile: "meta",
+              // Every rule for the code, conditional ones first: "Recall in 3 months at high caries risk; Recall in 6 months".
+              cell: (p) => rulesFor(p.code).map((r) => `${describeRule(r)}${r.when ? ` at ${r.when.label}` : ""}`).join("; ") || describeRule(undefined),
+            },
           ]}
         />
       </Section>

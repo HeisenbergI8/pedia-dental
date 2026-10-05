@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dueBucket, dueDateFor, dueItemFor, findRule, isDueItemOpen } from "./recall";
+import { dueBucket, dueDateFor, dueItemFor, findRule, isDueItemOpen, ruleLabel } from "./recall";
 
 describe("follow-up rules", () => {
   it("extraction → 7 days", () => {
@@ -46,4 +46,25 @@ describe("follow-up rules", () => {
     expect(isDueItemOpen(item, [appt("oral_exam", "done", "2026-03-01T02:00:00.000Z")])).toBe(true); // before the item
     expect(isDueItemOpen({ ...item, ruleId: "extraction" }, [appt("oral_exam", "done")])).toBe(true); // follow-ups need their own visit
   });
+});
+
+describe("ruleLabel", () => {
+  const name = (code: string) => ({ extraction: "Extraction", oral_exam: "Oral examination" })[code] ?? code;
+  it("words a follow-up from its procedure and a recall from its interval", () => {
+    expect(ruleLabel("extraction", name)).toBe("Follow-up after extraction");
+    expect(ruleLabel("routine", name)).toBe("6-month recall");
+  });
+  it("is undefined for an unknown rule", () => expect(ruleLabel("nope", name)).toBeUndefined());
+});
+
+describe("risk-based recall", () => {
+  it("brings the checkup forward to 3 months at a high caries risk", () => {
+    expect(dueItemFor("oral_exam", "2026-10-02", { caries_risk: "High" })).toMatchObject({ ruleId: "routine_high_risk", dueOn: "2027-01-02" });
+  });
+  it("keeps 6 months at a lower risk or without the note's values", () => {
+    expect(dueItemFor("oral_exam", "2026-10-02", { caries_risk: "Low" })).toMatchObject({ ruleId: "routine", dueOn: "2027-04-02" });
+    expect(dueItemFor("oral_exam", "2026-10-02")).toMatchObject({ ruleId: "routine" });
+    expect(findRule("oral_exam")?.id).toBe("routine");
+  });
+  it("words the high-risk rule as a 3-month recall", () => expect(ruleLabel("routine_high_risk", (c) => c)).toBe("3-month recall"));
 });

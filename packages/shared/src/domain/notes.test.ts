@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { groupFields, noteServices, noteValuesSchema } from "./notes";
-import type { NoteTemplate } from "../schemas/notes";
+import { UpdateNoteInput, type NoteTemplate } from "../schemas/notes";
 
 const pulpotomy: NoteTemplate = {
   id: "tpl_pulpotomy",
@@ -59,5 +59,12 @@ describe("note sections and services", () => {
       [150000, false],
     ]);
     expect(noteServices({ id: "other" }, [item("i1", 1)], invoices, [])).toEqual([]);
+  });
+});
+
+describe("behavior note", () => {
+  it("is limited to 300 characters on input", () => {
+    expect(UpdateNoteInput.safeParse({ values: {}, behavior: [], behaviorNote: "x".repeat(301) }).success).toBe(false);
+    expect(UpdateNoteInput.safeParse({ values: {}, behavior: [], behaviorNote: "x".repeat(300) }).success).toBe(true);
   });
 });

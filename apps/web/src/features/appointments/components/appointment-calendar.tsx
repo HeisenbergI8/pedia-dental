@@ -24,11 +24,12 @@ import {
 import { enUS } from "date-fns/locale";
 import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from "lucide-react";
 import { toast } from "sonner";
-import { canReschedule, countByDay, inStatusGroup, isStatusGroup, type Appointment, type AppointmentStatus, type Chair, type StatusGroup } from "@pedia/shared";
+import { CLINIC_HOURS, canReschedule, countByDay, inStatusGroup, isStatusGroup, type Appointment, type AppointmentStatus, type Chair, type StatusGroup } from "@pedia/shared";
 import { ErrorState } from "@/components/error-state";
 import { PageHeader } from "@/components/page-header";
 import { Loading } from "@/components/brand";
 import { Segmented } from "@/components/segmented";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { useChairs } from "@/features/clinic/api";
 import { usePatients } from "@/features/patients/api";
@@ -76,11 +77,22 @@ const STATUS_CLASS: Record<AppointmentStatus, string> = {
 /** Two lines that each cut off cleanly, so narrow week columns and short slots stay legible. */
 function EventLabel({ event }: { event: CalendarEvent }) {
   const Icon = STATUS_ICON[event.appointment.status];
+  const name = event.title || <Skeleton className="inline-block h-3 w-16 align-middle" aria-hidden />;
+  // A 15-minute tile has room for one line: icon, status word, then the name, which is what truncates.
+  if (event.appointment.durationMin <= 20) {
+    return (
+      <span className="flex min-w-0 items-center gap-1 text-xs leading-tight">
+        <Icon className="size-3 shrink-0" aria-hidden />
+        <strong className="shrink-0">{STATUS_LABEL[event.appointment.status]}</strong>
+        <span className="truncate">· {name}</span>
+      </span>
+    );
+  }
   return (
     <span className="block min-w-0 text-xs leading-tight">
       <strong className="flex min-w-0 items-center gap-1">
         <Icon className="size-3 shrink-0" aria-hidden />
-        <span className="truncate">{event.title}</span>
+        <span className="truncate">{name}</span>
       </strong>
       <span className="block truncate">
         {STATUS_LABEL[event.appointment.status]} · {event.appointment.reason}
@@ -93,7 +105,7 @@ function EventLabel({ event }: { event: CalendarEvent }) {
 function MonthEventLabel({ event }: { event: CalendarEvent }) {
   return (
     <span className="text-xs">
-      <strong>{event.title}</strong> · {STATUS_LABEL[event.appointment.status]}
+      <strong>{event.title || <Skeleton className="inline-block h-3 w-16 align-middle" aria-hidden />}</strong> · {STATUS_LABEL[event.appointment.status]}
     </span>
   );
 }
@@ -168,7 +180,8 @@ export function AppointmentCalendar() {
   const events = useMemo<CalendarEvent[]>(() => {
     const name = (id: string) => {
       const p = patients.data?.find((x) => x.id === id);
-      return p ? `${p.firstName} ${p.lastName}` : "Patient";
+      // Empty while names load (the tile draws a placeholder bar), never a made-up name.
+      return p ? `${p.firstName} ${p.lastName}` : patients.isLoading ? "" : "Unknown patient";
     };
     return (appointments.data ?? [])
       // Cancelled ones stay hidden unless the filter asks for them (the dashboard's "Cancelled or no-show").
@@ -181,7 +194,7 @@ export function AppointmentCalendar() {
         resourceId: a.chairId,
         chairName: chairs.data?.find((c) => c.id === a.chairId)?.name ?? "",
       }));
-  }, [appointments.data, patients.data, chairs.data, status]);
+  }, [appointments.data, patients.data, patients.isLoading, chairs.data, status]);
 
   function move({ event, start, end, resourceId }: EventInteractionArgs<CalendarEvent>) {
     const a = event.appointment;
@@ -316,9 +329,9 @@ export function AppointmentCalendar() {
               dayLayoutAlgorithm="no-overlap"
               step={15}
               timeslots={4}
-              min={new Date(1970, 0, 1, 8)}
-              max={new Date(1970, 0, 1, 18)}
-              scrollToTime={new Date(1970, 0, 1, 8)}
+              min={addMinutes(new Date(1970, 0, 1), CLINIC_HOURS.opensAt)}
+              max={addMinutes(new Date(1970, 0, 1), CLINIC_HOURS.closesAt)}
+              scrollToTime={addMinutes(new Date(1970, 0, 1), CLINIC_HOURS.opensAt)}
               selectable
               onSelectSlot={({ start, end, resourceId }) =>
                 setDraft({
@@ -328,6 +341,7 @@ export function AppointmentCalendar() {
                 })
               }
               onSelectEvent={(e) => setSelectedId(e.appointment.id)}
+              tooltipAccessor={(e) => [e.title, STATUS_LABEL[e.appointment.status], e.appointment.reason].filter(Boolean).join(" · ")}
               draggableAccessor={(e) => canReschedule(e.appointment.status)}
               resizableAccessor={(e) => canReschedule(e.appointment.status)}
               onEventDrop={move}

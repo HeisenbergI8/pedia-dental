@@ -7,8 +7,7 @@ import {
   NOTE_MESSAGES,
   allergyConflicts,
   type GenerateDocumentInput as Input,
-  type PatientDocument,
-} from "@pedia/shared";
+  type PatientDocument, isMoneyIn } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { db, persist } from "@/mocks/db";
 import { CLINIC_ID } from "@/mocks/seed";
@@ -22,7 +21,7 @@ function sourceFits(d: Input, patientId: string): boolean {
     case "visit":
       return db.visits.some((v) => v.id === d.sourceId && v.patientId === patientId && v.status === "completed");
     case "payment":
-      return db.payments.some((p) => p.id === d.sourceId && p.patientId === patientId);
+      return db.payments.some((p) => p.id === d.sourceId && p.patientId === patientId && isMoneyIn(p)); // a transfer has no receipt
     case "note": {
       const note = db.notes.find((n) => n.id === d.sourceId && n.patientId === patientId && n.signedAt);
       const procedure = note && db.noteTemplates.find((t) => t.id === note.templateId)?.procedure;

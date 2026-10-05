@@ -10,7 +10,9 @@ import { Button } from "@/components/ui/button";
 import { METHOD_LABEL } from "@/features/billing/api";
 import { useProcedures } from "@/features/clinic/api";
 import { usePatients } from "@/features/patients/api";
+import { PatientName } from "@/features/patients/components/patient-name";
 import { formatDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { useFinanceSummary } from "../api";
 import { RankBars, TimeBars } from "./charts";
 import { Loading } from "@/components/brand";
@@ -21,9 +23,9 @@ const PERIODS = { day: "Last 14 days", week: "Last 8 weeks", month: "Last 6 mont
 type Period = keyof typeof PERIODS;
 const tick: Record<Period, string> = { day: "MMM d", week: "'Wk of' MMM d", month: "MMM yyyy" };
 
-function Tile({ label, value, hint }: { label: string; value: string; hint?: string }) {
+function Tile({ label, value, hint, className }: { label: string; value: string; hint?: string; className?: string }) {
   return (
-    <div className="min-w-0 bg-surface p-4 sm:p-5">
+    <div className={cn("min-w-0 bg-surface p-4 sm:p-5", className)}>
       <dt className="text-sm text-ink-muted">{label}</dt>
       {/* Two tiles share a 360px row: the figure steps down a size there so ₱34,550.00 fits. */}
       <dd className="mt-1 font-title text-xl font-semibold tracking-tight break-words tabular-nums sm:text-2xl">{value}</dd>
@@ -36,7 +38,8 @@ function Tile({ label, value, hint }: { label: string; value: string; hint?: str
 /** The admin's money view. Rendered inside <Can permission="dashboard.view"> by DashboardScreen. */
 export function FinanceDashboard({ today }: { today: string }) {
   const { data: s, isLoading, error, refetch, isRefetching } = useFinanceSummary(today, true);
-  const patients = usePatients().data ?? [];
+  const patientsQuery = usePatients();
+  const patients = patientsQuery.data ?? [];
   const procedures = useProcedures().data ?? [];
   const [period, setPeriod] = useState<Period>("day");
   const [allUnpaid, setAllUnpaid] = useState(false);
@@ -53,7 +56,7 @@ export function FinanceDashboard({ today }: { today: string }) {
 
   const patientLink = (id: string) => {
     const p = patients.find((x) => x.id === id);
-    return <Link href={`/patients/${id}`} className="text-brand underline-offset-2 hover:underline">{p ? `${p.lastName}, ${p.firstName}` : "Patient"}</Link>;
+    return <Link href={`/patients/${id}`} className="text-brand underline-offset-2 hover:underline"><PatientName patient={p} loading={patientsQuery.isLoading} /></Link>;
   };
   const buckets = { day: s.byDay, week: s.byWeek, month: s.byMonth }[period];
   const series = buckets.map((b) => ({ label: format(parseISO(b.start), tick[period]), amount: b.amount }));
@@ -66,11 +69,13 @@ export function FinanceDashboard({ today }: { today: string }) {
     <section aria-label="Finance" className="space-y-5">
       {header}
       {/* One strip: a gap-px grid over a line background draws the dividers at every column count. */}
-      <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line bg-line shadow-card lg:grid-cols-4">
+      <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line bg-line shadow-card lg:grid-cols-5">
         <Tile label="Collected today" value={formatPeso(s.collected.today)} />
         <Tile label="This week" value={formatPeso(s.collected.week)} hint="Since Monday" />
         <Tile label="This month" value={formatPeso(s.collected.month)} hint={`Since ${format(parseISO(today), "MMM 1")}`} />
         <Tile label="Outstanding" value={formatPeso(s.outstandingTotal)} hint={`${owing} owe${s.outstanding.length === 1 ? "s" : ""} a balance`} />
+        {/* Owed to parents until applied, so shown beside Outstanding, never netted against it. Spans the phone row. */}
+        <Tile label="Deposits held" value={formatPeso(s.depositsHeld)} hint="Paid in advance, not yet applied" className="col-span-2 lg:col-span-1" />
       </dl>
 
       <SectionCard

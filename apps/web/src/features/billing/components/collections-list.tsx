@@ -3,7 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { addDays, format, parseISO } from "date-fns";
 import { ChevronLeftIcon, ChevronRightIcon, WalletIcon } from "lucide-react";
-import { PaymentMethod, formatPeso, type Payment } from "@pedia/shared";
+import { MONEY_METHODS, formatPeso, isMoneyIn, type Payment } from "@pedia/shared";
 import { DataList, type DataColumn } from "@/components/data-list";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
@@ -12,8 +12,9 @@ import { SectionCard } from "@/components/section-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { usePatients } from "@/features/patients/api";
+import { PatientName } from "@/features/patients/components/patient-name";
 import { formatDate } from "@/lib/format";
-import { METHOD_LABEL, useDailyPayments } from "../api";
+import { METHOD_LABEL, paymentLabel, useDailyPayments } from "../api";
 import { Loading } from "@/components/brand";
 import { ErrorState } from "@/components/error-state";
 
@@ -21,14 +22,14 @@ import { ErrorState } from "@/components/error-state";
 export function CollectionsList() {
   const today = format(new Date(), "yyyy-MM-dd");
   const [date, setDate] = useState(today);
-  const { data: rows = [], isLoading, error, refetch, isRefetching } = useDailyPayments(date);
-  const patients = usePatients().data ?? [];
+  const { data: all = [], isLoading, error, refetch, isRefetching } = useDailyPayments(date);
+  // Real money only, so the day's total matches the dashboard: applying a deposit moves money, it doesn't collect it.
+  const rows = all.filter(isMoneyIn);
+  const patientsQuery = usePatients();
+  const patients = patientsQuery.data ?? [];
   const total = rows.reduce((s, p) => s + p.amount, 0);
   const step = (days: number) => setDate(format(addDays(parseISO(date), days), "yyyy-MM-dd"));
-  const name = (id: string) => {
-    const x = patients.find((p) => p.id === id);
-    return x ? `${x.lastName}, ${x.firstName}` : "Patient";
-  };
+  const name = (id: string) => <PatientName patient={patients.find((p) => p.id === id)} loading={patientsQuery.isLoading} />;
   // Phone card: patient and amount on top; time, method, reference and receipt below.
   const columns: DataColumn<Payment>[] = [
     { key: "time", header: "Time", mobile: "meta", numeric: false, className: "whitespace-nowrap tabular-nums text-ink-muted", cell: (p) => format(parseISO(p.receivedAt), "h:mm a") },
@@ -42,7 +43,7 @@ export function CollectionsList() {
         </Link>
       ),
     },
-    { key: "method", header: "Method", mobile: "meta", cell: (p) => (p.amount < 0 ? `${METHOD_LABEL[p.method]} refund` : METHOD_LABEL[p.method]) },
+    { key: "method", header: "Method", mobile: "meta", cell: (p) => paymentLabel(p).replace(/ payment$/, "") },
     { key: "reference", header: "Reference", mobile: "meta", className: "whitespace-nowrap tabular-nums", cell: (p) => (p.referenceNo ? `ref ${p.referenceNo}` : null) },
     {
       key: "receipt",
@@ -56,7 +57,7 @@ export function CollectionsList() {
     },
     { key: "amount", header: "Amount", mobile: "trailing", numeric: true, cell: (p) => <span className={p.amount < 0 ? "text-danger" : "font-medium"}>{formatPeso(p.amount)}</span> },
   ];
-  const byMethod = PaymentMethod.options
+  const byMethod = MONEY_METHODS
     .map((m) => [m, rows.filter((p) => p.method === m).reduce((s, p) => s + p.amount, 0)] as const)
     .filter(([, sum]) => sum !== 0);
 

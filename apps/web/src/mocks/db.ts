@@ -52,8 +52,8 @@ export type Db = {
   staffPins: StaffPin[]; // each staff member's own PIN for switching user on a shared device; never served
 };
 
-// v19: appointments carry procedureCode, so a completed checkup or cleaning closes a due recall.
-const KEY = "pedia-dental:mock-db:v19";
+// v22: seeded growth records fall on their visit's own day.
+const KEY = "pedia-dental:mock-db:v22";
 
 function load(): Db {
   if (typeof window === "undefined") return seed();

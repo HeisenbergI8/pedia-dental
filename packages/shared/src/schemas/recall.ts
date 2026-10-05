@@ -16,5 +16,7 @@ export const DueItem = ClinicScoped.extend({
   appointmentId: Id.optional(), // set when booked
   closedAt: IsoDateTime.optional(), // set when a newer item for the same patient and rule replaces it
   createdAt: IsoDateTime,
+  /** The dentist of the visit whose note made this due. Derived on read for booking, never stored. */
+  dentistId: Id.optional(),
 });
 export type DueItem = z.infer<typeof DueItem>;

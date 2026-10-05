@@ -1,7 +1,7 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
-import { ClinicalPhoto, type UploadPhotoInput } from "@pedia/shared";
+import { ClinicalPhoto, type UploadPhotoInput, isPdf } from "@pedia/shared";
 import { api } from "@/lib/api-client";
 import { env } from "@/lib/env";
 import { compressImage } from "@/lib/image";
@@ -26,7 +26,9 @@ export function useUploadPhoto(patientId: string) {
   return useMutation({
     mutationFn: async ({ file, ...meta }: UploadPhotoInput & { file: File }) => {
       const body = new FormData();
-      body.set("file", await compressImage(file), "photo.jpg");
+      // A PDF goes as it is; photos are shrunk in the browser first (the mock stores them in IndexedDB).
+      if (isPdf(file.type)) body.set("file", file, file.name);
+      else body.set("file", await compressImage(file), "photo.jpg");
       body.set("meta", JSON.stringify(meta));
       return api(`/patients/${patientId}/photos`, ClinicalPhoto, { method: "POST", body });
     },

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MessageTemplate } from "../schemas/message";
-import { birthdayGreeting, isBirthdayOn, messageVars, renderMessage, reminderSendAt, unknownPlaceholders } from "./messages";
+import { birthdayGreeting, isBirthdayOn, messageVars, preVisitMessageFor, renderMessage, reminderSendAt, unknownPlaceholders } from "./messages";
 
 const bea = { firstName: "Bea", lastName: "Mendoza", guardians: [{ id: "g1", fullName: "Rosa Mendoza", relationship: "Mother", phone: "09171234567", isPrimary: true }] };
 const startsAt = new Date(2030, 0, 8, 10, 30).toISOString(); // Tue Jan 8 2030, 10:30 AM local
@@ -42,5 +42,14 @@ describe("birthday rule (shared by the daily job and Send greeting)", () => {
     const m = (createdAt: string) => ({ patientId: "p", kind: "birthday" as const, createdAt });
     expect(birthdayGreeting([m("2025-10-03T01:00:00.000Z")], "p", "2026-10-03")).toBeUndefined();
     expect(birthdayGreeting([m("2026-10-03T01:00:00.000Z")], "p", "2026-10-03")).toBeDefined();
+  });
+});
+
+describe("pre-treatment instructions", () => {
+  it("go with an extraction or a pulpotomy booking, not a checkup", () => {
+    expect(preVisitMessageFor("extraction")).toBe("pre_treatment");
+    expect(preVisitMessageFor("pulpotomy")).toBe("pre_treatment");
+    expect(preVisitMessageFor("oral_exam")).toBeUndefined();
+    expect(preVisitMessageFor(undefined)).toBeUndefined();
   });
 });

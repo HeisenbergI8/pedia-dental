@@ -56,6 +56,13 @@ export const NOTE_MESSAGES: Partial<Record<string, MessageKind>> = {
   fluoride: "fluoride_instructions",
 };
 
+/** Which instructions a booking sends before the visit, by Appointment.procedureCode. Data, like NOTE_MESSAGES. */
+export const PROCEDURE_PRE_MESSAGES: Partial<Record<string, MessageKind>> = {
+  extraction: "pre_treatment",
+  pulpotomy: "pre_treatment",
+};
+export const preVisitMessageFor = (procedureCode?: string) => (procedureCode ? PROCEDURE_PRE_MESSAGES[procedureCode] : undefined);
+
 /** The reminder goes out at 9 AM the day before. Booked after that, it goes out now. */
 export function reminderSendAt(startsAt: string, now = new Date()): string {
   const at = setHours(startOfDay(addDays(parseISO(startsAt), -1)), 9);

@@ -16,6 +16,7 @@ export const FinanceSummary = z.object({
   discounts: Centavos, // given on invoices issued this month
   outstanding: z.array(z.object({ patientId: Id, balance: Centavos })), // largest first
   outstandingTotal: Centavos,
+  depositsHeld: Centavos, // unapplied deposits across patients, shown apart from outstanding
   unpaidAppointments: z.array(
     z.object({ appointmentId: Id, patientId: Id, startsAt: IsoDateTime, reason: z.string(), invoiceId: Id.optional(), balance: Centavos.optional() }),
   ), // done in the last 30 days and not billed (no invoiceId) or not fully paid; newest first

@@ -20,6 +20,23 @@ describe("habitTimeline", () => {
       record("v1", "2026-03-01T00:00:00Z", [{ habit: "thumb_sucking", startedOn: "2023-01-01" }]),
     ]);
     expect(thumb).toEqual({ habit: "thumb_sucking", startedOn: "2023-01-01", stoppedOn: "2026-08-15", visitIds: ["v1", "v2"] });
+    expect(thumb?.stopInferred).toBeUndefined();
+  });
+  it("reads a habit unticked at a later visit as stopped by that visit", () => {
+    const [thumb] = habitTimeline([
+      record("v1", "2026-03-01T12:00:00Z", [{ habit: "thumb_sucking" }]),
+      record("v2", "2026-09-01T12:00:00Z", []),
+    ]);
+    expect(thumb).toMatchObject({ stoppedOn: "2026-09-01", stopInferred: true, visitIds: ["v1"] });
+  });
+  it("is ongoing again when ticked after an inferred stop", () => {
+    const [thumb] = habitTimeline([
+      record("v1", "2026-03-01T12:00:00Z", [{ habit: "thumb_sucking" }]),
+      record("v2", "2026-06-01T12:00:00Z", []),
+      record("v3", "2026-09-01T12:00:00Z", [{ habit: "thumb_sucking" }]),
+    ]);
+    expect(thumb?.stoppedOn).toBeUndefined();
+    expect(thumb?.stopInferred).toBeUndefined();
   });
 });
 

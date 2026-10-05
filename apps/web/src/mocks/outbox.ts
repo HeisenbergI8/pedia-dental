@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import { birthdayGreeting, isBirthdayOn, reminderSendAt, type Appointment, type Message } from "@pedia/shared";
+import { birthdayGreeting, isBirthdayOn, preVisitMessageFor, reminderSendAt, type Appointment, type Message } from "@pedia/shared";
 import { db } from "./db";
 import { composeMessage, type MessageEvent } from "./message-templates";
 import { CLINIC_ID } from "./seed";
@@ -17,6 +17,9 @@ export function queueBookingMessages(a: Appointment) {
   const base = { patientId: a.patientId, appointmentId: a.id, startsAt: a.startsAt, dentistId: a.dentistId };
   queueMessage({ ...base, kind: "appointment_confirmation", sendAt: new Date().toISOString() });
   queueMessage({ ...base, kind: "appointment_reminder", sendAt: reminderSendAt(a.startsAt) });
+  // Some treatments need the parent to prepare (PROCEDURE_PRE_MESSAGES): sent with the reminder, withdrawn with it.
+  const pre = preVisitMessageFor(a.procedureCode);
+  if (pre) queueMessage({ ...base, kind: pre, sendAt: reminderSendAt(a.startsAt) });
 }
 
 /** A cancelled, moved or missed appointment withdraws what it queued and hasn't sent. */

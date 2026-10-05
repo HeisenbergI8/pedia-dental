@@ -1,6 +1,6 @@
 "use client";
 import { format, parseISO } from "date-fns";
-import { accountSummary, formatPeso, invoiceBalance, invoiceTotal, planProgress, toothName, type PlanItemStatus } from "@pedia/shared";
+import { accountSummary, depositBalance, formatPeso, invoiceBalance, invoiceTotal, planProgress, toothName, type Payment, type PlanItemStatus } from "@pedia/shared";
 import { EmptyState } from "@/components/empty-state";
 import { SectionCard } from "@/components/section-card";
 import { Badge } from "@/components/ui/badge";
@@ -67,11 +67,24 @@ export function PortalBilling() {
   const allInvoices = invoices.data ?? [];
   const allPayments = payments.data ?? [];
   const summary = accountSummary(allInvoices, allPayments);
+  const held = depositBalance(allPayments, child.id);
+  const depositRows = allPayments.filter((p) => !p.invoiceId);
+  const billOf = (id?: string) => allInvoices.find((i) => i.id === id);
+  /** In a parent's words: what happened to this money, and when. */
+  const said = (p: Payment) => {
+    if (p.method === "account_credit") {
+      if (p.invoiceId) return `${p.amount > 0 ? "Paid from your deposit" : "Returned to your deposit"} ${day(p.receivedAt)}`;
+      const bill = billOf(p.appliedTo);
+      return p.amount < 0 ? `Used for the bill of ${bill ? day(bill.issuedAt) : "a visit"}` : `Returned from the bill of ${bill ? day(bill.issuedAt) : "a visit"}`;
+    }
+    if (!p.invoiceId) return `${p.amount < 0 ? "Deposit refunded to you" : "Deposit paid"} ${day(p.receivedAt)}`;
+    return `${p.amount < 0 ? "Refunded to you" : "Paid"} ${day(p.receivedAt)}`;
+  };
 
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-semibold tracking-tight">Bills for {child.firstName}</h1>
-      {invoices.isLoading || payments.isLoading ? <Loading label="Loading bills" /> : invoices.error || payments.error ? <ErrorState what="the bills" onRetry={() => [invoices, payments].forEach((q) => q.refetch())} /> : allInvoices.length === 0 ? (
+      {invoices.isLoading || payments.isLoading ? <Loading label="Loading bills" /> : invoices.error || payments.error ? <ErrorState what="the bills" onRetry={() => [invoices, payments].forEach((q) => q.refetch())} /> : allInvoices.length === 0 && depositRows.length === 0 ? (
         <EmptyState tone="warm" icon={ReceiptIcon} title="No bills yet">Bills from {child.firstName}&apos;s visits will show here.</EmptyState>
       ) : (
         <>
@@ -81,6 +94,18 @@ export function PortalBilling() {
               <div><dt className="text-sm text-ink-muted">Paid</dt><dd className="font-semibold">{formatPeso(summary.paid)}</dd></div>
             </dl>
           </SectionCard>
+          {depositRows.length > 0 && (
+            <SectionCard title={`Deposit on account ${formatPeso(held)}`} description="Money paid ahead, used for bills as they come.">
+              <ul className="divide-y divide-line-soft text-sm">
+                {depositRows.map((p) => (
+                  <li key={p.id} className="flex items-baseline justify-between gap-3 py-1.5">
+                    <MetaLine items={[said(p), p.method !== "account_credit" && METHOD_LABEL[p.method], p.receiptNo]} />
+                    <span className="whitespace-nowrap tabular-nums">{formatPeso(p.amount)}</span>
+                  </li>
+                ))}
+              </ul>
+            </SectionCard>
+          )}
           {[...allInvoices].reverse().map((inv) => {
             const balance = invoiceBalance(inv, allPayments);
             return (
@@ -95,7 +120,7 @@ export function PortalBilling() {
                     {allPayments.filter((p) => p.invoiceId === inv.id).map((p) => (
                       <tr key={p.id} className="text-ink-muted">
                         <td className="py-1.5">
-                          <MetaLine items={[`${p.amount < 0 ? "Refunded to you" : "Paid"} ${day(p.receivedAt)}`, METHOD_LABEL[p.method], p.receiptNo]} />
+                          <MetaLine items={[said(p), p.method !== "account_credit" && METHOD_LABEL[p.method], p.receiptNo]} />
                         </td>
                         {/* Against the bill: a payment lowers it, a refund raises it again. Sign stays with the amount. */}
                         <td className="py-1.5 text-right whitespace-nowrap tabular-nums">

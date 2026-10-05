@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { z } from "zod";
-import { IsoDate, type Appointment } from "@pedia/shared";
+import { IsoDate, outsideClinicHours, type Appointment } from "@pedia/shared";
 import { FormField } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -16,7 +16,8 @@ import { useChairs, useProcedures, useStaff } from "@/features/clinic/api";
 import { usePatients } from "@/features/patients/api";
 import { useBookAppointment, useRescheduleAppointment } from "../api";
 
-const FormValues = z.object({
+const FormValues = z
+  .object({
   patientId: z.string().min(1, "Pick a patient"),
   reason: z.string().trim().min(1, "Give a reason"),
   dentistId: z.string().min(1, "Pick a dentist"),
@@ -25,11 +26,16 @@ const FormValues = z.object({
   time: z.string().regex(/^\d{2}:\d{2}$/, "Pick a time"),
   durationMin: z.number({ error: "Enter minutes" }).int().positive("Enter minutes"),
   procedureCode: z.string().optional(), // set by the Procedure picker; the reason is the wording
-});
+  })
+  // The server's rule (outsideClinicHours), checked here too so the reason shows before anything is sent.
+  .superRefine((v, ctx) => {
+    const why = outsideClinicHours(new Date(`${v.date}T${v.time}`), v.durationMin);
+    if (why) ctx.addIssue({ code: "custom", message: why, path: ["time"] });
+  });
 type FormValues = z.infer<typeof FormValues>;
 
 /** Where the form opens: a slot picked on the calendar, or an appointment being moved. */
-export type AppointmentDraft = Partial<Pick<Appointment, "patientId" | "chairId" | "dentistId" | "reason" | "durationMin" | "sourceRuleId">> & {
+export type AppointmentDraft = Partial<Pick<Appointment, "patientId" | "chairId" | "dentistId" | "reason" | "durationMin" | "sourceRuleId" | "procedureCode">> & {
   start?: Date;
   appointment?: Appointment;
 };
@@ -45,6 +51,7 @@ function toValues({ appointment, start, ...rest }: AppointmentDraft): FormValues
     date: format(at, "yyyy-MM-dd"),
     time: format(at, "HH:mm"),
     durationMin: merged.durationMin ?? 30,
+    procedureCode: merged.procedureCode,
   };
 }
 
@@ -124,7 +131,9 @@ export function AppointmentForm({ draft, onClose }: { draft: AppointmentDraft | 
             {!editing && (
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="appt-procedure">Procedure (fills reason and length)</Label>
+                {/* Controlled, so a procedure prefilled by the recall list shows as selected. */}
                 <Select
+                  value={form.watch("procedureCode") ?? ""}
                   onValueChange={(code) => {
                     const p = procedures.data?.find((x) => x.code === code);
                     if (!p) return;

@@ -9,6 +9,7 @@ export default defineConfig({
     environment: "node",
     include: ["src/**/*.test.ts"],
     // Node's fetch rejects relative URLs, so handler tests need an absolute API base.
-    env: { NEXT_PUBLIC_API_URL: "http://localhost/api" },
+    // TZ: the clinic's zone. Handler tests book with UTC literals (01:00Z = 9:00 AM) that must fall in clinic hours.
+    env: { NEXT_PUBLIC_API_URL: "http://localhost/api", TZ: "Asia/Manila" },
   },
 });

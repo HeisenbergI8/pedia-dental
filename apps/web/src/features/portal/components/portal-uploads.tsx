@@ -11,16 +11,22 @@ import { SectionCard } from "@/components/section-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { isPdf, uploadProblem } from "@pedia/shared";
 import { photoFileUrl, usePhotos, useUploadPhoto } from "@/features/photos/api";
+import { FileCard } from "@/features/photos/components/file-card";
 import { useActiveChild } from "../use-child";
 import { Loading } from "@/components/brand";
 import { ErrorState } from "@/components/error-state";
 
 const KIND = { document: "Medical document (clearance, lab result)", intraoral: "Photo of teeth or mouth" } as const;
 const UploadForm = z.object({
-  file: z.instanceof(File, { message: "Choose or take a photo" }),
+  file: z.instanceof(File, { message: "Choose a photo or a PDF" }),
   type: z.enum(["document", "intraoral"]),
   caption: z.string().trim().min(1, "Say what this is, like “Medical clearance from Dr. Cruz”").max(200, "Keep it under 200 characters"),
+}).superRefine((v, ctx) => {
+  // The server's rule: a medical document may be a PDF, a photo of the teeth must be an image.
+  const why = uploadProblem(v.type, v.file);
+  if (why) ctx.addIssue({ code: "custom", message: why, path: ["file"] });
 });
 type UploadForm = z.infer<typeof UploadForm>;
 
@@ -64,13 +70,13 @@ export function PortalUploads() {
                 />
               )}
             </FormField>
-            <FormField name="file" label="Photo">
+            <FormField name="file" label="Photo or PDF">
               {(control) => (
                 <Controller
                   name="file"
                   control={form.control}
                   render={({ field }) => (
-                    <Input {...control} type="file" accept="image/*" onChange={(e) => field.onChange(e.target.files?.[0])} />
+                    <Input {...control} type="file" accept="image/*,application/pdf" onChange={(e) => field.onChange(e.target.files?.[0])} />
                   )}
                 />
               )}
@@ -91,8 +97,12 @@ export function PortalUploads() {
         <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           {files.map((f) => (
             <li key={f.id} className="space-y-1.5">
-              {/* eslint-disable-next-line @next/next/no-img-element -- served by the mock API, not a static asset */}
-              <img src={photoFileUrl(f.id)} alt={f.caption || "Upload"} className="aspect-square w-full rounded-lg border border-line object-cover" />
+              {isPdf(f.contentType) ? (
+                <FileCard photo={f} label="Medical document" />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element -- served by the mock API, not a static asset
+                <img src={photoFileUrl(f.id)} alt={f.caption || "Upload"} className="aspect-square w-full rounded-lg border border-line object-cover" />
+              )}
               <p className="text-sm font-medium">{f.caption}</p>
               <p className="text-xs text-ink-muted">{format(parseISO(f.createdAt), "MMMM d, yyyy")}</p>
             </li>

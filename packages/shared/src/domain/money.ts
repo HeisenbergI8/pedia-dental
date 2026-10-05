@@ -31,9 +31,22 @@ export function accountSummary(invoices: Pick<Invoice, "id" | "lines" | "discoun
 }
 
 /**
- * Money received beyond what was billed, invoice by invoice. Computed, never stored.
- * Always 0 while POST /invoices/:id/payments refuses an amount over the balance.
+ * Money received beyond what was billed, invoice by invoice. Computed, never stored. Always 0 while payments and
+ * deposit applications are capped at the balance; money held before billing is `depositBalance`.
  */
 export function accountCredit(invoices: Pick<Invoice, "id" | "lines" | "discount">[], payments: Payment[]): number {
   return invoices.reduce((s, inv) => s + Math.max(0, -invoiceBalance(inv, payments)), 0);
+}
+
+/** Real money in or out (cash, GCash, card…), not a transfer between a deposit and an invoice. Collections count these. */
+export const isMoneyIn = (p: Pick<Payment, "method">) => p.method !== "account_credit";
+
+/** Money held on a patient's account: deposits, less deposit refunds and what was applied. Computed, never stored. */
+export function depositBalance(payments: Pick<Payment, "patientId" | "invoiceId" | "amount">[], patientId: string): number {
+  return payments.filter((p) => p.patientId === patientId && !p.invoiceId).reduce((s, p) => s + p.amount, 0);
+}
+
+/** Deposit money applied to one invoice so far (what can be moved back to the deposit). */
+export function appliedCredit(invoiceId: string, payments: Pick<Payment, "invoiceId" | "method" | "amount">[]): number {
+  return payments.filter((p) => p.invoiceId === invoiceId && p.method === "account_credit").reduce((s, p) => s + p.amount, 0);
 }
