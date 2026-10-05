@@ -15,6 +15,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { Role } from "@pedia/shared";
+import { BottomTabIcon, bottomTabClass } from "@/components/bottom-tab";
 import { PageLoading, PrimoralLogo, PrimoralMark } from "@/components/brand";
 import { useNavigationPending } from "@/components/navigation-pending";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -148,9 +149,6 @@ function BottomNav({ onMore, moreOpen }: { onMore: () => void; moreOpen: boolean
   const primary = pinned ? pinned.flatMap((href) => items.filter((n) => n.href === href)) : items.slice(0, 4);
   const overflow = items.filter((n) => !primary.includes(n));
   const inOverflow = overflow.some((n) => isActive(pathname, n.href));
-  const tab = "relative flex min-h-14 flex-1 flex-col items-center justify-center gap-1 text-xs transition-colors duration-(--duration-fast)";
-  /** The current tab: a bar on the nav's top edge, a brand icon and a bold label (not hue alone). */
-  const marker = <span aria-hidden className="absolute inset-x-4 top-0 h-[3px] rounded-b-full bg-brand" />;
   return (
     <nav
       aria-label="Quick"
@@ -162,9 +160,8 @@ function BottomNav({ onMore, moreOpen }: { onMore: () => void; moreOpen: boolean
           const active = isActive(pathname, href);
           return (
             <li key={href} className="flex flex-1">
-              <Link href={href} aria-current={active ? "page" : undefined} className={cn(tab, active ? "font-bold text-ink" : "font-medium text-ink-muted")}>
-                {active && marker}
-                <Icon className={cn("size-5", active && "text-brand")} strokeWidth={active ? 2.25 : 1.75} aria-hidden />
+              <Link href={href} aria-current={active ? "page" : undefined} className={bottomTabClass(active)}>
+                <BottomTabIcon icon={Icon} active={active} />
                 {label}
               </Link>
             </li>
@@ -172,9 +169,8 @@ function BottomNav({ onMore, moreOpen }: { onMore: () => void; moreOpen: boolean
         })}
         {overflow.length > 0 && (
           <li className="flex flex-1">
-            <button type="button" onClick={onMore} aria-expanded={moreOpen} className={cn(tab, inOverflow ? "font-bold text-ink" : "font-medium text-ink-muted")}>
-              {inOverflow && marker}
-              <MenuIcon className={cn("size-5", inOverflow && "text-brand")} aria-hidden />
+            <button type="button" onClick={onMore} aria-expanded={moreOpen} className={bottomTabClass(inOverflow)}>
+              <BottomTabIcon icon={MenuIcon} active={inOverflow} />
               More
             </button>
           </li>

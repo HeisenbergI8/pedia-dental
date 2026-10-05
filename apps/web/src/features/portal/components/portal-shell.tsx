@@ -3,6 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { CalendarDaysIcon, ClipboardListIcon, HeartPulseIcon, HomeIcon, MenuIcon, ReceiptIcon, SmileIcon, UploadIcon } from "lucide-react";
+import { BottomTabIcon, bottomTabClass } from "@/components/bottom-tab";
 import { Loading, PageLoading, PrimoralLogo } from "@/components/brand";
 import { useNavigationPending } from "@/components/navigation-pending";
 import { EmptyState } from "@/components/empty-state";
@@ -33,9 +34,6 @@ function PortalBottomNav() {
   const primary = SECTIONS.filter((s) => PRIMARY.includes(s.href));
   const more = SECTIONS.filter((s) => !PRIMARY.includes(s.href));
   const inMore = more.some((s) => isActive(pathname, s.href));
-  const tab = "relative flex min-h-14 flex-1 flex-col items-center justify-center gap-1 text-xs";
-  /** The current tab, as in the staff shell: a bar on the top edge, a brand icon and a bold label (not hue alone). */
-  const marker = <span aria-hidden className="absolute inset-x-4 top-0 h-[3px] rounded-b-full bg-brand" />;
   return (
     <>
       <nav aria-label="Portal" data-bottom-nav className="pb-safe fixed inset-x-0 bottom-0 z-(--z-header) border-t border-line bg-surface/95 px-2 backdrop-blur md:hidden">
@@ -44,18 +42,16 @@ function PortalBottomNav() {
             const on = isActive(pathname, href);
             return (
               <li key={href} className="flex flex-1">
-                <Link href={href} aria-current={on ? "page" : undefined} className={cn(tab, on ? "font-bold text-ink" : "font-medium text-ink-muted")}>
-                  {on && marker}
-                  <Icon className={cn("size-5", on && "text-brand")} aria-hidden />
+                <Link href={href} aria-current={on ? "page" : undefined} className={bottomTabClass(on)}>
+                  <BottomTabIcon icon={Icon} active={on} />
                   {label}
                 </Link>
               </li>
             );
           })}
           <li className="flex flex-1">
-            <button type="button" onClick={() => setMoreOpen(true)} aria-expanded={moreOpen} className={cn(tab, inMore ? "font-bold text-ink" : "font-medium text-ink-muted")}>
-              {inMore && marker}
-              <MenuIcon className={cn("size-5", inMore && "text-brand")} aria-hidden />
+            <button type="button" onClick={() => setMoreOpen(true)} aria-expanded={moreOpen} className={bottomTabClass(inMore)}>
+              <BottomTabIcon icon={MenuIcon} active={inMore} />
               More
             </button>
           </li>
@@ -115,8 +111,8 @@ export function PortalShell({ children }: { children: ReactNode }) {
           </div>
         </div>
         {/* Tablets and up: the sections as tabs under the logo. Phones use the bottom tab bar. */}
-        <nav aria-label="Portal sections" className="mx-auto hidden max-w-3xl overflow-x-auto px-2 sm:px-4 md:block">
-          <ul className="flex w-max">
+        <nav aria-label="Portal sections" className="mx-auto hidden max-w-3xl overflow-x-auto px-2 pb-2 sm:px-4 md:block">
+          <ul className="flex w-max gap-1">
             {SECTIONS.map(({ href, label, icon: Icon }) => {
               const active = isActive(pathname, href);
               return (
@@ -125,11 +121,12 @@ export function PortalShell({ children }: { children: ReactNode }) {
                     href={href}
                     aria-current={active ? "page" : undefined}
                     className={cn(
-                      "flex min-h-11 items-center gap-2 border-b-2 px-3 text-sm font-medium transition-colors",
-                      active ? "border-brand font-semibold text-ink" : "border-transparent text-ink-muted hover:text-ink",
+                      "flex min-h-10 items-center gap-2 rounded-full px-3.5 text-sm transition-colors duration-(--duration-fast)",
+                      // The current section: the neutral selected pill, a brand icon and semibold ink (not hue alone).
+                      active ? "bg-selected font-semibold text-ink" : "font-medium text-ink-muted hover:bg-selected/60 hover:text-ink",
                     )}
                   >
-                    <Icon className="size-4" aria-hidden />
+                    <Icon className={cn("size-4", active && "text-brand")} aria-hidden />
                     {label}
                   </Link>
                 </li>
