@@ -15,6 +15,8 @@ const outfit = Outfit({ subsets: ["latin"], variable: "--font-outfit" });
 export const metadata: Metadata = {
   title: "Primoral Pediatric Dental Clinic",
   description: "Clinic management for Primoral Pediatric Dental Clinic",
+  // The installed app's name on desktop (application-name), alongside the manifest's.
+  applicationName: "Primoral",
   // The home-screen label on iOS, which otherwise truncates the full title.
   appleWebApp: { title: "Primoral", capable: true, statusBarStyle: "default" },
 };
