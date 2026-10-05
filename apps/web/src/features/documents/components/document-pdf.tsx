@@ -85,7 +85,7 @@ export function documentPdf(content: DocContent) {
         <View style={s.header}>
           {/* The logo carries the clinic's name; alt text isn't supported, the document metadata names it. */}
           {/* eslint-disable-next-line jsx-a11y/alt-text */}
-          <Image src="/brand/kidsmile-logo.png" style={s.logo} />
+          <Image src="/brand/primoral-logo.png" style={s.logo} />
           <Text style={s.title}>{content.title}</Text>
           <Text style={s.muted}>{content.subtitle}</Text>
         </View>
