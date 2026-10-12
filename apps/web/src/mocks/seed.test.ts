@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { differenceInYears, format, parseISO } from "date-fns";
 import { findConflict, habitTimeline, matchesFilter, needsAttention, patientStanding } from "@pedia/shared";
+import { seedPlatform } from "./db";
 import { seed } from "./seed";
 
 const today = format(new Date(), "yyyy-MM-dd");
@@ -63,5 +64,43 @@ describe("seed", () => {
 
   it("seeds 3-month recalls for high caries risk exams", () => {
     expect(seed().dueItems.some((i) => i.ruleId === "routine_high_risk")).toBe(true);
+  });
+});
+
+describe("platform seed", () => {
+  const platform = seedPlatform();
+  const tenants = Object.entries(platform.tenants);
+
+  it("has the demo clinic and a second, Small-tier account, each with its own store", () => {
+    expect(platform.accounts.map((a) => [a.id, a.tier, a.status])).toEqual([
+      ["clinic_demo", "mid", "active"],
+      ["clinic_ngiti", "small", "active"],
+    ]);
+    expect(tenants.map(([id]) => id)).toEqual(platform.accounts.map((a) => a.id));
+  });
+
+  it("stamps every record with its own account, and every branch-level record with one of that account's branches", () => {
+    for (const [clinicId, t] of tenants) {
+      const branchIds = new Set(t.branches.map((b) => b.id));
+      for (const rows of [t.patients, t.staff, t.visits, t.appointments, t.chairs, t.invoices, t.payments, t.messages]) {
+        expect(rows.every((r) => r.clinicId === clinicId), clinicId).toBe(true);
+      }
+      for (const rows of [t.appointments, t.chairs, t.invoices, t.payments]) {
+        expect(rows.every((r) => branchIds.has(r.branchId)), clinicId).toBe(true);
+      }
+      // An appointment's chair is at the appointment's branch.
+      expect(t.appointments.every((a) => t.chairs.find((c) => c.id === a.chairId)?.branchId === a.branchId), clinicId).toBe(true);
+    }
+  });
+
+  it("never shares a patient or staff id between accounts", () => {
+    const [demo, ngiti] = tenants.map(([, t]) => new Set([...t.patients, ...t.staff].map((r) => r.id)));
+    expect([...demo!].filter((id) => ngiti!.has(id))).toEqual([]);
+  });
+
+  it("keeps Dasmariñas billing-free, so the Imus finance figures are unchanged", () => {
+    const demo = platform.tenants.clinic_demo!;
+    expect(demo.appointments.some((a) => a.branchId === "branch_dasma")).toBe(true);
+    expect([...demo.invoices, ...demo.payments].every((r) => r.branchId === "branch_imus")).toBe(true);
   });
 });

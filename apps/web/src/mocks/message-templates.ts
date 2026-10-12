@@ -32,7 +32,7 @@ export type MessageEvent = Pick<Message, "kind" | "patientId" | "sendAt" | "appo
   dentistId?: string;
 };
 
-export type MessageRefs = { templates: MessageTemplate[]; patients: Patient[]; staff: StaffMember[] };
+export type MessageRefs = { templates: MessageTemplate[]; patients: Patient[]; staff: StaffMember[]; clinicName: string };
 
 /** One queued SMS to the primary guardian, rendered now. Undefined without a template, patient or guardian. */
 export function composeMessage(e: MessageEvent, refs: MessageRefs, meta: Pick<Message, "id" | "clinicId" | "createdAt">): Message | undefined {
@@ -48,7 +48,7 @@ export function composeMessage(e: MessageEvent, refs: MessageRefs, meta: Pick<Me
     channel: "sms",
     to: guardian.phone,
     recipientName: guardian.fullName,
-    body: renderMessage(template.body, messageVars(patient, { startsAt: e.startsAt, dueOn: e.dueOn, dentistName })),
+    body: renderMessage(template.body, messageVars(patient, { clinicName: refs.clinicName, startsAt: e.startsAt, dueOn: e.dueOn, dentistName })),
     status: "queued",
     sendAt: e.sendAt,
     appointmentId: e.appointmentId,

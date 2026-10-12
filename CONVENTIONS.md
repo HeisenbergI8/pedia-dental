@@ -2,11 +2,13 @@
 
 ## What this project is
 
-A pediatric dental clinic management system. **Current phase: frontend prototype.** Every API call is
+Primolar: pediatric dental clinic management sold as a service to many clinics. Each paying clinic is a
+**clinic account** with its own branches, staff, patients and branding (ROADMAP feature 16). **Current phase: frontend prototype.** Every API call is
 answered in the browser by MSW using fake, seeded data; there is no backend yet. A NestJS + MySQL API
 (`apps/api`) will replace the mocks later, endpoint by endpoint, without changing feature code.
 
-Users: dentists, front desk and clinic admin (staff app); parents (portal, through the demo login).
+Users: the Primolar operator (operator console); in each clinic account, the Owner, admins, dentists and front
+desk (staff app); parents (portal, through the demo login).
 
 **Stack:** pnpm workspace · Next.js 15 (App Router, webpack) · React 19 · TypeScript strict · Tailwind v4 ·
 TanStack Query · React Hook Form + Zod 4 · Zustand (UI state, plus the demo session in `stores/session-store.ts`) · MSW 3 · Vitest.
@@ -36,7 +38,7 @@ TanStack Query · React Hook Form + Zod 4 · Zustand (UI state, plus the demo se
 | Features | `apps/web/src/features/<name>/` | `api.ts` (Query hooks), `mocks.ts` (MSW handlers), `components/` |
 | Fake backend | `apps/web/src/mocks/` | MSW setup, localStorage-backed `db`, deterministic `seed` |
 | HTTP | `apps/web/src/lib/api-client.ts` | The only `fetch` in the app |
-| Access rules | `packages/shared/src/domain/permissions.ts` | `ROLE_PERMISSIONS`: who may do what. The only place access is decided. `today.view` = Today at a glance (all staff); `dashboard.view` = finance (admin); `patients.contact` = guardian phones and emails, emergency contact and address, **left out of every patient response** without it (admin and front desk: all; a parent: their own family). Responses parse with `PatientView`; the stored record is `Patient` |
+| Access rules | `packages/shared/src/domain/permissions.ts` | `ROLE_PERMISSIONS`: who may do what. The only place access is decided. `branches.all` = works at every branch (Owner). `today.view` = Today at a glance (all staff); `dashboard.view` = finance (admin); `patients.contact` = guardian phones and emails, emergency contact and address, **left out of every patient response** without it (admin and front desk: all; a parent: their own family). Responses parse with `PatientView`; the stored record is `Patient` |
 | Access gate | `apps/web/src/mocks/access.ts` | Route → permission (`RULES`), 401 / 403, parent ownership |
 
 **Read this first:** `apps/web/src/features/patients/`. Every new feature copies its shape.
@@ -84,7 +86,11 @@ MSW handler (now) or NestJS (later).
 - Money is integer centavos everywhere. Format only at display time with `formatPeso`.
 - Balances are computed from payments, never stored.
 - Follow-up and recall intervals are data (`DEFAULT_FOLLOW_UP_RULES`), not `if` statements.
-- Every record carries `clinicId` (multi-clinic later).
+- Every record belongs to one clinic account (`clinicId`), and branch-level records (appointments, chairs,
+  invoices, payments) also to one branch (`branchId`). Mock handlers scope every read and write to the
+  signed-in account; no account ever sees another's data, and the operator never sees patient records.
+- The clinic's name, hours, address and branding come from its account and branch, never from constants.
+- Tier limits are data, not `if` statements, and are enforced in the handler as well as the UI.
 - Allergies and alerts must be visible on every patient screen (`PatientHeader`).
 
 ---
@@ -96,8 +102,19 @@ MSW handler (now) or NestJS (later).
   and only import `@/mocks/browser` dynamically from `app/providers.tsx`.
 - `NEXT_PUBLIC_*` env vars are inlined at build time. Changing `.env.local` needs a dev-server restart.
 - Mock data lives in `localStorage`. After changing `seed()` or `Db`, bump the key in `mocks/db.ts`
-  or clear storage, or you'll keep seeing old data. The key is `pedia-dental:mock-db:v23`; each bump gets a
+  or clear storage, or you'll keep seeing old data. The key is `pedia-dental:mock-db:v24`; each bump gets a
   one-line comment above it saying why.
+- The mock store is partitioned by clinic account: `Platform = { accounts, tenants }` in `mocks/db.ts`. `db` is a
+  live binding to the signed-in account's `Db`, repointed by `sessionOf()` (`selectTenant`). Never cache `db` in a
+  module-level variable, and never call `selectTenant` from a feature handler. Stamp new records with
+  `currentClinicId()`. Branch-level lists filter by `activeBranch(request)` (from the `pd_branch` cookie, validated).
+- Demo tokens are `demo.<clinicId>.<accountId>`. Handler tests sign in with `pd_session=demo.clinic_demo.<id>`, and
+  add `; pd_branch=<branch id>` to pick a branch. Cross-account tests live in `mocks/tenancy.test.ts`, not `handlers.test.ts`.
+- Opening hours are the branch's (`useActiveBranch().openingHours`, `Branch.openingHours` in mocks). The clinic name
+  is the account's (`useClinic().account.name`, `currentAccount().name`). Every hours function takes `hours`.
+- A session holds every role (`SessionUser.roles`, e.g. Admin + Dentist). Check access with `rolesCan(roles, …)` /
+  `permissionScopeFor`, and "is a dentist" with `holdsRole(staff, "dentist")`. `roleCan(session.role, …)` and
+  `s.role === "dentist"` still compile but ignore a second role.
 - Seed shape is asserted by `mocks/seed.test.ts`. New seed patients come from `seedPatient()` after the last faker
   consumer (`seedRoster`). Adding a faker call inside `seedPatient()` re-rolls every later record, so update that
   test's first-patient names deliberately, never to make it pass.

@@ -55,7 +55,7 @@ import { handlers } from "./handlers";
  * Signed in through the session cookie, as the browser is (mocks/access.ts); admin unless a test says.
  */
 const server = setupServer(...handlers);
-const ADMIN = "demo.staff_delacruz";
+const ADMIN = "demo.clinic_demo.staff_delacruz";
 const signIn = (token: string | null) => vi.stubGlobal("document", { cookie: token ? `pd_session=${token}` : "" });
 beforeAll(() => {
   signIn(ADMIN);
@@ -168,7 +168,7 @@ describe("patients", () => {
 
   it("lets a dentist quick-update everything but the phone", async () => {
     const p = await api("/patients", Patient, send("POST", newPatient));
-    signIn("demo.staff_reyes");
+    signIn("demo.clinic_demo.staff_reyes");
     try {
       const ok = await api(`/patients/${p.id}`, PatientView, send("PATCH", { nickname: "Bebe", tags: [], alerts: [] }));
       expect(ok.nickname).toBe("Bebe");
@@ -208,7 +208,7 @@ describe("patients", () => {
     const g = { ...newPatient.guardians[0], id: "g_header_sib", phone: "09175550101" };
     const older = await api("/patients", Patient, send("POST", { ...newPatient, firstName: "Ana", guardians: [g] }));
     const younger = await api("/patients", Patient, send("POST", { ...newPatient, firstName: "Lia", guardians: [g] }));
-    signIn("demo.staff_reyes");
+    signIn("demo.clinic_demo.staff_reyes");
     try {
       const s = await api(`/patients/${older.id}/summary`, PatientHeaderSummary);
       expect(s.siblings).toEqual([{ id: younger.id, firstName: "Lia" }]);
@@ -226,7 +226,7 @@ describe("patients", () => {
 
   it("sends a dentist no guardian phone, email, emergency contact or address, from any patient endpoint", async () => {
     const p = await api("/patients", Patient, send("POST", withContacts));
-    signIn("demo.staff_reyes");
+    signIn("demo.clinic_demo.staff_reyes");
     try {
       const responses = [
         await api(`/patients/${p.id}`, PatientView),
@@ -239,7 +239,7 @@ describe("patients", () => {
     } finally {
       signIn(ADMIN);
     }
-    signIn("demo.staff_cruz"); // front desk still gets everything, in the strict shape
+    signIn("demo.clinic_demo.staff_cruz"); // front desk still gets everything, in the strict shape
     try {
       expect(await api(`/patients/${p.id}`, Patient)).toMatchObject({ address: withContacts.address, emergencyContact: withContacts.emergencyContact });
     } finally {
@@ -249,7 +249,7 @@ describe("patients", () => {
 
   it("keeps the stored contacts when a dentist saves a profile they were sent without them", async () => {
     const p = await api("/patients", Patient, send("POST", withContacts));
-    signIn("demo.staff_reyes");
+    signIn("demo.clinic_demo.staff_reyes");
     try {
       const seen = await api(`/patients/${p.id}`, PatientView);
       await api(`/patients/${p.id}`, PatientView, send("PUT", { ...seen, allergies: ["Latex", "Penicillin"] }));
@@ -330,10 +330,10 @@ describe("patient list", () => {
 
   it("shows guardian phones to front desk, not to a dentist, and phone search only to front desk", async () => {
     const phone = db.patients[0].guardians[0].phone;
-    signIn("demo.staff_cruz");
+    signIn("demo.clinic_demo.staff_cruz");
     expect((await page()).rows.every((r) => r.guardianPhone)).toBe(true);
     expect((await page(`&q=${phone}`)).total).toBeGreaterThan(0);
-    signIn("demo.staff_reyes");
+    signIn("demo.clinic_demo.staff_reyes");
     expect((await page()).rows.some((r) => r.guardianPhone)).toBe(false);
     expect((await page(`&q=${phone}`)).total).toBe(0);
     signIn(ADMIN);
@@ -929,7 +929,8 @@ describe("financial dashboard", () => {
     const patient = await api("/patients", Patient, send("POST", newPatient));
     // The last open day before today, after the seeded day: in clinic hours, in the past, inside the 30-day window.
     let day = subDays(startOfDay(new Date()), 1);
-    while (isClosedWeekday(day)) day = subDays(day, 1);
+    const imus = db.branches.find((b) => b.id === "branch_imus")!.openingHours;
+    while (isClosedWeekday(day, imus)) day = subDays(day, 1);
     const startsAt = setMinutes(setHours(day, 17), 30).toISOString();
     const appt = await api("/appointments", Appointment, send("POST", { patientId: patient.id, dentistId: "staff_reyes", chairId: "chair_3", startsAt, durationMin: 15, reason: "Fluoride application" }));
     await api(`/appointments/${appt.id}/status`, Appointment, send("POST", { status: "confirmed" }));
@@ -1130,7 +1131,7 @@ describe("documents", () => {
 
 describe("staff switch", () => {
   afterAll(() => signIn(ADMIN));
-  const DESK = "demo.staff_cruz";
+  const DESK = "demo.clinic_demo.staff_cruz";
   const pinOf = (staffId: string) => db.staffPins.find((p) => p.staffId === staffId)!.pin;
   const switchTo = (accountId: string, pin: string) => api("/auth/switch", Session, send("POST", { accountId, pin }));
 
@@ -1174,7 +1175,7 @@ describe("staff switch", () => {
     const { accounts } = await api("/auth/demo-accounts", DemoAccounts);
     const parent = accounts.find((a) => a.role === "parent")!;
     await expect(switchTo(parent.id, "1234")).rejects.toMatchObject({ status: 400 });
-    signIn(`demo.${parent.id}`);
+    signIn(`demo.clinic_demo.${parent.id}`);
     await expect(switchTo("staff_cruz", pinOf("staff_cruz"))).rejects.toMatchObject({ status: 403 });
     signIn(null);
     await expect(switchTo("staff_cruz", pinOf("staff_cruz"))).rejects.toMatchObject({ status: 401 });
@@ -1185,19 +1186,36 @@ describe("access control", () => {
   afterAll(() => signIn(ADMIN));
 
   it("lets front desk take a deposit and refuses a parent", async () => {
-    signIn(`demo.guardian.${db.patients.find((x) => x.id === "patient_sibling")!.guardians[0].id}`);
+    signIn(`demo.clinic_demo.guardian.${db.patients.find((x) => x.id === "patient_sibling")!.guardians[0].id}`);
     const body = { amount: pesos(500), method: "cash", receivedBy: "staff_cruz" };
     await expect(api("/patients/patient_sibling/deposits", Payment, send("POST", body))).rejects.toMatchObject({ status: 403 });
-    signIn("demo.staff_cruz");
+    signIn("demo.clinic_demo.staff_cruz");
     expect((await api("/patients/patient_sibling/deposits", Payment, send("POST", body))).amount).toBe(pesos(500));
     signIn(ADMIN);
   });
 
+  it("gives a front desk who is also a dentist both roles' access (decision #39)", async () => {
+    const p = await api("/patients", Patient, send("POST", { ...newPatient, firstName: "Dual" }));
+    const cruz = db.staff.find((x) => x.id === "staff_cruz")!;
+    cruz.alsoRoles = ["dentist"];
+    try {
+      signIn("demo.clinic_demo.staff_cruz");
+      const visit = await api(`/patients/${p.id}/visits`, Visit, send("POST", { dentistId: "staff_reyes" }));
+      const entry = await api(`/patients/${p.id}/chart`, ChartEntry, send("POST", { visitId: visit.id, tooth: 74, surfaces: ["O"], condition: "caries" }));
+      expect(entry.tooth).toBe(74); // the dentist's clinical.write
+      const deposit = await api(`/patients/${p.id}/deposits`, Payment, send("POST", { amount: pesos(300), method: "cash", receivedBy: "staff_cruz" }));
+      expect(deposit.amount).toBe(pesos(300)); // the front desk's billing.collect
+    } finally {
+      delete cruz.alsoRoles;
+      signIn(ADMIN);
+    }
+  });
+
   it("lets front desk quick-update a child, and refuses a parent the quick update and the duplicate check", async () => {
     const p = db.patients.find((x) => x.id === "patient_sibling")!;
-    signIn("demo.staff_cruz");
+    signIn("demo.clinic_demo.staff_cruz");
     expect((await api(`/patients/${p.id}`, Patient, send("PATCH", { nickname: "Miks", tags: [], alerts: p.alerts }))).nickname).toBe("Miks");
-    signIn(`demo.guardian.${p.guardians[0].id}`);
+    signIn(`demo.clinic_demo.guardian.${p.guardians[0].id}`);
     await expect(api(`/patients/${p.id}`, Patient, send("PATCH", { nickname: "X", tags: [], alerts: [] }))).rejects.toMatchObject({ status: 403 });
     await expect(api(`/patient-duplicates?firstName=a&lastName=b&birthDate=2020-01-01`, z.array(DuplicateMatch))).rejects.toMatchObject({ status: 403 });
     signIn(ADMIN);
@@ -1205,15 +1223,15 @@ describe("access control", () => {
 
   it("shows today at a glance to every staff role but not to parents; only front desk and admin greet", async () => {
     const bday = db.patients.find((p) => p.id.startsWith("patient_roster_"))!.id; // any patient: the 403 comes first
-    for (const token of ["demo.staff_reyes", "demo.staff_cruz"]) {
+    for (const token of ["demo.clinic_demo.staff_reyes", "demo.clinic_demo.staff_cruz"]) {
       signIn(token);
       expect((await api("/reports/today", TodaySummary)).counts.total).toBeGreaterThanOrEqual(0);
     }
-    signIn("demo.staff_reyes");
+    signIn("demo.clinic_demo.staff_reyes");
     await expect(api(`/patients/${bday}/birthday-greeting`, Message, { method: "POST" })).rejects.toMatchObject({ status: 403 });
-    // Token format as signInAsFamily(): demo.<account id>, and a parent's account id is guardian.<guardian id>.
+    // Token format as signInAsFamily(): demo.<clinic id>.<account id>, and a parent's account id is guardian.<guardian id>.
     const guardianId = db.patients.find((p) => p.id === "patient_sibling")!.guardians[0].id;
-    signIn(`demo.guardian.${guardianId}`);
+    signIn(`demo.clinic_demo.guardian.${guardianId}`);
     await expect(api("/reports/today", TodaySummary)).rejects.toMatchObject({ status: 403 });
     const mine = await api("/patient-summaries?pageSize=100", PatientPage);
     expect(mine.rows.map((r) => r.id).sort()).toEqual(db.patients.filter((p) => p.guardians.some((g) => g.id === guardianId)).map((p) => p.id).sort());
@@ -1225,7 +1243,7 @@ describe("access control", () => {
     signIn(null);
     await expect(api("/patients", z.array(Patient))).rejects.toMatchObject({ status: 401 });
     const { accounts } = await api("/auth/demo-accounts", DemoAccounts);
-    expect(new Set(accounts.map((a) => a.role))).toEqual(new Set(["admin", "dentist", "front_desk", "parent"]));
+    expect(new Set(accounts.map((a) => a.role))).toEqual(new Set(["owner", "admin", "dentist", "front_desk", "parent"]));
     expect(accounts.filter((a) => a.role === "parent")).toHaveLength(3);
   });
 
@@ -1233,7 +1251,7 @@ describe("access control", () => {
     signIn(null);
     const { accounts, password } = await api("/auth/demo-accounts", DemoAccounts);
     const dentist = accounts.find((a) => a.role === "dentist")!;
-    const login = (pw: string) => api("/auth/login", Session, send("POST", { email: dentist.email.toUpperCase(), password: pw }));
+    const login = (pw: string) => api("/auth/login", Session, send("POST", { email: dentist.email.toUpperCase(), password: pw, clinicId: "clinic_demo" }));
     await expect(login("wrong")).rejects.toMatchObject({ status: 401 });
     const session = await login(password);
     signIn(session.token);
@@ -1244,23 +1262,28 @@ describe("access control", () => {
     signIn(null);
     const { logins, password } = await api("/auth/demo-accounts", DemoAccounts);
     expect(password).toBe("pass123");
-    expect(logins).toEqual([
-      { role: "admin", email: "admin@gmail.com" },
-      { role: "dentist", email: "dentist@gmail.com" },
-      { role: "front_desk", email: "frontdesk@gmail.com" },
-      { role: "parent", email: "parent@gmail.com" },
+    expect(logins.map(({ role, email }) => [role, email])).toEqual([
+      ["owner", "owner@gmail.com"],
+      ["admin", "admin@gmail.com"],
+      ["dentist", "dentist@gmail.com"],
+      ["front_desk", "frontdesk@gmail.com"],
+      ["parent", "parent@gmail.com"],
+      ["owner", "owner@ngiti.demo"],
     ]);
+    expect(logins.find((l) => l.email === "dentist@gmail.com")!.clinics).toEqual(["Bulilit Smiles Pediatric Dental", "Ngiti Kids Dental"]);
     for (const { role, email } of logins) {
-      const session = await api("/auth/login", Session, send("POST", { email, password }));
+      // dentist@gmail.com is in both clinics: pick the demo clinic, as the chooser would.
+      const clinicId = email === "owner@ngiti.demo" ? "clinic_ngiti" : "clinic_demo";
+      const session = await api("/auth/login", Session, send("POST", { email, password, clinicId }));
       signIn(session.token);
       expect((await api("/auth/me", SessionUser)).role, email).toBe(role);
+      // The parent login is the two-children family.
+      if (role === "parent") expect((await api("/patients", z.array(Patient))).map((p) => p.id)).toContain("patient_sibling");
     }
-    // The parent login is the two-children family.
-    expect((await api("/patients", z.array(Patient))).map((p) => p.id)).toContain("patient_sibling");
   });
 
   it("keeps the finance dashboard admin-only", async () => {
-    for (const token of ["demo.staff_cruz", "demo.staff_reyes"]) {
+    for (const token of ["demo.clinic_demo.staff_cruz", "demo.clinic_demo.staff_reyes"]) {
       signIn(token);
       await expect(api("/reports/finance", FinanceSummary), token).rejects.toMatchObject({ status: 403 });
     }
@@ -1269,7 +1292,7 @@ describe("access control", () => {
   });
 
   it("lets front desk read a chart and a plan, but not write either", async () => {
-    signIn("demo.staff_cruz");
+    signIn("demo.clinic_demo.staff_cruz");
     const id = db.patients[0].id;
     expect(await api(`/patients/${id}/chart`, z.array(ChartEntry))).toBeDefined();
     await expect(api(`/patients/${id}/chart`, ChartEntry, send("POST", {}))).rejects.toMatchObject({ status: 403 });
@@ -1283,7 +1306,7 @@ describe("access control", () => {
       ...["", "/visits", "/notes", "/chart", "/growth", "/plan", "/photos", "/appointments", "/invoices", "/payments", "/documents"].map((p) => `/patients/${id}${p}`),
       "/staff", "/procedures", "/chairs", "/note-templates", "/message-templates",
     ];
-    for (const token of ["demo.staff_reyes", "demo.staff_cruz"]) {
+    for (const token of ["demo.clinic_demo.staff_reyes", "demo.clinic_demo.staff_cruz"]) {
       signIn(token);
       for (const path of paths) expect(await api(path, z.unknown()), `${token} ${path}`).toBeDefined();
     }
@@ -1298,7 +1321,7 @@ describe("parent portal", () => {
     signIn(null);
     const { accounts } = await api("/auth/demo-accounts", DemoAccounts);
     const family = accounts.find((a) => a.summary.startsWith("Two children"))!;
-    signIn(`demo.${family.id}`);
+    signIn(`demo.clinic_demo.${family.id}`);
     const mine = await api("/patients", z.array(Patient));
     const other = db.patients.find((p) => !mine.some((m) => m.id === p.id))!;
     return { family, mine, other };
@@ -1346,7 +1369,7 @@ describe("parent portal", () => {
     await expect(ask("patient_sibling")).rejects.toMatchObject({ status: 409 });
     await expect(ask(other.id)).rejects.toMatchObject({ status: 403 });
 
-    signIn("demo.staff_cruz");
+    signIn("demo.clinic_demo.staff_cruz");
     const inbox = await api("/appointment-requests?status=pending", z.array(AppointmentRequest));
     expect(inbox.map((r) => r.id)).toContain(request.id);
     expect((await api(`/appointment-requests/${request.id}/handled`, AppointmentRequest, { method: "POST" })).status).toBe("handled");
@@ -1356,7 +1379,7 @@ describe("parent portal", () => {
     signIn(null);
     const { accounts } = await api("/auth/demo-accounts", DemoAccounts);
     const parent = accounts.find((a) => a.summary === "Has an appointment to confirm")!;
-    signIn(`demo.${parent.id}`);
+    signIn(`demo.clinic_demo.${parent.id}`);
     const [child] = await api("/patients", z.array(Patient));
     const today = startOfDay(new Date()).toISOString();
     const next = (await api(`/patients/${child.id}/appointments`, z.array(Appointment)))

@@ -23,6 +23,7 @@ import { routePermission, useCan, useSession } from "@/features/auth/access";
 import { AccountMenu } from "@/features/auth/components/account-menu";
 import { NoAccess } from "@/features/auth/components/access-gate";
 import { PatientSearch } from "@/features/patients/components/patient-search";
+import { BranchSwitcher } from "@/features/clinic/components/branch-switcher";
 import { cn } from "@/lib/utils";
 
 /** Who sees an item is decided by ROUTE_ACCESS + ROLE_PERMISSIONS, never here. */
@@ -210,6 +211,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="px-2">
           <Brand className="w-44" />
         </div>
+        <BranchSwitcher className="mx-2 w-auto" />
         {canSearch && <PatientSearch variant="field" />}
         <div className="flex-1 overflow-y-auto">
           <Nav />
@@ -222,6 +224,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Phones: a slim top bar (brand, search, account) and the bottom nav. */}
       <header className="sticky top-0 z-(--z-header) flex h-14 items-center gap-1 border-b border-line bg-surface/95 px-4 backdrop-blur md:hidden print:hidden">
         <Brand className="w-28" />
+        {/* No branch switcher here: at 375 px it squeezes to an icon. Phones switch branch from the More sheet. */}
         <div className="ml-auto flex items-center gap-1">
           {canSearch && <PatientSearch variant="icon" />}
           <AccountMenu variant="bar" />
@@ -243,6 +246,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <SheetContent side="left" className="w-72 gap-6 p-4 pt-5">
           <SheetTitle className="sr-only">Menu</SheetTitle>
           <Brand className="w-40" />
+          <BranchSwitcher />
           <div className="flex-1 overflow-y-auto">
             <Nav onNavigate={() => setMenuOpen(false)} />
           </div>

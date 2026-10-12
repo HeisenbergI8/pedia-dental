@@ -1,5 +1,6 @@
 import { addDays, addMinutes, format, startOfDay } from "date-fns";
 import type { Appointment, AppointmentStatus } from "../schemas/appointment";
+import type { OpeningHours } from "../schemas/tenancy";
 
 /** booked → confirmed → arrived → in chair → done, or no-show / cancelled before arrival. */
 const NEXT: Record<AppointmentStatus, AppointmentStatus[]> = {
@@ -16,42 +17,36 @@ export function canTransition(from: AppointmentStatus, to: AppointmentStatus): b
   return NEXT[from].includes(to);
 }
 
-/** Weekdays the clinic is closed, 0 = Sunday. Data, so a Saturday half-day or a second branch is a list change. */
-export const CLOSED_WEEKDAYS: readonly number[] = [0];
+/** A weekday the branch never opens, whatever is booked. The booking rule; `isClosedDay` is the display rule. */
+export const isClosedWeekday = (day: Date, hours: OpeningHours) => hours.closedWeekdays.includes(day.getDay());
 
-/** Closed only when nothing is booked: a day with appointments is never shown as closed. */
-export function isClosedDay(day: Date, appointmentCount: number): boolean {
-  return appointmentCount === 0 && CLOSED_WEEKDAYS.includes(day.getDay());
+/** Closed only when nothing is booked: a day with appointments is never shown as closed. `hours` is the branch's. */
+export function isClosedDay(day: Date, appointmentCount: number, hours: OpeningHours): boolean {
+  return appointmentCount === 0 && isClosedWeekday(day, hours);
 }
-
-/** Opening hours in minutes from local midnight. Data: a Saturday half-day becomes a per-weekday map here. */
-export const CLINIC_HOURS = { opensAt: 8 * 60, closesAt: 18 * 60 } as const;
-
-/** A weekday the clinic never opens, whatever is booked. The booking rule; `isClosedDay` is the display rule. */
-export const isClosedWeekday = (day: Date) => CLOSED_WEEKDAYS.includes(day.getDay());
 
 const clock = (min: number) => format(addMinutes(startOfDay(new Date(2000, 0, 1)), min), "h:mm a");
 
-/** Why a booking can't go at this time, in staff words. Undefined when the clinic is open for all of it. */
-export function outsideClinicHours(startsAt: string | Date, durationMin: number): string | undefined {
+/** Why a booking can't go at this time, in staff words. Undefined when the branch is open for all of it. */
+export function outsideClinicHours(startsAt: string | Date, durationMin: number, hours: OpeningHours): string | undefined {
   const start = new Date(startsAt);
-  if (isClosedWeekday(start)) return `The clinic is closed on ${format(start, "EEEE")}s. Pick another day.`;
+  if (isClosedWeekday(start, hours)) return `The clinic is closed on ${format(start, "EEEE")}s. Pick another day.`;
   const from = start.getHours() * 60 + start.getMinutes();
-  if (from < CLINIC_HOURS.opensAt || from + durationMin > CLINIC_HOURS.closesAt) {
-    return `Book between ${clock(CLINIC_HOURS.opensAt)} and ${clock(CLINIC_HOURS.closesAt)}.`;
+  if (from < hours.opensAt || from + durationMin > hours.closesAt) {
+    return `Book between ${clock(hours.opensAt)} and ${clock(hours.closesAt)}.`;
   }
   return undefined;
 }
 
-/** The first quarter-hour on or after `from` where `durationMin` fits clinic hours on an open day. */
-export function nextOpenStart(from: Date, durationMin = 30): Date {
+/** The first quarter-hour on or after `from` where `durationMin` fits the branch's hours on an open day. */
+export function nextOpenStart(from: Date, hours: OpeningHours, durationMin = 30): Date {
   let t = new Date(Math.ceil(from.getTime() / 900_000) * 900_000); // round up to :00/:15/:30/:45
   for (let i = 0; i < 14; i++) {
     const day = startOfDay(t);
-    const opens = addMinutes(day, CLINIC_HOURS.opensAt);
+    const opens = addMinutes(day, hours.opensAt);
     if (t < opens) t = opens;
-    if (!outsideClinicHours(t, durationMin)) return t;
-    t = addMinutes(addDays(day, 1), CLINIC_HOURS.opensAt); // closed or too late: next morning
+    if (!outsideClinicHours(t, durationMin, hours)) return t;
+    t = addMinutes(addDays(day, 1), hours.opensAt); // closed or too late: next morning
   }
   return t;
 }
@@ -60,8 +55,8 @@ export function nextOpenStart(from: Date, durationMin = 30): Date {
  * Where a new booking opens: the asked-for start (a calendar day at 00:00, a clicked slot) or now, whichever is later,
  * moved to the first open quarter-hour. Never in the past, never outside clinic hours.
  */
-export function bookableStart(start: Date | undefined, now: Date, durationMin = 30): Date {
-  return nextOpenStart(start && start > now ? start : now, durationMin);
+export function bookableStart(start: Date | undefined, now: Date, hours: OpeningHours, durationMin = 30): Date {
+  return nextOpenStart(start && start > now ? start : now, hours, durationMin);
 }
 
 /** Live appointments per local day ("2026-10-07" → 3). Cancelled ones don't count; no-shows do (they held the slot). */
@@ -113,16 +108,16 @@ export function findConflict(candidate: Slot, existing: Slot[]): { appointment: 
   return undefined;
 }
 
-type SlotSearch = { from: Date; durationMin: number; dentistId: string; chairIds: string[]; days?: number };
+type SlotSearch = { from: Date; durationMin: number; dentistId: string; chairIds: string[]; hours: OpeningHours; days?: number };
 
 /**
  * Up to `count` quarter-hours from `from`, in clinic hours on open days within `days`, where the dentist and one of
  * the chairs (in the order given, so a preferred chair goes first) are free. Each time appears once, with its chair.
  */
-export function findFreeSlots({ from, durationMin, dentistId, chairIds, days = 14 }: SlotSearch, existing: Slot[], count: number) {
+export function findFreeSlots({ from, durationMin, dentistId, chairIds, hours, days = 14 }: SlotSearch, existing: Slot[], count: number) {
   const found: { startsAt: Date; chairId: string }[] = [];
   const until = addDays(startOfDay(from), days);
-  for (let t = nextOpenStart(from, durationMin); t < until && found.length < count; t = nextOpenStart(addMinutes(t, 15), durationMin)) {
+  for (let t = nextOpenStart(from, hours, durationMin); t < until && found.length < count; t = nextOpenStart(addMinutes(t, 15), hours, durationMin)) {
     const chairId = chairIds.find(
       (c) => !findConflict({ id: "", dentistId, chairId: c, startsAt: t.toISOString(), durationMin, status: "booked" }, existing),
     );

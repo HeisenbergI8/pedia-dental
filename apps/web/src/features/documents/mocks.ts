@@ -7,10 +7,9 @@ import {
   NOTE_MESSAGES,
   allergyConflicts,
   type GenerateDocumentInput as Input,
-  type PatientDocument, isMoneyIn } from "@pedia/shared";
+  type PatientDocument, holdsRole, isMoneyIn } from "@pedia/shared";
 import { env } from "@/lib/env";
-import { db, persist } from "@/mocks/db";
-import { CLINIC_ID } from "@/mocks/seed";
+import { currentClinicId, db, persist } from "@/mocks/db";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 const newestFirst = (a: PatientDocument, b: PatientDocument) => b.createdAt.localeCompare(a.createdAt);
@@ -54,7 +53,7 @@ export const documentHandlers = [
 
     const issuer = db.staff.find((s) => s.id === input.issuedBy);
     if (!issuer) return new HttpResponse("Unknown staff member", { status: 400 });
-    if (DENTIST_SIGNED.includes(input.type) && issuer.role !== "dentist") {
+    if (DENTIST_SIGNED.includes(input.type) && !holdsRole(issuer, "dentist")) {
       return new HttpResponse(`A dentist has to issue the ${DOCUMENT_TYPE_LABEL[input.type].toLowerCase()}`, { status: 400 });
     }
     if (!sourceFits(input, patient.id)) return new HttpResponse(`${DOCUMENT_SOURCE[input.type]?.missing} for this patient`, { status: 400 });
@@ -66,7 +65,7 @@ export const documentHandlers = [
     const doc: PatientDocument = {
       ...input,
       id: crypto.randomUUID(),
-      clinicId: CLINIC_ID,
+      clinicId: currentClinicId(),
       patientId: patient.id,
       title: `${DOCUMENT_TYPE_LABEL[input.type]} · ${patient.firstName} ${patient.lastName}`,
       createdAt: new Date().toISOString(),

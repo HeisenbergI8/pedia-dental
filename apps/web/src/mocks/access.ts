@@ -1,37 +1,68 @@
 import { http, HttpResponse } from "msw";
-import { permissionScope, type AuditAction, type Permission } from "@pedia/shared";
+import { permissionScopeFor, usableBranches, type AuditAction, type Branch, type Permission } from "@pedia/shared";
 import { env } from "@/lib/env";
-import { db, persist } from "./db";
+import { accountById, currentClinicId, db, persist, platform, selectTenant } from "./db";
 import { accountForToken, childrenOf, type DemoAccountRecord } from "./demo-accounts";
-import { CLINIC_ID } from "./seed";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 export const SESSION_COOKIE = "pd_session";
+/** The branch this device is working at, written by the session store like the session cookie. */
+export const BRANCH_COOKIE = "pd_branch";
 
-export type MockSession = DemoAccountRecord & { patientIds: Set<string> };
+export type MockSession = DemoAccountRecord & { clinicId: string; patientIds: Set<string>; readOnly: boolean };
 
-/** The bearer header (scripts) or the session cookie (the browser, including <img> requests). */
-function tokenOf(request: Request): string | undefined {
-  const bearer = request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
-  if (bearer) return bearer;
-  // MSW runs handlers in the page, so the cookie the session store wrote is readable. Tests stub `document`.
+/** MSW runs handlers in the page, so the cookies the session store wrote are readable. Tests stub `document`. */
+function cookie(name: string): string | undefined {
   const cookies = typeof document === "undefined" ? "" : document.cookie;
   return cookies
     .split(/;\s*/)
-    .find((c) => c.startsWith(`${SESSION_COOKIE}=`))
-    ?.slice(SESSION_COOKIE.length + 1);
+    .find((c) => c.startsWith(`${name}=`))
+    ?.slice(name.length + 1);
 }
 
-export function sessionOf(request: Request): MockSession | undefined {
-  const account = accountForToken(db, tokenOf(request));
-  if (!account) return undefined;
-  const children = account.guardianId ? childrenOf(db, account.guardianId) : [];
-  return { ...account, patientIds: new Set(children.map((p) => p.id)) };
+/** The bearer header (scripts) or the session cookie (the browser, including <img> requests). */
+function tokenOf(request: Request): string | undefined {
+  return request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1] ?? cookie(SESSION_COOKIE);
 }
+
+/**
+ * Who is calling, and in which clinic account. Also points `db` at that account's data (`selectTenant`), so every
+ * read and write after this, in this request, is scoped to it. The access gate calls this first on every route;
+ * /auth/* handlers call it themselves.
+ */
+export function sessionOf(request: Request): MockSession | undefined {
+  const found = accountForToken(platform, tokenOf(request));
+  if (!found) return undefined;
+  // Staff of a suspended account are signed out on their next request (#41); its parents read on (#44).
+  const suspended = accountById(found.clinicId)?.status !== "active";
+  if (suspended && found.account.role !== "parent") return undefined;
+  selectTenant(found.clinicId);
+  const { account, clinicId } = found;
+  const children = account.guardianId ? childrenOf(db, account.guardianId) : [];
+  return { ...account, clinicId, patientIds: new Set(children.map((p) => p.id)), readOnly: suspended };
+}
+
+/** The branches this caller may work at: the Owner every open one, staff their assignments, parents every open one. */
+export function usableBranchesOf(session: MockSession): Branch[] {
+  const staff = session.staffId ? db.staff.find((s) => s.id === session.staffId) : undefined;
+  return usableBranches(session.roles, staff?.branchIds, db.branches);
+}
+
+/**
+ * The branch this device is working at: the `pd_branch` cookie when it is one the caller may use, else their first.
+ * A cookie naming another account's branch, an archived one or a made-up id is ignored, never trusted.
+ */
+export function branchOf(session: MockSession): Branch {
+  const usable = usableBranchesOf(session);
+  return usable.find((b) => b.id === cookie(BRANCH_COOKIE)) ?? usable[0]!;
+}
+
+/** For handlers behind the access gate, where a session is guaranteed: the branch-level lists' branch. */
+export const activeBranch = (request: Request): Branch => branchOf(sessionOf(request)!);
 
 /** For handlers the gate passed as "filtered": may this caller see this patient's row? */
 export function inScope(session: MockSession | undefined, permission: Permission, patientId: string) {
-  const scope = session && permissionScope(session.role, permission);
+  const scope = session && permissionScopeFor(session.roles, permission);
   return scope === "all" || (scope === "own" && session!.patientIds.has(patientId));
 }
 
@@ -60,6 +91,7 @@ const via =
  */
 const RULES: Rule[] = [
   // Reference data: not personal data, so not audited
+  { method: "GET", path: "/clinic", permission: "clinic.view" },
   { method: "GET", path: "/staff", permission: "clinic.view" },
   { method: "GET", path: "/chairs", permission: "clinic.view" },
   { method: "GET", path: "/procedures", permission: "clinic.view" },
@@ -178,7 +210,7 @@ export function recordAudit(actor: DemoAccountRecord, action: AuditAction, recor
   if (repeat) return;
   db.auditEvents.push({
     id: crypto.randomUUID(),
-    clinicId: CLINIC_ID,
+    clinicId: currentClinicId(),
     at: now.toISOString(),
     actorId: actor.id,
     actorName: actor.name,
@@ -199,7 +231,7 @@ function patientOf(rule: Rule, params: Record<string, string>, u: URL): string |
 
 /** 403 when this caller may not make this request, otherwise nothing. */
 function refusal(session: MockSession, rule: Rule, params: Record<string, string>, u: URL) {
-  const scopes = [rule.permission].flat().map((p) => permissionScope(session.role, p));
+  const scopes = [rule.permission].flat().map((p) => permissionScopeFor(session.roles, p));
   if (scopes.includes("all")) return;
   if (!scopes.includes("own") || !rule.owner) return deny(403, "You don't have access to this");
   if (rule.owner === "filtered") return;
@@ -227,6 +259,12 @@ export const accessGate = http.all(url("/*"), ({ request }) => {
     .map((rule) => ({ rule, params: match(rule.path, path) }))
     .find((h) => h.params);
   if (!hit?.params) return deny(403, `No access rule for ${request.method} ${path}`);
+
+  // A suspended clinic's parents may look, not change (decision #44). A copy of records (action "export") is a read.
+  if (session.readOnly && request.method !== "GET" && hit.rule.action !== "export") {
+    recordAudit(session, "denied", hit.rule.audit ?? "Portal (clinic paused)", patientOf(hit.rule, hit.params, u));
+    return deny(403, "Your clinic's account is paused, so you can view records but not make changes. Contact your clinic.");
+  }
 
   const refused = refusal(session, hit.rule, hit.params, u);
   const { audit, action = ACTION_OF[request.method] } = hit.rule;

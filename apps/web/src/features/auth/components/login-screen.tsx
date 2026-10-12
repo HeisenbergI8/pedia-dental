@@ -4,8 +4,8 @@ import { useState } from "react";
 import { useIsMutating } from "@tanstack/react-query";
 import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CalendarCheckIcon, EyeIcon, EyeOffIcon, HeartHandshakeIcon, HeartIcon, RainbowIcon, ShieldCheckIcon, SparklesIcon, StethoscopeIcon, type LucideIcon } from "lucide-react";
-import { LoginInput, type DemoAccounts, type Role } from "@pedia/shared";
+import { CalendarCheckIcon, CrownIcon, EyeIcon, EyeOffIcon, HeartHandshakeIcon, HeartIcon, RainbowIcon, ShieldCheckIcon, SparklesIcon, StethoscopeIcon, type LucideIcon } from "lucide-react";
+import { LoginInput, type ClinicChoice, type DemoAccounts, type Role } from "@pedia/shared";
 import { Loading, LoadingScreen, PrimolarLogo } from "@/components/brand";
 import { FormField } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
@@ -14,8 +14,10 @@ import { cn } from "@/lib/utils";
 import { env } from "@/lib/env";
 import { ROLE_HOME, ROLE_LABEL, useSession } from "../access";
 import { authKeys, useDemoAccounts, useSignIn } from "../api";
+import { ClinicChooser } from "./clinic-chooser";
 
 const ROLE_ICON: Record<Role, LucideIcon> = {
+  owner: CrownIcon,
   admin: ShieldCheckIcon,
   dentist: StethoscopeIcon,
   front_desk: CalendarCheckIcon,
@@ -24,6 +26,7 @@ const ROLE_ICON: Record<Role, LucideIcon> = {
 
 /** A crayon tint per role, for recognition only: the role is always written out beside it. */
 const ROLE_TINT: Record<Role, string> = {
+  owner: "bg-crayon-yellow/40",
   admin: "bg-crayon-purple/15",
   dentist: "bg-crayon-teal/30",
   front_desk: "bg-crayon-lime/30",
@@ -112,10 +115,26 @@ function EmailSignIn() {
   const signIn = useSignIn();
   const form = useForm<LoginInput>({ resolver: zodResolver(LoginInput), defaultValues: { email: "", password: "" } });
   const [showPassword, setShowPassword] = useState(false);
+  const [choices, setChoices] = useState<ClinicChoice[] | null>(null);
+  const submit = (input: LoginInput) => signIn.mutate(input, { onSuccess: (r) => "choices" in r && setChoices(r.choices) });
+  if (choices) {
+    return (
+      <ClinicChooser
+        choices={choices}
+        pending={signIn.isPending}
+        error={signIn.error?.message}
+        onPick={(clinicId) => submit({ ...form.getValues(), clinicId })}
+        onBack={() => {
+          signIn.reset();
+          setChoices(null);
+        }}
+      />
+    );
+  }
   return (
     <section aria-label="Sign in" className="rounded-xl border border-line bg-surface p-4 shadow-card sm:p-6">
       <FormProvider {...form}>
-        <form noValidate onSubmit={form.handleSubmit((input) => signIn.mutate(input))} className="space-y-4">
+        <form noValidate onSubmit={form.handleSubmit(submit)} className="space-y-4">
           <FormField name="email" label="Email">
             <Input type="email" autoComplete="username" {...form.register("email")} />
           </FormField>
@@ -165,7 +184,7 @@ function DemoLogins({ logins, password }: Pick<DemoAccounts, "logins" | "passwor
         </p>
       </div>
       <ul className="grid gap-3 sm:grid-cols-2">
-        {logins.map(({ role, email }) => {
+        {logins.map(({ role, email, clinics }) => {
           const Icon = ROLE_ICON[role];
           return (
             <li key={email} className="flex items-center gap-3 rounded-xl border border-line bg-surface p-3">
@@ -175,6 +194,7 @@ function DemoLogins({ logins, password }: Pick<DemoAccounts, "logins" | "passwor
               <span className="min-w-0">
                 <span className="block text-sm font-medium">{ROLE_LABEL[role]}</span>
                 <span className="block truncate text-sm text-ink-muted select-all">{email}</span>
+                <span className="block text-xs text-ink-muted">{clinics.join(" · ")}</span>
               </span>
             </li>
           );

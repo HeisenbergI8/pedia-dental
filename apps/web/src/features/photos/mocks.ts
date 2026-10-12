@@ -1,10 +1,9 @@
 import { http, HttpResponse, delay } from "msw";
-import { UPLOAD_RULES, UploadPhotoInput, isPdf, roleCan, uploadProblem, type ClinicalPhoto, type PhotoType } from "@pedia/shared";
+import { UPLOAD_RULES, UploadPhotoInput, isPdf, rolesCan, uploadProblem, type ClinicalPhoto, type PhotoType } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { inScope, sessionOf } from "@/mocks/access";
 import { getBlob, putBlob } from "@/mocks/blob-store";
-import { db, persist } from "@/mocks/db";
-import { CLINIC_ID } from "@/mocks/seed";
+import { currentClinicId, db, persist } from "@/mocks/db";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 /** What a parent may upload from the portal. Clinical imaging (X-rays) is the clinic's. */
@@ -41,7 +40,7 @@ export const photoHandlers = [
     const problem = uploadProblem(parsed.data.type, file);
     if (problem) return new HttpResponse(problem, { status: file.size > UPLOAD_RULES.maxBytes ? 413 : 400 });
     const session = sessionOf(request);
-    const fromParent = !(session && roleCan(session.role, "clinical.write"));
+    const fromParent = !(session && rolesCan(session.roles, "clinical.write"));
     if (fromParent && (!PARENT_TYPES.includes(parsed.data.type) || parsed.data.visitId || parsed.data.stage || parsed.data.tooth)) {
       return new HttpResponse("Upload a photo or a medical document", { status: 400 });
     }
@@ -53,7 +52,7 @@ export const photoHandlers = [
     const photo: ClinicalPhoto = {
       ...parsed.data,
       id: crypto.randomUUID(),
-      clinicId: CLINIC_ID,
+      clinicId: currentClinicId(),
       patientId: String(params.id),
       contentType: file.type,
       uploadedBy: fromParent ? "parent" : "staff",

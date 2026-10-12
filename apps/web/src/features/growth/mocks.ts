@@ -1,8 +1,7 @@
 import { http, HttpResponse, delay } from "msw";
 import { SaveGrowthInput, type GrowthRecord } from "@pedia/shared";
 import { env } from "@/lib/env";
-import { db, persist } from "@/mocks/db";
-import { CLINIC_ID } from "@/mocks/seed";
+import { currentClinicId, db, persist } from "@/mocks/db";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 
@@ -30,7 +29,7 @@ export const growthHandlers = [
     const record: GrowthRecord = {
       ...parsed.data,
       id: existing?.id ?? crypto.randomUUID(),
-      clinicId: CLINIC_ID,
+      clinicId: currentClinicId(),
       patientId: visit.patientId,
       visitId: visit.id,
       recordedAt: new Date().toISOString(),

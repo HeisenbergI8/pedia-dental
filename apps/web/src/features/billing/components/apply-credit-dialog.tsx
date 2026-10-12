@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSession } from "@/features/auth/access";
-import { useStaff } from "@/features/clinic/api";
+import { useBranchStaff, useStaff } from "@/features/clinic/api";
 import { formatDate } from "@/lib/format";
 import { useApplyCredit } from "../api";
 
@@ -22,13 +22,14 @@ export function ApplyCreditDialog({ invoice, payments, mode, onClose }: { invoic
   const applied = appliedCredit(invoice.id, payments);
   const most = mode === "apply" ? Math.min(held, balance) : applied;
   const staff = useStaff().data ?? [];
+  const branchStaff = useBranchStaff();
   const myId = useSession()?.user.staffId;
   const apply = useApplyCredit();
   const [amount, setAmount] = useState(String(most / 100));
   const [receivedBy, setReceivedBy] = useState("");
   const [error, setError] = useState<string>();
-  // Whoever is signed in did it; front desk when the session isn't a staff member we know (the server refuses unknown ids).
-  const by = receivedBy || (staff.find((s) => s.id === myId) ?? staff.find((s) => s.role === "front_desk"))?.id || "";
+  // Whoever is signed in did it; else this branch's front desk (the server refuses unknown ids).
+  const by = receivedBy || (staff.find((s) => s.id === myId) ?? branchStaff.find((s) => s.role === "front_desk"))?.id || "";
 
   function submit(e: FormEvent) {
     e.preventDefault();

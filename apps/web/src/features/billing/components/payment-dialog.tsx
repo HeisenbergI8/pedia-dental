@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useSession } from "@/features/auth/access";
-import { useStaff } from "@/features/clinic/api";
+import { useBranchStaff, useStaff } from "@/features/clinic/api";
 import { METHOD_LABEL, useRecordDeposit, useRecordPayment } from "../api";
 
 /** Money against an invoice, or held on the account as a deposit (refunds are negative in both). */
@@ -25,6 +25,7 @@ export function PaymentDialog({ target, payments, onClose }: { target: PaymentTa
   const balance = invoice ? invoiceBalance(invoice, payments) : 0;
   const paid = invoice ? invoiceTotal(invoice) - balance : 0;
   const staff = useStaff().data ?? [];
+  const branchStaff = useBranchStaff();
   const myId = useSession()?.user.staffId;
   const recordPayment = useRecordPayment();
   const recordDeposit = useRecordDeposit("invoice" in target ? target.invoice.patientId : target.patientId);
@@ -36,8 +37,8 @@ export function PaymentDialog({ target, payments, onClose }: { target: PaymentTa
   const [note, setNote] = useState("");
   const [receivedBy, setReceivedBy] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
-  // Whoever is signed in did it; front desk when the session isn't a staff member we know (the server refuses unknown ids).
-  const by = receivedBy || (staff.find((s) => s.id === myId) ?? staff.find((s) => s.role === "front_desk"))?.id || "";
+  // Whoever is signed in did it; else this branch's front desk (the server refuses unknown ids).
+  const by = receivedBy || (staff.find((s) => s.id === myId) ?? branchStaff.find((s) => s.role === "front_desk"))?.id || "";
 
   function submit(e: FormEvent) {
     e.preventDefault();

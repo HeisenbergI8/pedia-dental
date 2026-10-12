@@ -1,8 +1,7 @@
 import { http, HttpResponse, delay } from "msw";
 import { AddPlanItemInput, SetPlanItemStatusInput, type PlanItem } from "@pedia/shared";
 import { env } from "@/lib/env";
-import { db, persist } from "@/mocks/db";
-import { CLINIC_ID } from "@/mocks/seed";
+import { currentClinicId, db, persist } from "@/mocks/db";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 
@@ -29,7 +28,7 @@ export const planHandlers = [
     const item: PlanItem = {
       ...parsed.data,
       id: crypto.randomUUID(),
-      clinicId: CLINIC_ID,
+      clinicId: currentClinicId(),
       patientId: String(params.id),
       status: "planned",
       createdAt: new Date().toISOString(),

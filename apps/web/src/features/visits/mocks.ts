@@ -1,9 +1,8 @@
 import { http, HttpResponse, delay } from "msw";
 import { format } from "date-fns";
-import { StartVisitInput, type Visit } from "@pedia/shared";
+import { StartVisitInput, holdsRole, type Visit } from "@pedia/shared";
 import { env } from "@/lib/env";
-import { db, persist } from "@/mocks/db";
-import { CLINIC_ID } from "@/mocks/seed";
+import { currentClinicId, db, persist } from "@/mocks/db";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 
@@ -23,7 +22,7 @@ export const visitHandlers = [
     }
     const parsed = StartVisitInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
-    if (!db.staff.some((s) => s.id === parsed.data.dentistId && s.role === "dentist")) {
+    if (!db.staff.some((s) => s.id === parsed.data.dentistId && holdsRole(s, "dentist"))) {
       return new HttpResponse("Unknown dentist", { status: 400 });
     }
     if (db.visits.some((v) => v.patientId === params.id && v.status === "in_progress")) {
@@ -44,7 +43,7 @@ export const visitHandlers = [
     const visit: Visit = {
       ...parsed.data,
       id: crypto.randomUUID(),
-      clinicId: CLINIC_ID,
+      clinicId: currentClinicId(),
       patientId: String(params.id),
       date: format(now, "yyyy-MM-dd"), // the clinic's calendar day, not UTC's
       status: "in_progress",

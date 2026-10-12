@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ClinicScoped, Id, IsoDateTime, isoDate } from "./common";
+import { BranchScoped, ClinicScoped, Id, IsoDateTime, isoDate } from "./common";
 
 export const AppointmentStatus = z.enum([
   "booked",
@@ -12,7 +12,8 @@ export const AppointmentStatus = z.enum([
 ]);
 export type AppointmentStatus = z.infer<typeof AppointmentStatus>;
 
-export const Appointment = ClinicScoped.extend({
+/** Branch-owned (decision #16): it happens at one branch, in one of that branch's chairs. */
+export const Appointment = BranchScoped.extend({
   id: Id,
   patientId: Id,
   dentistId: Id,

@@ -1,9 +1,10 @@
 "use client";
 import type { ReactNode } from "react";
-import { roleCan, type Permission, type Role } from "@pedia/shared";
+import { READ_ONLY_DENIED, rolesCan, type Permission, type Role } from "@pedia/shared";
 import { useSessionStore } from "@/stores/session-store";
 
 export const ROLE_LABEL: Record<Role, string> = {
+  owner: "Owner",
   admin: "Admin",
   dentist: "Dentist",
   front_desk: "Front desk",
@@ -12,6 +13,7 @@ export const ROLE_LABEL: Record<Role, string> = {
 
 /** Where each role lands after signing in (Q3). */
 export const ROLE_HOME: Record<Role, string> = {
+  owner: "/dashboard",
   admin: "/dashboard",
   dentist: "/appointments",
   front_desk: "/appointments",
@@ -42,8 +44,10 @@ export const useSession = () => useSessionStore((s) => s.session);
 
 /** `can("billing.collect")`: does the signed-in user hold it (at any scope, or at `all` when asked)? */
 export function useCan() {
-  const role = useSessionStore((s) => s.session?.user.role);
-  return (permission: Permission, scope?: "all") => !!role && roleCan(role, permission, scope);
+  const user = useSessionStore((s) => s.session?.user);
+  // A read-only session (a parent of a paused clinic) loses the portal's write actions (decisions #44, #46).
+  return (permission: Permission, scope?: "all") =>
+    !!user && !(user.readOnly && READ_ONLY_DENIED.includes(permission)) && rolesCan(user.roles, permission, scope);
 }
 
 /** Shows children only with the permission. Tidiness, not security: the API refuses regardless. */

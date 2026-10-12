@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { format, parseISO } from "date-fns";
 import { FileTextIcon } from "lucide-react";
-import { DENTIST_SIGNED, DOCUMENT_TYPE_LABEL, DocumentType, GenerateDocumentInput } from "@pedia/shared";
+import { DENTIST_SIGNED, DOCUMENT_TYPE_LABEL, DocumentType, GenerateDocumentInput, holdsRole } from "@pedia/shared";
 import { EmptyState } from "@/components/empty-state";
 import { SectionCard } from "@/components/section-card";
 import { useSession } from "@/features/auth/access";
@@ -36,7 +36,7 @@ const DESCRIPTION: Record<DocumentType, string> = {
  */
 export function initialDraft(type: DocumentType, src: DocSources, myStaffId?: string): Draft {
   const me = src.staff.find((s) => s.id === myStaffId);
-  const dentist = me?.role === "dentist" ? me.id : (src.visits[0]?.dentistId ?? src.staff.find((s) => s.role === "dentist")?.id ?? "");
+  const dentist = me && holdsRole(me, "dentist") ? me.id : (src.visits[0]?.dentistId ?? src.staff.find((s) => holdsRole(s, "dentist"))?.id ?? "");
   const desk = me?.id ?? src.staff.find((s) => s.role === "front_desk")?.id ?? dentist;
   const planned = [...new Set(src.plan.filter((i) => i.status === "planned" || i.status === "in_progress").map((i) => i.procedureCode))];
   return {

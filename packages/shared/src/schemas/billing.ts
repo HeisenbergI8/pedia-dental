@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Centavos, ClinicScoped, Id, IsoDateTime } from "./common";
+import { BranchScoped, Centavos, Id, IsoDateTime } from "./common";
 
 /** `account_credit`: a transfer from the patient's deposit to an invoice. Set by the server only, never a way to pay. */
 export const PaymentMethod = z.enum(["cash", "gcash", "maya", "card", "bank_transfer", "account_credit"]);
@@ -16,7 +16,8 @@ export const InvoiceLine = z.object({
   amount: Centavos,
 });
 
-export const Invoice = ClinicScoped.extend({
+/** The branch of the visit it bills (decision #16). A patient's balance still sums every branch: patients are account-owned. */
+export const Invoice = BranchScoped.extend({
   id: Id,
   patientId: Id,
   visitId: Id.optional(),
@@ -32,7 +33,8 @@ export type Invoice = z.infer<typeof Invoice>;
  * Payments are append-only. Refunds are negative payments. Without `invoiceId` a row is money held on the patient's
  * account: a deposit (+), a deposit refund (−), or the deposit side of applying credit to an invoice (−, `appliedTo`).
  */
-export const Payment = ClinicScoped.extend({
+/** The branch that took the money: its invoice's branch, or for a deposit the branch where it was handed over. */
+export const Payment = BranchScoped.extend({
   id: Id,
   patientId: Id,
   invoiceId: Id.optional(),

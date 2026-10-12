@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AccountMenu } from "@/features/auth/components/account-menu";
 import { cn } from "@/lib/utils";
+import { PausedNotice } from "./paused-notice";
 import { useChildren } from "../use-child";
 
 const SECTIONS = [
@@ -137,6 +138,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
       </header>
 
       <main id="main" tabIndex={-1} className="mx-auto max-w-3xl space-y-6 px-4 py-6 text-base outline-none sm:px-6">
+        <PausedNotice />
         {kids.length > 1 && child && (
           <div role="group" aria-label="Whose records to show" className="flex flex-wrap gap-2">
             {kids.map((k) => (

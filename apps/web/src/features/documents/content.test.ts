@@ -6,14 +6,15 @@ import { initialDraft } from "./components/documents-tab";
 
 const at = "2026-09-30T02:00:00.000Z";
 const src: DocSources = {
+  clinicName: "Bulilit Smiles Pediatric Dental",
   patient: {
     id: "p1", clinicId: "c", patientNo: "KS-00001", firstName: "Bea", lastName: "Mendoza", birthDate: "2020-07-02", sex: "female", address: "12 Mabini St, Imus",
     guardians: [{ id: "g1", fullName: "Rosa Mendoza", relationship: "Mother", phone: "09171234567", isPrimary: true }],
     allergies: ["Latex"], medicalConditions: [], medications: [], alerts: [], dentalHistory: { previousClinic: "", notes: "" }, consents: [], createdAt: at,
   },
   staff: [
-    { id: "staff_reyes", clinicId: "c", fullName: "Dr. Ana Reyes", role: "dentist", licenseNo: "0045821" },
-    { id: "staff_cruz", clinicId: "c", fullName: "Liza Cruz", role: "front_desk" },
+    { id: "staff_reyes", clinicId: "c", fullName: "Dr. Ana Reyes", role: "dentist", licenseNo: "0045821", branchIds: ["b"] },
+    { id: "staff_cruz", clinicId: "c", fullName: "Liza Cruz", role: "front_desk", branchIds: ["b"] },
   ],
   procedures: [{ clinicId: "c", code: "fluoride", name: "Fluoride application", defaultDurationMin: 15, fee: pesos(800), perTooth: false }],
   visits: [{ id: "v1", clinicId: "c", patientId: "p1", dentistId: "staff_reyes", date: "2026-09-30", status: "completed", startedAt: at, completedAt: at }],
@@ -21,8 +22,8 @@ const src: DocSources = {
   noteTemplates: [{ id: "tpl_fluoride", name: "Fluoride application", procedure: "fluoride", fields: [] }],
   chart: [{ id: "e1", clinicId: "c", patientId: "p1", visitId: "v1", tooth: 74, surfaces: ["O"], condition: "caries", recordedBy: "staff_reyes", recordedAt: at }],
   plan: [{ id: "i1", clinicId: "c", patientId: "p1", procedureCode: "fluoride", fee: pesos(800), status: "done", completedVisitId: "v1", completedNoteId: "n1", createdAt: at }],
-  invoices: [{ id: "inv1", clinicId: "c", patientId: "p1", lines: [{ planItemId: "i1", procedureCode: "fluoride", description: "Fluoride application", amount: pesos(800) }], discount: 0, issuedAt: at }],
-  payments: [{ id: "pay1", clinicId: "c", patientId: "p1", invoiceId: "inv1", amount: pesos(800), method: "cash", receiptNo: "AR-000042", receivedBy: "staff_cruz", receivedAt: at }],
+  invoices: [{ id: "inv1", clinicId: "c", branchId: "b", patientId: "p1", lines: [{ planItemId: "i1", procedureCode: "fluoride", description: "Fluoride application", amount: pesos(800) }], discount: 0, issuedAt: at }],
+  payments: [{ id: "pay1", clinicId: "c", branchId: "b", patientId: "p1", invoiceId: "inv1", amount: pesos(800), method: "cash", receiptNo: "AR-000042", receivedBy: "staff_cruz", receivedAt: at }],
   messageTemplates: [{ clinicId: "c", kind: "fluoride_instructions", name: "Fluoride instructions", body: "{child_first_name} had fluoride today.", updatedAt: at }],
 };
 const text = (choice: Partial<GenerateDocumentInput> & Pick<GenerateDocumentInput, "type">) =>

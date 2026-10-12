@@ -24,14 +24,14 @@ import {
 import { enUS } from "date-fns/locale";
 import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from "lucide-react";
 import { toast } from "sonner";
-import { CLINIC_HOURS, canReschedule, countByDay, inStatusGroup, isStatusGroup, type Appointment, type AppointmentStatus, type Chair, type StatusGroup } from "@pedia/shared";
+import { canReschedule, countByDay, inStatusGroup, isStatusGroup, type Appointment, type AppointmentStatus, type Chair, type StatusGroup } from "@pedia/shared";
 import { ErrorState } from "@/components/error-state";
 import { PageHeader } from "@/components/page-header";
 import { Loading } from "@/components/brand";
 import { Segmented } from "@/components/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { useChairs } from "@/features/clinic/api";
+import { useActiveBranch, useBranchChairs } from "@/features/clinic/api";
 import { usePatients } from "@/features/patients/api";
 import { PHONE, useMediaQuery } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
@@ -174,7 +174,8 @@ export function AppointmentCalendar() {
   const to = endOfWeek(endOfMonth(date)).toISOString();
   const appointments = useAppointments(from, to);
   const patients = usePatients();
-  const chairs = useChairs();
+  const chairs = useBranchChairs(); // the day view's columns: this branch's chairs only
+  const hours = useActiveBranch()?.openingHours;
   const reschedule = useRescheduleAppointment();
 
   const events = useMemo<CalendarEvent[]>(() => {
@@ -329,9 +330,9 @@ export function AppointmentCalendar() {
               dayLayoutAlgorithm="no-overlap"
               step={15}
               timeslots={4}
-              min={addMinutes(new Date(1970, 0, 1), CLINIC_HOURS.opensAt)}
-              max={addMinutes(new Date(1970, 0, 1), CLINIC_HOURS.closesAt)}
-              scrollToTime={addMinutes(new Date(1970, 0, 1), CLINIC_HOURS.opensAt)}
+              min={hours && addMinutes(new Date(1970, 0, 1), hours.opensAt)}
+              max={hours && addMinutes(new Date(1970, 0, 1), hours.closesAt)}
+              scrollToTime={hours && addMinutes(new Date(1970, 0, 1), hours.opensAt)}
               selectable
               onSelectSlot={({ start, end, resourceId }) =>
                 setDraft({
