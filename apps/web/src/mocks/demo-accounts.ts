@@ -1,6 +1,6 @@
 import { startOfDay } from "date-fns";
-import { Role, accountSummary, rolesOf, type Appointment, type DemoAccount, type Guardian, type Patient, type StaffMember, type StaffRole } from "@pedia/shared";
-import { accountById, type Db, type Platform } from "./db";
+import { Role, accountSummary, isActiveStaff, rolesOf, type Appointment, type DemoAccount, type Guardian, type Patient, type StaffMember, type StaffRole } from "@pedia/shared";
+import { accountById, credentialOf, type Db, type Platform } from "./db";
 
 /** Every demo account signs in with this. It is shown on the login screen and protects nothing. */
 export const DEMO_PASSWORD = "pass123";
@@ -59,7 +59,7 @@ const staffAccount = (s: StaffMember, pin?: string): DemoAccountRecord => ({
   id: s.id,
   role: rolesOf(s)[0]!, // the highest role held: Owner for the account's owner
   name: s.fullName,
-  email: STAFF_LOGIN[s.id] ?? `${handle(s.fullName)}@pediadental.demo`,
+  email: s.email ?? STAFF_LOGIN[s.id] ?? `${handle(s.fullName)}@pediadental.demo`, // the Owner typed it for added staff
   summary: s.isOwner ? OWNER_SUMMARY : STAFF_SUMMARY[s.role],
   staffId: s.id,
   roles: rolesOf(s),
@@ -76,10 +76,10 @@ const parentAccount = (db: Db, g: Guardian, summary: string): DemoAccountRecord 
   roles: ["parent"],
 });
 
-/** Everyone who can sign in: all staff and every guardian on any patient. */
+/** Everyone who can sign in: active staff (decision #23) and every guardian on any patient. */
 export function allAccounts(db: Db): DemoAccountRecord[] {
   const guardians = new Map(db.patients.flatMap((p) => p.guardians).map((g) => [g.id, g]));
-  return [...db.staff.map((s) => staffAccount(s)), ...[...guardians.values()].map((g) => parentAccount(db, g, ""))];
+  return [...db.staff.filter(isActiveStaff).map((s) => staffAccount(s)), ...[...guardians.values()].map((g) => parentAccount(db, g, ""))];
 }
 
 /**
@@ -134,9 +134,23 @@ export function demoAccounts(db: Db): DemoAccountRecord[] {
     return [parentAccount(db, guardian, summary)];
   };
   return [
-    ...db.staff.map((s) => staffAccount(s, db.staffPins.find((p) => p.staffId === s.id)?.pin)),
+    ...db.staff.filter(isActiveStaff).map((s) => staffAccount(s, db.staffPins.find((p) => p.staffId === s.id)?.pin)),
     ...pick("Two children, one mid-treatment", (p) => childrenOf(db, primaryGuardian(p).id).length > 1),
     ...pick("Has an unpaid balance", owes),
     ...pick("Has an appointment to confirm", (p) => toConfirm.has(p.id)),
   ];
 }
+
+/** Does this password open this login? Its own password once it has one (an added or changed login), else the demo one. */
+export const passwordOpens = (db: Db, account: Pick<DemoAccountRecord, "staffId">, password: string) =>
+  (credentialOf(db, account.staffId)?.password ?? DEMO_PASSWORD) === password;
+
+/** The email a staff login signs in with, deactivated or not. */
+export const staffEmail = (s: StaffMember) => staffAccount(s).email;
+
+/**
+ * Is this email already a login in the account? Deactivated staff count: they can be reactivated, and two logins with
+ * one email would make sign-in ambiguous (decision #27: one login per email per account).
+ */
+export const emailTaken = (db: Db, email: string, exceptStaffId?: string) =>
+  db.staff.some((s) => s.id !== exceptStaffId && staffEmail(s) === email) || allAccounts(db).some((a) => !a.staffId && a.email === email);

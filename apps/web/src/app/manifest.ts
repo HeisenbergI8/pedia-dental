@@ -10,9 +10,9 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     // A fixed identity, so a later change to start_url doesn't install as a second app.
     id: "/",
-    name: "Primolar Pediatric Dental Clinic",
+    name: "Primolar",
     short_name: "Primolar",
-    description: "Clinic management for Primolar Pediatric Dental Clinic",
+    description: "Clinic management for pediatric dental clinics",
     lang: "en",
     categories: ["medical", "health", "business"],
     start_url: "/",

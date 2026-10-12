@@ -1,9 +1,9 @@
 import { http, HttpResponse, delay } from "msw";
-import { LoginInput, LogoutInput, SwitchUserInput, pinLockout, rolesCan, worksAt, type AuditAction, type Session, type SessionUser } from "@pedia/shared";
+import { ChangePasswordInput, LoginInput, LogoutInput, SwitchUserInput, pinLockout, rolesCan, worksAt, type AuditAction, type Session, type SessionUser } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { branchOf, recordAudit, sessionOf } from "@/mocks/access";
-import { accountById, db, persist, platform, selectTenant } from "@/mocks/db";
-import { DEMO_PASSWORD, accountsByEmail, allAccounts, demoAccounts, demoLogins, tokenFor, type AccountMatch, type DemoAccountRecord } from "@/mocks/demo-accounts";
+import { accountById, credentialOf, db, persist, platform, selectTenant } from "@/mocks/db";
+import { DEMO_PASSWORD, accountsByEmail, allAccounts, demoAccounts, demoLogins, passwordOpens, tokenFor, type AccountMatch, type DemoAccountRecord } from "@/mocks/demo-accounts";
 import { DEMO_CLINIC_ID } from "@/mocks/seed";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
@@ -16,6 +16,7 @@ const userOf = ({ id, role, name, email, staffId, guardianId, roles }: DemoAccou
   clinicId,
   roles,
   readOnly: accountById(clinicId)?.status === "active" ? undefined : true,
+  mustChangePassword: credentialOf(platform.tenants[clinicId]!, staffId)?.mustChange || undefined,
   staffId,
   guardianId,
 });
@@ -50,15 +51,16 @@ export const authHandlers = [
         recordAudit(m.account, action, record);
       });
     // One message for both cases, so the form doesn't reveal which emails exist.
-    if (matches.length === 0 || password !== DEMO_PASSWORD) {
+    const opened = matches.filter((m) => passwordOpens(platform.tenants[m.clinicId]!, m.account, password));
+    if (opened.length === 0) {
       logEach(matches, "sign_in_failed");
       return new HttpResponse("That email and password don't match a demo account", { status: 401 });
     }
     // Checked after the password, so a stranger can't learn that an account is suspended. A suspended account's staff
     // are refused; its parents still sign in, read-only (decisions #26, #44).
-    const open = matches.filter((m) => accountById(m.clinicId)?.status === "active" || m.account.role === "parent");
+    const open = opened.filter((m) => accountById(m.clinicId)?.status === "active" || m.account.role === "parent");
     if (open.length === 0) {
-      logEach(matches, "denied", "Session (account suspended)");
+      logEach(opened, "denied", "Session (account suspended)");
       return new HttpResponse("Your clinic's Primolar account is paused. Contact your clinic.", { status: 403 });
     }
     const match = clinicId ? open.find((m) => m.clinicId === clinicId) : open.length === 1 ? open[0] : undefined;
@@ -86,6 +88,32 @@ export const authHandlers = [
   }),
 
   /**
+   * Changes the signed-in staff member's password: at first sign-in with the temporary one (decision #21), or any time
+   * after. Only for logins the Owner added: seeded demo logins keep the demo password.
+   * Outside the access gate (/auth/*), which is what lets a login that must change its password reach it.
+   * Returns the session again so the app drops `mustChangePassword` without a new sign-in.
+   */
+  http.post(url("/auth/password"), async ({ request }) => {
+    const session = sessionOf(request);
+    if (!session?.staffId) return new HttpResponse("Sign in with your staff login to change its password", { status: 401 });
+    // Seeded demo logins keep the password the login screen shows; only logins the Owner added have their own.
+    if (!credentialOf(db, session.staffId)) return new HttpResponse(`Demo logins keep the demo password (${DEMO_PASSWORD})`, { status: 403 });
+    const parsed = ChangePasswordInput.safeParse(await request.json());
+    if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
+    if (!passwordOpens(db, session, parsed.data.current)) {
+      recordAudit(session, "denied", "Password");
+      return new HttpResponse("That isn't your current password", { status: 400 });
+    }
+    const own = credentialOf(db, session.staffId);
+    if (own) Object.assign(own, { password: parsed.data.next, mustChange: false });
+    else db.staffCredentials.push({ clinicId: session.clinicId, staffId: session.staffId, password: parsed.data.next, mustChange: false });
+    persist();
+    recordAudit(session, "update", "Password");
+    const fresh: Session = { token: tokenFor(session.clinicId, session), user: userOf(session, session.clinicId) };
+    return HttpResponse.json(fresh);
+  }),
+
+  /**
    * Hands a shared device to another staff member, who proves it's them with their own PIN (own account, never a
    * shared login, never just a tap on a name). Needs a staff session already on the device. Logged as the old
    * person signing out and the new one signing in, so the trail always says who was acting.
@@ -95,6 +123,8 @@ export const authHandlers = [
     const current = sessionOf(request);
     if (!current) return new HttpResponse("Sign in to continue", { status: 401 });
     if (!rolesCan(current.roles, "session.switch")) return new HttpResponse("Switching user is for clinic staff", { status: 403 });
+    // A new login hands the device on only after choosing its own password (decision #21), like every other route.
+    if (current.mustChangePassword) return new HttpResponse("Choose your own password to continue", { status: 403 });
     const parsed = SwitchUserInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
 

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { z } from "zod";
-import { DemoAccounts, LoginResult, Session, type LoginInput, type LogoutInput, type SwitchUserInput } from "@pedia/shared";
+import { DemoAccounts, LoginResult, Session, type ChangePasswordInput, type LoginInput, type LogoutInput, type SwitchUserInput } from "@pedia/shared";
 import { api } from "@/lib/api-client";
 import { useSessionStore } from "@/stores/session-store";
 import { ROLE_HOME } from "./access";
@@ -58,6 +58,15 @@ export function useSwitchUser() {
       qc.removeQueries({ predicate: (q) => q.queryKey[0] !== authKeys.demo[0] });
       router.replace(ROLE_HOME[session.user.role]);
     },
+  });
+}
+
+/** Decision #21. The server answers with the session again, without `mustChangePassword`, so the app opens. */
+export function useChangePassword() {
+  const signIn = useSessionStore((s) => s.signIn);
+  return useMutation({
+    mutationFn: (input: ChangePasswordInput) => api("/auth/password", Session, { method: "POST", body: JSON.stringify(input) }),
+    onSuccess: (session) => signIn(session),
   });
 }
 

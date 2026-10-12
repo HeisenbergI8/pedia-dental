@@ -1,5 +1,5 @@
-import { ClinicSettings } from "@/features/clinic/components/clinic-settings";
+import { SettingsScreen } from "@/features/clinic/components/settings-screen";
 
 export default function SettingsPage() {
-  return <ClinicSettings />;
+  return <SettingsScreen />;
 }

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { useSessionStore } from "@/stores/session-store";
 import { ROLE_HOME, ROLE_LABEL, useSession } from "../access";
 import { useSignOut } from "../api";
+import { ChangePasswordScreen } from "./change-password-screen";
 
 /** True once the persisted session has been read, so a signed-in user is never bounced to /login. */
 function useHydrated() {
@@ -50,7 +51,8 @@ export function NoAccess({ reason }: { reason?: string }) {
  */
 export function RequireSession({ area, children }: { area: "clinic" | "portal"; children: ReactNode }) {
   const hydrated = useHydrated();
-  const role = useSession()?.user.role;
+  const user = useSession()?.user;
+  const role = user?.role;
   const router = useRouter();
   useEffect(() => {
     if (hydrated && !role) router.replace("/login");
@@ -64,6 +66,9 @@ export function RequireSession({ area, children }: { area: "clinic" | "portal"; 
       </main>
     );
   }
+  // A login the Owner just made: nothing else until they choose their own password (decision #21). The shell isn't
+  // mounted, so none of its queries fire while the API would refuse them.
+  if (user?.mustChangePassword) return <ChangePasswordScreen />;
   return <>{children}</>;
 }
 

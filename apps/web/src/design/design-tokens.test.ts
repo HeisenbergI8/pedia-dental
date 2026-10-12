@@ -74,7 +74,13 @@ describe("token hygiene", () => {
   it("no file uses a retired token", () => {
     expect(filesMatching(/\b(brand-soft|plum-bg|(?:bg|text|border|ring|fill|stroke)-plum)\b|--color-plum/)).toEqual([]);
   });
-  it("raw hex lives only in the token file, the PDF (draws its own colours) and the manifest", () => {
-    expect(filesMatching(/#[0-9a-fA-F]{6}\b/)).toEqual(["app/globals.css", "app/manifest.ts", "features/documents/components/document-pdf.tsx"]);
+  it("raw hex lives only in the token file, the PDF, the manifest and the seeded brand colours (data, not styling)", () => {
+    expect(filesMatching(/#[0-9a-fA-F]{6}\b/)).toEqual([
+      "app/globals.css",
+      "app/manifest.ts",
+      "features/documents/components/document-pdf.tsx",
+      "mocks/seed-ngiti.ts",
+      "mocks/seed.ts",
+    ]);
   });
 });

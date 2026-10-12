@@ -1,6 +1,6 @@
-import { PageLoading } from "@/components/brand";
+import { ClinicPageLoading } from "@/features/clinic/components/clinic-logo";
 
 /** Shown by Next while the next page in this area loads. */
 export default function AreaLoading() {
-  return <PageLoading />;
+  return <ClinicPageLoading />;
 }

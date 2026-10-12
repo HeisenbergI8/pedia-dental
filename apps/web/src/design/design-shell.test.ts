@@ -3,6 +3,12 @@ import { read } from "./source";
 
 describe("staff shell", () => {
   const shell = read("components/app-shell.tsx");
+  it("shows the clinic's logo, and Primolar only as 'Powered by' (decisions #31, #32)", () => {
+    expect(shell).not.toMatch(/PrimolarLogo|PrimolarMark/);
+    expect(shell).toContain("<ClinicLogo");
+    expect(shell).toContain("<PoweredByPrimolar");
+    expect(read("features/portal/components/portal-shell.tsx")).toContain("<PoweredByPrimolar");
+  });
   it("has no crayon strip on any surface", () => expect(shell).not.toContain("brand-strip"));
   it("marks the current page with a neutral pill, not a tint or a side bar", () => {
     expect(shell).not.toMatch(/bg-brand-subtle|left-0 w-1/);

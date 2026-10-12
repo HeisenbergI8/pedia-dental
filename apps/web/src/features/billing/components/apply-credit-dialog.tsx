@@ -1,7 +1,7 @@
 "use client";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { ApplyCreditInput, appliedCredit, depositBalance, formatPeso, invoiceBalance, pesos, type Invoice, type Payment } from "@pedia/shared";
+import { ApplyCreditInput, appliedCredit, depositBalance, formatPeso, invoiceBalance, isActiveStaff, pesos, type Invoice, type Payment } from "@pedia/shared";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -81,7 +81,7 @@ export function ApplyCreditDialog({ invoice, payments, mode, onClose }: { invoic
             <Select value={by} onValueChange={setReceivedBy}>
               <SelectTrigger id="credit-by" className="w-full"><SelectValue placeholder="Choose" /></SelectTrigger>
               <SelectContent>
-                {staff.map((s) => <SelectItem key={s.id} value={s.id}>{s.fullName}</SelectItem>)}
+                {staff.filter(isActiveStaff).map((s) => <SelectItem key={s.id} value={s.id}>{s.fullName}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

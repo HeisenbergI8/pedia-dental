@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import type { Role } from "@pedia/shared";
 import { BottomTabIcon, bottomTabClass } from "@/components/bottom-tab";
-import { PageLoading, PrimolarLogo, PrimolarMark } from "@/components/brand";
+import { PoweredByPrimolar } from "@/components/brand";
 import { useNavigationPending } from "@/components/navigation-pending";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { routePermission, useCan, useSession } from "@/features/auth/access";
@@ -24,6 +24,8 @@ import { AccountMenu } from "@/features/auth/components/account-menu";
 import { NoAccess } from "@/features/auth/components/access-gate";
 import { PatientSearch } from "@/features/patients/components/patient-search";
 import { BranchSwitcher } from "@/features/clinic/components/branch-switcher";
+import { BrandTheme } from "@/features/clinic/components/brand-theme";
+import { ClinicLogo, ClinicMark, ClinicPageLoading } from "@/features/clinic/components/clinic-logo";
 import { cn } from "@/lib/utils";
 
 /** Who sees an item is decided by ROUTE_ACCESS + ROLE_PERMISSIONS, never here. */
@@ -43,8 +45,8 @@ const NAV: NavItem[] = [
 
 function Brand({ className }: { className?: string }) {
   return (
-    <Link href="/" aria-label="Primolar home" className="inline-flex rounded-md">
-      <PrimolarLogo className={className} />
+    <Link href="/" aria-label="Home" className="inline-flex rounded-md">
+      <ClinicLogo className={className} />
     </Link>
   );
 }
@@ -109,8 +111,8 @@ function Rail() {
   const can = useCan();
   return (
     <aside className="sticky top-0 hidden h-screen flex-col items-stretch gap-3 border-r border-line bg-surface px-2 pt-5 pb-4 md:flex lg:hidden print:hidden!">
-      <Link href="/" aria-label="Primolar home" className="mx-auto rounded-lg">
-        <PrimolarMark />
+      <Link href="/" aria-label="Home" className="mx-auto rounded-lg">
+        <ClinicMark />
       </Link>
       {can("patients.view") && <PatientSearch variant="rail" />}
       <nav aria-label="Main" className="flex-1 overflow-y-auto">
@@ -205,6 +207,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         Skip to content
       </a>
+      <BrandTheme />
 
       {/* Desktop: the full sidebar. */}
       <aside className="sticky top-0 hidden h-screen flex-col gap-5 border-r border-line bg-surface px-3.5 pt-5 pb-4 lg:flex print:hidden!">
@@ -217,6 +220,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Nav />
         </div>
         <AccountMenu />
+        <PoweredByPrimolar className="px-2" />
       </aside>
 
       <Rail />
@@ -232,7 +236,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header>
 
       <main id="main" tabIndex={-1} className="mx-auto w-full max-w-7xl min-w-0 px-4 py-5 outline-none sm:px-6 lg:px-8 lg:py-8 print:max-w-none print:p-0">
-        {navigating && <PageLoading />}
+        {navigating && <ClinicPageLoading />}
         {/* Hidden, not unmounted, so a navigation that doesn't land leaves the page as it was. */}
         <div hidden={navigating} className="contents">
           <RouteGate key={userId}>{children}</RouteGate>
@@ -251,6 +255,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Nav onNavigate={() => setMenuOpen(false)} />
           </div>
           <AccountMenu />
+          <PoweredByPrimolar className="px-2" />
         </SheetContent>
       </Sheet>
     </div>

@@ -3,6 +3,7 @@ import {
   DOCUMENT_TYPE_LABEL,
   NOTE_MESSAGES,
   accountSummary,
+  branchLine,
   deriveChart,
   findDrug,
   formatPeso,
@@ -13,6 +14,7 @@ import {
   renderMessage,
   rolesCan,
   rolesOf,
+  type Branch,
   type ChartEntry,
   type ClinicalNote,
   type ConsentScope,
@@ -40,11 +42,15 @@ export type DocBlock =
   | { kind: "table"; heading?: string; head: string[]; rows: string[][]; foot?: string[]; numeric?: number[] }
   | { kind: "signatures"; lines: { label: string; name?: string; detail?: string }[] };
 
-export type DocContent = { title: string; subtitle: string; blocks: DocBlock[]; footnote?: string; fileName: string; clinicName: string };
+/** What heads every document (decisions #19, #31): the clinic, the branch it came from, its logo and brand ring. */
+export type Letterhead = { clinicName: string; branchLine: string; logoUrl: string | null; ring: string };
+export type DocContent = { title: string; subtitle: string; blocks: DocBlock[]; footnote?: string; fileName: string; clinicName: string; letterhead: Letterhead };
 
 /** Everything a document can draw on: one patient's record plus reference data. */
 export type DocSources = {
-  clinicName: string; // the clinic account's; the branch address on letterheads comes with the branding plan
+  clinicName: string; // the clinic account's
+  letterhead: Letterhead; // at the device's active branch (decision #51)
+  branches: Branch[]; // every branch, archived too: a receipt names the branch the payment was taken for
   patient: PatientView;
   staff: StaffMember[];
   procedures: Procedure[];
@@ -125,6 +131,7 @@ export function buildDocument(choice: GenerateDocumentInput, src: DocSources, no
     blocks,
     fileName: `${slug(DOCUMENT_TYPE_LABEL[choice.type])}-${slug(patient.lastName)}-${slug(patient.firstName)}-${today}.pdf`,
     clinicName: src.clinicName,
+    letterhead: src.letterhead,
     ...extra,
   });
 
@@ -252,7 +259,9 @@ export function buildDocument(choice: GenerateDocumentInput, src: DocSources, no
       // A deposit has no invoice; a payment that names one must find it.
       const invoice = payment.invoiceId ? need(src.invoices.find((i) => i.id === payment.invoiceId), "That payment's invoice") : undefined;
       const r = receiptContent({ patient, invoice, payment, payments: src.payments, staff: src.staff });
-      return doc([{ kind: "rows", rows: r.rows }], { title: r.title, subtitle: r.subtitle, footnote: r.footnote });
+      const paidAt = src.branches.find((b) => b.id === payment.branchId);
+      const letterhead = paidAt ? { ...src.letterhead, branchLine: branchLine(paidAt) } : src.letterhead;
+      return doc([{ kind: "rows", rows: r.rows }], { title: r.title, subtitle: r.subtitle, footnote: r.footnote, letterhead });
     }
     case "notes_report": {
       // Guardian contacts (the address) only when the issuer holds patients.contact; names stay (identity).

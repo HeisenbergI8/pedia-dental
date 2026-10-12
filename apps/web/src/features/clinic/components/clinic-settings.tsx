@@ -25,8 +25,11 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-/** Read-only view of the clinic's reference data. Editing comes later if the clinic needs it. */
-export function ClinicSettings() {
+/**
+ * Read-only view of the clinic's reference data. Everyone but the Owner sees it as Settings; the Owner sees it as a
+ * tab of theirs (`embedded`: no page header).
+ */
+export function ClinicSettings({ embedded = false }: { embedded?: boolean }) {
   const procedures = useProcedures();
   const staff = useStaff();
   const chairs = useChairs();
@@ -40,7 +43,7 @@ export function ClinicSettings() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Settings" description="The clinic's procedures, staff and chairs. Read-only in this prototype." />
+      {!embedded && <PageHeader title="Settings" description="The clinic's procedures, staff and chairs. Read-only in this prototype." />}
 
       <Section title="Procedure catalog">
         <DataList

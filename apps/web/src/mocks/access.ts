@@ -1,7 +1,7 @@
 import { http, HttpResponse } from "msw";
 import { permissionScopeFor, usableBranches, type AuditAction, type Branch, type Permission } from "@pedia/shared";
 import { env } from "@/lib/env";
-import { accountById, currentClinicId, db, persist, platform, selectTenant } from "./db";
+import { accountById, credentialOf, currentClinicId, db, persist, platform, selectTenant } from "./db";
 import { accountForToken, childrenOf, type DemoAccountRecord } from "./demo-accounts";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
@@ -9,7 +9,7 @@ export const SESSION_COOKIE = "pd_session";
 /** The branch this device is working at, written by the session store like the session cookie. */
 export const BRANCH_COOKIE = "pd_branch";
 
-export type MockSession = DemoAccountRecord & { clinicId: string; patientIds: Set<string>; readOnly: boolean };
+export type MockSession = DemoAccountRecord & { clinicId: string; patientIds: Set<string>; readOnly: boolean; mustChangePassword: boolean };
 
 /** MSW runs handlers in the page, so the cookies the session store wrote are readable. Tests stub `document`. */
 function cookie(name: string): string | undefined {
@@ -39,7 +39,8 @@ export function sessionOf(request: Request): MockSession | undefined {
   selectTenant(found.clinicId);
   const { account, clinicId } = found;
   const children = account.guardianId ? childrenOf(db, account.guardianId) : [];
-  return { ...account, clinicId, patientIds: new Set(children.map((p) => p.id)), readOnly: suspended };
+  const mustChangePassword = !!credentialOf(db, account.staffId)?.mustChange;
+  return { ...account, clinicId, patientIds: new Set(children.map((p) => p.id)), readOnly: suspended, mustChangePassword };
 }
 
 /** The branches this caller may work at: the Owner every open one, staff their assignments, parents every open one. */
@@ -92,10 +93,25 @@ const via =
 const RULES: Rule[] = [
   // Reference data: not personal data, so not audited
   { method: "GET", path: "/clinic", permission: "clinic.view" },
+  { method: "GET", path: "/clinic/logo", permission: "clinic.view" }, // parents too: the portal shows the clinic's logo
+  { method: "GET", path: "/branches", permission: "clinic.view" }, // archived ones too: old receipts name their branch
   { method: "GET", path: "/staff", permission: "clinic.view" },
   { method: "GET", path: "/chairs", permission: "clinic.view" },
   { method: "GET", path: "/procedures", permission: "clinic.view" },
   { method: "GET", path: "/note-templates", permission: "clinic.view" },
+  // Owner settings (decision #11): the account, its branding, branches and staff logins
+  { method: "GET", path: "/clinic/usage", permission: "clinic.manage" },
+  { method: "PUT", path: "/clinic", permission: "clinic.manage" },
+  { method: "PUT", path: "/clinic/branding", permission: "clinic.manage" },
+  { method: "PUT", path: "/clinic/logo", permission: "clinic.manage" },
+  { method: "DELETE", path: "/clinic/logo", permission: "clinic.manage" },
+  { method: "POST", path: "/branches", permission: "clinic.manage" },
+  { method: "PUT", path: "/branches/:id", permission: "clinic.manage" },
+  { method: "POST", path: "/branches/:id/archive", permission: "clinic.manage" },
+  { method: "POST", path: "/branches/:id/reopen", permission: "clinic.manage" },
+  { method: "POST", path: "/staff", permission: "clinic.manage", audit: "Staff login" },
+  { method: "POST", path: "/staff/:id/deactivate", permission: "clinic.manage", audit: "Staff login (deactivated)", action: "update" },
+  { method: "POST", path: "/staff/:id/reactivate", permission: "clinic.manage", audit: "Staff login (reactivated)", action: "update" },
   // Patients
   { method: "GET", path: "/patients", permission: "patients.view", owner: "filtered", audit: "Patient list" },
   { method: "GET", path: "/patient-summaries", permission: "patients.view", owner: "filtered", audit: "Patient list" },
@@ -254,6 +270,9 @@ export const accessGate = http.all(url("/*"), ({ request }) => {
 
   const session = sessionOf(request);
   if (!session) return deny(401, "Sign in to continue");
+  // A login the Owner just made works only after its person picks their own password (decision #21). /auth/* is
+  // outside this gate, so POST /auth/password still answers.
+  if (session.mustChangePassword) return deny(403, "Choose your own password to continue");
 
   const hit = RULES.filter((r) => r.method === request.method)
     .map((rule) => ({ rule, params: match(rule.path, path) }))

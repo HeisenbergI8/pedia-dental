@@ -1,4 +1,4 @@
-import { PrimolarLogo } from "@/components/brand";
+import { ClinicLogo } from "@/features/clinic/components/clinic-logo";
 import { cn } from "@/lib/utils";
 import type { DocBlock, DocContent } from "../content";
 
@@ -7,7 +7,8 @@ export function DocumentPreview({ content }: { content: DocContent }) {
   return (
     <article aria-label={`Preview of the ${content.title.toLowerCase()}`} className="mx-auto w-full max-w-2xl space-y-4 rounded-xl border border-line bg-surface p-5 text-sm shadow-card sm:p-8">
       <header className="space-y-0.5 border-b-2 border-brand-ring pb-3">
-        <PrimolarLogo className="mb-2 w-36" />
+        <ClinicLogo className="mb-1 w-36" />
+        <p className="text-xs text-ink-muted">{content.letterhead.branchLine}</p>
         <h3 className="font-semibold tracking-wide uppercase">{content.title}</h3>
         <p className="text-ink-muted">{content.subtitle}</p>
       </header>

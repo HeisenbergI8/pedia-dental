@@ -37,3 +37,4 @@ export * from "./domain/permissions";
 export * from "./domain/pin";
 export * from "./domain/photos";
 export * from "./domain/tenancy";
+export * from "./domain/branding";

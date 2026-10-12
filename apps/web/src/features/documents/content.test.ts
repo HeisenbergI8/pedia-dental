@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { DocumentType, formatPeso, pesos, type GenerateDocumentInput } from "@pedia/shared";
+import { DEFAULT_BRAND_COLOR, DEFAULT_OPENING_HOURS, DocumentType, deriveBrandPalette, formatPeso, pesos, type GenerateDocumentInput } from "@pedia/shared";
 import { formatDate } from "@/lib/format";
 import { buildDocument, type DocSources } from "./content";
 import { initialDraft } from "./components/documents-tab";
 
 const at = "2026-09-30T02:00:00.000Z";
+const branch = (id: string, name: string) => ({ id, clinicId: "c", name, address: `1 Main St, ${name}`, phone: "(046) 000 0000", openingHours: DEFAULT_OPENING_HOURS, archived: false });
 const src: DocSources = {
   clinicName: "Bulilit Smiles Pediatric Dental",
+  letterhead: { clinicName: "Bulilit Smiles Pediatric Dental", branchLine: "1 Main St, Imus · (046) 000 0000", logoUrl: null, ring: deriveBrandPalette(DEFAULT_BRAND_COLOR).light["brand-ring"] },
+  branches: [branch("b", "Imus"), branch("branch_dasma", "Dasmariñas")],
   patient: {
     id: "p1", clinicId: "c", patientNo: "KS-00001", firstName: "Bea", lastName: "Mendoza", birthDate: "2020-07-02", sex: "female", address: "12 Mabini St, Imus",
     guardians: [{ id: "g1", fullName: "Rosa Mendoza", relationship: "Mother", phone: "09171234567", isPrimary: true }],
@@ -35,6 +38,13 @@ describe("document content", () => {
     for (const expected of ["Bea Mendoza", formatDate("2026-09-30"), "Fluoride application", "Rosa Mendoza", "Dr. Ana Reyes", "PRC Lic. No. 0045821"]) {
       expect(t).toContain(expected);
     }
+  });
+
+  it("heads a receipt with the branch the payment was taken for, other documents with the device's (decision #51)", () => {
+    const dasmaPayment = { ...src.payments[0]!, branchId: "branch_dasma" };
+    const receipt = buildDocument({ type: "receipt", sourceId: dasmaPayment.id, issuedBy: "staff_cruz" }, { ...src, payments: [dasmaPayment] });
+    expect(receipt.letterhead.branchLine).toContain("Dasmariñas");
+    expect(buildDocument({ type: "dental_certificate", sourceId: "v1", issuedBy: "staff_reyes" }, src).letterhead.branchLine).toContain("Imus");
   });
 
   it("fills a receipt from the payment", () => {

@@ -2,7 +2,7 @@
 import type { ReactNode } from "react";
 import { format, parseISO } from "date-fns";
 import { PlusIcon, TriangleAlertIcon, XIcon } from "lucide-react";
-import { ConsentScope, DENTIST_SIGNED, FORMULARY, holdsRole, NOTE_MESSAGES, findDrug, formatPeso, type DocumentType, type PrescriptionItem, isMoneyIn } from "@pedia/shared";
+import { ConsentScope, DENTIST_SIGNED, FORMULARY, holdsRole, isActiveStaff, NOTE_MESSAGES, findDrug, formatPeso, type DocumentType, type PrescriptionItem, isMoneyIn } from "@pedia/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -62,7 +62,8 @@ function Pick({ id, value, options, onChange, placeholder, error }: { id: string
 export function DocumentOptions({ type, src, draft, errors, onChange }: { type: DocumentType; src: DocSources; draft: Draft; errors: Record<string, string>; onChange: (d: Draft) => void }) {
   const set = (patch: Partial<Draft>) => onChange({ ...draft, ...patch });
   const detail = (key: string, value: string) => set({ details: { ...draft.details, [key]: value } });
-  const issuers = src.staff.filter((s) => !DENTIST_SIGNED.includes(type) || holdsRole(s, "dentist"));
+  // Active staff, plus the draft's issuer even if since deactivated: re-issuing an old document still shows who signed it.
+  const issuers = src.staff.filter((s) => (isActiveStaff(s) || s.id === draft.issuedBy) && (!DENTIST_SIGNED.includes(type) || holdsRole(s, "dentist")));
   const sources = sourceOptions(type, src);
   const open = src.plan.filter((i) => i.status === "planned" || i.status === "in_progress");
   const planned = [...new Set(open.map((i) => i.procedureCode))].map((code) => ({ value: code, label: src.procedures.find((p) => p.code === code)?.name ?? code }));

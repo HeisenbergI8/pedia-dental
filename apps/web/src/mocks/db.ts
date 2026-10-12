@@ -20,6 +20,7 @@ import type {
   PlanItem,
   Procedure,
   StaffMember,
+  StaffCredential,
   StaffPin,
   Visit,
 } from "@pedia/shared";
@@ -54,6 +55,7 @@ export type Db = {
   appointmentRequests: AppointmentRequest[]; // from the parent portal; staff mark them handled
   auditEvents: AuditEvent[]; // who touched which personal data (RA 10173); append-only, written by mocks/access.ts
   staffPins: StaffPin[]; // each staff member's own PIN for switching user on a shared device; never served
+  staffCredentials: StaffCredential[]; // passwords of logins the Owner added or that changed theirs; never served
 };
 
 /** Everything the fake backend stores: the clinic accounts (what the operator sees) and each account's own Db. */
@@ -64,8 +66,8 @@ export const seedPlatform = (): Platform => ({
   tenants: { [DEMO_ACCOUNT.id]: seed(), [NGITI_ACCOUNT.id]: seedNgiti() },
 });
 
-// v24: one store per clinic account (Primolar tenancy): the demo clinic with two branches, plus a second account.
-const KEY = "pedia-dental:mock-db:v24";
+// v25: Owner settings and branding: brand colours and logos on both accounts, Ngiti at its 5-login limit, credentials.
+const KEY = "pedia-dental:mock-db:v25";
 
 function load(): Platform {
   if (typeof window === "undefined") return seedPlatform();
@@ -99,6 +101,9 @@ export function selectTenant(id: string): Db | undefined {
 /** Stamped on every new record. Replaces the hard-coded CLINIC_ID. */
 export const currentClinicId = () => clinicId;
 export const accountById = (id: string): ClinicAccount | undefined => platform.accounts.find((a) => a.id === id);
+/** A staff login's own password, when it has one. Seeded logins have none and sign in with the demo password. */
+export const credentialOf = (tenant: Db, staffId: string | undefined): StaffCredential | undefined =>
+  staffId ? tenant.staffCredentials.find((c) => c.staffId === staffId) : undefined;
 export const currentAccount = (): ClinicAccount => accountById(clinicId)!;
 
 export function persist() {

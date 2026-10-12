@@ -9,6 +9,7 @@ import {
   formatPeso,
   invoiceBalance,
   invoiceTotal,
+  isActiveStaff,
   unbilledItems,
   type Invoice,
   type Payment,
@@ -18,6 +19,8 @@ import { activeBranch } from "@/mocks/access";
 import { currentClinicId, db, persist } from "@/mocks/db";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
+/** New money is received by someone who works here now; old records keep a deactivated name (decision #23). */
+const isActiveStaffId = (id: string) => db.staff.some((s) => s.id === id && isActiveStaff(s));
 const byReceived = (a: Payment, b: Payment) => a.receivedAt.localeCompare(b.receivedAt);
 /** AR for money received, CR for a deposit applied to an invoice. Counted per prefix, so neither sequence skips. */
 const nextNo = (prefix: "AR" | "CR") =>
@@ -105,7 +108,7 @@ export const billingHandlers = [
     if (!invoice) return new HttpResponse("Invoice not found", { status: 404 });
     const parsed = RecordPaymentInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
-    if (!db.staff.some((s) => s.id === parsed.data.receivedBy)) return new HttpResponse("Unknown staff member", { status: 400 });
+    if (!isActiveStaffId(parsed.data.receivedBy)) return new HttpResponse("Choose someone who works here now", { status: 400 });
 
     const balance = invoiceBalance(invoice, db.payments);
     // Real money on this invoice: an applied deposit goes back through apply-credit, not as a cash refund.
@@ -134,7 +137,7 @@ export const billingHandlers = [
     if (!db.patients.some((p) => p.id === patientId)) return new HttpResponse("Patient not found", { status: 404 });
     const parsed = RecordPaymentInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
-    if (!db.staff.some((s) => s.id === parsed.data.receivedBy)) return new HttpResponse("Unknown staff member", { status: 400 });
+    if (!isActiveStaffId(parsed.data.receivedBy)) return new HttpResponse("Choose someone who works here now", { status: 400 });
     const held = depositBalance(db.payments, patientId);
     if (-parsed.data.amount > held) return new HttpResponse(`A refund can't be more than the ${formatPeso(held)} deposit`, { status: 409 });
     const branchId = activeBranch(request).id; // handed over at this branch
@@ -150,7 +153,7 @@ export const billingHandlers = [
     if (!invoice) return new HttpResponse("Invoice not found", { status: 404 });
     const parsed = ApplyCreditInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
-    if (!db.staff.some((s) => s.id === parsed.data.receivedBy)) return new HttpResponse("Unknown staff member", { status: 400 });
+    if (!isActiveStaffId(parsed.data.receivedBy)) return new HttpResponse("Choose someone who works here now", { status: 400 });
     const { amount, receivedBy } = parsed.data;
     const held = depositBalance(db.payments, invoice.patientId);
     const balance = invoiceBalance(invoice, db.payments);

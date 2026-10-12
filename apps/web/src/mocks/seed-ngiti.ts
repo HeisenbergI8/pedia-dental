@@ -19,6 +19,8 @@ export const NGITI_ACCOUNT: ClinicAccount = {
   tin: "234-567-890-000",
   tier: "small",
   status: "active",
+  brandColor: "#1e5fb4", // blue, 6.3:1 on white
+  logoRef: "demo/ngiti-logo.svg",
 };
 
 const BRANCH: Branch = {
@@ -31,13 +33,24 @@ const BRANCH: Branch = {
   archived: false,
 };
 
-/** Dr. Ana Reyes also works here, as her own login with the same email: that is what shows the clinic chooser. */
+/**
+ * Dr. Ana Reyes also works here, as her own login with the same email: that is what shows the clinic chooser.
+ * Five logins, the Owner included: exactly Small's limit (decision #5), so adding a sixth is refused on the first try.
+ */
 const STAFF: StaffMember[] = [
   { id: "ngiti_staff_lim", clinicId: NGITI_ID, fullName: "Dr. Bea Lim", role: "dentist", licenseNo: "0062214", isOwner: true, branchIds: [BRANCH.id] },
   { id: "ngiti_staff_reyes", clinicId: NGITI_ID, fullName: "Dr. Ana Reyes", role: "dentist", licenseNo: "0045821", branchIds: [BRANCH.id] },
   { id: "ngiti_staff_tan", clinicId: NGITI_ID, fullName: "Joy Tan", role: "front_desk", branchIds: [BRANCH.id] },
+  { id: "ngiti_staff_bautista", clinicId: NGITI_ID, fullName: "Dr. Rico Bautista", role: "dentist", licenseNo: "0058812", branchIds: [BRANCH.id] },
+  { id: "ngiti_staff_dizon", clinicId: NGITI_ID, fullName: "Mae Dizon", role: "front_desk", branchIds: [BRANCH.id] },
 ];
-const PINS: Record<string, string> = { ngiti_staff_lim: "4826", ngiti_staff_reyes: "3691", ngiti_staff_tan: "5173" };
+const PINS: Record<string, string> = {
+  ngiti_staff_lim: "4826",
+  ngiti_staff_reyes: "3691",
+  ngiti_staff_tan: "5173",
+  ngiti_staff_bautista: "2958",
+  ngiti_staff_dizon: "6407",
+};
 
 export function seedNgiti(): Db {
   faker.seed(7); // its own sequence: the demo clinic's records never shift because of this account
@@ -86,5 +99,6 @@ export function seedNgiti(): Db {
     appointmentRequests: [],
     auditEvents: [],
     staffPins: STAFF.map((s) => ({ clinicId: NGITI_ID, staffId: s.id, pin: PINS[s.id]!, failedAt: [] })),
+    staffCredentials: [],
   };
 }

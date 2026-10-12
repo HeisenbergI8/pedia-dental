@@ -1,12 +1,11 @@
 import { Document, Font, Image, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
 import type { DocBlock, DocContent } from "../content";
 
-/** react-pdf can't read CSS variables: these mirror --color-ink, --color-ink-muted, --color-line, --color-line-strong, --color-brand-ring. */
+/** react-pdf can't read CSS variables: these mirror --color-ink, --color-ink-muted, --color-line, --color-line-strong. The brand ring comes from the clinic (letterhead.ring). */
 const INK = "#111c1e";
 const MUTED = "#56656a";
 const LINE = "#ecebe6";
 const LINE_STRONG = "#d9d8d1";
-const BRAND_RING = "#dcd3f4";
 
 // Helvetica has no ₱ glyph; Noto Sans does (public/fonts, plan Q2).
 Font.register({ family: "Noto Sans", fonts: [{ src: "/fonts/NotoSans-Regular.ttf" }, { src: "/fonts/NotoSans-Bold.ttf", fontWeight: 700 }] });
@@ -14,8 +13,9 @@ Font.registerHyphenationCallback((word) => [word]); // never hyphenate a child's
 
 const s = StyleSheet.create({
   page: { fontFamily: "Noto Sans", fontSize: 10, lineHeight: 1.45, color: INK, padding: 48, paddingBottom: 64 },
-  header: { borderBottomWidth: 2, borderBottomColor: BRAND_RING, paddingBottom: 8, marginBottom: 16 },
-  logo: { width: 150, marginBottom: 6 },
+  header: { borderBottomWidth: 2, paddingBottom: 8, marginBottom: 16 },
+  logo: { maxWidth: 180, maxHeight: 48, objectFit: "contain", marginBottom: 4 },
+  clinic: { fontSize: 14, fontWeight: 700, marginBottom: 2 },
   title: { fontSize: 12, fontWeight: 700, marginTop: 4, textTransform: "uppercase" },
   muted: { color: MUTED },
   block: { marginBottom: 12 },
@@ -77,14 +77,16 @@ function Block({ block }: { block: DocBlock }) {
 }
 
 /** The PDF for any document. Returns the <Document> element so pdf() gets the type it expects. */
-export function documentPdf(content: DocContent) {
+export function documentPdf(content: DocContent, logo?: string) {
+  const { letterhead } = content;
   return (
     <Document title={content.title} author={content.clinicName} creator={content.clinicName}>
       <Page size="A4" style={s.page}>
-        <View style={s.header}>
+        <View style={[s.header, { borderBottomColor: letterhead.ring }]}>
           {/* The logo carries the clinic's name; alt text isn't supported, the document metadata names it. */}
           {/* eslint-disable-next-line jsx-a11y/alt-text */}
-          <Image src="/brand/primolar-logo.png" style={s.logo} />
+          {logo ? <Image src={logo} style={s.logo} /> : <Text style={s.clinic}>{letterhead.clinicName}</Text>}
+          <Text style={s.muted}>{letterhead.branchLine}</Text>
           <Text style={s.title}>{content.title}</Text>
           <Text style={s.muted}>{content.subtitle}</Text>
         </View>

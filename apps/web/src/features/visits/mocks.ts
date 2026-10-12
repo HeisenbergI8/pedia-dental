@@ -1,6 +1,6 @@
 import { http, HttpResponse, delay } from "msw";
 import { format } from "date-fns";
-import { StartVisitInput, holdsRole, type Visit } from "@pedia/shared";
+import { StartVisitInput, holdsRole, isActiveStaff, type Visit } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { currentClinicId, db, persist } from "@/mocks/db";
 
@@ -22,7 +22,7 @@ export const visitHandlers = [
     }
     const parsed = StartVisitInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
-    if (!db.staff.some((s) => s.id === parsed.data.dentistId && holdsRole(s, "dentist"))) {
+    if (!db.staff.some((s) => s.id === parsed.data.dentistId && holdsRole(s, "dentist") && isActiveStaff(s))) {
       return new HttpResponse("Unknown dentist", { status: 400 });
     }
     if (db.visits.some((v) => v.patientId === params.id && v.status === "in_progress")) {

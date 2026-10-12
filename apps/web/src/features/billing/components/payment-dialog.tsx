@@ -1,7 +1,7 @@
 "use client";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { MONEY_METHODS, PaymentMethod, RecordPaymentInput, formatPeso, invoiceBalance, invoiceTotal, pesos, type Invoice, type Payment } from "@pedia/shared";
+import { MONEY_METHODS, PaymentMethod, RecordPaymentInput, formatPeso, invoiceBalance, isActiveStaff, invoiceTotal, pesos, type Invoice, type Payment } from "@pedia/shared";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -117,7 +117,7 @@ export function PaymentDialog({ target, payments, onClose }: { target: PaymentTa
             <Select value={by} onValueChange={setReceivedBy}>
               <SelectTrigger id="pay-receivedBy" className="w-full"><SelectValue placeholder="Choose" /></SelectTrigger>
               <SelectContent>
-                {staff.map((s) => <SelectItem key={s.id} value={s.id}>{s.fullName}</SelectItem>)}
+                {staff.filter(isActiveStaff).map((s) => <SelectItem key={s.id} value={s.id}>{s.fullName}</SelectItem>)}
               </SelectContent>
             </Select>
             {fieldError("receivedBy")}

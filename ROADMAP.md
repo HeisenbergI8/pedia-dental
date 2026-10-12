@@ -451,7 +451,8 @@ suspended account's staff are refused at sign-in.
 
 ## Chunk 20: Owner settings and clinic branding (24 h) — feature 16, part 2 · Large
 
-**Plan:** `.claude/plans/feature-primolar-branding-plan/` (to be written)
+**Plan:** `.claude/plans/feature-primolar-branding-plan/`
+**Status:** built 2026-10-12
 
 - Owner settings: clinic profile; branches (add, edit, archive, never the last one); staff (add with
   role and branches, temporary password, deactivate); tier and usage panel.

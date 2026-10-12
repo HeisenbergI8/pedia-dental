@@ -1,11 +1,11 @@
-import { useId } from "react";
+import { useId, type ReactNode } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 /*
  * The Primolar mark: a P whose counter is a molar, with a smile on its crown. The bowl curls back
  * without closing, so the tooth's root runs out between the stem and the curl. Drawn once here, in
- * the artwork's own units; icon.svg, the app icons and primolar-logo.png (the PDF) are cut from it.
+ * the artwork's own units; icon.svg, the app icons and the PNG in public/brand are cut from it.
  */
 const MARK_P =
   "M123 143H300A161 161 0 0 1 300 465H276A39 39 0 0 1 276 387C330 387 379 350 379 300C379 262 360 239 335 239" +
@@ -175,11 +175,14 @@ export function Loading({ label = "Loading", compact, rows = 3, className }: { l
   );
 }
 
-/** A whole page or area on its way (navigation, route loading): the animated mark. */
-export function PageLoading({ label = "Opening" }: { label?: string }) {
+/**
+ * A whole page or area on its way (navigation, route loading): an animated mark. Inside a clinic's app it is the
+ * clinic's (`ClinicPageLoading`, decision #52); Primolar's own mark is the default for screens before sign-in.
+ */
+export function PageLoading({ label = "Opening", mark }: { label?: string; mark?: ReactNode }) {
   return (
     <div role="status" aria-live="polite" className="pm-fade-in flex flex-col items-center gap-3 py-16 text-center">
-      <PrimolarMark animated className="size-14" />
+      {mark ?? <PrimolarMark animated className="size-14" />}
       <p className="text-sm text-ink-muted">{label}</p>
     </div>
   );
@@ -194,10 +197,18 @@ export function LoadingScreen({ label = "Getting things ready" }: { label?: stri
         <div aria-hidden>
           {/* Sized to the name's former text-4xl / sm:text-5xl. */}
           <PrimolarName className="mx-auto block w-[9.5rem] sm:w-[12.5rem]" />
-          <p className="mt-2 text-xs font-semibold tracking-brand text-ink uppercase">Pediatric Dental Clinic</p>
         </div>
       </div>
       <p className="text-sm text-ink-muted">{label}</p>
     </div>
+  );
+}
+
+/** Decision #32: the only Primolar mark inside a clinic's app. Small and quiet; the clinic's own brand leads. */
+export function PoweredByPrimolar({ className }: { className?: string }) {
+  return (
+    <p className={cn("text-xs text-ink-muted", className)}>
+      Powered by <span className="font-brand font-semibold text-ink">Primolar</span>
+    </p>
   );
 }

@@ -74,8 +74,9 @@ MSW handler (now) or NestJS (later).
 - Palette, type and radius changes go in `apps/web/src/app/globals.css` tokens, never as raw values in
   components.
 - `apps/web/src/design/` holds guards that read source and render primitives: token contrast in both themes, no raw
-  hex outside `globals.css` / `manifest.ts` / `document-pdf.tsx`, no dashed outlines, crayon strip and Fredoka only on
-  login and portal. A failing guard means the system was bypassed. Fix the component, not the guard.
+  hex outside `globals.css` / `manifest.ts` / `document-pdf.tsx` and the two seed files (their stored brand colours
+  are data), no dashed outlines, crayon strip and Fredoka only on login and portal, Primolar's logo only on sign-in
+  (`design-branding.test.ts`). A failing guard means the system was bypassed. Fix the component, not the guard.
 - Tailwind v4's bare `border` is `currentColor`. `globals.css` restores `line` as the default, so a darker edge is
   always named (`border-input`, `border-alert-line`).
 
@@ -91,6 +92,11 @@ MSW handler (now) or NestJS (later).
   signed-in account; no account ever sees another's data, and the operator never sees patient records.
 - The clinic's name, hours, address and branding come from its account and branch, never from constants.
 - Tier limits are data, not `if` statements, and are enforced in the handler as well as the UI.
+- A clinic's brand colour is checked and derived in `domain/branding.ts` (`brandColorProblem`, `deriveBrandPalette`)
+  and applied only by `brandCss` (`features/clinic/brand-css.ts`). Never colour a component from
+  `account.brandColor`; use the brand tokens. Two exceptions, both because CSS variables can't reach them: the PDF
+  letterhead's ring (react-pdf) and the branding form's preview of a colour not yet saved. The clinic's logo comes from `ClinicContext.logoUrl` through
+  `ClinicLogo`. Primolar's wordmark appears only on sign-in, the cold-start loader and `PoweredByPrimolar`.
 - Allergies and alerts must be visible on every patient screen (`PatientHeader`).
 
 ---
@@ -102,7 +108,7 @@ MSW handler (now) or NestJS (later).
   and only import `@/mocks/browser` dynamically from `app/providers.tsx`.
 - `NEXT_PUBLIC_*` env vars are inlined at build time. Changing `.env.local` needs a dev-server restart.
 - Mock data lives in `localStorage`. After changing `seed()` or `Db`, bump the key in `mocks/db.ts`
-  or clear storage, or you'll keep seeing old data. The key is `pedia-dental:mock-db:v24`; each bump gets a
+  or clear storage, or you'll keep seeing old data. The key is `pedia-dental:mock-db:v25`; each bump gets a
   one-line comment above it saying why.
 - The mock store is partitioned by clinic account: `Platform = { accounts, tenants }` in `mocks/db.ts`. `db` is a
   live binding to the signed-in account's `Db`, repointed by `sessionOf()` (`selectTenant`). Never cache `db` in a
@@ -115,6 +121,12 @@ MSW handler (now) or NestJS (later).
 - A session holds every role (`SessionUser.roles`, e.g. Admin + Dentist). Check access with `rolesCan(roles, …)` /
   `permissionScopeFor`, and "is a dentist" with `holdsRole(staff, "dentist")`. `roleCan(session.role, …)` and
   `s.role === "dentist"` still compile but ignore a second role.
+- Staff logins the Owner adds have their own password in `Db.staffCredentials` (stored as typed, like PINs); seeded
+  logins have none and use the demo password. A deactivated login (`deactivatedAt`) is dropped by `allAccounts`, so
+  it can't sign in, switch in or be picked, and `worksAt` refuses it. Name lookups still use the full `db.staff`.
+  `GET /staff` serves `email` to the Owner only and `deactivatedAt` to staff only. An email is one login per account,
+  deactivated logins included (`emailTaken`).
+  Owner-settings tests live in `mocks/owner-settings.test.ts`, since they change tiers, staff and branches.
 - Seed shape is asserted by `mocks/seed.test.ts`. New seed patients come from `seedPatient()` after the last faker
   consumer (`seedRoster`). Adding a faker call inside `seedPatient()` re-rolls every later record, so update that
   test's first-patient names deliberately, never to make it pass.
@@ -151,7 +163,7 @@ MSW handler (now) or NestJS (later).
 ## Reporting rules
 
 - **A deferral is not a gap.** Deliberately deferred for the prototype: real authentication (the demo
-  login is a demo control: anyone can sign in as any account with the shown password; the token is the account id; staff PINs are stored as typed and listed in the Switch user dialog's "Demo PINs" hint), the NestJS backend, real SMS/email sending, real file storage, BIR
+  login is a demo control: anyone can sign in as any account with the shown password; the token is the account id; staff PINs and Owner-added passwords are stored as typed and PINs are listed in the Switch user dialog's "Demo PINs" hint), the NestJS backend, real SMS/email sending and staff email invites, real file storage (and sanitising uploaded SVG logos), BIR
   official receipts, and every screen that currently renders `ComingSoon`. Their absence is intentional.
 - **A claim that ages carries the date it was measured.** Any count or "every / all / none" statement
   written into something durable says when it was measured.

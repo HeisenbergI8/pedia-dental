@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Bricolage_Grotesque, Figtree, Fredoka, Outfit } from "next/font/google";
+import { Bricolage_Grotesque, Figtree, Fredoka, Lexend, Nunito, Outfit, Poppins, Quicksand } from "next/font/google";
 import { THEME_SCRIPT } from "@/lib/theme";
 import { Providers } from "./providers";
 import "./globals.css";
@@ -11,10 +11,17 @@ const bricolage = Bricolage_Grotesque({ subsets: ["latin"], axes: ["opsz"], vari
 // The Primolar name in the logo (components/brand.tsx).
 // Variable font, so the logo can use its exact weight (560).
 const outfit = Outfit({ subsets: ["latin"], variable: "--font-outfit" });
+// The Big tier's heading-font shortlist (decision #28), with Outfit and Fredoka above. Never preloaded: a clinic that
+// picks none downloads none. Applied to headings and the clinic name only (decision #30) by brandCss.
+const nunito = Nunito({ subsets: ["latin"], variable: "--font-nunito", preload: false });
+const poppins = Poppins({ subsets: ["latin"], weight: ["600", "700"], variable: "--font-poppins", preload: false });
+const lexend = Lexend({ subsets: ["latin"], variable: "--font-lexend", preload: false });
+const quicksand = Quicksand({ subsets: ["latin"], variable: "--font-quicksand", preload: false });
+const headingFonts = [nunito, poppins, lexend, quicksand].map((f) => f.variable).join(" ");
 
 export const metadata: Metadata = {
-  title: "Primolar Pediatric Dental Clinic",
-  description: "Clinic management for Primolar Pediatric Dental Clinic",
+  title: "Primolar",
+  description: "Clinic management for pediatric dental clinics",
   // The installed app's name on desktop (application-name), alongside the manifest's.
   applicationName: "Primolar",
   // The home-screen label on iOS, which otherwise truncates the full title.
@@ -31,7 +38,7 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, view
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     // suppressHydrationWarning: THEME_SCRIPT sets data-theme before React hydrates, and the server can't know it.
-    <html lang="en" className={`${figtree.variable} ${fredoka.variable} ${bricolage.variable} ${outfit.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${figtree.variable} ${fredoka.variable} ${bricolage.variable} ${outfit.variable} ${headingFonts}`} suppressHydrationWarning>
       <head>
         {/* The saved theme, applied before first paint. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
