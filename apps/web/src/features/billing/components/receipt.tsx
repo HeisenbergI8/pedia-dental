@@ -1,7 +1,7 @@
 "use client";
 import { PrinterIcon } from "lucide-react";
 import { isMoneyIn } from "@pedia/shared";
-import { Loading, PrimoralLogo } from "@/components/brand";
+import { Loading, PrimolarLogo } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { useStaff } from "@/features/clinic/api";
 import { DownloadDocumentButton } from "@/features/documents/components/download-document-button";
@@ -35,7 +35,7 @@ export function Receipt({ patientId, paymentId }: { patientId: string; paymentId
       </div>
       <article className="mx-auto max-w-xl space-y-5 rounded-xl border border-line bg-surface p-6 shadow-card print:max-w-none print:border-0 print:p-0 print:shadow-none">
         <header className="flex flex-col items-center gap-1 border-b-2 border-brand-ring pb-4 text-center">
-          <PrimoralLogo className="mb-2 w-44" />
+          <PrimolarLogo className="mb-2 w-44" />
           <h1 className="text-base font-semibold tracking-wide uppercase">{receipt.title}</h1>
           <p className="text-sm text-ink-muted">{receipt.subtitle}</p>
         </header>

@@ -1,6 +1,6 @@
-# Primoral design system
+# Primolar design system
 
-The rules for how the Primoral clinic app looks and behaves. Tokens live in
+The rules for how the Primolar clinic app looks and behaves. Tokens live in
 `apps/web/src/app/globals.css`, components in `apps/web/src/components/`. **Change the system there, never in
 a screen.** UI_AUDIT.md records why each rule exists.
 
@@ -35,7 +35,7 @@ a new text or chart token adds its pair there.
 | Overlay | `scrim` | Behind dialogs and sheets, never `bg-black`. |
 | **Status** (fg / bg / line) | `success*`, `info*`, `warning*`, `danger*` | Status only, always with an icon and a word |
 | **Clinical alert** | `alert*` | Allergies, conditions and patient alerts **only** |
-| Logo | `logo`, `logo-smile`, `logo-ink` | The Primoral logo, loader and brand strip only. |
+| Logo | `logo`, `logo-smile`, `logo-ink` | The Primolar logo, loader and brand strip only. |
 | Crayons | `crayon-*` | Illustrations and warm tints. **Decoration only.** |
 | Charts | `chart-bar`, `chart-returning` + `chart-new` | `chart-bar` (= brand) for one series. Returning = plum, new = teal; the pair passed the dataviz validator in both themes (2026-10-04) and must differ in lightness by ≥ 1.3:1 (tested). A new series needs a validated token, light and dark. |
 
@@ -50,7 +50,7 @@ a new text or chart token adds its pair there.
   picks a dark colour itself. `dark:` utilities follow the app's choice (not the OS) and never apply in print.
 - **Paper stays white.** Printing always uses the light palette (the dark block is `@media screen`), so receipts print
   white. PDFs draw their own colours and are always white.
-- **The logo follows the theme through its own tokens.** `PrimoralLogo` and `PrimoralMark` (components/brand.tsx) are
+- **The logo follows the theme through its own tokens.** `PrimolarLogo` and `PrimolarMark` (components/brand.tsx) are
   inline SVG coloured by `logo`, `logo-smile` and `logo-ink`; dark lifts the P and lightens the name. No plate.
 - **Constant tokens** (`paper`, `photo-backdrop`) are the same in both themes. Use them only for artwork and photos.
 - **Teeth stay white** with their conventional fills in both themes.
@@ -122,7 +122,7 @@ a new text or chart token adds its pair there.
 | **Dialog** | Forms and confirmations | Full-screen sheet on phones, 85dvh capped at sm+, inner scroll, **sticky footer**. `size="confirm"` for a short question: a bottom sheet with a handle on phones, a small card from sm. |
 | **Segmented** | One choice of a few (calendar view, dentition, side of the mouth, grouping, photo layout) | A `track` with a white pill on the chosen option; buttons with `aria-pressed` in a labelled group. Never tabs (nothing is a tabpanel). |
 | **Loading** | Content inside an open page | A skeleton shaped like the content, fading in after 150 ms. `compact` is one line. |
-| **PageLoading / LoadingScreen** | Page changes / app start and sign-in | The animated Primoral mark (the P bobs, the smile draws itself) |
+| **PageLoading / LoadingScreen** | Page changes / app start and sign-in | The animated Primolar mark (the P bobs, the smile draws itself) |
 | **ErrorState** | Any failed query | Plain words for what failed, plus **Try again** (refetch). `compact` for cards. |
 | **EmptyState** | First use and no results | What's missing and the next step. `tone="quiet"` (staff, default): a brand-tint icon tile and a Bricolage title. `tone="warm"` (portal, success): the hand-drawn badge and Fredoka. |
 | **StatusChip** | Appointment status | Icon + word + tone. Never colour alone. Confirmed = brand tint + ring. Calendar tiles lead with the same status icon. |
