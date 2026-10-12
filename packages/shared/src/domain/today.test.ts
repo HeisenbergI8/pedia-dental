@@ -6,7 +6,7 @@ const today = "2026-10-03"; // Saturday; the week starts Monday 2026-09-28
 const at = (day: string, h = 10) => `${day}T${String(h - 8).padStart(2, "0")}:00:00.000Z`; // h o'clock in Manila
 let n = 0;
 const appt = (patientId: string, status: AppointmentStatus, startsAt = at(today)): Appointment => ({
-  id: `a${++n}`, clinicId: "c", patientId, dentistId: "d1", chairId: "c1", startsAt, durationMin: 30, reason: "Oral examination", status,
+  id: `a${++n}`, clinicId: "c", branchId: "b", patientId, dentistId: "d1", chairId: "c1", startsAt, durationMin: 30, reason: "Oral examination", status,
 });
 const patients = [
   { id: "p1", firstName: "Ana", lastName: "Cruz", birthDate: "2020-10-03" },

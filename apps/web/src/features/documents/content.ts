@@ -1,6 +1,5 @@
 import { format } from "date-fns";
 import {
-  CLINIC_NAME,
   DOCUMENT_TYPE_LABEL,
   NOTE_MESSAGES,
   accountSummary,
@@ -12,7 +11,8 @@ import {
   noteServices,
   planProgress,
   renderMessage,
-  roleCan,
+  rolesCan,
+  rolesOf,
   type ChartEntry,
   type ClinicalNote,
   type ConsentScope,
@@ -40,10 +40,11 @@ export type DocBlock =
   | { kind: "table"; heading?: string; head: string[]; rows: string[][]; foot?: string[]; numeric?: number[] }
   | { kind: "signatures"; lines: { label: string; name?: string; detail?: string }[] };
 
-export type DocContent = { title: string; subtitle: string; blocks: DocBlock[]; footnote?: string; fileName: string };
+export type DocContent = { title: string; subtitle: string; blocks: DocBlock[]; footnote?: string; fileName: string; clinicName: string };
 
 /** Everything a document can draw on: one patient's record plus reference data. */
 export type DocSources = {
+  clinicName: string; // the clinic account's; the branch address on letterheads comes with the branding plan
   patient: PatientView;
   staff: StaffMember[];
   procedures: Procedure[];
@@ -123,6 +124,7 @@ export function buildDocument(choice: GenerateDocumentInput, src: DocSources, no
     subtitle: `Issued ${formatDate(today)}`,
     blocks,
     fileName: `${slug(DOCUMENT_TYPE_LABEL[choice.type])}-${slug(patient.lastName)}-${slug(patient.firstName)}-${today}.pdf`,
+    clinicName: src.clinicName,
     ...extra,
   });
 
@@ -130,7 +132,7 @@ export function buildDocument(choice: GenerateDocumentInput, src: DocSources, no
     case "dental_certificate": {
       const visit = need(src.visits.find((v) => v.id === choice.sourceId), "That visit");
       return doc([
-        { kind: "text", paragraphs: [`This is to certify that ${child}, aged ${age}, was seen and treated at ${CLINIC_NAME} on ${formatDate(visit.date)}.`] },
+        { kind: "text", paragraphs: [`This is to certify that ${child}, aged ${age}, was seen and treated at ${src.clinicName} on ${formatDate(visit.date)}.`] },
         { kind: "rows", rows: [...patientRows, ["Treatment given", list(treatmentsIn(visit.id))]] },
         { kind: "text", paragraphs: [`This certification is issued at the request of ${guardian.fullName} for whatever purpose it may serve.`] },
         { kind: "signatures", lines: [dentistLine] },
@@ -178,7 +180,7 @@ export function buildDocument(choice: GenerateDocumentInput, src: DocSources, no
         { kind: "rows", rows: patientRows },
         medical,
         findings,
-        { kind: "text", paragraphs: [`Thank you for seeing this patient. Please send your findings to ${CLINIC_NAME}.`] },
+        { kind: "text", paragraphs: [`Thank you for seeing this patient. Please send your findings to ${src.clinicName}.`] },
         { kind: "signatures", lines: [dentistLine] },
       ]);
     case "clearance": {
@@ -188,7 +190,7 @@ export function buildDocument(choice: GenerateDocumentInput, src: DocSources, no
           kind: "text",
           paragraphs: [
             `To: ${physician || "Attending physician"}`,
-            `${child} is scheduled for ${procedureName(choice.details?.procedure ?? "").toLowerCase()} at ${CLINIC_NAME}, which may need local anaesthesia. Please assess whether the child is medically fit for this treatment and note any precautions.`,
+            `${child} is scheduled for ${procedureName(choice.details?.procedure ?? "").toLowerCase()} at ${src.clinicName}, which may need local anaesthesia. Please assess whether the child is medically fit for this treatment and note any precautions.`,
           ],
         },
         { kind: "rows", rows: patientRows },
@@ -203,7 +205,7 @@ export function buildDocument(choice: GenerateDocumentInput, src: DocSources, no
       const pending = src.plan.filter((i) => i.status === "planned" || i.status === "in_progress");
       const pendingText = pending.map((i) => `${procedureName(i.procedureCode)}${i.tooth ? ` (tooth ${i.tooth})` : ""}`);
       return doc([
-        { kind: "text", paragraphs: [`This is to certify that ${child}, aged ${age}, was examined at ${CLINIC_NAME} on ${formatDate(visit.date)}.`] },
+        { kind: "text", paragraphs: [`This is to certify that ${child}, aged ${age}, was examined at ${src.clinicName} on ${formatDate(visit.date)}.`] },
         { kind: "rows", rows: [...patientRows, ["Cleared for", choice.details?.purpose ?? ""], ["Dental treatment still planned", list(pendingText)]] },
         {
           kind: "text",
@@ -224,7 +226,7 @@ export function buildDocument(choice: GenerateDocumentInput, src: DocSources, no
       const visit = src.visits.find((v) => v.id === note.visitId);
       return doc([
         { kind: "rows", rows: [["Patient", child], ["Treatment", treatmentOf(note)], ["Date", formatDate(visit?.date ?? today)]] },
-        { kind: "text", heading: "Care instructions", paragraphs: [renderMessage(text.body, messageVars(patient, { dueOn: visit?.date }))] },
+        { kind: "text", heading: "Care instructions", paragraphs: [renderMessage(text.body, messageVars(patient, { clinicName: src.clinicName, dueOn: visit?.date }))] },
         { kind: "signatures", lines: [dentistLine] },
       ]);
     }
@@ -254,7 +256,7 @@ export function buildDocument(choice: GenerateDocumentInput, src: DocSources, no
     }
     case "notes_report": {
       // Guardian contacts (the address) only when the issuer holds patients.contact; names stay (identity).
-      const showContacts = !!issuer && roleCan(issuer.role, "patients.contact");
+      const showContacts = !!issuer && rolesCan(rolesOf(issuer), "patients.contact");
       const reportRows = showContacts ? patientRows : patientRows.filter(([label]) => label !== "Address");
       const signed = src.notes.filter((n) => n.signedAt).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
       const blocks: DocBlock[] = [{ kind: "rows", rows: reportRows }, medical];

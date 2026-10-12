@@ -1,6 +1,8 @@
-# Pediatric Dental Clinic — frontend prototype
+# Primolar — frontend prototype
 
-Clickable prototype of the clinic system. All data is fake and lives in your browser.
+Primolar is clinic management for pediatric dental clinics, sold as a service: each clinic gets its own
+account, branches, staff and branding, on a Small, Mid or Big tier. This is the clickable prototype.
+All data is fake and lives in your browser.
 
 ## Run it
 
@@ -24,6 +26,7 @@ pnpm run check      # typecheck + all tests
 apps/web/           Next.js app (the prototype)
 packages/shared/    Zod schemas, types and domain logic, shared with the future NestJS API
 CONVENTIONS.md      How the code is organised and the rules it follows. Read before adding a feature.
+ROADMAP.md          What each feature does, and the order to build them in.
 ```
 
 ## Moving to a real backend

@@ -1,13 +1,12 @@
 import { format } from "date-fns";
 import { birthdayGreeting, isBirthdayOn, preVisitMessageFor, reminderSendAt, type Appointment, type Message } from "@pedia/shared";
-import { db } from "./db";
+import { currentAccount, currentClinicId, db } from "./db";
 import { composeMessage, type MessageEvent } from "./message-templates";
-import { CLINIC_ID } from "./seed";
 
 /** Feature 5's outbox. Events queue messages here and nothing is ever sent. The calling handler persists. */
 export function queueMessage(e: MessageEvent): Message | undefined {
-  const refs = { templates: db.messageTemplates, patients: db.patients, staff: db.staff };
-  const message = composeMessage(e, refs, { id: crypto.randomUUID(), clinicId: CLINIC_ID, createdAt: new Date().toISOString() });
+  const refs = { templates: db.messageTemplates, patients: db.patients, staff: db.staff, clinicName: currentAccount().name };
+  const message = composeMessage(e, refs, { id: crypto.randomUUID(), clinicId: currentClinicId(), createdAt: new Date().toISOString() });
   if (message) db.messages.push(message);
   return message;
 }

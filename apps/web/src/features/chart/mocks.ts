@@ -1,8 +1,7 @@
 import { http, HttpResponse, delay } from "msw";
 import { CreateChartBatchInput, CreateChartEntryInput, deriveChart, isToothGone, surfacesFor, type ChartEntry } from "@pedia/shared";
 import { env } from "@/lib/env";
-import { db, persist } from "@/mocks/db";
-import { CLINIC_ID } from "@/mocks/seed";
+import { currentClinicId, db, persist } from "@/mocks/db";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 
@@ -48,7 +47,7 @@ export const chartHandlers = [
     const entry: ChartEntry = {
       ...input,
       id: crypto.randomUUID(),
-      clinicId: CLINIC_ID,
+      clinicId: currentClinicId(),
       patientId: String(params.id),
       recordedBy: visit.dentistId,
       recordedAt: new Date().toISOString(),
@@ -79,7 +78,7 @@ export const chartHandlers = [
       ...finding,
       tooth,
       id: crypto.randomUUID(),
-      clinicId: CLINIC_ID,
+      clinicId: currentClinicId(),
       patientId: String(params.id),
       recordedBy: visit.dentistId,
       recordedAt,

@@ -4,14 +4,14 @@ import { toast } from "sonner";
 import Link from "next/link";
 import { addDays, format, parseISO, setHours, startOfDay } from "date-fns";
 import { BellRingIcon } from "lucide-react";
-import { dueBucket, findFreeSlot, nextOpenStart, ruleLabel, type DueBucket, type DueItem } from "@pedia/shared";
+import { dueBucket, findFreeSlot, holdsRole, nextOpenStart, ruleLabel, type DueBucket, type DueItem } from "@pedia/shared";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { SectionCard } from "@/components/section-card";
 import { Button } from "@/components/ui/button";
 import { useAppointments } from "@/features/appointments/api";
 import { AppointmentForm, type AppointmentDraft } from "@/features/appointments/components/appointment-form";
-import { useChairs, useProcedures, useStaff } from "@/features/clinic/api";
+import { useActiveBranch, useBranchChairs, useBranchStaff, useProcedures } from "@/features/clinic/api";
 import { useQueueDueMessage } from "@/features/messages/api";
 import { usePatients } from "@/features/patients/api";
 import { PatientName } from "@/features/patients/components/patient-name";
@@ -38,22 +38,24 @@ export function RecallList() {
   const today = format(new Date(), "yyyy-MM-dd");
   // 30 days of due items plus a 14-day slot search. Strings from `today`, so the query key is stable across renders.
   const booked = useAppointments(startOfDay(parseISO(today)).toISOString(), addDays(parseISO(today), 45).toISOString());
-  const chairs = useChairs().data ?? [];
-  const dentists = (useStaff().data ?? []).filter((s) => s.role === "dentist");
+  const chairs = useBranchChairs().data ?? [];
+  const hours = useActiveBranch()?.openingHours;
+  const dentists = useBranchStaff().filter((s) => holdsRole(s, "dentist")); // only dentists who work at this branch
 
   const procedureName = (code: string) => procedures.find((p) => p.code === code)?.name ?? code;
   /** "Follow-up after extraction" or "6-month recall", worded from the rule (shared with the appointment sheet). */
   const what = (i: DueItem) => ruleLabel(i.ruleId, procedureName) ?? "Recall";
 
   function book(i: DueItem) {
+    if (!hours) return; // the button only shows once the page has loaded; this keeps the types honest
     const visitCode = i.kind === "follow_up" ? "follow_up" : "oral_exam";
     const durationMin = procedures.find((p) => p.code === visitCode)?.defaultDurationMin ?? 30;
     // 9 AM on the due day, never in the past, never outside clinic hours or on a closed day.
     const due = setHours(parseISO(i.dueOn), 9);
-    const from = nextOpenStart(due < new Date() ? new Date() : due, durationMin);
+    const from = nextOpenStart(due < new Date() ? new Date() : due, hours, durationMin);
     // The child's dentist from the visit that made this due; any dentist if that's unknown.
     const dentistId = i.dentistId ?? dentists[0]?.id;
-    const slot = dentistId && booked.data ? findFreeSlot({ from, durationMin, dentistId, chairIds: chairs.map((c) => c.id) }, booked.data) : undefined;
+    const slot = dentistId && booked.data ? findFreeSlot({ from, durationMin, dentistId, chairIds: chairs.map((c) => c.id), hours }, booked.data) : undefined;
     setDraft({
       patientId: i.patientId,
       reason: what(i),

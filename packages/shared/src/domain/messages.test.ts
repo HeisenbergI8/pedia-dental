@@ -8,13 +8,17 @@ const startsAt = new Date(2030, 0, 8, 10, 30).toISOString(); // Tue Jan 8 2030, 
 describe("parent messages", () => {
   it("fills the child's name, date and time for a booking", () => {
     const body = "Hi {guardian_name}, {child_first_name} is booked {date} at {time} with {dentist_name}.";
-    expect(renderMessage(body, messageVars(bea, { startsAt, dentistName: "Dr. Ana Reyes" }))).toBe(
+    expect(renderMessage(body, messageVars(bea, { clinicName: "Bulilit Smiles", startsAt, dentistName: "Dr. Ana Reyes" }))).toBe(
       "Hi Rosa Mendoza, Bea is booked Tue, Jan 8 at 10:30 AM with Dr. Ana Reyes.",
     );
   });
 
+  it("names the clinic account it is given", () => {
+    expect(renderMessage("See you at {clinic_name}", messageVars(bea, { clinicName: "Ngiti Kids Dental" }))).toBe("See you at Ngiti Kids Dental");
+  });
+
   it("leaves a placeholder with no value visible, rather than dropping it", () => {
-    expect(renderMessage("{child_first_name} is due {date} at {time}", messageVars(bea, { dueOn: "2030-01-08" }))).toBe(
+    expect(renderMessage("{child_first_name} is due {date} at {time}", messageVars(bea, { clinicName: "Bulilit Smiles", dueOn: "2030-01-08" }))).toBe(
       "Bea is due Tue, Jan 8 at {time}",
     );
   });

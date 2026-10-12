@@ -8,6 +8,7 @@ import { SectionCard } from "@/components/section-card";
 import { MetaLine } from "@/components/meta-line";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useActiveBranch } from "@/features/clinic/api";
 import { usePatients } from "@/features/patients/api";
 import { PatientName } from "@/features/patients/components/patient-name";
 import { TIME_OF_DAY_LABEL, useMarkRequestHandled, usePendingRequests } from "../api";
@@ -20,6 +21,7 @@ export function AppointmentRequests({ look = "strip" }: { look?: "strip" | "card
   const patients = patientsQuery.data ?? [];
   const handled = useMarkRequestHandled();
   const [draft, setDraft] = useState<AppointmentDraft | null>(null);
+  const hours = useActiveBranch()?.openingHours;
   if (requests.length === 0) return null;
 
   return (
@@ -46,7 +48,7 @@ export function AppointmentRequests({ look = "strip" }: { look?: "strip" | "card
                   {r.note && <p className="mt-0.5 text-sm text-ink">“{r.note}”</p>}
                 </div>
                 <span className="flex gap-2">
-                  <Button size="sm" onClick={() => setDraft({ patientId: r.patientId, reason: r.reason, start: nextOpenStart(start < new Date() ? new Date() : start) })}>
+                  <Button size="sm" onClick={() => setDraft({ patientId: r.patientId, reason: r.reason, start: hours ? nextOpenStart(start < new Date() ? new Date() : start, hours) : start })}>
                     Book
                   </Button>
                   <Button

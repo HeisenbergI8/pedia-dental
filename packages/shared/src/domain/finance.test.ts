@@ -5,13 +5,13 @@ import { financeSummary } from "./finance";
 import { pesos } from "./money";
 
 const local = (m: number, d: number, h = 10) => new Date(2026, m - 1, d, h).toISOString();
-const base = { clinicId: "c", receiptNo: "AR-000001", receivedBy: "staff_cruz" };
+const base = { clinicId: "c", branchId: "b", receiptNo: "AR-000001", receivedBy: "staff_cruz" };
 const invoices: Invoice[] = [
-  { id: "A", clinicId: "c", patientId: "p1", appointmentId: "a1", issuedAt: local(10, 1), discount: pesos(100), lines: [
+  { id: "A", clinicId: "c", branchId: "b", patientId: "p1", appointmentId: "a1", issuedAt: local(10, 1), discount: pesos(100), lines: [
     { procedureCode: "restoration", description: "Restoration", amount: pesos(2000) },
     { procedureCode: "fluoride", description: "Fluoride", amount: pesos(900) },
   ] },
-  { id: "B", clinicId: "c", patientId: "p2", appointmentId: "a2", issuedAt: local(9, 20), discount: 0, lines: [{ procedureCode: "oral_exam", description: "Exam", amount: pesos(500) }] },
+  { id: "B", clinicId: "c", branchId: "b", patientId: "p2", appointmentId: "a2", issuedAt: local(9, 20), discount: 0, lines: [{ procedureCode: "oral_exam", description: "Exam", amount: pesos(500) }] },
 ];
 const payments: Payment[] = [
   { ...base, id: "1", patientId: "p1", invoiceId: "A", amount: pesos(1000), method: "cash", receivedAt: local(10, 3) },

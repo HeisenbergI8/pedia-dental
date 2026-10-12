@@ -14,14 +14,35 @@ import {
   type Payment,
 } from "@pedia/shared";
 import { env } from "@/lib/env";
-import { db, persist } from "@/mocks/db";
-import { CLINIC_ID } from "@/mocks/seed";
+import { activeBranch } from "@/mocks/access";
+import { currentClinicId, db, persist } from "@/mocks/db";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 const byReceived = (a: Payment, b: Payment) => a.receivedAt.localeCompare(b.receivedAt);
 /** AR for money received, CR for a deposit applied to an invoice. Counted per prefix, so neither sequence skips. */
 const nextNo = (prefix: "AR" | "CR") =>
   `${prefix}-${String(db.payments.filter((p) => p.receiptNo.startsWith(prefix)).length + 1).padStart(6, "0")}`;
+
+/**
+ * Where moving `amount` of deposit onto (+) or off (−) this invoice lands on the deposit side, per branch, so each
+ * branch's "deposits held" stays true. Drawing takes the invoice's own branch's deposits first, then the others';
+ * returning puts money back on the branches it was drawn from for this invoice. Rows are [branchId, signed amount].
+ */
+function depositSide(invoice: Invoice, amount: number): [string, number][] {
+  const mine = db.payments.filter((p) => p.patientId === invoice.patientId && !p.invoiceId);
+  const sumBy = (rows: Payment[]) => rows.reduce((m, p) => m.set(p.branchId, (m.get(p.branchId) ?? 0) + p.amount), new Map<string, number>());
+  // Drawing: what each branch holds. Returning: what each branch gave this invoice (drawn rows are negative).
+  const pool = amount > 0 ? sumBy(mine) : new Map([...sumBy(mine.filter((p) => p.appliedTo === invoice.id))].map(([b, n]) => [b, -n]));
+  const order = [invoice.branchId, ...[...pool.keys()].filter((b) => b !== invoice.branchId)];
+  const rows: [string, number][] = [];
+  let left = Math.abs(amount);
+  for (const b of order) {
+    const take = Math.min(left, Math.max(0, pool.get(b) ?? 0));
+    if (take > 0) rows.push([b, amount > 0 ? -take : take]);
+    left -= take;
+  }
+  return rows;
+}
 
 /** API contract for apps/api's BillingController. Balances are computed from payments, never stored. */
 export const billingHandlers = [
@@ -57,7 +78,9 @@ export const billingHandlers = [
     const fromAppointments = new Set(items.map((i) => db.visits.find((v) => v.id === i.completedVisitId)?.appointmentId));
     const appointmentId = fromAppointments.size === 1 ? [...fromAppointments][0] : undefined;
 
-    const invoice: Invoice = { id: crypto.randomUUID(), clinicId: CLINIC_ID, patientId: String(params.id), appointmentId, lines, discount, issuedAt: new Date().toISOString() };
+    // The branch of the visit it bills; billed without an appointment, the branch this device is on.
+    const branchId = db.appointments.find((a) => a.id === appointmentId)?.branchId ?? activeBranch(request).id;
+    const invoice: Invoice = { id: crypto.randomUUID(), clinicId: currentClinicId(), branchId, patientId: String(params.id), appointmentId, lines, discount, issuedAt: new Date().toISOString() };
     db.invoices.push(invoice);
     persist();
     return HttpResponse.json(invoice, { status: 201 });
@@ -68,11 +91,12 @@ export const billingHandlers = [
     return HttpResponse.json(db.payments.filter((p) => p.patientId === params.id).sort(byReceived));
   }),
 
-  // The daily collection list: payments and refunds received on ?date=YYYY-MM-DD (clinic local day).
+  // The daily collection list: the active branch's payments and refunds received on ?date=YYYY-MM-DD (local day).
   http.get(url("/payments"), async ({ request }) => {
     await delay(100);
     const date = new URL(request.url).searchParams.get("date") ?? format(new Date(), "yyyy-MM-dd");
-    const rows = db.payments.filter((p) => format(new Date(p.receivedAt), "yyyy-MM-dd") === date);
+    const branchId = activeBranch(request).id;
+    const rows = db.payments.filter((p) => p.branchId === branchId && format(new Date(p.receivedAt), "yyyy-MM-dd") === date);
     return HttpResponse.json(rows.sort(byReceived));
   }),
 
@@ -92,7 +116,8 @@ export const billingHandlers = [
     const payment: Payment = {
       ...parsed.data,
       id: crypto.randomUUID(),
-      clinicId: CLINIC_ID,
+      clinicId: currentClinicId(),
+      branchId: invoice.branchId, // the money is the invoice's branch's, wherever it is paid
       patientId: invoice.patientId,
       invoiceId: invoice.id,
       receiptNo: nextNo("AR"), // payments are append-only, so this never repeats
@@ -112,7 +137,8 @@ export const billingHandlers = [
     if (!db.staff.some((s) => s.id === parsed.data.receivedBy)) return new HttpResponse("Unknown staff member", { status: 400 });
     const held = depositBalance(db.payments, patientId);
     if (-parsed.data.amount > held) return new HttpResponse(`A refund can't be more than the ${formatPeso(held)} deposit`, { status: 409 });
-    const payment: Payment = { ...parsed.data, id: crypto.randomUUID(), clinicId: CLINIC_ID, patientId, receiptNo: nextNo("AR"), receivedAt: new Date().toISOString() };
+    const branchId = activeBranch(request).id; // handed over at this branch
+    const payment: Payment = { ...parsed.data, id: crypto.randomUUID(), clinicId: currentClinicId(), branchId, patientId, receiptNo: nextNo("AR"), receivedAt: new Date().toISOString() };
     db.payments.push(payment);
     persist();
     return HttpResponse.json(payment, { status: 201 });
@@ -131,10 +157,11 @@ export const billingHandlers = [
     if (amount > held) return new HttpResponse(`Only ${formatPeso(held)} is on deposit`, { status: 409 });
     if (amount > balance) return new HttpResponse(`That's more than the ${formatPeso(balance)} balance`, { status: 409 });
     if (-amount > appliedCredit(invoice.id, db.payments)) return new HttpResponse("That's more than was applied from the deposit", { status: 409 });
-    const base = { clinicId: CLINIC_ID, patientId: invoice.patientId, method: "account_credit" as const, receivedBy, receiptNo: nextNo("CR"), receivedAt: new Date().toISOString() };
-    const onInvoice: Payment = { ...base, id: crypto.randomUUID(), invoiceId: invoice.id, amount, note: amount > 0 ? "Paid from deposit" : "Returned to deposit" };
-    const onDeposit: Payment = { ...base, id: crypto.randomUUID(), appliedTo: invoice.id, amount: -amount };
-    db.payments.push(onInvoice, onDeposit);
+    const base = { clinicId: currentClinicId(), patientId: invoice.patientId, method: "account_credit" as const, receivedBy, receiptNo: nextNo("CR"), receivedAt: new Date().toISOString() };
+    // The invoice side is the invoice's branch's money. The deposit side comes off the branches that hold it.
+    const onInvoice: Payment = { ...base, branchId: invoice.branchId, id: crypto.randomUUID(), invoiceId: invoice.id, amount, note: amount > 0 ? "Paid from deposit" : "Returned to deposit" };
+    const onDeposit = depositSide(invoice, amount).map(([branchId, share]): Payment => ({ ...base, branchId, id: crypto.randomUUID(), appliedTo: invoice.id, amount: share }));
+    db.payments.push(onInvoice, ...onDeposit);
     persist();
     return HttpResponse.json(onInvoice, { status: 201 });
   }),

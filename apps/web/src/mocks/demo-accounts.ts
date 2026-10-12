@@ -1,15 +1,18 @@
 import { startOfDay } from "date-fns";
-import { Role, accountSummary, type Appointment, type DemoAccount, type Guardian, type Patient, type StaffMember } from "@pedia/shared";
-import type { Db } from "./db";
+import { Role, accountSummary, rolesOf, type Appointment, type DemoAccount, type Guardian, type Patient, type StaffMember, type StaffRole } from "@pedia/shared";
+import { accountById, type Db, type Platform } from "./db";
 
 /** Every demo account signs in with this. It is shown on the login screen and protects nothing. */
 export const DEMO_PASSWORD = "pass123";
 
 /** One easy login per role, on fixed seed people. Everyone else keeps a generated address. */
 const STAFF_LOGIN: Record<string, string> = {
+  staff_villanueva: "owner@gmail.com",
   staff_delacruz: "admin@gmail.com",
   staff_reyes: "dentist@gmail.com",
   staff_cruz: "frontdesk@gmail.com",
+  ngiti_staff_reyes: "dentist@gmail.com", // the same person's login at the second clinic: shows the clinic chooser
+  ngiti_staff_lim: "owner@ngiti.demo",
 };
 /** The parent login is the two-children family (seedSibling in seed.ts): the fullest portal to show. */
 const PARENT_LOGIN = { patientId: "patient_sibling", email: "parent@gmail.com" };
@@ -18,16 +21,17 @@ const LOGINS = new Set([...Object.values(STAFF_LOGIN), PARENT_LOGIN.email]);
 /** Matches the portal's "Coming up" list (portal-appointments.tsx). */
 const UPCOMING: Appointment["status"][] = ["booked", "confirmed", "arrived", "in_chair"];
 
-export type DemoAccountRecord = DemoAccount & { staffId?: string; guardianId?: string };
+export type DemoAccountRecord = DemoAccount & { staffId?: string; guardianId?: string; roles: Role[] };
 
-const STAFF_SUMMARY: Record<StaffMember["role"], string> = {
+const STAFF_SUMMARY: Record<StaffRole, string> = {
   admin: "Everything, including the financial dashboard",
   dentist: "Charts, notes and treatment plans",
   front_desk: "Appointments, billing, recalls and messages",
 };
+const OWNER_SUMMARY = "The whole clinic: every branch and every screen";
 
 /** "Dr. Ana Reyes" → "ana.reyes", "Niño Peñaflor" → "nino.penaflor". */
-const handle = (fullName: string) =>
+export const handle = (fullName: string) =>
   fullName
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -36,7 +40,9 @@ const handle = (fullName: string) =>
     .replace(/[^a-z]+/g, ".")
     .replace(/^\.|\.$/g, "");
 
-export const tokenFor = (account: { id: string }) => `demo.${account.id}`;
+/** `demo.<clinic id>.<account id>`. Clinic ids never contain a dot; account ids may (`guardian.<id>`). */
+export const tokenFor = (clinicId: string, account: { id: string }) => `demo.${clinicId}.${account.id}`;
+const TOKEN = /^demo\.([^.]+)\.(.+)$/;
 
 /** The children listing this guardian. Ownership is exactly this, computed on every request. */
 export const childrenOf = (db: Db, guardianId: string): Patient[] =>
@@ -51,11 +57,12 @@ const loginFamily = (db: Db) => {
 
 const staffAccount = (s: StaffMember, pin?: string): DemoAccountRecord => ({
   id: s.id,
-  role: s.role,
+  role: rolesOf(s)[0]!, // the highest role held: Owner for the account's owner
   name: s.fullName,
   email: STAFF_LOGIN[s.id] ?? `${handle(s.fullName)}@pediadental.demo`,
-  summary: STAFF_SUMMARY[s.role],
+  summary: s.isOwner ? OWNER_SUMMARY : STAFF_SUMMARY[s.role],
   staffId: s.id,
+  roles: rolesOf(s),
   pin,
 });
 
@@ -66,6 +73,7 @@ const parentAccount = (db: Db, g: Guardian, summary: string): DemoAccountRecord 
   email: g.id === loginFamily(db)?.id ? PARENT_LOGIN.email : `${handle(g.fullName)}@parent.demo`,
   summary,
   guardianId: g.id,
+  roles: ["parent"],
 });
 
 /** Everyone who can sign in: all staff and every guardian on any patient. */
@@ -74,15 +82,34 @@ export function allAccounts(db: Db): DemoAccountRecord[] {
   return [...db.staff.map((s) => staffAccount(s)), ...[...guardians.values()].map((g) => parentAccount(db, g, ""))];
 }
 
-/** The logins the sign-in page lists, one per role, in role order. */
-export const demoLogins = (db: Db) =>
-  allAccounts(db)
-    .filter((a) => LOGINS.has(a.email))
-    .sort((a, b) => Role.options.indexOf(a.role) - Role.options.indexOf(b.role))
-    .map(({ role, email }) => ({ role, email }));
+/**
+ * The logins the sign-in page lists: one per role from the demo clinic in role order, then the second clinic's Owner,
+ * each with every clinic account its email signs in to (dentist@gmail.com names both, which is the chooser demo).
+ */
+export function demoLogins(platform: Platform) {
+  const names = (email: string) => accountsByEmail(platform, email).map((m) => accountById(m.clinicId)!.name);
+  const seen = new Set<string>();
+  return platform.accounts
+    .flatMap(({ id }) => allAccounts(platform.tenants[id]!).sort((a, b) => Role.options.indexOf(a.role) - Role.options.indexOf(b.role)))
+    .filter((a) => LOGINS.has(a.email) && !seen.has(a.email) && seen.add(a.email))
+    .map(({ role, email }) => ({ role, email, clinics: names(email) }));
+}
 
-export const accountForToken = (db: Db, token: string | undefined) =>
-  token ? allAccounts(db).find((a) => tokenFor(a) === token) : undefined;
+export type AccountMatch = { clinicId: string; account: DemoAccountRecord };
+
+/** Who a token names, and in which clinic account. Undefined for an unknown token or an unknown account. */
+export function accountForToken(platform: Platform, token: string | undefined): AccountMatch | undefined {
+  const [, clinicId, accountId] = token?.match(TOKEN) ?? [];
+  const tenant = clinicId ? platform.tenants[clinicId] : undefined;
+  const account = tenant && allAccounts(tenant).find((a) => a.id === accountId);
+  return account && { clinicId: clinicId!, account };
+}
+
+/** Every login with this email, in every clinic account. Each account keeps its own logins (decision #27). */
+export const accountsByEmail = (platform: Platform, email: string): AccountMatch[] =>
+  platform.accounts.flatMap(({ id }) =>
+    allAccounts(platform.tenants[id]!).filter((a) => a.email === email).map((account) => ({ clinicId: id, account })),
+  );
 
 /**
  * The accounts on the login screen: all staff, then three parents picked by what they demonstrate.

@@ -2,6 +2,7 @@
 import { format, parseISO } from "date-fns";
 import { ChevronDownIcon, StethoscopeIcon } from "lucide-react";
 import { toast } from "sonner";
+import { holdsRole } from "@pedia/shared";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -22,7 +23,7 @@ export function VisitBanner({ patientId }: { patientId: string }) {
   const staff = useStaff();
   const start = useStartVisit(patientId);
   const complete = useCompleteVisit(patientId);
-  const dentists = staff.data?.filter((s) => s.role === "dentist") ?? [];
+  const dentists = staff.data?.filter((s) => holdsRole(s, "dentist")) ?? [];
   const onError = (e: Error) => toast.error(e.message);
   const canWrite = useCan()("clinical.write");
   const myId = useSession()?.user.staffId;

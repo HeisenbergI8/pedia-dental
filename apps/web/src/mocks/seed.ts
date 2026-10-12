@@ -1,6 +1,7 @@
 import { faker } from "@faker-js/faker";
 import { addDays, addMinutes, addMonths, differenceInYears, format, min, parseISO, setHours, startOfDay, startOfWeek, subDays, subMinutes, subMonths, subYears } from "date-fns";
 import {
+  DEFAULT_OPENING_HOURS,
   PERMANENT_TEETH,
   PRIMARY_TEETH,
   MONEY_METHODS,
@@ -13,8 +14,10 @@ import {
   type Appointment,
   type AppointmentRequest,
   type AuditEvent,
+  type Branch,
   type Chair,
   type ChartEntry,
+  type ClinicAccount,
   type ClinicalNote,
   type DueItem,
   type GrowthRecord,
@@ -31,14 +34,43 @@ import type { Db } from "./db";
 import { composeMessage, defaultMessageTemplates, type MessageEvent, type MessageRefs } from "./message-templates";
 import { NOTE_TEMPLATES } from "./note-templates";
 
-export const CLINIC_ID = "clinic_demo";
+/**
+ * The demo clinic account's id, for seed rows only. Handlers stamp `currentClinicId()` (mocks/db.ts), never this:
+ * it is deliberately not exported under this name, so an old `import { CLINIC_ID }` fails the typecheck.
+ */
+const CLINIC_ID = "clinic_demo";
+export const DEMO_CLINIC_ID = CLINIC_ID;
+
+/** Today's demo clinic as one account (decision #33). Mid tier, so its two branches are within its limit. */
+export const DEMO_ACCOUNT: ClinicAccount = {
+  id: CLINIC_ID,
+  name: "Bulilit Smiles Pediatric Dental",
+  contactEmail: "hello@bulilitsmiles.demo",
+  tin: "123-456-789-000",
+  tier: "mid",
+  status: "active",
+};
+
+/**
+ * Imus holds every record seeded before tenancy. Dasmariñas keeps shorter hours (9 AM–5 PM) so the switcher visibly
+ * changes the calendar, and it has no billing, so the finance totals the handler tests assert are Imus's alone.
+ */
+export const IMUS = "branch_imus";
+export const DASMA = "branch_dasma";
+const BRANCHES: Branch[] = [
+  { clinicId: CLINIC_ID, id: IMUS, name: "Imus", address: "12 Nueno Avenue, Imus, Cavite", phone: "(046) 471 2580", openingHours: DEFAULT_OPENING_HOURS, archived: false },
+  { clinicId: CLINIC_ID, id: DASMA, name: "Dasmariñas", address: "4 Aguinaldo Highway, Dasmariñas, Cavite", phone: "(046) 416 1357", openingHours: { opensAt: 9 * 60, closesAt: 17 * 60, closedWeekdays: [0] }, archived: false },
+];
 
 /** Fixed ids, so appointments and visits seeded later can point at them. */
 const STAFF: StaffMember[] = [
-  { id: "staff_reyes", clinicId: CLINIC_ID, fullName: "Dr. Ana Reyes", role: "dentist", licenseNo: "0045821" },
-  { id: "staff_santos", clinicId: CLINIC_ID, fullName: "Dr. Miguel Santos", role: "dentist", licenseNo: "0051377" },
-  { id: "staff_cruz", clinicId: CLINIC_ID, fullName: "Liza Cruz", role: "front_desk" },
-  { id: "staff_delacruz", clinicId: CLINIC_ID, fullName: "Carmen Dela Cruz", role: "admin" },
+  { id: "staff_reyes", clinicId: CLINIC_ID, fullName: "Dr. Ana Reyes", role: "dentist", licenseNo: "0045821", branchIds: [IMUS, DASMA] },
+  { id: "staff_santos", clinicId: CLINIC_ID, fullName: "Dr. Miguel Santos", role: "dentist", licenseNo: "0051377", branchIds: [IMUS] },
+  { id: "staff_cruz", clinicId: CLINIC_ID, fullName: "Liza Cruz", role: "front_desk", branchIds: [IMUS] },
+  // Admin + Dentist at her one branch (decision #45): shows #39 on screen. No seeded appointments, so the seed doesn't move.
+  { id: "staff_delacruz", clinicId: CLINIC_ID, fullName: "Carmen Dela Cruz", role: "admin", alsoRoles: ["dentist"], licenseNo: "0047730", branchIds: [IMUS] },
+  // The Owner treats patients too (decision #12). No seeded appointments, so nothing else in the seed moves.
+  { id: "staff_villanueva", clinicId: CLINIC_ID, fullName: "Dr. Paolo Villanueva", role: "dentist", licenseNo: "0039904", isOwner: true, branchIds: [IMUS, DASMA] },
 ];
 
 /** Each staff member's own demo PIN, shown on the login screen. Different for everyone: there are no shared logins. */
@@ -47,16 +79,19 @@ const STAFF_PINS: Record<string, string> = {
   staff_santos: "1357",
   staff_cruz: "2468",
   staff_delacruz: "1793",
+  staff_villanueva: "8642",
 };
 
-const CHAIRS: Chair[] = ["Chair 1", "Chair 2", "Chair 3"].map((name, i) => ({
+/** Chairs 1–3 are Imus's (every seeded appointment uses them). Chairs 4–5 are Dasmariñas's. */
+const CHAIRS: Chair[] = [IMUS, IMUS, IMUS, DASMA, DASMA].map((branchId, i) => ({
   id: `chair_${i + 1}`,
   clinicId: CLINIC_ID,
-  name,
+  branchId,
+  name: `Chair ${i + 1}`,
 }));
 
 /** Fees reproduce the spec's billing example: 1,200 + 800 + 3 × 2,000 + 500 = ₱8,500. */
-const PROCEDURES: Procedure[] = (
+export const PROCEDURES: Procedure[] = (
   [
     ["oral_exam", "Oral examination", 30, 500, false],
     ["prophylaxis", "Prophylaxis (cleaning)", 30, 1200, false],
@@ -86,7 +121,7 @@ const PROCEDURES: Procedure[] = (
  * Adding a faker call here re-rolls every later record: add new fields at the END of this body, and expect
  * seed.test.ts's "unchanged first patients" check to need its names updated deliberately.
  */
-function seedPatient(): Patient {
+export function seedPatient(): Patient {
   const lastName = faker.person.lastName();
   const sex = faker.helpers.arrayElement(["male", "female"] as const);
   const guardianId = faker.string.uuid();
@@ -214,11 +249,12 @@ export function seed(): Db {
   const messageTemplates = defaultMessageTemplates(CLINIC_ID, new Date().toISOString());
   const family = seedSibling(patients, example.planItems[0]?.patientId);
   // After every other faker consumer, so the records above stay exactly as they were.
-  const roster = seedRoster(billing.payments.length, { templates: messageTemplates, staff: STAFF });
+  const roster = seedRoster(billing.payments.length, { templates: messageTemplates, staff: STAFF, clinicName: DEMO_ACCOUNT.name });
   const allVisits = [...visits, ...roster.visits];
   const allNotes = [...notes, ...example.notes, ...roster.notes];
 
   return {
+    branches: BRANCHES,
     patients: seedProfiles([...patients, ...family.patients, ...roster.patients]),
     staff: STAFF,
     chairs: CHAIRS,
@@ -229,13 +265,13 @@ export function seed(): Db {
     notes: seedExamFindings(allNotes),
     growth: seedGrowth(patients, visits),
     planItems: example.planItems,
-    appointments: [...appointments, ...family.appointments, ...roster.appointments],
+    appointments: [...appointments, ...family.appointments, ...roster.appointments, ...seedDasmarinas(roster.patients)],
     photos: [],
     dueItems: seedDueItems(allVisits, allNotes),
     invoices: [...billing.invoices, ...roster.invoices],
     payments: [...billing.payments, ...roster.payments],
     messageTemplates,
-    messages: [...seedMessages(appointments, { templates: messageTemplates, patients, staff: STAFF }), ...roster.messages],
+    messages: [...seedMessages(appointments, { templates: messageTemplates, patients, staff: STAFF, clinicName: DEMO_ACCOUNT.name }), ...roster.messages],
     documents: [],
     appointmentRequests: roster.requests,
     auditEvents: seedAudit(patients, example.planItems[0]?.patientId),
@@ -260,7 +296,7 @@ const NEW_PATIENT_TIMES = [[0, 8, 0], [1, 8, 30], [2, 12, 0]] as const; // [day 
  * - requests from i = 2 and 8 (pending) and 14 (handled)
  * Faker calls only inside seedPatient(). Everything else is derived from `i` and today.
  */
-function seedRoster(paymentsSoFar: number, refs: Pick<MessageRefs, "templates" | "staff">) {
+function seedRoster(paymentsSoFar: number, refs: Pick<MessageRefs, "templates" | "staff" | "clinicName">) {
   const now = new Date();
   const today = startOfDay(now);
   const at = (day: Date, h: number, m = 0) => addMinutes(setHours(day, h), m);
@@ -284,7 +320,7 @@ function seedRoster(paymentsSoFar: number, refs: Pick<MessageRefs, "templates" |
       p.consents = p.consents.map((c) => ({ ...c, date: format(start, "yyyy-MM-dd") }));
       const status = addMinutes(start, exam.defaultDurationMin) <= now ? "done" : "booked";
       out.appointments.push({
-        id: `appointment_roster_${n}`, clinicId: CLINIC_ID, patientId: p.id, dentistId: "staff_santos", chairId: "chair_3",
+        id: `appointment_roster_${n}`, clinicId: CLINIC_ID, branchId: IMUS, patientId: p.id, dentistId: "staff_santos", chairId: "chair_3",
         startsAt: start.toISOString(), durationMin: exam.defaultDurationMin, reason: exam.name, procedureCode: exam.code, status,
       });
       return;
@@ -306,14 +342,14 @@ function seedRoster(paymentsSoFar: number, refs: Pick<MessageRefs, "templates" |
 
     if (i % 12 === 0) {
       const invoice: Invoice = {
-        id: `inv_seed_roster_${n}`, clinicId: CLINIC_ID, patientId: p.id, visitId: visit.id, discount: 0, issuedAt: at(day, 10, 50).toISOString(),
+        id: `inv_seed_roster_${n}`, clinicId: CLINIC_ID, branchId: IMUS, patientId: p.id, visitId: visit.id, discount: 0, issuedAt: at(day, 10, 50).toISOString(),
         lines: [exam, cleaning].map((x) => ({ procedureCode: x.code, description: x.name, amount: x.fee })),
       };
       out.invoices.push(invoice);
       const k = paymentsSoFar + out.payments.length + 1;
       out.payments.push({
         id: `pay_seed_roster_${n}`, // still "pay_seed_": the financial dashboard test's seeded-only guard holds
-        clinicId: CLINIC_ID, patientId: p.id, invoiceId: invoice.id, amount: exam.fee, method: "cash",
+        clinicId: CLINIC_ID, branchId: IMUS, patientId: p.id, invoiceId: invoice.id, amount: exam.fee, method: "cash",
         receiptNo: `AR-${String(k).padStart(6, "0")}`, receivedBy: "staff_cruz", receivedAt: at(day, 10, 55).toISOString(),
       });
     }
@@ -507,7 +543,7 @@ function seedAppointments(patients: Patient[]): Appointment[] {
         const status = end <= now ? past : start <= now ? "arrived" : faker.helpers.arrayElement(["booked", "confirmed"] as const);
         rows.push({
           id: faker.string.uuid(),
-          clinicId: CLINIC_ID,
+          clinicId: CLINIC_ID, branchId: IMUS,
           patientId: faker.helpers.arrayElement(patients).id,
           dentistId,
           chairId,
@@ -572,7 +608,7 @@ function seedBilling(appointments: Appointment[], skipPatientId?: string) {
     const end = addMinutes(parseISO(a.startsAt), a.durationMin);
     const invoice: Invoice = {
       id: `inv_seed_${invoices.length + 1}`,
-      clinicId: CLINIC_ID,
+      clinicId: CLINIC_ID, branchId: IMUS,
       patientId: a.patientId,
       appointmentId: a.id,
       lines: [{ procedureCode: procedure.code, description: procedure.name, amount: procedure.fee }],
@@ -584,7 +620,7 @@ function seedBilling(appointments: Appointment[], skipPatientId?: string) {
     const n = payments.length + 1;
     payments.push({
       id: `pay_seed_${n}`,
-      clinicId: CLINIC_ID,
+      clinicId: CLINIC_ID, branchId: IMUS,
       patientId: a.patientId,
       invoiceId: invoice.id,
       amount: i % 5 === 4 ? Math.round(procedure.fee / 200) * 100 : procedure.fee, // half, in whole pesos
@@ -630,7 +666,7 @@ function seedSibling(patients: Patient[], olderId: string | undefined) {
   const exam = PROCEDURES.find((p) => p.code === "oral_exam")!;
   const appointment: Appointment = {
     id: "appointment_sibling",
-    clinicId: CLINIC_ID,
+    clinicId: CLINIC_ID, branchId: IMUS,
     patientId: sibling.id,
     dentistId: "staff_santos",
     chairId: "chair_3",
@@ -641,6 +677,35 @@ function seedSibling(patients: Patient[], olderId: string | undefined) {
     status: "booked",
   };
   return { patients: [sibling], appointments: [appointment] };
+}
+
+/**
+ * A week of Dasmariñas bookings, so a dentist at both branches sees a different day at each. Dr. Reyes at 12:00:
+ * Imus never seeds a 12:00 slot (seedAppointments' hours skip it) and the roster's 12:00 is Dr. Santos, so nobody is
+ * double-booked. Future days only, and no billing, so today's and this month's Imus figures are exactly as before.
+ */
+function seedDasmarinas(patients: Patient[]): Appointment[] {
+  const exam = PROCEDURES.find((p) => p.code === "oral_exam")!;
+  const rows: Appointment[] = [];
+  for (let offset = 1; offset <= 7; offset++) {
+    const day = addDays(startOfDay(new Date()), offset);
+    if (day.getDay() === 0) continue; // Dasmariñas is closed on Sundays too
+    const patient = patients[offset % patients.length]!;
+    rows.push({
+      id: `appointment_dasma_${offset}`,
+      clinicId: CLINIC_ID,
+      branchId: DASMA,
+      patientId: patient.id,
+      dentistId: "staff_reyes",
+      chairId: "chair_4",
+      startsAt: setHours(day, 12).toISOString(),
+      durationMin: exam.defaultDurationMin,
+      reason: exam.name,
+      procedureCode: exam.code,
+      status: "booked",
+    });
+  }
+  return rows;
 }
 
 /**

@@ -1,6 +1,7 @@
 "use client";
 import { addDays, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, startOfMonth, startOfWeek } from "date-fns";
 import { isClosedDay } from "@pedia/shared";
+import { useActiveBranch } from "@/features/clinic/api";
 import { cn } from "@/lib/utils";
 
 /**
@@ -8,6 +9,7 @@ import { cn } from "@/lib/utils";
  * Counts come from countByDay (cancelled excluded), so they match the list it opens.
  */
 export function MonthCountGrid({ month, counts, onPick }: { month: Date; counts: Map<string, number>; onPick: (day: Date) => void }) {
+  const hours = useActiveBranch()?.openingHours;
   const first = startOfWeek(startOfMonth(month));
   const last = endOfWeek(endOfMonth(month));
   const days: Date[] = [];
@@ -24,7 +26,7 @@ export function MonthCountGrid({ month, counts, onPick }: { month: Date; counts:
       <ol className="grid grid-cols-7 gap-0.5">
         {days.map((d) => {
           const n = counts.get(format(d, "yyyy-MM-dd")) ?? 0;
-          const closed = isClosedDay(d, n);
+          const closed = !!hours && isClosedDay(d, n, hours);
           const label = `${format(d, "EEEE, MMMM d")}: ${closed ? "closed" : n === 0 ? "no appointments" : `${n} appointment${n === 1 ? "" : "s"}`}`;
           return (
             <li key={d.toISOString()}>

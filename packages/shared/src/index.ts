@@ -1,4 +1,5 @@
 export * from "./schemas/common";
+export * from "./schemas/tenancy";
 export * from "./schemas/clinic";
 export * from "./schemas/patient";
 export * from "./schemas/visit";
@@ -35,3 +36,4 @@ export * from "./domain/today";
 export * from "./domain/permissions";
 export * from "./domain/pin";
 export * from "./domain/photos";
+export * from "./domain/tenancy";

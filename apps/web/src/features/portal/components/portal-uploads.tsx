@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { isPdf, uploadProblem } from "@pedia/shared";
 import { photoFileUrl, usePhotos, useUploadPhoto } from "@/features/photos/api";
 import { FileCard } from "@/features/photos/components/file-card";
+import { Can } from "@/features/auth/access";
 import { useActiveChild } from "../use-child";
 import { Loading } from "@/components/brand";
 import { ErrorState } from "@/components/error-state";
@@ -51,43 +52,45 @@ export function PortalUploads() {
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-semibold tracking-tight">Uploads for {child.firstName}</h1>
-      <SectionCard title="Send the clinic a file" description="Only you and the clinic's staff can see what you upload.">
-        <FormProvider {...form}>
-          <form noValidate onSubmit={form.handleSubmit(onSubmit)} className="max-w-md space-y-4">
-            <FormField name="type" label="What are you sending?">
-              {(control) => (
-                <Controller
-                  name="type"
-                  control={form.control}
-                  render={({ field }) => (
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger {...control} className="w-full"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(KIND).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  )}
-                />
-              )}
-            </FormField>
-            <FormField name="file" label="Photo or PDF">
-              {(control) => (
-                <Controller
-                  name="file"
-                  control={form.control}
-                  render={({ field }) => (
-                    <Input {...control} type="file" accept="image/*,application/pdf" onChange={(e) => field.onChange(e.target.files?.[0])} />
-                  )}
-                />
-              )}
-            </FormField>
-            <FormField name="caption" label="Description">
-              <Input {...form.register("caption")} />
-            </FormField>
-            <Button type="submit" className="min-h-11" disabled={upload.isPending}>{upload.isPending ? "Uploading" : "Upload"}</Button>
-          </form>
-        </FormProvider>
-      </SectionCard>
+      <Can permission="uploads.create">
+        <SectionCard title="Send the clinic a file" description="Only you and the clinic's staff can see what you upload.">
+          <FormProvider {...form}>
+            <form noValidate onSubmit={form.handleSubmit(onSubmit)} className="max-w-md space-y-4">
+              <FormField name="type" label="What are you sending?">
+                {(control) => (
+                  <Controller
+                    name="type"
+                    control={form.control}
+                    render={({ field }) => (
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger {...control} className="w-full"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(KIND).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                )}
+              </FormField>
+              <FormField name="file" label="Photo or PDF">
+                {(control) => (
+                  <Controller
+                    name="file"
+                    control={form.control}
+                    render={({ field }) => (
+                      <Input {...control} type="file" accept="image/*,application/pdf" onChange={(e) => field.onChange(e.target.files?.[0])} />
+                    )}
+                  />
+                )}
+              </FormField>
+              <FormField name="caption" label="Description">
+                <Input {...form.register("caption")} />
+              </FormField>
+              <Button type="submit" className="min-h-11" disabled={upload.isPending}>{upload.isPending ? "Uploading" : "Upload"}</Button>
+            </form>
+          </FormProvider>
+        </SectionCard>
+      </Can>
 
       {isLoading ? <Loading label="Loading uploads" /> : error ? (
         <ErrorState what="your uploads" onRetry={() => refetch()} retrying={isRefetching} />

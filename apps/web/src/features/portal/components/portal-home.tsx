@@ -3,7 +3,7 @@ import Link from "next/link";
 import { format, parseISO } from "date-fns";
 import { accountSummary, depositBalance, formatPeso, planProgress } from "@pedia/shared";
 import { SectionCard } from "@/components/section-card";
-import { useSession } from "@/features/auth/access";
+import { Can, useSession } from "@/features/auth/access";
 import { usePatientAppointments } from "@/features/appointments/api";
 import { useInvoices, usePayments } from "@/features/billing/api";
 import { useStaff } from "@/features/clinic/api";
@@ -51,7 +51,10 @@ export function PortalHome() {
           </div>
         ) : (
           <p className="text-ink-muted">
-            No visits booked. <Link href="/portal/appointments#request" className={more}>Request an appointment</Link>
+            No visits booked.{" "}
+            <Can permission="appointments.request">
+              <Link href="/portal/appointments#request" className={more}>Request an appointment</Link>
+            </Can>
           </p>
         )}
       </SectionCard>

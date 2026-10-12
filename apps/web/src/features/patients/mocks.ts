@@ -19,7 +19,7 @@ import {
   normalizeName,
   paginate,
   patientStanding,
-  roleCan,
+  rolesCan,
   type Patient,
   type PatientSummary,
   type PatientView,
@@ -27,8 +27,7 @@ import {
 import { env } from "@/lib/env";
 import { inScope, sessionOf, type MockSession } from "@/mocks/access";
 import { deleteBlob, getBlob, putBlob } from "@/mocks/blob-store";
-import { db, persist } from "@/mocks/db";
-import { CLINIC_ID } from "@/mocks/seed";
+import { currentClinicId, db, persist } from "@/mocks/db";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 
@@ -76,7 +75,7 @@ export const patientHandlers = [
     const rows = db.patients
       // The directory (⌘K search, pickers): child or guardian name, or a guardian's phone for those who may see phones.
       // A parent: their children only.
-      .filter((p) => inScope(session, "patients.view", p.id) && matchesSearch(p, q, { phones: !!session && roleCan(session.role, "patients.contact") }))
+      .filter((p) => inScope(session, "patients.view", p.id) && matchesSearch(p, q, { phones: !!session && rolesCan(session.roles, "patients.contact") }))
       .sort((a, b) => a.lastName.localeCompare(b.lastName))
       .map((p) => visibleTo(session, p));
     return HttpResponse.json(rows);
@@ -90,8 +89,8 @@ export const patientHandlers = [
     const params = new URL(request.url).searchParams;
     const query = PatientListQuery.parse(Object.fromEntries(params));
     const today = params.get("today") ?? format(new Date(), "yyyy-MM-dd");
-    const contact = roleCan(session.role, "patients.contact"); // phone search
-    const money = roleCan(session.role, "billing.view");
+    const contact = rolesCan(session.roles, "patients.contact"); // phone search
+    const money = rolesCan(session.roles, "billing.view");
 
     const all = db.patients
       .filter((p) => inScope(session, "patients.view", p.id) && matchesSearch(p, query.q, { phones: contact }))
@@ -139,7 +138,7 @@ export const patientHandlers = [
       ...tidy(parsed.data),
       id: crypto.randomUUID(),
       patientNo: nextPatientNo(db.patients),
-      clinicId: CLINIC_ID,
+      clinicId: currentClinicId(),
       consents: [],
       createdAt: new Date().toISOString(),
     };

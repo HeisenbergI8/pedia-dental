@@ -48,7 +48,7 @@ describe("no contact", () => {
 describe("balance", () => {
   it("is the account balance, the dashboard's outstanding rule", () => {
     const invoices = [{ id: "i1", patientId: "p", lines: [{ procedureCode: "x", description: "x", amount: 170_000 }], discount: 0 }];
-    const payments = [{ id: "y", clinicId: "c", patientId: "p", invoiceId: "i1", amount: 50_000, method: "cash" as const, receiptNo: "AR-1", receivedBy: "s", receivedAt: at("2026-09-01") }];
+    const payments = [{ id: "y", clinicId: "c", branchId: "b", patientId: "p", invoiceId: "i1", amount: 50_000, method: "cash" as const, receiptNo: "AR-1", receivedBy: "s", receivedAt: at("2026-09-01") }];
     const s = patientStanding("p", { visits: [], appointments: [], dueItems: [], invoices, payments, messages: [] }, today);
     expect(s.balance).toBe(120_000);
     expect(s.flags).toEqual({ recallDue: false, balanceDue: true, noContact: false });

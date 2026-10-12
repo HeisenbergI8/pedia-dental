@@ -1,9 +1,8 @@
 import { http, HttpResponse, delay } from "msw";
 import { CreateNoteInput, NOTE_MESSAGES, UpdateNoteInput, dueItemFor, itemsCompletedBy, noteValuesSchema, type ClinicalNote } from "@pedia/shared";
 import { env } from "@/lib/env";
-import { db, persist } from "@/mocks/db";
+import { currentClinicId, db, persist } from "@/mocks/db";
 import { queueMessage } from "@/mocks/outbox";
-import { CLINIC_ID } from "@/mocks/seed";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 
@@ -43,7 +42,7 @@ export const noteHandlers = [
       ...parsed.data,
       values,
       id: crypto.randomUUID(),
-      clinicId: CLINIC_ID,
+      clinicId: currentClinicId(),
       patientId: String(params.id),
       authorId: visit.dentistId,
       createdAt: new Date().toISOString(),
@@ -93,7 +92,7 @@ export const noteHandlers = [
       db.dueItems.push({
         ...due,
         id: crypto.randomUUID(),
-        clinicId: CLINIC_ID,
+        clinicId: currentClinicId(),
         patientId: note.patientId,
         sourceNoteId: note.id,
         createdAt: signedAt,

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { z } from "zod";
-import { DemoAccounts, Session, type LoginInput, type LogoutInput, type SwitchUserInput } from "@pedia/shared";
+import { DemoAccounts, LoginResult, Session, type LoginInput, type LogoutInput, type SwitchUserInput } from "@pedia/shared";
 import { api } from "@/lib/api-client";
 import { useSessionStore } from "@/stores/session-store";
 import { ROLE_HOME } from "./access";
@@ -29,8 +29,10 @@ export function useSignIn() {
   }, [router]);
   return useMutation({
     mutationKey: authKeys.signIn,
-    mutationFn: (input: LoginInput) => api("/auth/login", Session, { method: "POST", body: JSON.stringify(input) }),
-    onSuccess: (session) => {
+    mutationFn: (input: LoginInput) => api("/auth/login", LoginResult, { method: "POST", body: JSON.stringify(input) }),
+    onSuccess: (result) => {
+      if ("choices" in result) return; // the sign-in form shows the clinic chooser (login-screen.tsx)
+      const session = result;
       signIn(session); // cookie first, so refetches below already carry the new user
       // Demo accounts are the same for everyone, so keep them: the login screen stays put until it leaves.
       qc.removeQueries({ predicate: (q) => q.queryKey[0] !== authKeys.demo[0] });

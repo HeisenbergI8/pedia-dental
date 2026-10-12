@@ -1,5 +1,6 @@
 import { format, isSameDay } from "date-fns";
 import { isClosedDay, type Appointment } from "@pedia/shared";
+import { useActiveBranch } from "@/features/clinic/api";
 import { StatusChip } from "./status-chip";
 
 export type AgendaItem = { appointment: Appointment; title: string; start: Date; end: Date; chairName: string };
@@ -20,6 +21,7 @@ export function AgendaList({
   onOpen: (id: string) => void;
   counts?: Map<string, number>;
 }) {
+  const hours = useActiveBranch()?.openingHours;
   return (
     <div className="space-y-5">
       {days.map((day) => {
@@ -36,7 +38,7 @@ export function AgendaList({
             )}
             {today.length === 0 ? (
               <p className="rounded-2xl bg-surface px-4 py-5 text-sm text-ink-muted ring-1 ring-line">
-                {isClosedDay(day, counts?.get(format(day, "yyyy-MM-dd")) ?? today.length) ? "The clinic is closed." : "No appointments."}
+                {hours && isClosedDay(day, counts?.get(format(day, "yyyy-MM-dd")) ?? today.length, hours) ? "The clinic is closed." : "No appointments."}
               </p>
             ) : (
               <ul className="divide-y divide-line-soft overflow-hidden rounded-2xl border border-line bg-surface shadow-card">

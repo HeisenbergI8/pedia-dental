@@ -30,6 +30,7 @@ export const Permission = z.enum([
   "settings.view",
   "audit.view",
   "session.switch", // hand a shared device to another staff member, with their own PIN
+  "branches.all", // works at every branch of the account, whatever their assignment: the Owner
 ]);
 export type Permission = z.infer<typeof Permission>;
 
@@ -43,6 +44,13 @@ export const SessionUser = z.object({
   role: Role,
   name: z.string(),
   email: z.string(),
+  clinicId: Id, // the clinic account this login belongs to (one login, one account: decision #27)
+  // Every role held, highest first (Role order); `role` is roles[0], kept for labels and the home page. Access is the
+  // union of all of them (`rolesCan`), so an Admin + Dentist can sign notes and an Owner + Dentist is a bookable dentist.
+  roles: z.array(Role).min(1),
+  // A parent whose clinic is suspended (decision #44): reads work, every portal change is refused. Staff of a
+  // suspended clinic never get a session at all (decisions #26, #41).
+  readOnly: z.boolean().optional(),
   staffId: Id.optional(),
   guardianId: Id.optional(),
 });
@@ -55,8 +63,17 @@ export type Session = z.infer<typeof Session>;
 export const LoginInput = z.object({
   email: z.string().trim().toLowerCase().email("Enter your email address, like name@example.com"),
   password: z.string().min(1, "Enter your password"),
+  clinicId: Id.optional(), // sent on the second step, once the person has picked a clinic
 });
 export type LoginInput = z.infer<typeof LoginInput>;
+
+/** One clinic an email belongs to, for the chooser. Only the name: nothing else is shown before a clinic is picked. */
+export const ClinicChoice = z.object({ clinicId: Id, name: z.string() });
+export type ClinicChoice = z.infer<typeof ClinicChoice>;
+
+/** POST /auth/login: a session, or, when the email is in several clinic accounts it may use, which one (decision #27). */
+export const LoginResult = z.union([Session, z.object({ choices: z.array(ClinicChoice).min(2) })]);
+export type LoginResult = z.infer<typeof LoginResult>;
 
 /** `idle`: the app signed the user out after a period of inactivity, logged as "timed out". */
 export const LogoutInput = z.object({ reason: z.enum(["user", "idle"]).default("user") });
@@ -85,6 +102,7 @@ export type DemoAccount = z.infer<typeof DemoAccount>;
 export const DemoAccounts = z.object({
   password: z.string(),
   accounts: z.array(DemoAccount), // with PINs, for the staff switch
-  logins: z.array(DemoAccount.pick({ role: true, email: true })), // one per role, listed on the sign-in page
+  // One per role, listed on the sign-in page, with the clinic accounts each email signs in to.
+  logins: z.array(DemoAccount.pick({ role: true, email: true }).extend({ clinics: z.array(z.string()).min(1) })),
 });
 export type DemoAccounts = z.infer<typeof DemoAccounts>;

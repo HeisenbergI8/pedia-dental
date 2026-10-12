@@ -6,7 +6,7 @@ import { accountCredit, accountSummary, appliedCredit, depositBalance, formatPes
 describe("money", () => {
   it("matches the spec example: 8,500 total, 5,000 paid, 3,500 balance", () => {
     const inv = { id: "i1", lines: [{ procedureCode: "x", description: "x", amount: pesos(8500) }], discount: 0 };
-    const pay = { clinicId: "c1", id: "p1", patientId: "pt1", invoiceId: "i1", amount: pesos(5000), method: "cash" as const, receiptNo: "AR-000001", receivedBy: "u1", receivedAt: "2026-01-01T00:00:00Z" };
+    const pay = { clinicId: "c1", branchId: "b", id: "p1", patientId: "pt1", invoiceId: "i1", amount: pesos(5000), method: "cash" as const, receiptNo: "AR-000001", receivedBy: "u1", receivedAt: "2026-01-01T00:00:00Z" };
     expect(invoiceBalance(inv, [pay])).toBe(pesos(3500));
   });
   it("formats pesos", () => {
@@ -14,7 +14,7 @@ describe("money", () => {
   });
 
   const paid = (id: string, amount: number, invoiceId = "inv"): Payment => ({
-    clinicId: "c1", id, patientId: "pt1", invoiceId, amount, method: "cash", receiptNo: id, receivedBy: "u1", receivedAt: "2026-10-03T01:00:00Z",
+    clinicId: "c1", branchId: "b", id, patientId: "pt1", invoiceId, amount, method: "cash", receiptNo: id, receivedBy: "u1", receivedAt: "2026-10-03T01:00:00Z",
   });
 
   it("reproduces the spec example from the example plan's catalog fees, in two partial payments", () => {
@@ -43,7 +43,7 @@ describe("money", () => {
 
   it("counts an overpaid invoice as credit, never a paid or part-paid one", () => {
     const inv = { id: "A", lines: [{ procedureCode: "x", description: "x", amount: pesos(500) }], discount: 0 };
-    const pay = (amount: number): Payment => ({ id: String(amount), clinicId: "c", patientId: "p", invoiceId: "A", amount, method: "cash", receiptNo: "AR-1", receivedBy: "s", receivedAt: "2026-10-01T00:00:00.000Z" });
+    const pay = (amount: number): Payment => ({ id: String(amount), clinicId: "c", branchId: "b", patientId: "p", invoiceId: "A", amount, method: "cash", receiptNo: "AR-1", receivedBy: "s", receivedAt: "2026-10-01T00:00:00.000Z" });
     expect(accountCredit([inv], [pay(pesos(500))])).toBe(0);
     expect(accountCredit([inv], [pay(pesos(200))])).toBe(0);
     expect(accountCredit([inv], [pay(pesos(700))])).toBe(pesos(200));
@@ -52,7 +52,7 @@ describe("money", () => {
 
 describe("deposits", () => {
   const row = (id: string, patientId: string, amount: number, extra: Partial<Payment> = {}): Payment =>
-    ({ id, clinicId: "c", patientId, amount, method: "cash", receiptNo: "AR-1", receivedBy: "s", receivedAt: "2026-10-01T00:00:00.000Z", ...extra });
+    ({ id, clinicId: "c", branchId: "b", patientId, amount, method: "cash", receiptNo: "AR-1", receivedBy: "s", receivedAt: "2026-10-01T00:00:00.000Z", ...extra });
   const inv = { id: "INV", lines: [{ procedureCode: "x", description: "x", amount: pesos(800) }], discount: 0 };
   const rows = [
     row("d", "p", pesos(1000)), // deposit

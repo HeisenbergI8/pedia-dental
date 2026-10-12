@@ -1,7 +1,8 @@
 "use client";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { CLINIC_NAME, PLACEHOLDERS, UpdateMessageTemplateInput, renderMessage, type MessageTemplate, type Placeholder } from "@pedia/shared";
+import { PLACEHOLDERS, UpdateMessageTemplateInput, renderMessage, type MessageTemplate, type Placeholder } from "@pedia/shared";
+import { useClinic } from "@/features/clinic/api";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,15 +11,14 @@ import { useMessageTemplates, useUpdateMessageTemplate } from "../api";
 import { Loading } from "@/components/brand";
 import { ErrorState } from "@/components/error-state";
 
-/** Sample values for the preview, so staff see a real-looking message, never the raw placeholders. */
-const SAMPLE: Record<Placeholder, string> = {
+/** Sample values for the preview, so staff see a real-looking message, never the raw placeholders. The clinic is real. */
+const SAMPLE: Omit<Record<Placeholder, string>, "clinic_name"> = {
   child_first_name: "Bea",
   child_name: "Bea Mendoza",
   guardian_name: "Rosa Mendoza",
   date: "Mon, Oct 12",
   time: "9:00 AM",
   dentist_name: "Dr. Ana Reyes",
-  clinic_name: CLINIC_NAME,
 };
 
 export function TemplateEditor() {
@@ -53,11 +53,12 @@ export function TemplateEditor() {
 
 function Editor({ template }: { template: MessageTemplate }) {
   const save = useUpdateMessageTemplate();
+  const clinic = useClinic();
   const [body, setBody] = useState(template.body);
   const area = useRef<HTMLTextAreaElement>(null);
   const parsed = UpdateMessageTemplateInput.safeParse({ body });
   const problem = parsed.success ? undefined : parsed.error.issues[0]?.message;
-  const preview = renderMessage(body, SAMPLE);
+  const preview = renderMessage(body, { ...SAMPLE, clinic_name: clinic.data?.account.name ?? "" });
   const segments = Math.max(1, Math.ceil(preview.length / 160));
 
   function insert(p: Placeholder) {

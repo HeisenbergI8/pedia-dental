@@ -1,10 +1,15 @@
-# Roadmap: Pediatric Dental Clinic (frontend prototype)
+# Roadmap: Primolar (frontend prototype)
+
+Primolar is clinic management for pediatric dental clinics, sold as a service: each paying clinic is a
+**clinic account** with its own branches, staff, patients and branding (feature 16). Features 1–15 work
+inside one clinic account.
 
 Two parts:
 
-1. **Features**: what each of the 15 features does, its screens, its data, and its rules.
-2. **Build chunks**: the order to build them in. Each chunk is small enough for one or two sessions,
-   depends only on chunks above it, and ends with a "done when" you can check.
+1. **Features**: what each of the 16 features does, its screens, its data, and its rules.
+2. **Build chunks**: the order to build them in. Each chunk depends only on chunks above it and ends
+   with a "done when" you can check. Chunks 0–18 were sized for one or two sessions. From chunk 19 on,
+   each chunk is one **Large** piece of work with its own architect plan: fewer, bigger chunks.
 
 Scope for every chunk is the **prototype**: real UI, fake data through MSW, no backend. Anything marked
 *Later* belongs to the NestJS phase. Follow `CONVENTIONS.md` → "Registering a new feature" for each one.
@@ -162,11 +167,65 @@ Procedure-based follow-ups: extraction → 7 days, pulpotomy → 2 weeks, sealan
 When a note for that procedure is signed, a follow-up becomes due on the computed date. The rules are
 editable data (`DEFAULT_FOLLOW_UP_RULES`). Shares the "due" list with feature 14.
 
+## 16. Primolar platform (clinic accounts, tiers, branches, branding)
+
+Turns the single-clinic app into a product many clinics use. Decisions settled on 2026-10-12 live in
+`.claude/plans/feature-primolar-platform-plan/decisions.md`; this section is the summary.
+
+- **Who's who:** the **Primolar operator** (you) runs the product. A **clinic account** is one paying
+  dental business. It has exactly one **Owner**, one or more **branches** (physical locations), and
+  **staff** (Admin, Dentist, Front desk), each assigned to one or more branches. Parents use the portal
+  and are never staff. Any staff role, the Owner included, can also hold a clinical role.
+- **Tiers:**
+
+  | | Small | Mid | Big |
+  |---|---|---|---|
+  | Branches | 1 | up to 3 | unlimited |
+  | Staff logins (the Owner counts) | 5 | 20 | unlimited |
+  | Cross-branch dashboard and finance | — | ✓ | ✓ |
+  | Logo and brand colour | ✓ | ✓ | ✓ |
+  | Heading font | — | — | ✓ |
+
+- **What belongs where:** the clinic account owns patients and charts, the procedure price list,
+  message templates and recalls (filterable by branch), plus its name, logo, contact email and TIN.
+  A branch owns its address, phone, opening hours, chairs, appointments, and the invoices and payments
+  for visits there. Documents and receipts show the clinic's name and the visit branch's address.
+- **Screens:**
+  - *Operator console:* clinic accounts with tier, Owner and usage (branches, staff, patients);
+    create an account and invite its Owner; change tier; suspend and reactivate; transfer ownership.
+  - *Owner settings:* clinic profile; branches (add, edit, archive); staff (add with role and branches,
+    deactivate); branding (logo, brand colour, font on Big); the account's tier and usage.
+  - *Branch switcher* in the top bar for staff at several branches, with "All branches" for the Owner.
+  - *Clinic chooser* after sign-in when an email belongs to more than one clinic account.
+- **Rules:**
+  - Every record belongs to one clinic account, and branch-level records to one branch. No account
+    ever sees another account's data. The operator never sees patient records.
+  - Reaching a tier limit blocks the next branch or staff login with "Contact Primolar to upgrade".
+    A downgrade never disables what exists; nothing new is added until the account is under the limit.
+  - Branches are archived, never deleted. Staff are deactivated, never deleted; their name stays on
+    what they recorded. Neither counts toward limits once archived or deactivated.
+  - A new staff login gets a temporary password, shown once, changed at first sign-in.
+  - The shared-device PIN switch lists only staff assigned to that device's branch.
+  - A suspended account's staff can't sign in, and anyone signed in is signed out; sign-in says
+    "Contact your clinic". Parents keep read-only portal access to their child's records (Data Privacy
+    Act). All data is kept and returns on reactivation.
+  - A payment belongs to the branch where the visit happened. Parent appointment requests stay
+    account-wide; front desk picks the branch when booking.
+- **Branding:** a logo (PNG, JPG or SVG, up to 1 MB) and one brand colour on every tier. The app derives
+  the colour's tints, shades and dark-mode version and refuses a colour that fails WCAG AA contrast,
+  suggesting the nearest that passes. Big adds a heading font from a shortlist of 4–6 rounded fonts; it
+  applies to headings and the clinic name only. The clinic's logo replaces Primolar's everywhere staff
+  and parents look (sidebar, portal, receipts, letterheads, PDFs); with no logo, the clinic name shows in
+  its heading font. Primolar's wordmark stays on the sign-in page, the operator console, and a small
+  "Powered by Primolar" line.
+- **Later:** self-signup and card payments for tiers; per-clinic web addresses; real email invites;
+  per-branch price lists; operator impersonation for support.
+
 ---
 
 # Part 2: Build chunks (in order)
 
-Total ≈ 153 hours. Hours are estimates for one developer using Claude Code.
+Total ≈ 212 hours (153 for features 1–15, 59 for the platform). Hours are estimates for one developer using Claude Code.
 
 ## ✅ Chunk 0: Foundation (done)
 
@@ -366,6 +425,63 @@ filled in.
 
 **Depends on:** all.
 
+## Chunk 19: Tenancy foundation (22 h) — feature 16, part 1 · Large
+
+**Plan:** `.claude/plans/feature-primolar-tenancy-plan/`
+
+**Goal:** every record knows its clinic account and, where it applies, its branch; staff sign in to
+the right clinic and work at the right branch.
+
+- Shared schemas for clinic account (name, logo, contact email, TIN, tier, status) and branch (name,
+  address, phone, opening hours, archived). Tier limits as data, not `if` statements.
+- The mock store split into one dataset per clinic account, so a handler can only reach its own
+  account's data. Branch ids on appointments, chairs, invoices and payments.
+- `CLINIC_NAME` and `CLINIC_HOURS` come from the account and branch instead of constants.
+- Seed: Bulilit Smiles Pediatric Dental (two branches) and Ngiti Kids Dental (Small tier).
+- Owner role above Admin; any staff role can add a clinical role; staff carry assigned branches.
+- One sign-in page that finds the account by email, with a clinic chooser; suspended accounts refused
+  (staff signed out, parents read-only).
+- Branch switcher; the PIN switch lists only the device's branch staff.
+
+**Done when:** signed in to either demo account, no screen or API call returns the other's data
+(tested); a staff member at two branches switches between them and sees each branch's day; a
+suspended account's staff are refused at sign-in.
+
+**Depends on:** 18.
+
+## Chunk 20: Owner settings and clinic branding (24 h) — feature 16, part 2 · Large
+
+**Plan:** `.claude/plans/feature-primolar-branding-plan/` (to be written)
+
+- Owner settings: clinic profile; branches (add, edit, archive, never the last one); staff (add with
+  role and branches, temporary password, deactivate); tier and usage panel.
+- Tier limits enforced in the UI and the mock handlers, with "Contact Primolar to upgrade".
+- Branding: logo upload (stored like clinical photos); one brand colour with derived tints, shades and
+  dark values, checked against WCAG AA; heading font shortlist on Big. Applied at runtime through the
+  existing CSS tokens everywhere the Primolar logo is today, PDFs included, plus "Powered by Primolar".
+
+**Done when:** on the Small demo account, adding a second branch or a sixth staff login is refused with
+the limit shown, and archiving or deactivating frees the slot; each demo account shows its own logo
+and colour in the staff app, portal, a receipt and a PDF, in light and dark; a low-contrast colour is
+refused with a suggestion.
+
+**Depends on:** 19.
+
+## Chunk 21: Cross-branch views and operator console (13 h) — feature 16, part 3 · Large
+
+**Plan:** `.claude/plans/feature-primolar-operator-plan/` (to be written)
+
+- Branch filter on the dashboard and finance views, plus an "All branches" total for the Owner. Mid
+  and Big only.
+- A separate operator sign-in and console: accounts with tier, Owner and usage counts; create an
+  account and its Owner; change tier; suspend and reactivate; transfer ownership. No patient data.
+
+**Done when:** the Owner of a two-branch account sees each branch and the combined total, and a Small
+account doesn't see the filter; the operator creates a third account, signs in as its new Owner, and
+downgrading it to Small blocks new additions without disabling anything.
+
+**Depends on:** 20, 13.
+
 ---
 
 ## Order at a glance
@@ -383,6 +499,7 @@ filled in.
 9 + 12 ─ 16 Documents
 10 + 11 + 12 + 14 + 15 ─ 17 Parent portal
 everything ─ 18 Polish & deploy
+18 ─ 19 Tenancy foundation ─ 20 Owner settings & branding ─ 21 Cross-branch & operator ◄── 13
 ```
 
 Chunks 5–6 (the chart) carry the most risk. If time gets tight, cut scope from 17 (portal) and 13

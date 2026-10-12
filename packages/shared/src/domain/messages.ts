@@ -2,9 +2,6 @@ import { addDays, format, parseISO, setHours, startOfDay } from "date-fns";
 import type { Patient } from "../schemas/patient";
 import type { Message, MessageKind } from "../schemas/message";
 
-/** Shown on messages and documents until the clinic has a settings record (chunks-11-12 Q7). */
-export const CLINIC_NAME = "Primolar Pediatric Dental Clinic";
-
 /** Every placeholder a template may use, with the label the editor shows. */
 export const PLACEHOLDERS = {
   child_first_name: "Child's first name",
@@ -31,10 +28,13 @@ export function renderMessage(body: string, vars: MessageVars): string {
   return body.replace(TOKEN, (whole, key: string) => (isPlaceholder(key) && vars[key]) || whole);
 }
 
-/** The values for one patient. `startsAt` (appointment) gives date and time; `dueOn` (recall) gives a date only. */
+/**
+ * The values for one patient. `startsAt` (appointment) gives date and time; `dueOn` (recall) gives a date only.
+ * `clinicName` is the clinic account's name: every message speaks for the account, whichever branch.
+ */
 export function messageVars(
   patient: Pick<Patient, "firstName" | "lastName"> & { guardians: Pick<Patient["guardians"][number], "fullName" | "isPrimary">[] },
-  at: { startsAt?: string; dueOn?: string; dentistName?: string } = {},
+  at: { clinicName: string; startsAt?: string; dueOn?: string; dentistName?: string },
 ): MessageVars {
   const guardian = patient.guardians.find((g) => g.isPrimary) ?? patient.guardians[0];
   const when = at.startsAt ?? at.dueOn;
@@ -45,7 +45,7 @@ export function messageVars(
     date: when && format(parseISO(when), "EEE, MMM d"),
     time: at.startsAt && format(parseISO(at.startsAt), "h:mm a"),
     dentist_name: at.dentistName,
-    clinic_name: CLINIC_NAME,
+    clinic_name: at.clinicName,
   };
 }
 

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Can, useCan } from "@/features/auth/access";
 import {
   STATUS_LABEL,
   TIME_OF_DAY_LABEL,
@@ -32,6 +33,7 @@ export const nextAppointment = (rows: Appointment[]) => upcoming(rows)[0]; // th
 /** "Confirm" on a booked visit, or a "Confirmed" mark once it is. */
 export function ConfirmButton({ appointment: a, childName }: { appointment: Appointment; childName: string }) {
   const change = useChangeAppointmentStatus();
+  const can = useCan();
   if (a.status === "confirmed") {
     return (
       <span className="flex items-center gap-1.5 text-sm font-medium text-brand">
@@ -39,7 +41,7 @@ export function ConfirmButton({ appointment: a, childName }: { appointment: Appo
       </span>
     );
   }
-  if (!canTransition(a.status, "confirmed")) return null;
+  if (!canTransition(a.status, "confirmed") || !can("appointments.confirm")) return null;
   return (
     <Button
       className="min-h-11"
@@ -90,7 +92,9 @@ export function PortalAppointments() {
         )}
       </SectionCard>
 
-      <RequestAppointment />
+      <Can permission="appointments.request">
+        <RequestAppointment />
+      </Can>
 
       {past.length > 0 && (
         <SectionCard title="Past visits">

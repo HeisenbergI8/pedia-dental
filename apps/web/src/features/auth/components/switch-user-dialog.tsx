@@ -2,14 +2,14 @@
 import { Controller, FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { SwitchUserInput } from "@pedia/shared";
+import { SwitchUserInput, worksAt } from "@pedia/shared";
 import { FormField } from "@/components/form-field";
 import { Loading } from "@/components/brand";
 import { ErrorState } from "@/components/error-state";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { useStaff } from "@/features/clinic/api";
+import { useActiveBranch, useStaff } from "@/features/clinic/api";
 import { env } from "@/lib/env";
 import { ROLE_LABEL, useSession } from "../access";
 import { useDemoAccounts, useSwitchUser } from "../api";
@@ -21,12 +21,14 @@ import { useDemoAccounts, useSwitchUser } from "../api";
 export function SwitchUserDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const session = useSession();
   const staff = useStaff();
+  const branch = useActiveBranch();
   const demo = useDemoAccounts();
   const switchUser = useSwitchUser();
   const form = useForm<SwitchUserInput>({ resolver: zodResolver(SwitchUserInput), defaultValues: { accountId: "", pin: "" } });
-  const others = (staff.data ?? []).filter((s) => s.id !== session?.user.staffId);
+  // Only people who work at this device's branch (decision #24). The Owner works at every branch.
+  const others = (staff.data ?? []).filter((s) => s.id !== session?.user.staffId && !!branch && worksAt(s, branch));
   const chosen = others.find((s) => s.id === form.watch("accountId"));
-  const demoPins = env.apiMocking ? (demo.data?.accounts ?? []).filter((a) => a.pin && a.id !== session?.user.id) : [];
+  const demoPins = env.apiMocking ? (demo.data?.accounts ?? []).filter((a) => a.pin && others.some((s) => s.id === a.id)) : [];
 
   const close = (next: boolean) => {
     if (!next) form.reset();

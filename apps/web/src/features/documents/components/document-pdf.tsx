@@ -1,5 +1,4 @@
 import { Document, Font, Image, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
-import { CLINIC_NAME } from "@pedia/shared";
 import type { DocBlock, DocContent } from "../content";
 
 /** react-pdf can't read CSS variables: these mirror --color-ink, --color-ink-muted, --color-line, --color-line-strong, --color-brand-ring. */
@@ -80,7 +79,7 @@ function Block({ block }: { block: DocBlock }) {
 /** The PDF for any document. Returns the <Document> element so pdf() gets the type it expects. */
 export function documentPdf(content: DocContent) {
   return (
-    <Document title={content.title} author={CLINIC_NAME} creator={CLINIC_NAME}>
+    <Document title={content.title} author={content.clinicName} creator={content.clinicName}>
       <Page size="A4" style={s.page}>
         <View style={s.header}>
           {/* The logo carries the clinic's name; alt text isn't supported, the document metadata names it. */}

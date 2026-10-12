@@ -6,13 +6,13 @@ import { addDays, format, isValid, parseISO, startOfDay } from "date-fns";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { z } from "zod";
-import { IsoDate, bookableStart, findFreeSlots, outsideClinicHours, type Appointment } from "@pedia/shared";
+import { IsoDate, bookableStart, findFreeSlots, holdsRole, outsideClinicHours, type Appointment, type OpeningHours } from "@pedia/shared";
 import { FormField } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useSession } from "@/features/auth/access";
-import { useChairs, useProcedures, useStaff } from "@/features/clinic/api";
+import { useActiveBranch, useBranchChairs, useBranchStaff, useProcedures } from "@/features/clinic/api";
 import { usePatient } from "@/features/patients/api";
 import { useVisits } from "@/features/visits/api";
 import { useAppointments, useBookAppointment, useRescheduleAppointment } from "../api";
@@ -29,14 +29,16 @@ const FormValues = z
   time: z.string().regex(/^\d{2}:\d{2}$/, "Pick a time"),
   durationMin: z.number({ error: "Enter minutes" }).int().positive("Enter minutes"),
   procedureCode: z.string().optional(), // set by the Procedure picker; the reason is the wording
-  })
-  // The server's rule (outsideClinicHours), checked here too so the reason shows before anything is sent.
-  .superRefine((v, ctx) => {
-    const why = outsideClinicHours(new Date(`${v.date}T${v.time}`), v.durationMin);
-    if (why) ctx.addIssue({ code: "custom", message: why, path: ["time"] });
   });
 type FormValues = z.infer<typeof FormValues>;
 export type BookingValues = FormValues;
+
+/** The server's rule (outsideClinicHours), checked here too so the reason shows before anything is sent. */
+const withinHours = (hours: OpeningHours | undefined) =>
+  FormValues.superRefine((v, ctx) => {
+    const why = hours && outsideClinicHours(new Date(`${v.date}T${v.time}`), v.durationMin, hours);
+    if (why) ctx.addIssue({ code: "custom", message: why, path: ["time"] });
+  });
 
 /** Where the form opens: a slot picked on the calendar, or an appointment being moved. */
 export type AppointmentDraft = Partial<Pick<Appointment, "patientId" | "chairId" | "dentistId" | "reason" | "durationMin" | "sourceRuleId" | "procedureCode">> & {
@@ -45,11 +47,11 @@ export type AppointmentDraft = Partial<Pick<Appointment, "patientId" | "chairId"
 };
 
 /** `myDentistId`: the signed-in dentist, the default when the draft names none. */
-function toValues({ appointment, start, ...rest }: AppointmentDraft, myDentistId?: string): FormValues {
+function toValues({ appointment, start, ...rest }: AppointmentDraft, hours: OpeningHours | undefined, myDentistId?: string): FormValues {
   const merged = { ...rest, ...appointment };
   const durationMin = merged.durationMin ?? 30;
   // A move keeps its time; a new booking opens on a bookable one (a calendar day arrives as 00:00).
-  const at = appointment ? new Date(appointment.startsAt) : bookableStart(start, new Date(), durationMin);
+  const at = appointment ? new Date(appointment.startsAt) : hours ? bookableStart(start, new Date(), hours, durationMin) : (start ?? new Date());
   return {
     patientId: merged.patientId ?? "",
     reason: merged.reason ?? "",
@@ -65,24 +67,26 @@ function toValues({ appointment, start, ...rest }: AppointmentDraft, myDentistId
 export function AppointmentForm({ draft, onClose }: { draft: AppointmentDraft | null; onClose: () => void }) {
   const router = useRouter();
   const me = useSession()?.user;
-  const myDentistId = me?.role === "dentist" ? me.staffId : undefined;
-  const staff = useStaff();
-  const chairs = useChairs();
+  const myDentistId = me?.roles.includes("dentist") ? me.staffId : undefined;
+  const branchStaff = useBranchStaff();
+  const chairs = useBranchChairs();
+  const hours = useActiveBranch()?.openingHours;
+  const resolver = useMemo(() => zodResolver(withinHours(hours)), [hours]);
   const procedures = useProcedures();
   const book = useBookAppointment();
   const reschedule = useRescheduleAppointment();
-  const form = useForm<FormValues>({ resolver: zodResolver(FormValues), defaultValues: toValues({}) });
+  const form = useForm<FormValues>({ resolver, defaultValues: toValues({}, hours) });
   const editing = draft?.appointment;
   const patientFixed = !!(editing ?? draft?.patientId);
-  const dentists = (staff.data ?? []).filter((s) => s.role === "dentist");
+  const dentists = branchStaff.filter((s) => holdsRole(s, "dentist")); // only dentists who work at this branch
   // Set by "Pick another date or time": from then on the user owns the time, and slots stop following the dentist.
   const [custom, setCustom] = useState(false);
 
   useEffect(() => {
     if (!draft) return;
-    form.reset(toValues(draft, myDentistId));
+    form.reset(toValues(draft, hours, myDentistId));
     setCustom(false);
-  }, [draft, form, myDentistId]);
+  }, [draft, form, hours, myDentistId]);
 
   const [patientId, dentistId, durationMin, date, time] = form.watch(["patientId", "dentistId", "durationMin", "date", "time"]);
   const patient = usePatient(patientId).data;
@@ -106,13 +110,16 @@ export function AppointmentForm({ draft, onClose }: { draft: AppointmentDraft | 
 
   // A draft's chair (a clicked calendar slot, a recall) goes first, then the rest in order.
   const chairKey = [draft?.chairId, ...(chairs.data ?? []).map((c) => c.id)].filter((c, i, a): c is string => !!c && a.indexOf(c) === i).join();
-  const from = useMemo(() => (draft && !draft.appointment ? bookableStart(draft.start, new Date(), draft.durationMin ?? 30) : undefined), [draft]);
+  const from = useMemo(
+    () => (draft && !draft.appointment && hours ? bookableStart(draft.start, new Date(), hours, draft.durationMin ?? 30) : undefined),
+    [draft, hours],
+  );
   const slots = useMemo(
     () =>
-      from && dentistId && chairKey && booked.data && Number.isFinite(durationMin) && durationMin > 0
-        ? findFreeSlots({ from, durationMin, dentistId, chairIds: chairKey.split(",") }, booked.data, 3)
+      from && hours && dentistId && chairKey && booked.data && Number.isFinite(durationMin) && durationMin > 0
+        ? findFreeSlots({ from, durationMin, dentistId, chairIds: chairKey.split(","), hours }, booked.data, 3)
         : [],
-    [from, dentistId, durationMin, chairKey, booked.data],
+    [from, hours, dentistId, durationMin, chairKey, booked.data],
   );
   const noSlots = !!dentistId && !!booked.data && slots.length === 0;
 

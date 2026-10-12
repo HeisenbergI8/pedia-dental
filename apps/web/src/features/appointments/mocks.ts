@@ -11,26 +11,34 @@ import {
   findConflict,
   isDueItemOpen,
   outsideClinicHours,
-  roleCan,
+  holdsRole,
+  rolesCan,
+  worksAt,
   type Appointment,
   type AppointmentRequest,
 } from "@pedia/shared";
 import { env } from "@/lib/env";
-import { sessionOf } from "@/mocks/access";
-import { db, persist } from "@/mocks/db";
+import { activeBranch, sessionOf } from "@/mocks/access";
+import { currentClinicId, db, persist } from "@/mocks/db";
 import { cancelQueued, queueBookingMessages, queueMessage } from "@/mocks/outbox";
-import { CLINIC_ID } from "@/mocks/seed";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 const byStart = (a: Appointment, b: Appointment) => a.startsAt.localeCompare(b.startsAt);
 
-/** 400 for unknown references or a time the clinic is closed, 409 for a double-booking. Undefined when the slot is free. */
+/**
+ * 400 for unknown references, a chair at another branch, or a time the clinic is closed; 409 for a double-booking.
+ * Undefined when the slot is free. Conflicts are checked across every branch: a dentist can't be in two places.
+ */
 function rejectSlot(slot: Appointment) {
-  if (!db.staff.some((s) => s.id === slot.dentistId && s.role === "dentist")) {
-    return new HttpResponse("Unknown dentist", { status: 400 });
+  const dentist = db.staff.find((s) => s.id === slot.dentistId && holdsRole(s, "dentist")); // a second role counts (#39)
+  if (!dentist) return new HttpResponse("Unknown dentist", { status: 400 });
+  const branch = db.branches.find((b) => b.id === slot.branchId);
+  if (!branch || branch.archived) return new HttpResponse("This branch isn't taking bookings", { status: 400 });
+  if (!worksAt(dentist, branch)) return new HttpResponse(`${dentist.fullName} doesn't work at this branch`, { status: 400 });
+  if (!db.chairs.some((c) => c.id === slot.chairId && c.branchId === slot.branchId)) {
+    return new HttpResponse("Choose a chair at this branch", { status: 400 });
   }
-  if (!db.chairs.some((c) => c.id === slot.chairId)) return new HttpResponse("Unknown chair", { status: 400 });
-  const closed = outsideClinicHours(slot.startsAt, slot.durationMin);
+  const closed = outsideClinicHours(slot.startsAt, slot.durationMin, branch.openingHours);
   if (closed) return new HttpResponse(closed, { status: 400 });
   const conflict = findConflict(slot, db.appointments);
   if (!conflict) return undefined;
@@ -44,15 +52,16 @@ function rejectSlot(slot: Appointment) {
 
 /** API contract for apps/api's AppointmentsController. */
 export const appointmentHandlers = [
-  // Appointments starting in [from, to). Both are ISO timestamps.
+  // The active branch's appointments starting in [from, to). Both are ISO timestamps.
   http.get(url("/appointments"), async ({ request }) => {
     await delay(100);
     const params = new URL(request.url).searchParams;
     const from = new Date(params.get("from") ?? 0).getTime();
     const to = new Date(params.get("to") ?? 8.64e15).getTime();
+    const branchId = activeBranch(request).id;
     const rows = db.appointments.filter((a) => {
       const t = new Date(a.startsAt).getTime();
-      return t >= from && t < to;
+      return a.branchId === branchId && t >= from && t < to;
     });
     return HttpResponse.json(rows.sort(byStart));
   }),
@@ -68,7 +77,8 @@ export const appointmentHandlers = [
     if (!db.patients.some((p) => p.id === parsed.data.patientId)) {
       return new HttpResponse("Patient not found", { status: 404 });
     }
-    const appointment: Appointment = { ...parsed.data, id: crypto.randomUUID(), clinicId: CLINIC_ID, status: "booked" };
+    const branchId = activeBranch(request).id; // booked at the branch this device is on
+    const appointment: Appointment = { ...parsed.data, id: crypto.randomUUID(), clinicId: currentClinicId(), branchId, status: "booked" };
     const rejected = rejectSlot(appointment);
     if (rejected) return rejected;
     db.appointments.push(appointment);
@@ -109,7 +119,7 @@ export const appointmentHandlers = [
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
     // Confirm-only callers (a parent) can't check in, cancel or mark a no-show.
     const session = sessionOf(request);
-    if (parsed.data.status !== "confirmed" && !(session && roleCan(session.role, "appointments.manage"))) {
+    if (parsed.data.status !== "confirmed" && !(session && rolesCan(session.roles, "appointments.manage"))) {
       return new HttpResponse("You can confirm this appointment. To change it, call the clinic.", { status: 403 });
     }
     if (!canTransition(appointment.status, parsed.data.status)) {
@@ -153,7 +163,7 @@ export const appointmentHandlers = [
     const row: AppointmentRequest = {
       ...parsed.data,
       id: crypto.randomUUID(),
-      clinicId: CLINIC_ID,
+      clinicId: currentClinicId(),
       patientId: patient.id,
       guardianId,
       status: "pending",
