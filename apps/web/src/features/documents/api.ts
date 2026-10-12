@@ -1,11 +1,11 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
-import { PatientDocument, type GenerateDocumentInput } from "@pedia/shared";
+import { PatientDocument, branchLine, deriveBrandPalette, type GenerateDocumentInput } from "@pedia/shared";
 import { api } from "@/lib/api-client";
 import { useInvoices, usePayments } from "@/features/billing/api";
 import { useChartEntries } from "@/features/chart/api";
-import { useClinic, useProcedures, useStaff } from "@/features/clinic/api";
+import { useActiveBranch, useBranches, useClinic, useProcedures, useStaff } from "@/features/clinic/api";
 import { useMessageTemplates } from "@/features/messages/api";
 import { useNoteTemplates, useNotes } from "@/features/notes/api";
 import { usePatient } from "@/features/patients/api";
@@ -46,6 +46,8 @@ export function useDocumentSources(patientId: string): {
   isRefetching: boolean;
 } {
   const clinic = useClinic();
+  const active = useActiveBranch();
+  const branches = useBranches();
   const patient = usePatient(patientId);
   const staff = useStaff();
   const procedures = useProcedures();
@@ -57,16 +59,23 @@ export function useDocumentSources(patientId: string): {
   const invoices = useInvoices(patientId);
   const payments = usePayments(patientId);
   const messageTemplates = useMessageTemplates();
-  const all = [clinic, patient, staff, procedures, visits, notes, noteTemplates, chart, plan, invoices, payments, messageTemplates];
+  const all = [clinic, branches, patient, staff, procedures, visits, notes, noteTemplates, chart, plan, invoices, payments, messageTemplates];
   const error = all.find((q) => q.error)?.error ?? null;
   const refetch = () => all.filter((q) => q.error).forEach((q) => void q.refetch());
   const isRefetching = all.some((q) => q.isRefetching);
-  if (!clinic.data || !patient.data || !staff.data || !procedures.data || !visits.data || !notes.data || !noteTemplates.data || !chart.data || !plan.data || !invoices.data || !payments.data || !messageTemplates.data) {
+  if (!clinic.data || !active || !branches.data || !patient.data || !staff.data || !procedures.data || !visits.data || !notes.data || !noteTemplates.data || !chart.data || !plan.data || !invoices.data || !payments.data || !messageTemplates.data) {
     return { isLoading: !error, error, refetch, isRefetching };
   }
   return {
     data: {
       clinicName: clinic.data.account.name,
+      letterhead: {
+        clinicName: clinic.data.account.name,
+        branchLine: branchLine(active),
+        logoUrl: clinic.data.logoUrl,
+        ring: deriveBrandPalette(clinic.data.account.brandColor).light["brand-ring"],
+      },
+      branches: branches.data,
       patient: patient.data,
       staff: staff.data,
       procedures: procedures.data,

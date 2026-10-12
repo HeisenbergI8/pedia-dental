@@ -13,8 +13,10 @@
 }
 
 /* Design tokens. Change the palette here, not in components.
-   Brand: Primolar Pediatric Dental Clinic. Plum (close to the logo's P, deepened for contrast) is the brand hue and
-   the logo's teal smile is the secondary accent. Crayon colours are decoration only. */
+   Brand: Primolar's plum is the default. A clinic account replaces the brand-* and on-deep-* tokens at runtime with
+   its own colour (features/clinic/brand-css.ts, derived and AA-checked in packages/shared domain/branding.ts), and on
+   Big --font-title. Nothing else is overridden: status, alerts, charts, crayons and the logo-* tokens stay Primolar's.
+   The neutrals brand colours are checked against are mirrored in BRAND_BACKGROUNDS (a design guard keeps them equal). */
 @theme {
   --color-ground: #f7f7f4;
   --color-surface: #ffffff;
@@ -117,7 +119,7 @@
   --font-title: var(--font-bricolage), var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
   /* Fredoka echoes the logo's rounded letters. Warm moments only (login hero, portal greeting), set explicitly. */
   --font-display: var(--font-fredoka), var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
-  /* Outfit: the Primolar name in the logo and loading screen. Nowhere else. */
+  /* Outfit: the Primolar name in the logo, the loading screen and "Powered by Primolar". Also on the heading-font shortlist. */
   --font-brand: var(--font-outfit), var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
   --shadow-card: 0 1px 2px 0 rgb(16 24 40 / 0.04);
   --shadow-xs: 0 1px 2px 0 rgb(16 24 40 / 0.05); /* secondary buttons, booked tiles */

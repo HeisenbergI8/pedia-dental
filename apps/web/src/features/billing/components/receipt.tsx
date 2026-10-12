@@ -1,9 +1,10 @@
 "use client";
 import { PrinterIcon } from "lucide-react";
-import { isMoneyIn } from "@pedia/shared";
-import { Loading, PrimolarLogo } from "@/components/brand";
+import { branchLine, isMoneyIn } from "@pedia/shared";
+import { Loading } from "@/components/brand";
 import { Button } from "@/components/ui/button";
-import { useStaff } from "@/features/clinic/api";
+import { useBranches, useStaff } from "@/features/clinic/api";
+import { ClinicLogo } from "@/features/clinic/components/clinic-logo";
 import { DownloadDocumentButton } from "@/features/documents/components/download-document-button";
 import { usePatient } from "@/features/patients/api";
 import { useInvoices, usePayments } from "../api";
@@ -15,6 +16,7 @@ export function Receipt({ patientId, paymentId }: { patientId: string; paymentId
   const invoices = useInvoices(patientId);
   const payments = usePayments(patientId);
   const staff = useStaff().data ?? [];
+  const branches = useBranches().data ?? [];
 
   if (patient.isLoading || invoices.isLoading || payments.isLoading) return <Loading label="Loading receipt" />;
   const all = payments.data ?? [];
@@ -24,6 +26,7 @@ export function Receipt({ patientId, paymentId }: { patientId: string; paymentId
   if (!patient.data || !payment || !isMoneyIn(payment) || (payment.invoiceId && !invoice)) return <p className="text-danger">This receipt doesn&apos;t exist for this patient.</p>;
 
   const receipt = receiptContent({ patient: patient.data, invoice, payment, payments: all, staff });
+  const paidAt = branches.find((b) => b.id === payment.branchId); // the visit's branch (decision #38), not the device's
 
   return (
     <div className="space-y-4">
@@ -35,7 +38,8 @@ export function Receipt({ patientId, paymentId }: { patientId: string; paymentId
       </div>
       <article className="mx-auto max-w-xl space-y-5 rounded-xl border border-line bg-surface p-6 shadow-card print:max-w-none print:border-0 print:p-0 print:shadow-none">
         <header className="flex flex-col items-center gap-1 border-b-2 border-brand-ring pb-4 text-center">
-          <PrimolarLogo className="mb-2 w-44" />
+          <ClinicLogo className="mb-1 w-44" />
+          {paidAt && <p className="text-xs text-ink-muted">{branchLine(paidAt)}</p>}
           <h1 className="text-base font-semibold tracking-wide uppercase">{receipt.title}</h1>
           <p className="text-sm text-ink-muted">{receipt.subtitle}</p>
         </header>

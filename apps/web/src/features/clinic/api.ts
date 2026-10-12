@@ -1,15 +1,29 @@
 "use client";
 import { useMemo } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
-import { Chair, ClinicContext, Procedure, StaffMember, worksAt } from "@pedia/shared";
+import {
+  AddStaffResult,
+  Branch,
+  Chair,
+  ClinicAccount,
+  ClinicContext,
+  ClinicUsage,
+  Procedure,
+  StaffMember,
+  worksAt,
+  type AddStaffInput,
+  type BranchInput,
+  type UpdateBrandingInput,
+  type UpdateClinicProfileInput,
+} from "@pedia/shared";
 import { api } from "@/lib/api-client";
 import { useSessionStore } from "@/stores/session-store";
 
 /** Reference data changes rarely, so it is cached for the whole session. */
 const forever = { staleTime: Infinity } as const;
 
-export const clinicKeys = { context: ["clinic"] as const };
+export const clinicKeys = { context: ["clinic"] as const, usage: ["clinic", "usage"] as const, branches: ["branches"] as const, staff: ["staff"] as const };
 
 /**
  * The signed-in clinic account, the branches this user may work at, and the one this device is on. Replaces the
@@ -25,8 +39,13 @@ export function useActiveBranch() {
   return data?.branches.find((b) => b.id === data.activeBranchId);
 }
 
+/** Every branch, archived ones too: an old receipt still names the branch it was paid at (decision #22). */
+export function useBranches() {
+  return useQuery({ queryKey: clinicKeys.branches, queryFn: () => api("/branches", z.array(Branch)), ...forever });
+}
+
 export function useStaff() {
-  return useQuery({ queryKey: ["staff"], queryFn: () => api("/staff", z.array(StaffMember)), ...forever });
+  return useQuery({ queryKey: clinicKeys.staff, queryFn: () => api("/staff", z.array(StaffMember)), ...forever });
 }
 
 /** The staff who work at the active branch (the Owner works at all): who can be booked here or take money here. */
@@ -68,3 +87,44 @@ export function useSwitchBranch() {
     void qc.invalidateQueries();
   };
 }
+
+/** Seats and open branches against the tier. Owner only. Not cached forever: it changes with every add or archive. */
+export function useClinicUsage() {
+  return useQuery({ queryKey: clinicKeys.usage, queryFn: () => api("/clinic/usage", ClinicUsage) });
+}
+
+const json = (method: string, body: unknown) => ({ method, body: JSON.stringify(body) });
+
+/**
+ * The Owner's changes. Each refetches the clinic context (name, logo, colour, branches in the switcher), and whatever
+ * list it touched. `["clinic"]` is a prefix, so usage refetches with it.
+ */
+function useOwnerMutation<I, O>(fn: (input: I) => Promise<O>, also: readonly (readonly string[])[] = []) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => [clinicKeys.context, ...also].forEach((queryKey) => qc.invalidateQueries({ queryKey })),
+  });
+}
+
+export const useUpdateClinicProfile = () => useOwnerMutation((input: UpdateClinicProfileInput) => api("/clinic", ClinicAccount, json("PUT", input)));
+export const useUpdateBranding = () => useOwnerMutation((input: UpdateBrandingInput) => api("/clinic/branding", ClinicAccount, json("PUT", input)));
+export const useUploadLogo = () =>
+  useOwnerMutation((file: File) => {
+    const body = new FormData();
+    body.set("file", file);
+    return api("/clinic/logo", ClinicAccount, { method: "PUT", body });
+  });
+export const useRemoveLogo = () => useOwnerMutation(() => api("/clinic/logo", ClinicAccount, { method: "DELETE" }));
+
+export const useSaveBranch = () =>
+  useOwnerMutation(
+    ({ id, ...input }: BranchInput & { id?: string }) => api(id ? `/branches/${id}` : "/branches", Branch, json(id ? "PUT" : "POST", input)),
+    [clinicKeys.branches],
+  );
+export const useBranchArchive = () =>
+  useOwnerMutation(({ id, archive }: { id: string; archive: boolean }) => api(`/branches/${id}/${archive ? "archive" : "reopen"}`, Branch, { method: "POST" }), [clinicKeys.branches]);
+
+export const useAddStaff = () => useOwnerMutation((input: AddStaffInput) => api("/staff", AddStaffResult, json("POST", input)), [clinicKeys.staff]);
+export const useStaffActive = () =>
+  useOwnerMutation(({ id, active }: { id: string; active: boolean }) => api(`/staff/${id}/${active ? "reactivate" : "deactivate"}`, StaffMember, { method: "POST" }), [clinicKeys.staff]);

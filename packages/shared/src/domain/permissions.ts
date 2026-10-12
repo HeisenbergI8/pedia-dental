@@ -7,8 +7,8 @@ const grant = (scope: PermissionScope, ...permissions: Permission[]) =>
 
 /** Actions only a parent takes for their own child. Staff do the same work from the staff screens. */
 const PARENT_ONLY: readonly Permission[] = ["appointments.request", "uploads.create"];
-/** The account-wide powers only the Owner holds. Owner settings add theirs here. */
-const OWNER_ONLY: readonly Permission[] = ["branches.all"];
+/** The account-wide powers only the Owner holds. */
+export const OWNER_ONLY: readonly Permission[] = ["branches.all", "clinic.manage"];
 const STAFF_PERMISSIONS = Permission.options.filter((p) => !PARENT_ONLY.includes(p));
 /** What a read-only session (a parent of a suspended clinic, decision #44) can't do: the portal's write actions (#46). */
 export const READ_ONLY_DENIED: readonly Permission[] = ["appointments.confirm", "appointments.request", "uploads.create"];

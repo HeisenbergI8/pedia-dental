@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Permission } from "../schemas/auth";
 import { Role } from "../schemas/common";
-import { READ_ONLY_DENIED, STAFF_ROLES, permissionScope, permissionScopeFor, roleCan, rolesCan } from "./permissions";
+import { OWNER_ONLY, READ_ONLY_DENIED, STAFF_ROLES, permissionScope, permissionScopeFor, roleCan, rolesCan } from "./permissions";
 
 const PARENT_ONLY = ["appointments.request", "uploads.create"];
 
@@ -9,10 +9,13 @@ describe("ROLE_PERMISSIONS", () => {
   it("gives the Owner every staff permission, and admin every one but the Owner's", () => {
     for (const p of Permission.options.filter((p) => !PARENT_ONLY.includes(p))) {
       expect(permissionScope("owner", p), p).toBe("all");
-      if (p !== "branches.all") expect(permissionScope("admin", p), p).toBe("all");
+      if (!OWNER_ONLY.includes(p)) expect(permissionScope("admin", p), p).toBe("all");
     }
     expect(permissionScope("admin", "branches.all")).toBeUndefined();
     expect(Role.options.filter((r) => roleCan(r, "branches.all"))).toEqual(["owner"]);
+    // Owner settings (decision #11): an Admin + Dentist still can't manage the account.
+    expect(Role.options.filter((r) => roleCan(r, "clinic.manage"))).toEqual(["owner"]);
+    expect(rolesCan(["admin", "dentist"], "clinic.manage")).toBe(false);
   });
 
   it("gives someone with two roles everything either grants", () => {

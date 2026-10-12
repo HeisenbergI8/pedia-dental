@@ -49,6 +49,8 @@ export const DEMO_ACCOUNT: ClinicAccount = {
   tin: "123-456-789-000",
   tier: "mid",
   status: "active",
+  brandColor: "#b0245e", // raspberry, 6.4:1 on white: visibly not Primolar's plum, so branding is seen to apply
+  logoRef: "demo/bulilit-logo.svg", // apps/web/public/demo/
 };
 
 /**
@@ -276,6 +278,7 @@ export function seed(): Db {
     appointmentRequests: roster.requests,
     auditEvents: seedAudit(patients, example.planItems[0]?.patientId),
     staffPins: STAFF.map((s) => ({ clinicId: CLINIC_ID, staffId: s.id, pin: STAFF_PINS[s.id], failedAt: [] })),
+    staffCredentials: [], // every seeded login uses the demo password
   };
 }
 

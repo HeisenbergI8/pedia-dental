@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { OpeningHours } from "../schemas/tenancy";
-import { DEFAULT_OPENING_HOURS, TIER_LIMITS, canAddUnder, holdsRole, rolesOf, usableBranches, worksAt } from "./tenancy";
+import {
+  DEFAULT_OPENING_HOURS,
+  TIER_LIMITS,
+  accountUsage,
+  archiveProblem,
+  canAddUnder,
+  formatTin,
+  holdsRole,
+  isActiveStaff,
+  limitMessage,
+  rolesOf,
+  usableBranches,
+  worksAt,
+} from "./tenancy";
 
 describe("tier limits", () => {
   it("matches decision #5: Small 1 branch and 5 logins, Mid 3 and 20, Big unlimited", () => {
@@ -51,5 +64,43 @@ describe("roles and usable branches", () => {
     expect(worksAt({ role: "dentist", branchIds: ["imus"] }, b("dasma"))).toBe(false);
     expect(worksAt({ role: "dentist", branchIds: ["imus"], isOwner: true }, b("dasma"))).toBe(true);
     expect(worksAt({ role: "front_desk", branchIds: ["dasma"] }, b("dasma"))).toBe(true);
+    expect(worksAt({ role: "front_desk", branchIds: ["dasma"], deactivatedAt: "2026-10-01T00:00:00.000Z" }, b("dasma"))).toBe(false);
+  });
+});
+
+describe("limits in use (decisions #8, #10, #37)", () => {
+  const s = (fullName: string, branchIds: string[], extra: Partial<{ isOwner: boolean; deactivatedAt: string }> = {}) => ({ fullName, branchIds, ...extra });
+  it("counts open branches and active logins, the Owner included", () => {
+    const usage = accountUsage({
+      branches: [{ archived: false }, { archived: true }],
+      staff: [s("Owner", ["a"], { isOwner: true }), s("Gone", ["a"], { deactivatedAt: "2026-10-01T00:00:00.000Z" }), s("Here", ["a"])],
+    });
+    expect(usage).toEqual({ branches: 1, staffLogins: 2 });
+    expect(isActiveStaff({ deactivatedAt: undefined })).toBe(true);
+  });
+
+  it("says the limit and how to lift it, the same words everywhere", () => {
+    expect(limitMessage("small", "branches")).toBe("Your Small plan includes 1 branch. Contact Primolar to upgrade.");
+    expect(limitMessage("small", "staffLogins")).toBe("Your Small plan includes 5 staff logins. Contact Primolar to upgrade.");
+    expect(limitMessage("mid", "branches")).toBe("Your Mid plan includes 3 branches. Contact Primolar to upgrade.");
+  });
+
+  it("never archives the last open branch, strands a login, or drops a booking (decision #22)", () => {
+    const branches = [{ id: "imus", archived: false }, { id: "dasma", archived: false }, { id: "old", archived: true }];
+    const imus = { id: "imus", name: "Imus" };
+    const staff = [s("Owner", ["imus"], { isOwner: true }), s("Liza Cruz", ["imus"]), s("Ana Reyes", ["imus", "dasma"])];
+    expect(archiveProblem(imus, { branches: branches.filter((b) => b.id !== "dasma"), staff: [], upcoming: 0 })).toMatch(/always keeps one open branch/);
+    expect(archiveProblem(imus, { branches, staff, upcoming: 0 })).toBe("Liza Cruz works only at Imus. Deactivate them first.");
+    const free = staff.filter((x) => x.fullName !== "Liza Cruz");
+    expect(archiveProblem(imus, { branches, staff: free, upcoming: 2 })).toBe("Imus has 2 upcoming appointments. Move or cancel them first.");
+    expect(archiveProblem(imus, { branches, staff: free, upcoming: 0 })).toBeUndefined();
+    // A deactivated login doesn't hold a branch open.
+    expect(archiveProblem(imus, { branches, staff: [...free, s("Gone", ["imus"], { deactivatedAt: "2026-10-01T00:00:00.000Z" })], upcoming: 0 })).toBeUndefined();
+  });
+
+  it("formats a TIN as typed (decision #42)", () => {
+    expect(formatTin("123456789")).toBe("123-456-789");
+    expect(formatTin("123 456 789 0001")).toBe("123-456-789-0001");
+    expect(formatTin("12345")).toBe("123-45");
   });
 });

@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { differenceInYears, format, parseISO } from "date-fns";
-import { findConflict, habitTimeline, matchesFilter, needsAttention, patientStanding } from "@pedia/shared";
+import {
+  TIER_LIMITS,
+  accountUsage,
+  brandColorProblem,
+  canAddUnder,
+  findConflict,
+  habitTimeline,
+  matchesFilter,
+  needsAttention,
+  patientStanding,
+} from "@pedia/shared";
 import { seedPlatform } from "./db";
 import { seed } from "./seed";
 
@@ -102,5 +112,24 @@ describe("platform seed", () => {
     const demo = platform.tenants.clinic_demo!;
     expect(demo.appointments.some((a) => a.branchId === "branch_dasma")).toBe(true);
     expect([...demo.invoices, ...demo.payments].every((r) => r.branchId === "branch_imus")).toBe(true);
+  });
+});
+
+describe("demo accounts' branding and limits (chunk 20)", () => {
+  const p = seedPlatform();
+  it("gives each account its own passing colour and its own logo", () => {
+    const [demo, ngiti] = p.accounts;
+    expect(demo!.brandColor).not.toBe(ngiti!.brandColor);
+    expect(demo!.logoRef).not.toBe(ngiti!.logoRef);
+    for (const a of p.accounts) {
+      expect(brandColorProblem(a.brandColor), a.name).toBeUndefined();
+      expect(a.logoRef, a.name).toMatch(/^demo\/.+\.svg$/);
+    }
+  });
+  it("puts Ngiti (Small) exactly at its limits, so the next branch or login is refused", () => {
+    const ngiti = p.tenants.clinic_ngiti!;
+    expect(accountUsage(ngiti)).toEqual({ branches: 1, staffLogins: TIER_LIMITS.small.staffLogins });
+    expect(canAddUnder("small", "staffLogins", accountUsage(ngiti).staffLogins)).toBe(false);
+    expect(Object.values(p.tenants).every((t) => t.staffCredentials.length === 0)).toBe(true);
   });
 });

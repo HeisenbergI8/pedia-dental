@@ -4,13 +4,15 @@ import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { CalendarDaysIcon, ClipboardListIcon, HeartPulseIcon, HomeIcon, MenuIcon, ReceiptIcon, SmileIcon, UploadIcon } from "lucide-react";
 import { BottomTabIcon, bottomTabClass } from "@/components/bottom-tab";
-import { Loading, PageLoading, PrimolarLogo } from "@/components/brand";
+import { Loading, PoweredByPrimolar } from "@/components/brand";
 import { useNavigationPending } from "@/components/navigation-pending";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AccountMenu } from "@/features/auth/components/account-menu";
+import { BrandTheme } from "@/features/clinic/components/brand-theme";
+import { ClinicLogo, ClinicPageLoading } from "@/features/clinic/components/clinic-logo";
 import { cn } from "@/lib/utils";
 import { PausedNotice } from "./paused-notice";
 import { useChildren } from "../use-child";
@@ -101,11 +103,12 @@ export function PortalShell({ children }: { children: ReactNode }) {
       >
         Skip to content
       </a>
+      <BrandTheme />
       <header className="sticky top-0 z-(--z-header) border-b border-line bg-surface/95 backdrop-blur">
         <span aria-hidden className="brand-strip absolute inset-x-0 top-0 h-1" />
         <div className="mx-auto flex h-18 max-w-3xl items-center gap-3 px-4 pt-1 sm:px-6">
-          <Link href="/portal" aria-label="Primolar home" className="inline-flex rounded-md">
-            <PrimolarLogo className="w-36 sm:w-44" />
+          <Link href="/portal" aria-label="Home" className="inline-flex rounded-md">
+            <ClinicLogo className="w-36 sm:w-44" />
           </Link>
           <div className="ml-auto">
             <AccountMenu variant="bar" />
@@ -158,12 +161,13 @@ export function PortalShell({ children }: { children: ReactNode }) {
           </EmptyState>
         ) : (
           <>
-            {navigating && <PageLoading />}
+            {navigating && <ClinicPageLoading />}
             <div hidden={navigating} className="contents">
               {children}
             </div>
           </>
         )}
+        <PoweredByPrimolar className="py-6 text-center" />
         {/* Keeps the end of the page clear of the bottom tab bar. */}
         <div aria-hidden className="h-(--bottom-nav-h)" />
       </main>

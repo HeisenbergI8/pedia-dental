@@ -31,6 +31,7 @@ export const Permission = z.enum([
   "audit.view",
   "session.switch", // hand a shared device to another staff member, with their own PIN
   "branches.all", // works at every branch of the account, whatever their assignment: the Owner
+  "clinic.manage", // Owner settings: the account's profile, branding, branches and staff logins (decision #11)
 ]);
 export type Permission = z.infer<typeof Permission>;
 
@@ -51,6 +52,9 @@ export const SessionUser = z.object({
   // A parent whose clinic is suspended (decision #44): reads work, every portal change is refused. Staff of a
   // suspended clinic never get a session at all (decisions #26, #41).
   readOnly: z.boolean().optional(),
+  // A login the Owner just created (decision #21): until they choose their own password, every API route but /auth/*
+  // answers 403 and the app shows only "Choose your password".
+  mustChangePassword: z.boolean().optional(),
   staffId: Id.optional(),
   guardianId: Id.optional(),
 });
@@ -92,6 +96,22 @@ export type SwitchUserInput = z.infer<typeof SwitchUserInput>;
  */
 export const StaffPin = ClinicScoped.extend({ staffId: Id, pin: Pin, failedAt: z.array(IsoDateTime) });
 export type StaffPin = z.infer<typeof StaffPin>;
+
+/**
+ * A staff login's own password, once it has one (added by the Owner, or changed). Logins without one sign in with the
+ * demo password. Stored, never served. The prototype keeps it as typed, like PINs; NestJS stores a slow hash.
+ */
+export const StaffCredential = ClinicScoped.extend({ staffId: Id, password: z.string().min(8), mustChange: z.boolean() });
+export type StaffCredential = z.infer<typeof StaffCredential>;
+
+/** POST /auth/password. `current` is the temporary password at first sign-in. */
+export const ChangePasswordInput = z
+  .object({
+    current: z.string().min(1, "Enter your current password"),
+    next: z.string().min(8, "Use at least 8 characters"),
+  })
+  .refine((p) => p.next !== p.current, { message: "Choose a password different from the temporary one", path: ["next"] });
+export type ChangePasswordInput = z.infer<typeof ChangePasswordInput>;
 
 /** Prototype only: the one-click accounts on the login screen. NestJS won't serve this. */
 export const DemoAccount = SessionUser.pick({ id: true, role: true, name: true, email: true }).extend({
