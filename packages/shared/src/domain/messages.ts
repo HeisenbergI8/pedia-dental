@@ -3,7 +3,7 @@ import type { Patient } from "../schemas/patient";
 import type { Message, MessageKind } from "../schemas/message";
 
 /** Shown on messages and documents until the clinic has a settings record (chunks-11-12 Q7). */
-export const CLINIC_NAME = "Primoral Pediatric Dental Clinic";
+export const CLINIC_NAME = "Primolar Pediatric Dental Clinic";
 
 /** Every placeholder a template may use, with the label the editor shows. */
 export const PLACEHOLDERS = {

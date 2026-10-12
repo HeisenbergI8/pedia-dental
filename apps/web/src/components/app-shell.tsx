@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import type { Role } from "@pedia/shared";
 import { BottomTabIcon, bottomTabClass } from "@/components/bottom-tab";
-import { PageLoading, PrimoralLogo, PrimoralMark } from "@/components/brand";
+import { PageLoading, PrimolarLogo, PrimolarMark } from "@/components/brand";
 import { useNavigationPending } from "@/components/navigation-pending";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { routePermission, useCan, useSession } from "@/features/auth/access";
@@ -42,8 +42,8 @@ const NAV: NavItem[] = [
 
 function Brand({ className }: { className?: string }) {
   return (
-    <Link href="/" aria-label="Primoral home" className="inline-flex rounded-md">
-      <PrimoralLogo className={className} />
+    <Link href="/" aria-label="Primolar home" className="inline-flex rounded-md">
+      <PrimolarLogo className={className} />
     </Link>
   );
 }
@@ -108,8 +108,8 @@ function Rail() {
   const can = useCan();
   return (
     <aside className="sticky top-0 hidden h-screen flex-col items-stretch gap-3 border-r border-line bg-surface px-2 pt-5 pb-4 md:flex lg:hidden print:hidden!">
-      <Link href="/" aria-label="Primoral home" className="mx-auto rounded-lg">
-        <PrimoralMark />
+      <Link href="/" aria-label="Primolar home" className="mx-auto rounded-lg">
+        <PrimolarMark />
       </Link>
       {can("patients.view") && <PatientSearch variant="rail" />}
       <nav aria-label="Main" className="flex-1 overflow-y-auto">

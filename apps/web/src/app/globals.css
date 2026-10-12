@@ -13,7 +13,7 @@
 }
 
 /* Design tokens. Change the palette here, not in components.
-   Brand: Primoral Pediatric Dental Clinic. Plum (close to the logo's P, deepened for contrast) is the brand hue and
+   Brand: Primolar Pediatric Dental Clinic. Plum (close to the logo's P, deepened for contrast) is the brand hue and
    the logo's teal smile is the secondary accent. Crayon colours are decoration only. */
 @theme {
   --color-ground: #f7f7f4;
@@ -51,7 +51,7 @@
   /* Warm surface for celebrations, empty states and the portal welcome. Never status. */
   --color-sunny: #fff6dc; /* ink 14.2:1, ink-muted 6.0:1 */
 
-  /* The Primoral logo (components/brand.tsx): the P, its smile and the name. Logo only, never UI state. */
+  /* The Primolar logo (components/brand.tsx): the P, its smile and the name. Logo only, never UI state. */
   --color-logo-hi: #655389; /* the P's gradient, top-left */
   --color-logo-lo: #53447d; /* to bottom-right */
   --color-logo: #5b4982; /* the P as one flat colour (brand strip) */
@@ -117,7 +117,7 @@
   --font-title: var(--font-bricolage), var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
   /* Fredoka echoes the logo's rounded letters. Warm moments only (login hero, portal greeting), set explicitly. */
   --font-display: var(--font-fredoka), var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
-  /* Outfit: the Primoral name in the logo and loading screen. Nowhere else. */
+  /* Outfit: the Primolar name in the logo and loading screen. Nowhere else. */
   --font-brand: var(--font-outfit), var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
   --shadow-card: 0 1px 2px 0 rgb(16 24 40 / 0.04);
   --shadow-xs: 0 1px 2px 0 rgb(16 24 40 / 0.05); /* secondary buttons, booked tiles */
@@ -385,7 +385,7 @@ body {
   background: linear-gradient(90deg, var(--color-logo) 0%, var(--color-logo) 55%, var(--color-logo-smile) 100%);
 }
 
-/* ---- PrimoralMark, animated (components/brand.tsx): the P bobs and the smile draws itself ---- */
+/* ---- PrimolarMark, animated (components/brand.tsx): the P bobs and the smile draws itself ---- */
 .pm-bob {
   animation: pm-bob 1.8s cubic-bezier(0.45, 0, 0.55, 1) infinite;
 }

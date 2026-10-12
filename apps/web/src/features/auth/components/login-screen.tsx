@@ -6,7 +6,7 @@ import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { CalendarCheckIcon, EyeIcon, EyeOffIcon, HeartHandshakeIcon, HeartIcon, RainbowIcon, ShieldCheckIcon, SparklesIcon, StethoscopeIcon, type LucideIcon } from "lucide-react";
 import { LoginInput, type DemoAccounts, type Role } from "@pedia/shared";
-import { Loading, LoadingScreen, PrimoralLogo } from "@/components/brand";
+import { Loading, LoadingScreen, PrimolarLogo } from "@/components/brand";
 import { FormField } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,12 +49,12 @@ export function LoginScreen() {
     <>
       <main inert={signingIn} className="relative min-h-screen overflow-hidden bg-ground lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
         {/* Brand panel: the clinic introduces itself the way it does on its own page. */}
-        <section aria-label="About Primoral" className="relative overflow-hidden bg-surface px-6 pt-8 pb-10 lg:flex lg:flex-col lg:justify-center lg:px-12 lg:py-16">
+        <section aria-label="About Primolar" className="relative overflow-hidden bg-surface px-6 pt-8 pb-10 lg:flex lg:flex-col lg:justify-center lg:px-12 lg:py-16">
           <span aria-hidden className="brand-strip absolute inset-x-0 top-0 h-1.5" />
           <span aria-hidden className="absolute -top-16 -right-20 size-56 rounded-full bg-crayon-teal/20" />
           <span aria-hidden className="absolute -bottom-24 -left-16 hidden size-64 rounded-full bg-crayon-yellow/25 lg:block" />
           <div className="relative mx-auto max-w-md space-y-6 lg:mx-0">
-            <PrimoralLogo className="w-60 sm:w-72 lg:w-80" />
+            <PrimolarLogo className="w-60 sm:w-72 lg:w-80" />
             <p className="font-display text-2xl leading-snug font-medium text-balance lg:text-3xl">
               Give your child a <span className="text-brand">smile</span> they&apos;ll love.
             </p>

@@ -8,17 +8,17 @@ const figtree = Figtree({ subsets: ["latin"], variable: "--font-figtree" });
 const fredoka = Fredoka({ subsets: ["latin"], weight: ["500", "600"], variable: "--font-fredoka" });
 // Variable font: weight plus optical size, so 600 titles tighten at display sizes.
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"], axes: ["opsz"], variable: "--font-bricolage" });
-// The Primoral name in the logo (components/brand.tsx).
+// The Primolar name in the logo (components/brand.tsx).
 // Variable font, so the logo can use its exact weight (560).
 const outfit = Outfit({ subsets: ["latin"], variable: "--font-outfit" });
 
 export const metadata: Metadata = {
-  title: "Primoral Pediatric Dental Clinic",
-  description: "Clinic management for Primoral Pediatric Dental Clinic",
+  title: "Primolar Pediatric Dental Clinic",
+  description: "Clinic management for Primolar Pediatric Dental Clinic",
   // The installed app's name on desktop (application-name), alongside the manifest's.
-  applicationName: "Primoral",
+  applicationName: "Primolar",
   // The home-screen label on iOS, which otherwise truncates the full title.
-  appleWebApp: { title: "Primoral", capable: true, statusBarStyle: "default" },
+  appleWebApp: { title: "Primolar", capable: true, statusBarStyle: "default" },
 };
 
 /**

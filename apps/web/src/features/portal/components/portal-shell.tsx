@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { CalendarDaysIcon, ClipboardListIcon, HeartPulseIcon, HomeIcon, MenuIcon, ReceiptIcon, SmileIcon, UploadIcon } from "lucide-react";
 import { BottomTabIcon, bottomTabClass } from "@/components/bottom-tab";
-import { Loading, PageLoading, PrimoralLogo } from "@/components/brand";
+import { Loading, PageLoading, PrimolarLogo } from "@/components/brand";
 import { useNavigationPending } from "@/components/navigation-pending";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
@@ -103,8 +103,8 @@ export function PortalShell({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-(--z-header) border-b border-line bg-surface/95 backdrop-blur">
         <span aria-hidden className="brand-strip absolute inset-x-0 top-0 h-1" />
         <div className="mx-auto flex h-18 max-w-3xl items-center gap-3 px-4 pt-1 sm:px-6">
-          <Link href="/portal" aria-label="Primoral home" className="inline-flex rounded-md">
-            <PrimoralLogo className="w-36 sm:w-44" />
+          <Link href="/portal" aria-label="Primolar home" className="inline-flex rounded-md">
+            <PrimolarLogo className="w-36 sm:w-44" />
           </Link>
           <div className="ml-auto">
             <AccountMenu variant="bar" />
