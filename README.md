@@ -27,6 +27,7 @@ apps/web/           Next.js app (the prototype)
 packages/shared/    Zod schemas, types and domain logic, shared with the future NestJS API
 CONVENTIONS.md      How the code is organised and the rules it follows. Read before adding a feature.
 ROADMAP.md          What each feature does, and the order to build them in.
+DEMO_SCRIPT.md      A 5-minute walk through the demo for a client, with every login.
 ```
 
 ## Moving to a real backend

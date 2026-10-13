@@ -223,7 +223,7 @@ Turns the single-clinic app into a product many clinics use. Decisions settled o
 
 ---
 
-# Part 2: Build chunks (in order)
+# Part 2: Build chunks (in build order: 18 comes last)
 
 Total ≈ 212 hours (153 for features 1–15, 59 for the platform). Hours are estimates for one developer using Claude Code.
 
@@ -232,7 +232,7 @@ Total ≈ 212 hours (153 for features 1–15, 59 for the platform). Hours are es
 Workspace, shared schemas and domain logic, MSW mock layer, app shell with role switcher, patient
 list, patient header, provenly. Tests green.
 
-## Chunk 1: UI kit (6 h)
+## ✅ Chunk 1: UI kit (6 h) (done)
 
 **Goal:** stop hand-styling every input before the forms pile up.
 
@@ -243,7 +243,7 @@ list, patient header, provenly. Tests green.
 
 **Done when:** a sample form uses only kit components, and errors show under each field.
 
-## Chunk 2: Clinic setup data (6 h)
+## ✅ Chunk 2: Clinic setup data (6 h) (done)
 
 **Goal:** the reference data that appointments, plans and billing all need.
 
@@ -255,7 +255,7 @@ list, patient header, provenly. Tests green.
 
 **Depends on:** 1.
 
-## Chunk 3: Patient profile complete (10 h) — feature 1
+## ✅ Chunk 3: Patient profile complete (10 h) — feature 1 (done)
 
 - Create and edit forms: guardians (add or remove, mark primary), emergency contact, allergies,
   conditions, medications, dental history, alerts.
@@ -268,7 +268,7 @@ every tab.
 
 **Depends on:** 1.
 
-## Chunk 4: Visits (6 h)
+## ✅ Chunk 4: Visits (6 h) (done)
 
 **Goal:** the backbone. Chart entries, notes, behavior, photos and payments all attach to a visit.
 
@@ -279,7 +279,7 @@ every tab.
 
 **Depends on:** 3.
 
-## Chunk 5: Dental chart, display (12 h) — feature 2, part 1
+## ✅ Chunk 5: Dental chart, display (12 h) — feature 2, part 1 (done)
 
 - An SVG tooth component with 5 clickable surface zones (incisal edge for front teeth).
 - Full chart layout that matches the paper chart: quadrants, primary row, primary / permanent /
@@ -290,7 +290,7 @@ every tab.
 
 **Depends on:** 4.
 
-## Chunk 6: Dental chart, editing and history (12 h) — feature 2, part 2
+## ✅ Chunk 6: Dental chart, editing and history (12 h) — feature 2, part 2 (done)
 
 - Tooth panel: pick surfaces and a condition, add a note, save as a chart entry for the current visit.
 - Correct a finding (a superseding entry), never edit in place.
@@ -300,7 +300,7 @@ every tab.
 
 **Depends on:** 5.
 
-## Chunk 7: Clinical notes + behavior tracking (12 h) — features 3 and 9
+## ✅ Chunk 7: Clinical notes + behavior tracking (12 h) — features 3 and 9 (done)
 
 - A template renderer that builds a form from `NoteTemplate.fields`.
 - Seed all 11 templates. The oral exam template matches the paper chart.
@@ -311,7 +311,7 @@ every tab.
 
 **Depends on:** 4. Use chunk 6's tooth picker for the "teeth" field type.
 
-## Chunk 8: Growth and development (4 h) — feature 10
+## ✅ Chunk 8: Growth and development (4 h) — feature 10 (done)
 
 - A per-visit record: habits with started and stopped dates, speech observations.
 - Dentition stage and eruption status read from the chart.
@@ -322,7 +322,7 @@ the timeline.
 
 **Depends on:** 6.
 
-## Chunk 9: Treatment plan and progress (10 h) — feature 11
+## ✅ Chunk 9: Treatment plan and progress (10 h) — feature 11 (done)
 
 - Plan items from the procedure catalog, optionally tied to a tooth, with a fee.
 - "Add to plan" from a chart finding.
@@ -332,7 +332,7 @@ the timeline.
 
 **Depends on:** 2, 6, 7.
 
-## Chunk 10: Appointments (14 h) — feature 4
+## ✅ Chunk 10: Appointments (14 h) — feature 4 (done)
 
 - Day view by chair (react-big-calendar resources), plus week and month views.
 - Create, reschedule, cancel; the status flow; no-show tracking on the profile.
@@ -344,7 +344,7 @@ patient.
 
 **Depends on:** 2, 4.
 
-## Chunk 11: Follow-ups and recalls (8 h) — features 14 and 15
+## ✅ Chunk 11: Follow-ups and recalls (8 h) — features 14 and 15 (done)
 
 - Signing a note whose procedure has a rule creates a due item (`dueDateFor`).
 - A "Recalls" page with overdue, this week and this month lists, and one-tap booking.
@@ -354,7 +354,7 @@ the list.
 
 **Depends on:** 7, 10.
 
-## Chunk 12: Billing and payments (12 h) — feature 7
+## ✅ Chunk 12: Billing and payments (12 h) — feature 7 (done)
 
 - Create an invoice from done plan items, with a discount.
 - Record payments (method, reference number), partial payments, and refunds as negative payments.
@@ -364,7 +364,7 @@ the list.
 
 **Depends on:** 9.
 
-## Chunk 13: Financial dashboard (5 h) — feature 8
+## ✅ Chunk 13: Financial dashboard (5 h) — feature 8 (done)
 
 - Recharts: collections by day, week and month; revenue by procedure; method breakdown.
 - Outstanding balances and unpaid appointments tables.
@@ -374,7 +374,7 @@ the list.
 
 **Depends on:** 10, 12.
 
-## Chunk 14: Parent messages (8 h) — feature 5
+## ✅ Chunk 14: Parent messages (8 h) — feature 5 (done)
 
 - Template editor with placeholders and live preview.
 - An event → queued message hook for booking, reminders, no-shows, post-op notes, recalls and
@@ -386,7 +386,7 @@ filled in.
 
 **Depends on:** 10, 11.
 
-## Chunk 15: Clinical photos (6 h) — feature 12
+## ✅ Chunk 15: Clinical photos (6 h) — feature 12 (done)
 
 - Upload or take a photo (`<input capture>`), compress in the browser, store in IndexedDB.
 - Gallery by visit and type; before ↔ after slider.
@@ -395,7 +395,7 @@ filled in.
 
 **Depends on:** 4.
 
-## Chunk 16: Document generation (8 h) — feature 13
+## ✅ Chunk 16: Document generation (8 h) — feature 13 (done)
 
 - PDF templates for all 9 document types, filled from patient, chart, plan and billing data.
 - Preview, download, and a log on the patient record.
@@ -414,20 +414,10 @@ filled in.
 
 **Depends on:** 10, 11, 12, 14, 15.
 
-## Chunk 18: Demo polish and deploy (6 h)
-
-- A realistic demo scenario in the seed: one child mid-treatment, one due for recall, one with a
-  balance.
-- Responsive check at phone width; keyboard pass; empty and error states.
-- Deploy to Vercel; write a 5-minute demo script for the client.
-
-**Done when:** the client can open a link and walk the demo script without your help.
-
-**Depends on:** all.
-
-## Chunk 19: Tenancy foundation (22 h) — feature 16, part 1 · Large
+## ✅ Chunk 19: Tenancy foundation (22 h) — feature 16, part 1 · Large (done)
 
 **Plan:** `.claude/plans/feature-primolar-tenancy-plan/`
+**Status:** built 2026-10-12
 
 **Goal:** every record knows its clinic account and, where it applies, its branch; staff sign in to
 the right clinic and work at the right branch.
@@ -447,9 +437,9 @@ the right clinic and work at the right branch.
 (tested); a staff member at two branches switches between them and sees each branch's day; a
 suspended account's staff are refused at sign-in.
 
-**Depends on:** 18.
+**Depends on:** 17.
 
-## Chunk 20: Owner settings and clinic branding (24 h) — feature 16, part 2 · Large
+## ✅ Chunk 20: Owner settings and clinic branding (24 h) — feature 16, part 2 · Large (done)
 
 **Plan:** `.claude/plans/feature-primolar-branding-plan/`
 **Status:** built 2026-10-12
@@ -468,7 +458,7 @@ refused with a suggestion.
 
 **Depends on:** 19.
 
-## Chunk 21: Cross-branch views and operator console (13 h) — feature 16, part 3 · Large
+## ✅ Chunk 21: Cross-branch views and operator console (13 h) — feature 16, part 3 · Large (done)
 
 **Plan:** `.claude/plans/feature-primolar-operator-plan/`
 **Status:** built 2026-10-13
@@ -483,6 +473,18 @@ account doesn't see the filter; the operator creates a third account, signs in a
 downgrading it to Small blocks new additions without disabling anything.
 
 **Depends on:** 20, 13.
+
+## Chunk 18: Demo polish and deploy (6 h)
+
+- A realistic demo scenario in the seed: one child mid-treatment, one due for recall, one with a
+  balance.
+- Responsive check at phone width; keyboard pass; empty and error states.
+- Deploy to Vercel; write a 5-minute demo script for the client.
+
+**Done when:** the client can open a link and walk the demo script without your help.
+
+**Depends on:** all, 21 included. Built last so the demo, deploy and video show the whole product: several
+clinics, branches, clinic branding and the operator console.
 
 ---
 
@@ -500,8 +502,8 @@ downgrading it to Small blocks new additions without disabling anything.
 7 + 10 ─ 11 Follow-ups & recalls ─ 14 Messages
 9 + 12 ─ 16 Documents
 10 + 11 + 12 + 14 + 15 ─ 17 Parent portal
-everything ─ 18 Polish & deploy
-18 ─ 19 Tenancy foundation ─ 20 Owner settings & branding ─ 21 Cross-branch & operator ◄── 13
+17 ─ 19 Tenancy foundation ─ 20 Owner settings & branding ─ 21 Cross-branch & operator ◄── 13
+everything, 21 included ─ 18 Polish & deploy
 ```
 
 Chunks 5–6 (the chart) carry the most risk. If time gets tight, cut scope from 17 (portal) and 13
