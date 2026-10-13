@@ -17,6 +17,7 @@ export * from "./schemas/finance";
 export * from "./schemas/patient-list";
 export * from "./schemas/today";
 export * from "./schemas/auth";
+export * from "./schemas/operator";
 export * from "./schemas/audit";
 export * from "./domain/teeth";
 export * from "./errors";

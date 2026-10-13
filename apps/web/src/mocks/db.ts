@@ -58,6 +58,18 @@ export type Db = {
   staffCredentials: StaffCredential[]; // passwords of logins the Owner added or that changed theirs; never served
 };
 
+/**
+ * A clinic account with nothing in it yet: the operator fills in its branch, Owner and reference data (decision #3).
+ * Typed `Db`, so a collection added to Db without a value here fails typecheck.
+ */
+export const emptyDb = (): Db => ({
+  branches: [], patients: [], staff: [], chairs: [], procedures: [], visits: [], chartEntries: [], noteTemplates: [],
+  notes: [], growth: [], planItems: [], appointments: [], photos: [], dueItems: [], invoices: [], payments: [],
+  messageTemplates: [], messages: [], documents: [], appointmentRequests: [], auditEvents: [], staffPins: [],
+  staffCredentials: [],
+});
+
+
 /** Everything the fake backend stores: the clinic accounts (what the operator sees) and each account's own Db. */
 export type Platform = { accounts: ClinicAccount[]; tenants: Record<string, Db> };
 

@@ -27,7 +27,7 @@ import { env } from "@/lib/env";
 import { branchOf, sessionOf, usableBranchesOf } from "@/mocks/access";
 import { deleteBlob, getBlob, putBlob } from "@/mocks/blob-store";
 import { currentAccount, currentClinicId, db, persist } from "@/mocks/db";
-import { emailTaken, staffEmail } from "@/mocks/demo-accounts";
+import { emailTaken, newPin, staffEmail, temporaryPassword } from "@/mocks/demo-accounts";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 const refuse = (status: 400 | 403 | 404 | 409 | 413, message: string) => new HttpResponse(message, { status });
@@ -55,11 +55,6 @@ function atLimit(limit: "branches" | "staffLogins") {
   return canAddUnder(tier, limit, accountUsage(db)[limit]) ? undefined : refuse(409, limitMessage(tier, limit));
 }
 
-/** Readable at a glance and over the phone: no 0/O, 1/l/I. */
-const ALPHABET = "abcdefghjkmnpqrstuvwxyzACDEFGHJKLMNPQRTUVWXY23456789";
-const pick = (n: number, chars: string) => Array.from(crypto.getRandomValues(new Uint32Array(n)), (v) => chars[v % chars.length]).join("");
-/** "Kp7m-3xQa-9tLz": shown to the Owner once, passed on by them, changed at first sign-in (decision #21). */
-const temporaryPassword = () => [pick(4, ALPHABET), pick(4, ALPHABET), pick(4, ALPHABET)].join("-");
 
 /** Still to happen at the branch: what archiving would strand. Today's arrived and in-chair visits count too. */
 const UPCOMING: Appointment["status"][] = ["booked", "confirmed", "arrived", "in_chair"];
@@ -233,7 +228,7 @@ export const clinicHandlers = [
       ...(second?.length ? { alsoRoles: second } : {}),
       ...(licenseNo ? { licenseNo } : {}),
     };
-    const result: AddStaffResult = { staff, temporaryPassword: temporaryPassword(), pin: pick(4, "0123456789") };
+    const result: AddStaffResult = { staff, temporaryPassword: temporaryPassword(), pin: newPin() };
     db.staff.push(staff);
     db.staffCredentials.push({ clinicId: staff.clinicId, staffId: staff.id, password: result.temporaryPassword, mustChange: true });
     db.staffPins.push({ clinicId: staff.clinicId, staffId: staff.id, pin: result.pin, failedAt: [] });

@@ -15,7 +15,7 @@ import {
   type Payment,
 } from "@pedia/shared";
 import { env } from "@/lib/env";
-import { activeBranch } from "@/mocks/access";
+import { activeBranch, reportBranches } from "@/mocks/access";
 import { currentClinicId, db, persist } from "@/mocks/db";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
@@ -94,12 +94,14 @@ export const billingHandlers = [
     return HttpResponse.json(db.payments.filter((p) => p.patientId === params.id).sort(byReceived));
   }),
 
-  // The daily collection list: the active branch's payments and refunds received on ?date=YYYY-MM-DD (local day).
+  // The daily collection list: payments and refunds received on ?date=YYYY-MM-DD (local day), at the device's branch
+  // or the ?branch= one (reportBranches, decision #20).
   http.get(url("/payments"), async ({ request }) => {
     await delay(100);
     const date = new URL(request.url).searchParams.get("date") ?? format(new Date(), "yyyy-MM-dd");
-    const branchId = activeBranch(request).id;
-    const rows = db.payments.filter((p) => p.branchId === branchId && format(new Date(p.receivedAt), "yyyy-MM-dd") === date);
+    const branches = reportBranches(request);
+    if (branches instanceof Response) return branches;
+    const rows = db.payments.filter((p) => branches.includes(p.branchId) && format(new Date(p.receivedAt), "yyyy-MM-dd") === date);
     return HttpResponse.json(rows.sort(byReceived));
   }),
 

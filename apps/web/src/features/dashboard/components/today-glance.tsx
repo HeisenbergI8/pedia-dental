@@ -102,8 +102,8 @@ function Row({ a, muted }: { a: TodayAppointment; muted?: boolean }) {
   );
 }
 
-export function TodayGlance({ today, now }: { today: string; now: Date }) {
-  const { data: s, isLoading, error, refetch, isRefetching } = useTodaySummary(today);
+export function TodayGlance({ today, now, branch }: { today: string; now: Date; branch?: string }) {
+  const { data: s, isLoading, error, refetch, isRefetching } = useTodaySummary(today, branch);
   const greet = useSendBirthdayGreeting();
   const can = useCan();
   const seesRequests = can("appointments.manage");

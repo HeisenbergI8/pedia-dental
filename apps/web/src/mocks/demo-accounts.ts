@@ -154,3 +154,14 @@ export const staffEmail = (s: StaffMember) => staffAccount(s).email;
  */
 export const emailTaken = (db: Db, email: string, exceptStaffId?: string) =>
   db.staff.some((s) => s.id !== exceptStaffId && staffEmail(s) === email) || allAccounts(db).some((a) => !a.staffId && a.email === email);
+
+/** Readable at a glance and over the phone: no 0/O, 1/l/I. */
+const ALPHABET = "abcdefghjkmnpqrstuvwxyzACDEFGHJKLMNPQRTUVWXY23456789";
+const pick = (n: number, chars: string) => Array.from(crypto.getRandomValues(new Uint32Array(n)), (v) => chars[v % chars.length]).join("");
+/**
+ * "Kp7m-3xQa-9tLz": a new login's first password, shown once to whoever created it (the Owner adding staff, or the
+ * operator creating an account's Owner), passed on by them, changed at first sign-in (decision #21).
+ */
+export const temporaryPassword = () => [pick(4, ALPHABET), pick(4, ALPHABET), pick(4, ALPHABET)].join("-");
+/** A new login's Switch user PIN, shown once beside the temporary password. */
+export const newPin = () => pick(4, "0123456789");

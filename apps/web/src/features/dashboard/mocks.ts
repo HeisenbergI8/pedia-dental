@@ -2,7 +2,7 @@ import { http, HttpResponse, delay } from "msw";
 import { format } from "date-fns";
 import { financeSummary, todaySummary } from "@pedia/shared";
 import { env } from "@/lib/env";
-import { activeBranch } from "@/mocks/access";
+import { reportBranches } from "@/mocks/access";
 import { db, type Db } from "@/mocks/db";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
@@ -13,23 +13,26 @@ const isDay = (today: string) => /^\d{4}-\d{2}-\d{2}$/.test(today);
 const badDay = () => new HttpResponse("today must be YYYY-MM-DD", { status: 400 });
 
 /**
- * One branch's share of the account, for the branch-level reports: its appointments, invoices and payments, with
- * every account-level collection (patients, staff, visits) as is. The Owner's "All branches" total comes later.
+ * The branches' share of the account, for the branch-level reports: their appointments, invoices and payments, with
+ * every account-level collection (patients, staff, visits) as is. One branch, or all of them for the Owner's
+ * "All branches" total (decision #20): the same report over more rows, never a new report type.
  */
-const branchView = (all: Db, branchId: string): Db => ({
+const branchView = (all: Db, branchIds: string[]): Db => ({
   ...all,
-  appointments: all.appointments.filter((a) => a.branchId === branchId),
-  invoices: all.invoices.filter((i) => i.branchId === branchId),
-  payments: all.payments.filter((p) => p.branchId === branchId),
+  appointments: all.appointments.filter((a) => branchIds.includes(a.branchId)),
+  invoices: all.invoices.filter((i) => branchIds.includes(i.branchId)),
+  payments: all.payments.filter((p) => branchIds.includes(p.branchId)),
 });
 
 export const dashboardHandlers = [
-  // ?today=YYYY-MM-DD (the clinic's local day; defaults to now).
+  // ?today=YYYY-MM-DD (the clinic's local day; defaults to now). ?branch= a branch id or `all` (reportBranches).
   http.get(url("/reports/finance"), async ({ request }) => {
     await delay(100);
     const today = dayParam(request);
     if (!isDay(today)) return badDay();
-    return HttpResponse.json(financeSummary(branchView(db, activeBranch(request).id), today));
+    const branches = reportBranches(request);
+    if (branches instanceof Response) return branches;
+    return HttpResponse.json(financeSummary(branchView(db, branches), today));
   }),
 
   // Today at a glance, for every staff role. Same ?today= rule. The birthday job is NOT run here: opening
@@ -38,6 +41,8 @@ export const dashboardHandlers = [
     await delay(100);
     const today = dayParam(request);
     if (!isDay(today)) return badDay();
-    return HttpResponse.json(todaySummary(branchView(db, activeBranch(request).id), today));
+    const branches = reportBranches(request);
+    if (branches instanceof Response) return branches;
+    return HttpResponse.json(todaySummary(branchView(db, branches), today));
   }),
 ];

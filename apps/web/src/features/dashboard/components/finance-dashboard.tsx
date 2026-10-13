@@ -36,8 +36,8 @@ function Tile({ label, value, hint, className }: { label: string; value: string;
 
 
 /** The admin's money view. Rendered inside <Can permission="dashboard.view"> by DashboardScreen. */
-export function FinanceDashboard({ today }: { today: string }) {
-  const { data: s, isLoading, error, refetch, isRefetching } = useFinanceSummary(today, true);
+export function FinanceDashboard({ today, branch }: { today: string; branch?: string }) {
+  const { data: s, isLoading, error, refetch, isRefetching } = useFinanceSummary(today, true, branch);
   const patientsQuery = usePatients();
   const patients = patientsQuery.data ?? [];
   const procedures = useProcedures().data ?? [];

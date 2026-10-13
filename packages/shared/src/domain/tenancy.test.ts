@@ -10,7 +10,9 @@ import {
   holdsRole,
   isActiveStaff,
   limitMessage,
+  reportBranchFilter,
   rolesOf,
+  transferProblem,
   usableBranches,
   worksAt,
 } from "./tenancy";
@@ -103,4 +105,27 @@ describe("limits in use (decisions #8, #10, #37)", () => {
     expect(formatTin("123 456 789 0001")).toBe("123-456-789-0001");
     expect(formatTin("12345")).toBe("123-45");
   });
+});
+
+describe("reportBranchFilter (decision #20)", () => {
+  const branch = (id: string) => ({ clinicId: "c", id, name: id, address: "a", phone: "p", openingHours: DEFAULT_OPENING_HOURS, archived: false });
+  const two = [branch("branch_a"), branch("branch_b")];
+  it("is not offered on Small", () => expect(reportBranchFilter("small", ["owner", "dentist"], two)).toBeUndefined());
+  it("is not offered at a single branch", () => expect(reportBranchFilter("mid", ["owner"], [two[0]!])).toBeUndefined());
+  it("gives the Owner every branch and All branches", () =>
+    expect(reportBranchFilter("mid", ["owner", "dentist"], two)).toEqual({ branches: two, all: true }));
+  it("gives staff at two branches those two, without All branches", () =>
+    expect(reportBranchFilter("big", ["admin"], two)).toEqual({ branches: two, all: false }));
+});
+
+describe("transferProblem (decision #13)", () => {
+  const staff = [
+    { id: "s_owner", fullName: "Dr. Owner", isOwner: true },
+    { id: "s_admin", fullName: "Ana Admin" },
+    { id: "s_gone", fullName: "Gil Gone", deactivatedAt: "2026-10-01T00:00:00.000Z" },
+  ];
+  it("allows an active staff login", () => expect(transferProblem(staff, "s_admin")).toBeUndefined());
+  it("refuses a deactivated login", () => expect(transferProblem(staff, "s_gone")).toMatch(/deactivated/));
+  it("refuses the current Owner", () => expect(transferProblem(staff, "s_owner")).toMatch(/already the Owner/));
+  it("refuses someone outside the account", () => expect(transferProblem(staff, "staff_elsewhere")).toMatch(/Choose/));
 });

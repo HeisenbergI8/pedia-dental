@@ -470,7 +470,8 @@ refused with a suggestion.
 
 ## Chunk 21: Cross-branch views and operator console (13 h) — feature 16, part 3 · Large
 
-**Plan:** `.claude/plans/feature-primolar-operator-plan/` (to be written)
+**Plan:** `.claude/plans/feature-primolar-operator-plan/`
+**Status:** built 2026-10-13
 
 - Branch filter on the dashboard and finance views, plus an "All branches" total for the Owner. Mid
   and Big only.
