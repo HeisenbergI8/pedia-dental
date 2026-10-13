@@ -6,17 +6,26 @@ import {
   CreateAccountResult,
   OperatorSession,
   OwnerCandidate,
+  PriceList,
+  Signup,
   type CreateAccountInput,
   type OperatorLoginInput,
+  type RecordUpfrontPaymentInput,
+  type SetBrandingInput,
+  type SignupInput,
   type Tier,
 } from "@pedia/shared";
+import { signupFormData } from "@/features/signup/form-data";
 import { api } from "@/lib/api-client";
+import { env } from "@/lib/env";
 import { useOperatorSessionStore } from "@/stores/operator-session-store";
 
 export const operatorKeys = {
   all: ["operator"] as const,
   accounts: () => [...operatorKeys.all, "accounts"] as const,
   candidates: (id: string) => [...operatorKeys.all, "accounts", id, "staff"] as const,
+  signups: () => [...operatorKeys.all, "signups"] as const,
+  prices: () => [...operatorKeys.all, "prices"] as const,
 };
 const post = (body?: unknown) => ({ method: "POST", ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 
@@ -40,16 +49,40 @@ export const useAccounts = () => useQuery({ queryKey: operatorKeys.accounts(), q
 export const useOwnerCandidates = (id: string, enabled: boolean) =>
   useQuery({ queryKey: operatorKeys.candidates(id), queryFn: () => api(`/operator/accounts/${id}/staff`, z.array(OwnerCandidate)), enabled });
 
-/** Every account action answers with the account's new row; the list refetches so counts and Owner stay true. */
+/** Every console action refetches the whole console: approving changes both the sign-ups and the accounts list. */
 function useAccountAction<I, O>(call: (input: I) => Promise<O>) {
   const qc = useQueryClient();
   return useMutation({ mutationFn: call, onSuccess: () => qc.invalidateQueries({ queryKey: operatorKeys.all }) });
 }
 
-export const useCreateAccount = () => useAccountAction((input: CreateAccountInput) => api("/operator/accounts", CreateAccountResult, post(input)));
+/** Multipart: the logo and reference images are files (billing #16: the same branding choices as the form). */
+export const useCreateAccount = () =>
+  useAccountAction(({ input, logo, references }: { input: CreateAccountInput; logo?: File; references?: File[] }) =>
+    api("/operator/accounts", CreateAccountResult, { method: "POST", body: signupFormData(input, { logo, references }) }),
+  );
 export const useChangeTier = (id: string) =>
   useAccountAction((tier: Tier) => api(`/operator/accounts/${id}/tier`, AccountOverview, { method: "PUT", body: JSON.stringify({ tier }) }));
 export const useSetSuspended = (id: string) =>
   useAccountAction((suspend: boolean) => api(`/operator/accounts/${id}/${suspend ? "suspend" : "reactivate"}`, AccountOverview, post()));
 export const useTransferOwnership = (id: string) =>
   useAccountAction((staffId: string) => api(`/operator/accounts/${id}/owner`, AccountOverview, post({ staffId })));
+
+export const useSignups = () => useQuery({ queryKey: operatorKeys.signups(), queryFn: () => api("/operator/signups", z.array(Signup)) });
+export const useOperatorPrices = () => useQuery({ queryKey: operatorKeys.prices(), queryFn: () => api("/operator/prices", PriceList) });
+
+/** For <img>: the browser sends the operator cookie with it, as the clinic logo does with the clinic's. */
+export const signupFileUrl = (signupId: string, key: string) => `${env.apiUrl}/operator/signups/${signupId}/files/${encodeURIComponent(key)}`;
+
+export const useFixSignup = (id: string) =>
+  useAccountAction(({ input, logo, references }: { input: SignupInput; logo?: File; references: File[] }) =>
+    api(`/operator/signups/${id}`, Signup, { method: "PUT", body: signupFormData(input, { logo, references }) }),
+  );
+export const useRecordPayment = (id: string) =>
+  useAccountAction((input: RecordUpfrontPaymentInput) => api(`/operator/signups/${id}/payment`, Signup, post(input)));
+export const useRejectSignup = (id: string) => useAccountAction((reason: string) => api(`/operator/signups/${id}/reject`, Signup, post({ reason })));
+export const useApproveSignup = (id: string) => useAccountAction(() => api(`/operator/signups/${id}/approve`, CreateAccountResult, post()));
+export const useSavePrices = () => useAccountAction((prices: PriceList) => api("/operator/prices", PriceList, { method: "PUT", body: JSON.stringify(prices) }));
+export const useSetBranding = (accountId: string) =>
+  useAccountAction(({ input, logo }: { input: SetBrandingInput; logo?: File }) =>
+    api(`/operator/accounts/${accountId}/branding`, AccountOverview, { method: "PUT", body: signupFormData(input, { logo }) }),
+  );

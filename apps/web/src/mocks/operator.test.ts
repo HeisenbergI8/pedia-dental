@@ -18,6 +18,7 @@ import {
   type CreateAccountInput,
 } from "@pedia/shared";
 import { read } from "@/design/source";
+import { signupFormData } from "@/features/signup/form-data";
 import { ApiError, api } from "@/lib/api-client";
 import { ACCESS_RULES } from "./access";
 import { currentClinicId, platform } from "./db";
@@ -112,19 +113,25 @@ describe("the operator never reaches clinic data (decision #25)", () => {
     expect(await status(api("/operator/patients", z.unknown()))).toBe(403);
   });
 
-  it("keeps operator handlers out of the tenant binding", () => {
-    const src = read("features/operator/mocks.ts");
-    expect(src).not.toMatch(/\b(selectTenant|sessionOf|activeBranch)\b/);
-    expect(src).not.toMatch(/import \{[^}]*\bdb\b[^}]*\} from "@\/mocks\/db"/);
+  it("keeps operator and sign-up handlers out of the tenant binding (decision #25, billing #4)", () => {
+    const files = ["features/operator/mocks.ts", "features/operator/signup-mocks.ts", "features/signup/mocks.ts", "mocks/signups.ts"];
+    for (const file of files) {
+      const src = read(file);
+      expect(src, file).not.toMatch(/\b(selectTenant|sessionOf|activeBranch|currentClinicId|currentAccount)\b/);
+      expect(src, file).not.toMatch(/import \{[^}]*\bdb\b[^}]*\} from "(@\/mocks|\.)\/db"/);
+    }
   });
 });
 
 const EXAMPLE_NEW = "EXAMPLE-chosen-at-first-sign-in";
 const TALA: CreateAccountInput = {
   account: { name: "Tala Kids Dental", contactEmail: "hello@tala.demo", tin: "345-678-901", tier: "mid" },
-  branch: { name: "Silang", address: "3 Rizal Street, Silang, Cavite", phone: "(046) 400 0300" },
+  branch: { name: "Silang", address: "3 Rizal Street, Silang, Cavite", phone: "(046) 400 0300", openingHours: DEFAULT_OPENING_HOURS },
   owner: { fullName: "Dr. Tala Ramos", email: "owner@tala.demo", role: "dentist" },
+  branding: { choice: "default" },
+  payment: { method: "bank_transfer", paidOn: "2026-10-13" },
 };
+const multipart = (data: unknown, files?: Parameters<typeof signupFormData>[1]) => ({ method: "POST", body: signupFormData(data, files) });
 const asStaff = (token: string) => cookies(`pd_session=${token}`);
 
 describe("operator account actions (chunk 21 done-when)", () => {
@@ -133,10 +140,12 @@ describe("operator account actions (chunk 21 done-when)", () => {
 
   it("creates a third account, and its new Owner signs in to it", async () => {
     asOperator();
-    created = await api("/operator/accounts", CreateAccountResult, send("POST", TALA));
+    created = await api("/operator/accounts", CreateAccountResult, multipart(TALA));
     expect(await accounts()).toHaveLength(3);
     expect(created.overview).toMatchObject({ account: { tier: "mid", status: "active" }, owner: { email: "owner@tala.demo" }, usage: { branches: 1, staffLogins: 1, patients: 0 } });
-    expect(await status(api("/operator/accounts", CreateAccountResult, send("POST", TALA)))).toBe(409);
+    expect(await status(api("/operator/accounts", CreateAccountResult, multipart(TALA)))).toBe(409);
+    // A5: written as an approved, paid sign-up from the console, so chunk 23 finds its first payment in one place.
+    expect(platform.signups.find((s) => s.approval?.clinicId === created.overview.account.id)).toMatchObject({ source: "console", status: "approved", payment: { method: "bank_transfer" } });
 
     cookies();
     const first = await api("/auth/login", Session, send("POST", { email: "owner@tala.demo", password: created.temporaryPassword }));
@@ -208,12 +217,17 @@ describe("audit findings: duplicate names and a stranded old Owner", () => {
   it("treats inner spaces as one clinic name", async () => {
     asOperator();
     const twin = { ...TALA, account: { ...TALA.account, name: "Bulilit  Smiles   Pediatric Dental" }, owner: { ...TALA.owner, email: "twin@bulilit.demo" } };
-    expect(await status(api("/operator/accounts", CreateAccountResult, send("POST", twin)))).toBe(409);
+    expect(await status(api("/operator/accounts", CreateAccountResult, multipart(twin)))).toBe(409);
+    // Billing #10: a contact email in use is refused too, and so is a waiting sign-up's name.
+    const sameEmail = { ...TALA, account: { ...TALA.account, name: "Brand New Dental", contactEmail: "HELLO@ngiti.demo" } };
+    expect(await status(api("/operator/accounts", CreateAccountResult, multipart(sameEmail)))).toBe(409);
+    const waitingName = { ...TALA, account: { ...TALA.account, name: "hagikgik kids  dental", contactEmail: "x@hagikgik2.demo" } };
+    expect(await status(api("/operator/accounts", CreateAccountResult, multipart(waitingName)))).toBe(409);
   });
 
   it("gives an old Owner whose branches were all archived every open branch, so the app still opens for them", async () => {
     asOperator();
-    const made = await api("/operator/accounts", CreateAccountResult, send("POST", { ...TALA, account: { ...TALA.account, name: "Bituin Dental" }, owner: { ...TALA.owner, email: "owner@bituin.demo" } }));
+    const made = await api("/operator/accounts", CreateAccountResult, multipart({ ...TALA, account: { ...TALA.account, name: "Bituin Dental", contactEmail: "hello@bituin.demo" }, owner: { ...TALA.owner, email: "owner@bituin.demo" } }));
     const id = made.overview.account.id;
     const tenant = platform.tenants[id]!;
     const first = tenant.branches[0]!;

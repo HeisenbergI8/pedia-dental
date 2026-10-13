@@ -23,9 +23,8 @@ export function PlanPanel() {
       <div className="space-y-2 border-t border-line pt-4">
         <h3 className="text-sm font-semibold">Also on your plan</h3>
         <ul className="space-y-1 text-sm">
-          <Feature on>Your logo and brand colour</Feature>
+          <Feature on>Your logo, brand colour and heading font</Feature>
           <Feature on={limits.crossBranchViews}>Dashboard and finance views across branches</Feature>
-          <Feature on={limits.headingFont}>Your own heading font</Feature>
         </ul>
       </div>
     </SectionCard>

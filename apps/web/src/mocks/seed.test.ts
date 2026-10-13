@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { differenceInYears, format, parseISO } from "date-fns";
 import {
+  PriceList,
+  Signup,
   TIER_LIMITS,
+  amountDue,
   accountUsage,
   brandColorProblem,
   canAddUnder,
@@ -10,6 +13,7 @@ import {
   matchesFilter,
   needsAttention,
   patientStanding,
+  sameClinicName,
 } from "@pedia/shared";
 import { seedPlatform } from "./db";
 import { seed } from "./seed";
@@ -131,5 +135,18 @@ describe("demo accounts' branding and limits (chunk 20)", () => {
     expect(accountUsage(ngiti)).toEqual({ branches: 1, staffLogins: TIER_LIMITS.small.staffLogins });
     expect(canAddUnder("small", "staffLogins", accountUsage(ngiti).staffLogins)).toBe(false);
     expect(Object.values(p.tenants).every((t) => t.staffCredentials.length === 0)).toBe(true);
+  });
+});
+
+describe("sign-ups seed (billing #34)", () => {
+  const p = seedPlatform();
+  it("has one sign-up waiting for its setup fee, quoted from the price list", () => {
+    expect(p.signups.map((s) => [s.status, !!s.payment, s.branding.choice])).toEqual([["waiting", false, "designed"]]);
+    const s = Signup.parse(p.signups[0]);
+    expect(s.quote).toEqual(amountDue(PriceList.parse(p.prices), s.account.tier, s.branding.choice));
+  });
+  it("clashes with no clinic by name or contact email", () => {
+    const s = p.signups[0]!;
+    expect(p.accounts.some((a) => sameClinicName(a.name, s.account.name) || a.contactEmail === s.account.contactEmail)).toBe(false);
   });
 });

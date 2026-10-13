@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { AddStaffInput } from "./clinic";
 import { Id, Role } from "./common";
-import { Branch, ClinicAccount, Tier } from "./tenancy";
+import { DesignStatus, RecordUpfrontPaymentInput, SignupInput } from "./signup";
+import { ClinicAccount, HeadingFont, HexColor, Tier } from "./tenancy";
 
 /**
  * Primolar's own staff (decisions #3, #25). Not a clinic user: no clinicId, no role, no Permission. Its token is
@@ -33,19 +33,19 @@ export const AccountOverview = z.strictObject({
     staffLogins: z.number().int().nonnegative(), // active logins, the Owner included (#37)
     patients: z.number().int().nonnegative(), // a count: the operator never sees a patient record (#25)
   }),
+  // Billing #17: null unless the clinic chose Design it for me; then whether Primolar has delivered it yet.
+  design: DesignStatus.nullable(),
+  // With `design` only: the look the clinic has now, so Set branding starts from it rather than from Primolar's.
+  look: z.strictObject({ brandColor: HexColor, headingFont: HeadingFont.nullable(), hasLogo: z.boolean() }).nullable(),
 });
 export type AccountOverview = z.infer<typeof AccountOverview>;
 
 /**
- * POST /operator/accounts (decision #3): the account, its first branch, and its Owner. The Owner's job role is Admin
- * or Dentist (an Owner + Dentist, like the demo's Dr. Villanueva). Brand colour starts at Primolar's default; the
- * Owner sets the rest in Settings.
+ * POST /operator/accounts (billing #16): a clinic signed up by phone or in person. The same fields and branding
+ * choices as the public form, plus the upfront payment marked by hand. Multipart, like POST /signups (the logo is a
+ * file). Writes an approved sign-up with `source: "console"` (A5).
  */
-export const CreateAccountInput = z.object({
-  account: ClinicAccount.pick({ name: true, contactEmail: true, tin: true, tier: true }),
-  branch: Branch.pick({ name: true, address: true, phone: true }),
-  owner: AddStaffInput.pick({ fullName: true, email: true }).extend({ role: z.enum(["admin", "dentist"]) }),
-});
+export const CreateAccountInput = SignupInput.extend({ payment: RecordUpfrontPaymentInput });
 export type CreateAccountInput = z.infer<typeof CreateAccountInput>;
 
 /** The new account's row, and the only time the Owner's temporary password and PIN are sent (decision #21). */

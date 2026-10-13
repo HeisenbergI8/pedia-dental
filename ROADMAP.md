@@ -508,9 +508,10 @@ downgrading it to Small blocks new additions without disabling anything.
 
 **Depends on:** 20, 13.
 
-## Chunk 22: Sign-ups, branding choices and approval (22 h) — feature 17, part 1 · Large
+## ✅ Chunk 22: Sign-ups, branding choices and approval (22 h) — feature 17, part 1 · Large (done)
 
-**Plan:** `.claude/plans/feature-primolar-billing-plan/` (to be written)
+**Plan:** `.claude/plans/feature-primolar-billing-plan/`
+**Status:** built 2026-10-13
 
 - A public **Get started** form: clinic, first branch, Owner, plan and the three branding choices (own logo,
   colour and font; the default look; Design it for me with a brief and reference images). Duplicate clinic names

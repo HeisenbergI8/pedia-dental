@@ -230,7 +230,30 @@ const OPERATOR_RULES: Pick<Rule, "method" | "path">[] = [
   { method: "POST", path: "/operator/accounts/:id/reactivate" },
   { method: "GET", path: "/operator/accounts/:id/staff" },
   { method: "POST", path: "/operator/accounts/:id/owner" },
+  { method: "PUT", path: "/operator/accounts/:id/branding" },
+  { method: "GET", path: "/operator/signups" },
+  { method: "GET", path: "/operator/signups/:id/files/:key" },
+  { method: "PUT", path: "/operator/signups/:id" },
+  { method: "POST", path: "/operator/signups/:id/payment" },
+  { method: "POST", path: "/operator/signups/:id/reject" },
+  { method: "POST", path: "/operator/signups/:id/approve" },
+  { method: "GET", path: "/operator/prices" },
+  { method: "PUT", path: "/operator/prices" },
 ];
+
+/**
+ * The public sign-up (billing #4): no session of any kind. Deny by default, as RULES. Branches off before sessionOf,
+ * so a sign-up never selects a tenant, and a clinic or operator token changes nothing here.
+ */
+const PUBLIC_RULES: Pick<Rule, "method" | "path">[] = [
+  { method: "GET", path: "/signups/prices" },
+  { method: "POST", path: "/signups" },
+  { method: "GET", path: "/signups/:reference" },
+];
+
+function publicRefusal(request: Request, path: string) {
+  return PUBLIC_RULES.some((r) => r.method === request.method && match(r.path, path)) ? undefined : deny(403, `No access rule for ${request.method} ${path}`);
+}
 
 /** The gate for /operator/*: 401 without an operator token (a clinic token is not one), 403 for an unlisted route. */
 function operatorRefusal(request: Request, path: string) {
@@ -316,6 +339,7 @@ export const accessGate = http.all(url("/*"), ({ request }) => {
   // The operator is not a clinic user (decision #25). Its requests branch off here, before sessionOf, so they never
   // select a tenant: `db` is never pointed anywhere for them and no clinic rule can match them.
   if (path.startsWith("/operator/")) return operatorRefusal(request, path);
+  if (path === "/signups" || path.startsWith("/signups/")) return publicRefusal(request, path);
   if (path.startsWith("/auth/")) return; // login, me and logout check the session themselves
 
   const session = sessionOf(request);

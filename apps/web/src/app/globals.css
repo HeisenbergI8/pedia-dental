@@ -14,8 +14,8 @@
 
 /* Design tokens. Change the palette here, not in components.
    Brand: Primolar's plum is the default. A clinic account replaces the brand-* and on-deep-* tokens at runtime with
-   its own colour (features/clinic/brand-css.ts, derived and AA-checked in packages/shared domain/branding.ts), and on
-   Big --font-title. Nothing else is overridden: status, alerts, charts, crayons and the logo-* tokens stay Primolar's.
+   its own colour (features/clinic/brand-css.ts, derived and AA-checked in packages/shared domain/branding.ts), and
+   --font-title when it has a heading font (any plan). Nothing else is overridden: status, alerts, charts, crayons and the logo-* tokens stay Primolar's.
    The neutrals brand colours are checked against are mirrored in BRAND_BACKGROUNDS (a design guard keeps them equal). */
 @theme {
   --color-ground: #f7f7f4;

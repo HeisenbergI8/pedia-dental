@@ -18,7 +18,9 @@ import type {
   Patient,
   Payment,
   PlanItem,
+  PriceList,
   Procedure,
+  Signup,
   StaffMember,
   StaffCredential,
   StaffPin,
@@ -27,6 +29,7 @@ import type {
 import { clearBlobs } from "./blob-store";
 import { DEMO_ACCOUNT, DEMO_CLINIC_ID, seed } from "./seed";
 import { NGITI_ACCOUNT, seedNgiti } from "./seed-ngiti";
+import { SEED_PRICES, seedSignups } from "./seed-signups";
 
 /**
  * One clinic account's data (one tenant). Persisted inside `Platform` so demo data survives a refresh.
@@ -70,16 +73,22 @@ export const emptyDb = (): Db => ({
 });
 
 
-/** Everything the fake backend stores: the clinic accounts (what the operator sees) and each account's own Db. */
-export type Platform = { accounts: ClinicAccount[]; tenants: Record<string, Db> };
+/**
+ * Everything the fake backend stores: the clinic accounts (what the operator sees), each account's own Db, and
+ * Primolar's own records, which belong to no clinic: sign-ups (billing #12) and the price list (#23). Chunk 23 adds
+ * subscriptions here, beside them, never inside a tenant.
+ */
+export type Platform = { accounts: ClinicAccount[]; tenants: Record<string, Db>; signups: Signup[]; prices: PriceList };
 
 export const seedPlatform = (): Platform => ({
   accounts: [DEMO_ACCOUNT, NGITI_ACCOUNT],
   tenants: { [DEMO_ACCOUNT.id]: seed(), [NGITI_ACCOUNT.id]: seedNgiti() },
+  signups: seedSignups(),
+  prices: structuredClone(SEED_PRICES), // PUT /operator/prices replaces it; never share the constant
 });
 
-// v25: Owner settings and branding: brand colours and logos on both accounts, Ngiti at its 5-login limit, credentials.
-const KEY = "pedia-dental:mock-db:v25";
+// v26: sign-ups and the price list (chunk 22): Platform gains `signups` and `prices`, with one sign-up waiting.
+const KEY = "pedia-dental:mock-db:v26";
 
 function load(): Platform {
   if (typeof window === "undefined") return seedPlatform();

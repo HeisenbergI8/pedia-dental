@@ -5,7 +5,8 @@
 Primolar: pediatric dental clinic management sold as a service to many clinics. Each paying clinic is a
 **clinic account** with its own branches, staff, patients and branding (ROADMAP feature 16). **Current phase: frontend prototype.** Every API call is
 answered in the browser by MSW using fake, seeded data; there is no backend yet. A NestJS + MySQL API
-(`apps/api`) will replace the mocks later, endpoint by endpoint, without changing feature code.
+(`apps/api`) will replace the mocks later, endpoint by endpoint, without changing feature code. A clinic joins through
+the public **Get started** form, and Primolar approves it in the operator console (ROADMAP feature 17).
 
 Users: the Primolar operator (operator console); in each clinic account, the Owner, admins, dentists and front
 desk (staff app); parents (portal, through the demo login).
@@ -39,8 +40,9 @@ TanStack Query · React Hook Form + Zod 4 · Zustand (UI state, plus the demo se
 | Fake backend | `apps/web/src/mocks/` | MSW setup, localStorage-backed `db`, deterministic `seed` |
 | HTTP | `apps/web/src/lib/api-client.ts` | The only `fetch` in the app |
 | Access rules | `packages/shared/src/domain/permissions.ts` | `ROLE_PERMISSIONS`: who may do what. The only place access is decided. `branches.all` = works at every branch (Owner). `today.view` = Today at a glance (all staff); `dashboard.view` = finance (admin); `patients.contact` = guardian phones and emails, emergency contact and address, **left out of every patient response** without it (admin and front desk: all; a parent: their own family). Responses parse with `PatientView`; the stored record is `Patient` |
-| Access gate | `apps/web/src/mocks/access.ts` | Route → permission (`RULES`), 401 / 403, parent ownership. `/operator/*` branches off before `sessionOf` (`operatorRefusal`) |
-| Operator console | `apps/web/src/features/operator/`, `apps/web/src/app/operator/` | Primolar's console: clinic accounts, tiers, Owners, usage counts. Its own sign-in, session store and routes; never a clinic user |
+| Access gate | `apps/web/src/mocks/access.ts` | Route → permission (`RULES`), 401 / 403, parent ownership. `/operator/*` branches off before `sessionOf` (`operatorRefusal`); `/signups/*` too (`publicRefusal`, deny-by-default `PUBLIC_RULES`) |
+| Operator console | `apps/web/src/features/operator/`, `apps/web/src/app/operator/` | Primolar's console: clinic accounts, tiers, Owners, usage counts; sign-ups (record payment, fix, reject, approve), the price list, Set branding for Design it for me clinics. Its own sign-in, session store and routes; never a clinic user |
+| Public sign-up | `apps/web/src/features/signup/`, `apps/web/src/app/get-started/` | Get started form and the status page by reference. No sign-in; `/signups/*` answered outside every clinic |
 
 **Read this first:** `apps/web/src/features/patients/`. Every new feature copies its shape.
 
@@ -63,7 +65,7 @@ TanStack Query · React Hook Form + Zod 4 · Zustand (UI state, plus the demo se
 Component → feature hook (`features/*/api.ts`) → `api(path, ZodSchema)` → `fetch(/api/...)` →
 MSW handler (now) or NestJS (later).
 
-- Never call `fetch` from a component, and never import `@/mocks/*` from feature code outside `mocks.ts`.
+- Never call `fetch` from a component, and never import `@/mocks/*` from feature code outside `mocks.ts` (or a feature's second handler file, `*-mocks.ts`).
 - Every response is parsed with a shared schema. If parsing fails, fix the mock or schema; don't loosen it.
 - MSW handlers ARE the API contract. Same paths and shapes the NestJS controllers must serve.
 
@@ -76,7 +78,7 @@ MSW handler (now) or NestJS (later).
   components.
 - `apps/web/src/design/` holds guards that read source and render primitives: token contrast in both themes, no raw
   hex outside `globals.css` / `manifest.ts` / `document-pdf.tsx` and the two seed files (their stored brand colours
-  are data), no dashed outlines, crayon strip and Fredoka only on login and portal, Primolar's logo only on the sign-in pages and the operator console
+  are data), no dashed outlines, crayon strip and Fredoka only on login and portal, Primolar's logo only on the sign-in pages, the operator console and the public sign-up frame
   (`design-branding.test.ts`). A failing guard means the system was bypassed. Fix the component, not the guard.
 - Tailwind v4's bare `border` is `currentColor`. `globals.css` restores `line` as the default, so a darker edge is
   always named (`border-input`, `border-alert-line`).
@@ -96,9 +98,15 @@ MSW handler (now) or NestJS (later).
 - A clinic's brand colour is checked and derived in `domain/branding.ts` (`brandColorProblem`, `deriveBrandPalette`)
   and applied only by `brandCss` (`features/clinic/brand-css.ts`). Never colour a component from
   `account.brandColor`; use the brand tokens. Two exceptions, both because CSS variables can't reach them: the PDF
-  letterhead's ring (react-pdf) and the branding form's preview of a colour not yet saved. The clinic's logo comes from `ClinicContext.logoUrl` through
+  letterhead's ring (react-pdf) and a colour not yet any account's: the preview and swatches in
+  `features/clinic/components/brand-fields.tsx` and the console's sign-up Look card. The clinic's logo comes from `ClinicContext.logoUrl` through
   `ClinicLogo`. Primolar's wordmark appears only on sign-in, the operator console, the cold-start loader and
-  `PoweredByPrimolar`.
+  `PoweredByPrimolar`, plus the public sign-up frame.
+- The heading font is on every plan (billing #8). The operator sets a clinic's look only for Design it for me
+  (`PUT /operator/accounts/:id/branding`); every other look is the Owner's, in Settings → Clinic → Look.
+- Sign-up money: prices are VAT-inclusive centavos in `Platform.prices`. A sign-up's amount due is `amountDue`
+  (`domain/signup.ts`), quoted at submission and kept on the sign-up; the VAT part is `vatPart`. Duplicate clinic names
+  use `sameClinicName` everywhere.
 - Branch-level reports (Today, finance, daily collections) take `?branch=` (a branch id or `all`), resolved only by
   `reportBranches(request)`. Who may ask for what is `reportBranchFilter` in `domain/tenancy.ts`: Mid and Big, two or
   more branches; `all` for the Owner.
@@ -113,9 +121,10 @@ MSW handler (now) or NestJS (later).
   and only import `@/mocks/browser` dynamically from `app/providers.tsx`.
 - `NEXT_PUBLIC_*` env vars are inlined at build time. Changing `.env.local` needs a dev-server restart.
 - Mock data lives in `localStorage`. After changing `seed()` or `Db`, bump the key in `mocks/db.ts`
-  or clear storage, or you'll keep seeing old data. The key is `pedia-dental:mock-db:v25`; each bump gets a
+  or clear storage, or you'll keep seeing old data. The key is `pedia-dental:mock-db:v26`; each bump gets a
   one-line comment above it saying why.
-- The mock store is partitioned by clinic account: `Platform = { accounts, tenants }` in `mocks/db.ts`. `db` is a
+- The mock store is partitioned by clinic account: `Platform = { accounts, tenants, signups, prices }` in
+  `mocks/db.ts`. Sign-ups and prices are Primolar's, never inside a tenant. `db` is a
   live binding to the signed-in account's `Db`, repointed by `sessionOf()` (`selectTenant`). Never cache `db` in a
   module-level variable, and never call `selectTenant` from a feature handler. Stamp new records with
   `currentClinicId()`. Branch-level lists filter by `activeBranch(request)` (from the `pd_branch` cookie, validated).
@@ -137,7 +146,13 @@ MSW handler (now) or NestJS (later).
   `selectTenant` or `sessionOf` (guarded in `mocks/operator.test.ts`, which also sends the operator token to every
   clinic route). Operator query keys start with `"operator"`: the global 401 handler in `app/providers.tsx` signs out
   the operator, not the clinic user, on that prefix. Operator tests live in `mocks/operator.test.ts`, cross-branch
-  report tests in `mocks/cross-branch.test.ts`.
+  report tests in `mocks/cross-branch.test.ts`. The same guard reads `features/operator/signup-mocks.ts`,
+  `features/signup/mocks.ts` and `mocks/signups.ts`: public and sign-up handlers work on `platform` alone. Sign-up
+  tests live in `mocks/signups.test.ts` (public) and `mocks/operator-signups.test.ts` (console); the latter's
+  price-list describe changes `platform.prices` and stays last.
+- A sign-up's files travel as multipart parts beside a `data` JSON part, built only by `signupFormData`
+  (`features/signup/form-data.ts`) and read only by `readSignupForm` (`mocks/signups.ts`). New clinics are made only
+  by `createClinic` (approve and direct creation share it).
 - Seed shape is asserted by `mocks/seed.test.ts`. New seed patients come from `seedPatient()` after the last faker
   consumer (`seedRoster`). Adding a faker call inside `seedPatient()` re-rolls every later record, so update that
   test's first-patient names deliberately, never to make it pass.

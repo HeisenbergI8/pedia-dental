@@ -1,9 +1,10 @@
 "use client";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { LoadingScreen, PrimolarLogo } from "@/components/brand";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { useOperatorSessionStore } from "@/stores/operator-session-store";
 import { useOperatorSignOut } from "../api";
 
@@ -28,10 +29,17 @@ export function RequireOperator({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-/** Primolar's console frame (decision #32): its own wordmark and colours, never a clinic's. No sidebar: one list, one detail. */
+const NAV = [
+  { href: "/operator", label: "Clinic accounts", match: (p: string) => p === "/operator" || p.startsWith("/operator/accounts") },
+  { href: "/operator/signups", label: "Sign-ups", match: (p: string) => p.startsWith("/operator/signups") },
+  { href: "/operator/prices", label: "Price list", match: (p: string) => p.startsWith("/operator/prices") },
+];
+
+/** Primolar's console frame (decision #32): its own wordmark and colours, never a clinic's. Three areas in the header. */
 export function OperatorShell({ children }: { children: ReactNode }) {
   const operator = useOperatorSessionStore((s) => s.session?.operator);
   const signOut = useOperatorSignOut();
+  const pathname = usePathname();
   return (
     <div className="min-h-screen bg-ground">
       <a
@@ -54,6 +62,24 @@ export function OperatorShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
+      <nav aria-label="Console" className="border-b border-line bg-surface">
+        <ul className="mx-auto flex max-w-5xl gap-1 overflow-x-auto px-4 sm:px-6">
+          {NAV.map((n) => {
+            const here = n.match(pathname);
+            return (
+              <li key={n.href}>
+                <Link
+                  href={n.href}
+                  aria-current={here ? "page" : undefined}
+                  className={cn("inline-flex h-11 items-center border-b-2 px-3 text-sm font-semibold whitespace-nowrap", here ? "border-brand text-ink" : "border-transparent text-ink-muted hover:text-ink")}
+                >
+                  {n.label}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
       <main id="main" tabIndex={-1} className="mx-auto w-full max-w-5xl px-4 py-6 outline-none sm:px-6 lg:py-8">
         {children}
       </main>

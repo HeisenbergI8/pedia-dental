@@ -3,7 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Building2Icon, ChevronLeftIcon } from "lucide-react";
 import { toast } from "sonner";
-import { TIER_LABEL, Tier, type AccountOverview } from "@pedia/shared";
+import { DESIGN_STATUS_LABEL, TIER_LABEL, Tier, type AccountOverview } from "@pedia/shared";
 import { Loading } from "@/components/brand";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ROLE_LABEL } from "@/features/auth/access";
 import { useAccounts, useChangeTier, useOwnerCandidates, useSetSuspended, useTransferOwnership } from "../api";
 import { allowance, overLimits } from "./allowance";
+import { SetBrandingDialog } from "./set-branding-dialog";
 import { StatusBadge } from "./status-badge";
 
 /**
@@ -43,6 +44,7 @@ export function AccountDetail({ id }: { id: string }) {
             <StatusCard row={row} />
           </div>
           <OwnerCard row={row} />
+          {row.design && <DesignCard row={row} />}
         </>
       )}
     </div>
@@ -56,7 +58,7 @@ function PlanCard({ row }: { row: AccountOverview }) {
   const over = overLimits(tier, row.usage);
 
   return (
-    <SectionCard title="Plan" description="Primolar sets the plan by hand; there are no payments in the app.">
+    <SectionCard title="Plan" description="Primolar sets the plan by hand. Subscriptions and monthly payments come in a later chunk.">
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
         <dt className="text-ink-muted">Open branches</dt>
         <dd className="tabular-nums">{allowance(row.account.tier, "branches", row.usage.branches).text}</dd>
@@ -141,6 +143,24 @@ function StatusCard({ row }: { row: AccountOverview }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </SectionCard>
+  );
+}
+
+/** Billing #17: Design it for me. The clinic runs in the default look until Primolar delivers the finished one. */
+function DesignCard({ row }: { row: AccountOverview }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <SectionCard title="Design it for me" description={DESIGN_STATUS_LABEL[row.design!]}>
+      <p className="text-sm text-ink-muted">
+        {row.design === "delivered"
+          ? "The finished logo, colour and font are live. The Owner can change them in Settings."
+          : "Revisions and approval happen by email or chat. When the client approves, deliver the finished files here."}
+      </p>
+      <Button variant={row.design === "delivered" ? "outline" : "default"} onClick={() => setOpen(true)}>
+        Set branding
+      </Button>
+      {open && <SetBrandingDialog row={row} onClose={() => setOpen(false)} />}
     </SectionCard>
   );
 }

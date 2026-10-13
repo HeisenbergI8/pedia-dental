@@ -3,14 +3,17 @@ import type { StaffMember } from "../schemas/clinic";
 import type { Branch, OpeningHours, Tier } from "../schemas/tenancy";
 import { rolesCan } from "./permissions";
 
-/** `null` is unlimited. Archived branches and deactivated staff never count toward a limit (decision #10). */
-export type TierLimits = { branches: number | null; staffLogins: number | null; crossBranchViews: boolean; headingFont: boolean };
+/**
+ * `null` is unlimited. Archived branches and deactivated staff never count toward a limit (decision #10). The heading
+ * font is on every plan since billing #8 (it was Big's), so it is no longer a limit.
+ */
+export type TierLimits = { branches: number | null; staffLogins: number | null; crossBranchViews: boolean };
 
-/** Decisions #5–#7. Enforced in the handler and the UI by Owner settings; read here, never re-typed. */
+/** Decisions #5, #6. Enforced in the handler and the UI by Owner settings; read here, never re-typed. */
 export const TIER_LIMITS: Record<Tier, TierLimits> = {
-  small: { branches: 1, staffLogins: 5, crossBranchViews: false, headingFont: false },
-  mid: { branches: 3, staffLogins: 20, crossBranchViews: true, headingFont: false },
-  big: { branches: null, staffLogins: null, crossBranchViews: true, headingFont: true },
+  small: { branches: 1, staffLogins: 5, crossBranchViews: false },
+  mid: { branches: 3, staffLogins: 20, crossBranchViews: true },
+  big: { branches: null, staffLogins: null, crossBranchViews: true },
 };
 
 /**

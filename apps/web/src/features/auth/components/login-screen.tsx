@@ -91,6 +91,12 @@ export function LoginScreen() {
               </p>
             )}
             <EmailSignIn />
+            <p className="text-sm text-ink-muted">
+              New clinic?{" "}
+              <Link href="/get-started" className="font-semibold text-brand underline-offset-2 hover:underline">
+                Get started with Primolar
+              </Link>
+            </p>
             {env.apiMocking && (
               <>
                 {demo.isLoading && <Loading label="Loading demo logins" />}
