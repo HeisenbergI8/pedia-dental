@@ -1,8 +1,9 @@
 import { http, HttpResponse } from "msw";
-import { permissionScopeFor, usableBranches, type AuditAction, type Branch, type Permission } from "@pedia/shared";
+import { ALL_BRANCHES, TIER_LIMITS, permissionScopeFor, reportBranchFilter, usableBranches, type AuditAction, type Branch, type OperatorUser, type Permission } from "@pedia/shared";
 import { env } from "@/lib/env";
-import { accountById, credentialOf, currentClinicId, db, persist, platform, selectTenant } from "./db";
+import { accountById, credentialOf, currentAccount, currentClinicId, db, persist, platform, selectTenant } from "./db";
 import { accountForToken, childrenOf, type DemoAccountRecord } from "./demo-accounts";
+import { OPERATOR_COOKIE, operatorForToken } from "./operator";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 export const SESSION_COOKIE = "pd_session";
@@ -10,6 +11,8 @@ export const SESSION_COOKIE = "pd_session";
 export const BRANCH_COOKIE = "pd_branch";
 
 export type MockSession = DemoAccountRecord & { clinicId: string; patientIds: Set<string>; readOnly: boolean; mustChangePassword: boolean };
+
+const deny = (status: 401 | 403, message: string) => new HttpResponse(message, { status });
 
 /** MSW runs handlers in the page, so the cookies the session store wrote are readable. Tests stub `document`. */
 function cookie(name: string): string | undefined {
@@ -20,10 +23,13 @@ function cookie(name: string): string | undefined {
     ?.slice(name.length + 1);
 }
 
-/** The bearer header (scripts) or the session cookie (the browser, including <img> requests). */
-function tokenOf(request: Request): string | undefined {
-  return request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1] ?? cookie(SESSION_COOKIE);
+/** The bearer header (scripts) or the cookie (the browser, including <img> requests): the clinic's, or the operator's. */
+function tokenOf(request: Request, cookieName = SESSION_COOKIE): string | undefined {
+  return request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1] ?? cookie(cookieName);
 }
+
+/** The Primolar operator calling, if any. Never selects a tenant: the operator isn't in one (decision #25). */
+export const operatorOf = (request: Request): OperatorUser | undefined => operatorForToken(tokenOf(request, OPERATOR_COOKIE));
 
 /**
  * Who is calling, and in which clinic account. Also points `db` at that account's data (`selectTenant`), so every
@@ -60,6 +66,25 @@ export function branchOf(session: MockSession): Branch {
 
 /** For handlers behind the access gate, where a session is guaranteed: the branch-level lists' branch. */
 export const activeBranch = (request: Request): Branch => branchOf(sessionOf(request)!);
+
+/**
+ * The branches a report covers (decision #20), from `?branch=`: absent or the device's own branch → that branch;
+ * `all` → every branch of the account, archived ones included (their history stays in reports, #22), for the Owner;
+ * another branch id → that branch, when the caller works there. Anything wider than the device's branch needs a
+ * tier with cross-branch views (#6). A refusal is a 403 the handler returns as is. Behind the gate only.
+ */
+export function reportBranches(request: Request): string[] | Response {
+  const session = sessionOf(request)!;
+  const device = branchOf(session);
+  const asked = new URL(request.url).searchParams.get("branch");
+  if (!asked || asked === device.id) return [device.id];
+  const { tier } = currentAccount();
+  if (!TIER_LIMITS[tier].crossBranchViews) return deny(403, "Reports across branches come with the Mid and Big plans. Contact Primolar to upgrade.");
+  const filter = reportBranchFilter(tier, session.roles, usableBranchesOf(session));
+  if (!filter) return deny(403, "Reports across branches need two open branches you work at");
+  if (asked === ALL_BRANCHES) return filter.all ? db.branches.map((b) => b.id) : deny(403, "Only the clinic's Owner sees all branches together");
+  return filter.branches.some((b) => b.id === asked) ? [asked] : deny(403, "You don't work at that branch");
+}
 
 /** For handlers the gate passed as "filtered": may this caller see this patient's row? */
 export function inScope(session: MockSession | undefined, permission: Permission, patientId: string) {
@@ -190,6 +215,30 @@ const RULES: Rule[] = [
   { method: "GET", path: "/audit-log", permission: "audit.view", audit: "Audit log" },
 ];
 
+/** For the separation test (mocks/operator.test.ts): every clinic route, which an operator token must never pass. */
+export const ACCESS_RULES: readonly Pick<Rule, "method" | "path">[] = RULES;
+
+/**
+ * Every operator route. One question only, "is this a Primolar operator?": the operator holds no clinic Permission
+ * and no role (decision #25). Deny by default, as RULES: a route missing here is refused with its name.
+ */
+const OPERATOR_RULES: Pick<Rule, "method" | "path">[] = [
+  { method: "GET", path: "/operator/accounts" },
+  { method: "POST", path: "/operator/accounts" },
+  { method: "PUT", path: "/operator/accounts/:id/tier" },
+  { method: "POST", path: "/operator/accounts/:id/suspend" },
+  { method: "POST", path: "/operator/accounts/:id/reactivate" },
+  { method: "GET", path: "/operator/accounts/:id/staff" },
+  { method: "POST", path: "/operator/accounts/:id/owner" },
+];
+
+/** The gate for /operator/*: 401 without an operator token (a clinic token is not one), 403 for an unlisted route. */
+function operatorRefusal(request: Request, path: string) {
+  if (path.startsWith("/operator/auth/")) return; // sign-in, me and sign-out check the operator themselves
+  if (!operatorOf(request)) return deny(401, "Sign in to the Primolar console to continue");
+  return OPERATOR_RULES.some((r) => r.method === request.method && match(r.path, path)) ? undefined : deny(403, `No access rule for ${request.method} ${path}`);
+}
+
 /** `/patients/:id/plan` against `/patients/abc/plan` → `{ id: "abc" }`. Segment for segment, no wildcards. */
 function match(pattern: string, path: string): Record<string, string> | undefined {
   const want = pattern.split("/");
@@ -202,8 +251,6 @@ function match(pattern: string, path: string): Record<string, string> | undefine
   }
   return params;
 }
-
-const deny = (status: 401 | 403, message: string) => new HttpResponse(message, { status });
 
 const ACTION_OF: Record<string, AuditAction> = { GET: "view", POST: "create", PUT: "update", PATCH: "update" };
 const REPEAT_WINDOW_MS = 5 * 60_000;
@@ -266,6 +313,9 @@ function refusal(session: MockSession, rule: Rule, params: Record<string, string
 export const accessGate = http.all(url("/*"), ({ request }) => {
   const u = new URL(request.url);
   const path = u.pathname.slice(new URL(env.apiUrl, u.origin).pathname.length);
+  // The operator is not a clinic user (decision #25). Its requests branch off here, before sessionOf, so they never
+  // select a tenant: `db` is never pointed anywhere for them and no clinic rule can match them.
+  if (path.startsWith("/operator/")) return operatorRefusal(request, path);
   if (path.startsWith("/auth/")) return; // login, me and logout check the session themselves
 
   const session = sessionOf(request);

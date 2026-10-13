@@ -39,7 +39,8 @@ TanStack Query · React Hook Form + Zod 4 · Zustand (UI state, plus the demo se
 | Fake backend | `apps/web/src/mocks/` | MSW setup, localStorage-backed `db`, deterministic `seed` |
 | HTTP | `apps/web/src/lib/api-client.ts` | The only `fetch` in the app |
 | Access rules | `packages/shared/src/domain/permissions.ts` | `ROLE_PERMISSIONS`: who may do what. The only place access is decided. `branches.all` = works at every branch (Owner). `today.view` = Today at a glance (all staff); `dashboard.view` = finance (admin); `patients.contact` = guardian phones and emails, emergency contact and address, **left out of every patient response** without it (admin and front desk: all; a parent: their own family). Responses parse with `PatientView`; the stored record is `Patient` |
-| Access gate | `apps/web/src/mocks/access.ts` | Route → permission (`RULES`), 401 / 403, parent ownership |
+| Access gate | `apps/web/src/mocks/access.ts` | Route → permission (`RULES`), 401 / 403, parent ownership. `/operator/*` branches off before `sessionOf` (`operatorRefusal`) |
+| Operator console | `apps/web/src/features/operator/`, `apps/web/src/app/operator/` | Primolar's console: clinic accounts, tiers, Owners, usage counts. Its own sign-in, session store and routes; never a clinic user |
 
 **Read this first:** `apps/web/src/features/patients/`. Every new feature copies its shape.
 
@@ -75,7 +76,7 @@ MSW handler (now) or NestJS (later).
   components.
 - `apps/web/src/design/` holds guards that read source and render primitives: token contrast in both themes, no raw
   hex outside `globals.css` / `manifest.ts` / `document-pdf.tsx` and the two seed files (their stored brand colours
-  are data), no dashed outlines, crayon strip and Fredoka only on login and portal, Primolar's logo only on sign-in
+  are data), no dashed outlines, crayon strip and Fredoka only on login and portal, Primolar's logo only on the sign-in pages and the operator console
   (`design-branding.test.ts`). A failing guard means the system was bypassed. Fix the component, not the guard.
 - Tailwind v4's bare `border` is `currentColor`. `globals.css` restores `line` as the default, so a darker edge is
   always named (`border-input`, `border-alert-line`).
@@ -96,7 +97,11 @@ MSW handler (now) or NestJS (later).
   and applied only by `brandCss` (`features/clinic/brand-css.ts`). Never colour a component from
   `account.brandColor`; use the brand tokens. Two exceptions, both because CSS variables can't reach them: the PDF
   letterhead's ring (react-pdf) and the branding form's preview of a colour not yet saved. The clinic's logo comes from `ClinicContext.logoUrl` through
-  `ClinicLogo`. Primolar's wordmark appears only on sign-in, the cold-start loader and `PoweredByPrimolar`.
+  `ClinicLogo`. Primolar's wordmark appears only on sign-in, the operator console, the cold-start loader and
+  `PoweredByPrimolar`.
+- Branch-level reports (Today, finance, daily collections) take `?branch=` (a branch id or `all`), resolved only by
+  `reportBranches(request)`. Who may ask for what is `reportBranchFilter` in `domain/tenancy.ts`: Mid and Big, two or
+  more branches; `all` for the Owner.
 - Allergies and alerts must be visible on every patient screen (`PatientHeader`).
 
 ---
@@ -127,6 +132,12 @@ MSW handler (now) or NestJS (later).
   `GET /staff` serves `email` to the Owner only and `deactivatedAt` to staff only. An email is one login per account,
   deactivated logins included (`emailTaken`).
   Owner-settings tests live in `mocks/owner-settings.test.ts`, since they change tiers, staff and branches.
+- The operator is not a clinic user: token `operator.<id>`, cookie `pd_operator`, routes `/operator/*`, store
+  `stores/operator-session-store.ts`. Operator handlers read `platform.tenants[id]` and never touch `db`,
+  `selectTenant` or `sessionOf` (guarded in `mocks/operator.test.ts`, which also sends the operator token to every
+  clinic route). Operator query keys start with `"operator"`: the global 401 handler in `app/providers.tsx` signs out
+  the operator, not the clinic user, on that prefix. Operator tests live in `mocks/operator.test.ts`, cross-branch
+  report tests in `mocks/cross-branch.test.ts`.
 - Seed shape is asserted by `mocks/seed.test.ts`. New seed patients come from `seedPatient()` after the last faker
   consumer (`seedRoster`). Adding a faker call inside `seedPatient()` re-rolls every later record, so update that
   test's first-patient names deliberately, never to make it pass.
@@ -163,7 +174,7 @@ MSW handler (now) or NestJS (later).
 ## Reporting rules
 
 - **A deferral is not a gap.** Deliberately deferred for the prototype: real authentication (the demo
-  login is a demo control: anyone can sign in as any account with the shown password; the token is the account id; staff PINs and Owner-added passwords are stored as typed and PINs are listed in the Switch user dialog's "Demo PINs" hint), the NestJS backend, real SMS/email sending and staff email invites, real file storage (and sanitising uploaded SVG logos), BIR
+  login is a demo control: anyone can sign in as any account with the shown password; the token is the account id; staff PINs and Owner-added passwords are stored as typed and PINs are listed in the Switch user dialog's "Demo PINs" hint; the operator's demo sign-in, operator@primolar.demo with the demo password), the NestJS backend, real SMS/email sending and staff email invites, real file storage (and sanitising uploaded SVG logos), BIR
   official receipts, and every screen that currently renders `ComingSoon`. Their absence is intentional.
 - **A claim that ages carries the date it was measured.** Any count or "every / all / none" statement
   written into something durable says when it was measured.

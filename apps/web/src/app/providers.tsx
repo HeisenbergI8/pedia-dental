@@ -8,6 +8,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { ApiError } from "@/lib/api-client";
 import { env } from "@/lib/env";
 import { resolveTheme } from "@/lib/theme";
+import { useOperatorSessionStore } from "@/stores/operator-session-store";
 import { useSessionStore } from "@/stores/session-store";
 import { useThemeStore } from "@/stores/theme-store";
 
@@ -50,10 +51,13 @@ export function Providers({ children }: { children: ReactNode }) {
     () =>
       new QueryClient({
         defaultOptions: { queries: { staleTime: 30_000, retry: (count, e) => !isAuthError(e) && count < 1 } },
-        // A 401 means the session is gone (another tab signed out, storage cleared): back to /login.
+        // A 401 means the session is gone (another tab signed out, storage cleared): back to sign-in. Operator
+        // queries (keys under "operator") end the operator's session only, never a clinic session in the same browser.
         queryCache: new QueryCache({
-          onError: (e) => {
-            if (e instanceof ApiError && e.status === 401) useSessionStore.getState().signOut();
+          onError: (e, query) => {
+            if (!(e instanceof ApiError) || e.status !== 401) return;
+            if (query.queryKey[0] === "operator") useOperatorSessionStore.getState().signOut();
+            else useSessionStore.getState().signOut();
           },
         }),
       }),

@@ -22,6 +22,20 @@ export function canAddUnder(tier: Tier, limit: "branches" | "staffLogins", inUse
   return max === null || inUse < max;
 }
 
+/** The report filter's "All branches" value (decision #20). Never a branch id: ids are `branch_…`. */
+export const ALL_BRANCHES = "all";
+
+/**
+ * The branch filter on Today, the finance dashboard and the collections list (decisions #6, #20). Undefined when it
+ * isn't offered: a tier without cross-branch views, or fewer than two branches this person works at. `all` is the
+ * Owner's combined total (`branches.all`). `usable` is what `usableBranches` returns for the person (ClinicContext's
+ * `branches` in the app, `usableBranchesOf` in the mock API).
+ */
+export function reportBranchFilter(tier: Tier, roles: readonly Role[], usable: Branch[]): { branches: Branch[]; all: boolean } | undefined {
+  if (!TIER_LIMITS[tier].crossBranchViews || usable.length < 2) return undefined;
+  return { branches: usable, all: rolesCan(roles, "branches.all") };
+}
+
 /** A new branch's hours until the Owner edits them: the demo clinic's hours before tenancy (Mon–Sat, 8 AM–6 PM). */
 export const DEFAULT_OPENING_HOURS: OpeningHours = { opensAt: 8 * 60, closesAt: 18 * 60, closedWeekdays: [0] };
 
@@ -57,6 +71,21 @@ export const TIER_LABEL: Record<Tier, string> = { small: "Small", mid: "Mid", bi
 
 /** Can sign in and be chosen for new work. A deactivated login keeps its name on what it recorded (decision #23). */
 export const isActiveStaff = (staff: Pick<StaffMember, "deactivatedAt">) => !staff.deactivatedAt;
+
+/**
+ * Why ownership can't go to this login, in plain words; undefined when it can (decision #13: exactly one Owner,
+ * moved only by the operator). Only an active staff login of the same account: `staff` is that account's list.
+ */
+export function transferProblem(
+  staff: Pick<StaffMember, "id" | "fullName" | "isOwner" | "deactivatedAt">[],
+  toStaffId: string,
+): string | undefined {
+  const to = staff.find((s) => s.id === toStaffId);
+  if (!to) return "Choose a staff login of this clinic";
+  if (to.isOwner) return `${to.fullName} is already the Owner`;
+  if (!isActiveStaff(to)) return `${to.fullName}'s login is deactivated. The Owner must reactivate it before it can own the account.`;
+  return undefined;
+}
 
 /** What counts toward the limits: open branches and active logins, the Owner included (decisions #10, #37). */
 export function accountUsage(data: { branches: Pick<Branch, "archived">[]; staff: Pick<StaffMember, "deactivatedAt">[] }) {

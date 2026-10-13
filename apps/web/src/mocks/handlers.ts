@@ -8,6 +8,7 @@ import { documentHandlers } from "@/features/documents/mocks";
 import { growthHandlers } from "@/features/growth/mocks";
 import { messageHandlers } from "@/features/messages/mocks";
 import { noteHandlers } from "@/features/notes/mocks";
+import { operatorHandlers } from "@/features/operator/mocks";
 import { patientHandlers } from "@/features/patients/mocks";
 import { photoHandlers } from "@/features/photos/mocks";
 import { planHandlers } from "@/features/plan/mocks";
@@ -22,6 +23,7 @@ import { accessGate } from "./access";
 export const handlers = [
   accessGate,
   ...authHandlers,
+  ...operatorHandlers,
   ...patientHandlers,
   ...clinicHandlers,
   ...visitHandlers,

@@ -14,6 +14,8 @@ import { Label } from "@/components/ui/label";
 import { usePatients } from "@/features/patients/api";
 import { PatientName } from "@/features/patients/components/patient-name";
 import { formatDate } from "@/lib/format";
+import { BranchFilter } from "@/features/dashboard/components/branch-filter";
+import { useReportBranch } from "@/features/dashboard/api";
 import { METHOD_LABEL, paymentLabel, useDailyPayments } from "../api";
 import { Loading } from "@/components/brand";
 import { ErrorState } from "@/components/error-state";
@@ -22,7 +24,8 @@ import { ErrorState } from "@/components/error-state";
 export function CollectionsList() {
   const today = format(new Date(), "yyyy-MM-dd");
   const [date, setDate] = useState(today);
-  const { data: all = [], isLoading, error, refetch, isRefetching } = useDailyPayments(date);
+  const { filter, value, branch, choose } = useReportBranch();
+  const { data: all = [], isLoading, error, refetch, isRefetching } = useDailyPayments(date, branch);
   // Real money only, so the day's total matches the dashboard: applying a deposit moves money, it doesn't collect it.
   const rows = all.filter(isMoneyIn);
   const patientsQuery = usePatients();
@@ -69,6 +72,7 @@ export function CollectionsList() {
         actions={
           // The same day stepper as Appointments: Today, back and forward a day, or pick one.
           <div className="flex flex-wrap items-center gap-2">
+            {filter && <BranchFilter id="collections-branch" filter={filter} value={value} onChange={choose} />}
             <Button variant="outline" onClick={() => setDate(today)} disabled={date === today}>Today</Button>
             <Button variant="ghost" size="icon" aria-label="Previous day" onClick={() => step(-1)}>
               <ChevronLeftIcon />
