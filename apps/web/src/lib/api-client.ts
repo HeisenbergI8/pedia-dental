@@ -23,16 +23,27 @@ export async function api<T extends z.ZodType>(
     credentials: "include",
   });
   if (!res.ok) throw new ApiError(res.status, readableError(await res.text()));
-  return schema.parse(await res.json());
+  let body: unknown;
+  try {
+    body = await res.json();
+  } catch {
+    throw new ApiError(res.status, UNREACHABLE); // a web page where JSON belongs: the request never reached the API
+  }
+  return schema.parse(body);
 }
 
+/** Shown when the reply is a web page or empty, never the page's own markup. */
+export const UNREACHABLE = "Couldn't reach Primolar. Check your connection and try again.";
+
 /** A 400 carries Zod issues as JSON; show their messages, not the raw JSON. */
-function readableError(body: string): string {
+export function readableError(body: string): string {
   try {
     const issues: unknown = JSON.parse(body);
     if (Array.isArray(issues)) return issues.map((i: { message?: string }) => i.message).filter(Boolean).join(". ") || body;
   } catch {
     // plain-text error
   }
+  // An HTML error page (a request that missed the API, a host's 404 or 500) or nothing at all.
+  if (!body.trim() || /^\s*</.test(body)) return UNREACHABLE;
   return body;
 }
