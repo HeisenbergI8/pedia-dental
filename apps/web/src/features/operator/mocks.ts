@@ -3,6 +3,7 @@ import {
   ChangeTierInput,
   CreateAccountInput,
   OperatorLoginInput,
+  RecordUpfrontPaymentInput,
   SetBrandingInput,
   TransferOwnershipInput,
   accountUsage,
@@ -23,6 +24,7 @@ import { accountById, persist, platform } from "@/mocks/db";
 import { staffEmail } from "@/mocks/demo-accounts";
 import { OPERATORS, operatorPasswordOpens, operatorToken } from "@/mocks/operator";
 import { addSignup, brandingRefusal, createClinic, duplicateOf, readSignupForm, replaceFile, signupOfClinic } from "@/mocks/signups";
+import { cancelSubscription, changePlan, forgetPause, reactivateRefusal, recordSubscriptionPayment, subscriptionView } from "@/mocks/subscriptions";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 const refuse = (status: 400 | 401 | 404 | 409, message: string) => new HttpResponse(message, { status });
@@ -66,6 +68,11 @@ function setStatus(id: unknown, status: AccountStatus) {
   const found = findAccount(id);
   if (!found) return notFound();
   const { account } = found;
+  if (status === "active") {
+    const refused = reactivateRefusal(account.id);
+    if (refused) return refuse(409, refused);
+    forgetPause(account.id);
+  }
   account.status = status;
   persist();
   return HttpResponse.json(overviewOf(account.id));
@@ -116,17 +123,41 @@ export const operatorHandlers = [
     return HttpResponse.json(result, { status: 201 });
   }),
 
-  // Decisions #4, #9: set by hand; a downgrade disables nothing. Branches and logins over the new limit stay usable,
-  // and canAddUnder refuses only the next addition. The heading font is on every plan (billing #8).
+  // Billing #27: an upgrade applies at once (billed at the new price from the next due date); a downgrade waits for
+  // the next due date (settleSubscriptions applies it). Nothing is ever disabled (platform #9): over the limit stays
+  // usable, and canAddUnder refuses only the next addition.
   http.put(url("/operator/accounts/:id/tier"), async ({ params, request }) => {
     const found = findAccount(params.id);
     if (!found) return notFound();
     const { account } = found;
     const parsed = ChangeTierInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
-    account.tier = parsed.data.tier;
-    persist();
-    return HttpResponse.json(overviewOf(account.id));
+    const refused = changePlan(account.id, parsed.data.tier);
+    return refused ? refuse(409, refused) : HttpResponse.json(overviewOf(account.id));
+  }),
+
+  // Billing #31, S14: the subscription, its state and its payments. Primolar's billing, never a patient record.
+  http.get(url("/operator/accounts/:id/subscription"), ({ params }) => {
+    const found = findAccount(params.id);
+    return found ? HttpResponse.json(subscriptionView(found.account.id)) : notFound();
+  }),
+
+  // Billing #3, #29, S5: one month marked paid by hand, a late one included. The amount is the server's.
+  http.post(url("/operator/accounts/:id/subscription/payments"), async ({ params, request }) => {
+    const found = findAccount(params.id);
+    if (!found) return notFound();
+    const parsed = RecordUpfrontPaymentInput.safeParse(await request.json());
+    if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
+    const refused = recordSubscriptionPayment(found.account.id, parsed.data);
+    return refused ? refuse(409, refused) : HttpResponse.json(subscriptionView(found.account.id), { status: 201 });
+  }),
+
+  // Billing #30, S7: the Owner has no Cancel button; Primolar cancels on request. Pauses when the paid month ends.
+  http.post(url("/operator/accounts/:id/subscription/cancel"), ({ params }) => {
+    const found = findAccount(params.id);
+    if (!found) return notFound();
+    const refused = cancelSubscription(found.account.id);
+    return refused ? refuse(409, refused) : HttpResponse.json(subscriptionView(found.account.id));
   }),
 
   http.post(url("/operator/accounts/:id/suspend"), ({ params }) => setStatus(params.id, "suspended")),

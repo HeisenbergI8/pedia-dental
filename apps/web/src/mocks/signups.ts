@@ -25,6 +25,7 @@ import { newPin, temporaryPassword } from "./demo-accounts";
 import { defaultMessageTemplates } from "./message-templates";
 import { NOTE_TEMPLATES } from "./note-templates";
 import { PROCEDURES } from "./seed";
+import { startSubscription } from "./subscriptions";
 
 /*
  * Sign-ups and the clinics made from them (billing #10–#17). Platform-level, like the operator's handlers: this file
@@ -190,6 +191,7 @@ export async function createClinic(signup: Signup): Promise<{ clinicId: string; 
   };
   signup.status = "approved";
   signup.approval = { clinicId, at: new Date().toISOString() };
+  startSubscription(signup, clinicId); // billing #26: due monthly from today; the upfront payment is its first invoice
   if (branding.choice === "designed") signup.design = { status: "in_progress" };
   if (branding.choice === "own") {
     account.brandColor = branding.brandColor;

@@ -8,6 +8,7 @@ import {
   OwnerCandidate,
   PriceList,
   Signup,
+  SubscriptionView,
   type CreateAccountInput,
   type OperatorLoginInput,
   type RecordUpfrontPaymentInput,
@@ -24,6 +25,7 @@ export const operatorKeys = {
   all: ["operator"] as const,
   accounts: () => [...operatorKeys.all, "accounts"] as const,
   candidates: (id: string) => [...operatorKeys.all, "accounts", id, "staff"] as const,
+  subscription: (id: string) => [...operatorKeys.all, "accounts", id, "subscription"] as const,
   signups: () => [...operatorKeys.all, "signups"] as const,
   prices: () => [...operatorKeys.all, "prices"] as const,
 };
@@ -86,3 +88,13 @@ export const useSetBranding = (accountId: string) =>
   useAccountAction(({ input, logo }: { input: SetBrandingInput; logo?: File }) =>
     api(`/operator/accounts/${accountId}/branding`, AccountOverview, { method: "PUT", body: signupFormData(input, { logo }) }),
   );
+
+/** Billing #31: the clinic's subscription, state and payment history (S14). */
+export const useAccountSubscription = (id: string) =>
+  useQuery({ queryKey: operatorKeys.subscription(id), queryFn: () => api(`/operator/accounts/${id}/subscription`, SubscriptionView) });
+/** Billing #29, S5: one month, marked by hand. Not `useRecordPayment`, which is the sign-up's upfront payment. */
+export const useRecordSubscriptionPayment = (id: string) =>
+  useAccountAction((input: RecordUpfrontPaymentInput) => api(`/operator/accounts/${id}/subscription/payments`, SubscriptionView, post(input)));
+/** Billing #30, S7. */
+export const useCancelSubscription = (id: string) =>
+  useAccountAction(() => api(`/operator/accounts/${id}/subscription/cancel`, SubscriptionView, post()));
