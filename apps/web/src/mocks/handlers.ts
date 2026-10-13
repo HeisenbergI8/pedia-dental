@@ -14,6 +14,7 @@ import { patientHandlers } from "@/features/patients/mocks";
 import { photoHandlers } from "@/features/photos/mocks";
 import { planHandlers } from "@/features/plan/mocks";
 import { recallHandlers } from "@/features/recalls/mocks";
+import { legalHandlers } from "@/features/legal/mocks";
 import { signupHandlers } from "@/features/signup/mocks";
 import { visitHandlers } from "@/features/visits/mocks";
 import { accessGate } from "./access";
@@ -28,6 +29,7 @@ export const handlers = [
   ...operatorHandlers,
   ...operatorSignupHandlers,
   ...signupHandlers,
+  ...legalHandlers,
   ...patientHandlers,
   ...clinicHandlers,
   ...visitHandlers,

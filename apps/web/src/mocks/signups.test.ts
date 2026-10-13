@@ -8,7 +8,7 @@ import {
   SignupStatusView,
   amountDue,
   duplicateNameMessage,
-  type SignupInput,
+  type GetStartedInput,
 } from "@pedia/shared";
 import { signupFormData } from "@/features/signup/form-data";
 import { ApiError, api } from "@/lib/api-client";
@@ -20,15 +20,16 @@ const server = setupServer(...handlers);
 const status = (p: Promise<unknown>) => p.then(() => 200, (e: ApiError) => e.status);
 const svg = () => new Blob(['<svg xmlns="http://www.w3.org/2000/svg"/>'], { type: "image/svg+xml" });
 const png = () => new Blob([new Uint8Array([137, 80, 78, 71])], { type: "image/png" });
-const submit = (input: SignupInput, files?: Parameters<typeof signupFormData>[1]) =>
+const submit = (input: GetStartedInput, files?: Parameters<typeof signupFormData>[1]) =>
   api("/signups", SignupStatusView, { method: "POST", body: signupFormData(input, files) });
 
 /** A fresh, valid sign-up; `n` keeps names and emails apart between tests. */
-const form = (n: string, branding: SignupInput["branding"], tier: SignupInput["account"]["tier"] = "small"): SignupInput => ({
+const form = (n: string, branding: GetStartedInput["branding"], tier: GetStartedInput["account"]["tier"] = "small"): GetStartedInput => ({
   account: { name: `Ngipin ${n} Dental`, contactEmail: `hello@ngipin${n}.demo`, tin: "567-890-123", tier },
   branch: { name: "Tagaytay", address: "1 Aguinaldo Hi-way, Tagaytay", phone: "(046) 483 0000", openingHours: DEFAULT_OPENING_HOURS },
   owner: { fullName: `Dr. ${n} Cruz`, email: `owner@ngipin${n}.demo`, role: "admin" },
   branding,
+  acceptTerms: true,
 });
 
 beforeAll(() => {

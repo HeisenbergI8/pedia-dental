@@ -3,6 +3,7 @@ import { setupServer } from "msw/node";
 import { z } from "zod";
 import {
   AccountOverview,
+  CONFIDENTIALITY_NOTICE,
   Branch,
   ClinicContext,
   ClinicUsage,
@@ -25,6 +26,7 @@ import { today } from "./clock";
 import { currentClinicId, platform } from "./db";
 import { DEMO_PASSWORD } from "./demo-accounts";
 import { handlers } from "./handlers";
+import { staffAcknowledged } from "./seed-privacy";
 
 const server = setupServer(...handlers);
 const OPERATOR = "operator.operator_primolar";
@@ -115,7 +117,7 @@ describe("the operator never reaches clinic data (decision #25)", () => {
   });
 
   it("keeps operator and sign-up handlers out of the tenant binding (decision #25, billing #4)", () => {
-    const files = ["features/operator/mocks.ts", "features/operator/signup-mocks.ts", "features/signup/mocks.ts", "mocks/signups.ts", "mocks/subscriptions.ts"];
+    const files = ["features/operator/mocks.ts", "features/operator/signup-mocks.ts", "features/signup/mocks.ts", "mocks/signups.ts", "mocks/subscriptions.ts", "features/legal/mocks.ts"];
     for (const file of files) {
       const src = read(file);
       expect(src, file).not.toMatch(/\b(selectTenant|sessionOf|activeBranch|currentClinicId|currentAccount)\b/);
@@ -131,6 +133,8 @@ const TALA: CreateAccountInput = {
   owner: { fullName: "Dr. Tala Ramos", email: "owner@tala.demo", role: "dentist" },
   branding: { choice: "default" },
   payment: { method: "bank_transfer", paidOn: "2026-10-13" },
+  signedOnFile: true,
+  signedOn: "2026-10-01",
 };
 const multipart = (data: unknown, files?: Parameters<typeof signupFormData>[1]) => ({ method: "POST", body: signupFormData(data, files) });
 const asStaff = (token: string) => cookies(`pd_session=${token}`);
@@ -155,6 +159,7 @@ describe("operator account actions (chunk 21 done-when)", () => {
     const fresh = await api("/auth/password", Session, send("POST", { current: created.temporaryPassword, next: EXAMPLE_NEW }));
     ownerToken = fresh.token;
     asStaff(ownerToken);
+    await api("/auth/acknowledgement", Session, send("POST", { kind: "confidentiality", version: CONFIDENTIALITY_NOTICE.version })); // privacy #21
     const clinic = await api("/clinic", ClinicContext);
     expect(clinic.account.name).toBe("Tala Kids Dental");
     expect(fresh.user.roles).toEqual(["owner", "dentist"]);
@@ -242,6 +247,7 @@ describe("audit findings: duplicate names and a stranded old Owner", () => {
     tenant.staff.push({ id: `${id}_heir`, clinicId: id, fullName: "Heir Apparent", role: "admin", branchIds: [`${first.id}_2`] });
     const oldOwner = tenant.staff.find((s) => s.isOwner)!;
     tenant.staffCredentials.find((c) => c.staffId === oldOwner.id)!.mustChange = false;
+    tenant.acknowledgements.push(...staffAcknowledged(id, [oldOwner])); // privacy #21: as if they had read it
 
     await api(`/operator/accounts/${id}/owner`, AccountOverview, send("POST", { staffId: `${id}_heir` }));
     expect(oldOwner.branchIds).toEqual([`${first.id}_2`]);

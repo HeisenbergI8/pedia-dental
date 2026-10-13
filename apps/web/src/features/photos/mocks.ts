@@ -1,5 +1,5 @@
 import { http, HttpResponse, delay } from "msw";
-import { UPLOAD_RULES, UploadPhotoInput, isPdf, rolesCan, uploadProblem, type ClinicalPhoto, type PhotoType } from "@pedia/shared";
+import { CONSENTED_PHOTO_TYPES, UPLOAD_RULES, UploadPhotoInput, choiceDeclined, isPdf, rolesCan, uploadProblem, type ClinicalPhoto, type PhotoType } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { inScope, sessionOf } from "@/mocks/access";
 import { getBlob, putBlob } from "@/mocks/blob-store";
@@ -39,6 +39,14 @@ export const photoHandlers = [
     // The file rule depends on the type (a PDF is fine for a document, not a photo), so it runs after meta.
     const problem = uploadProblem(parsed.data.type, file);
     if (problem) return new HttpResponse(problem, { status: file.size > UPLOAD_RULES.maxBytes ? 413 : 400 });
+    // Privacy #14 (P14): a family that declined clinical photos gets none, from staff or from the portal.
+    const patient = db.patients.find((p) => p.id === params.id)!;
+    if (CONSENTED_PHOTO_TYPES.includes(parsed.data.type) && choiceDeclined(patient, "photos")) {
+      return new HttpResponse(
+        `${patient.firstName}'s family declined clinical photos. Staff can change this under Privacy on the child's Overview; parents on the portal's Home page.`,
+        { status: 409 },
+      );
+    }
     const session = sessionOf(request);
     const fromParent = !(session && rolesCan(session.roles, "clinical.write"));
     if (fromParent && (!PARENT_TYPES.includes(parsed.data.type) || parsed.data.visitId || parsed.data.stage || parsed.data.tooth)) {

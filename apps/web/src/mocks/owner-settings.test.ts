@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupServer } from "msw/node";
 import { z } from "zod";
 import {
+  CONFIDENTIALITY_NOTICE,
   AddStaffResult,
   Branch,
   ClinicAccount,
@@ -108,6 +109,9 @@ describe("deactivating frees a seat (decisions #10, #23)", () => {
     await expect(api("/auth/password", Session, send("POST", { current: EXAMPLE_WRONG, next: EXAMPLE_NEW }))).rejects.toMatchObject({ status: 400 });
     const changed = await api("/auth/password", Session, send("POST", { current: added.temporaryPassword, next: EXAMPLE_NEW }));
     expect(changed.user.mustChangePassword).toBeUndefined();
+    expect(changed.user.mustAcknowledge).toBe("confidentiality");
+    await expect(api("/patients", z.array(Patient))).rejects.toMatchObject({ status: 403, message: "Acknowledge patient confidentiality to continue" });
+    await api("/auth/acknowledgement", Session, send("POST", { kind: "confidentiality", version: CONFIDENTIALITY_NOTICE.version }));
     expect((await api("/patients", z.array(Patient))).length).toBeGreaterThan(0);
 
     signIn(null);

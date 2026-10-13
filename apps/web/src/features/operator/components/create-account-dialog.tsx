@@ -5,15 +5,23 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
 import { CreateAccountInput, amountDue, brandColorProblem, type CreateAccountResult } from "@pedia/shared";
 import { Loading } from "@/components/brand";
+import { CheckField } from "@/components/check-field";
+import { FormField } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { AmountDueSummary, SignupFields, emptySignup, showDuplicate, type SignupFiles } from "@/features/signup/components/signup-fields";
 import { useCreateAccount, useOperatorPrices } from "../api";
 import { OwnerPassword } from "./owner-password";
 import { PaymentFields } from "./payment-fields";
 
 /** A sign-up by phone or in person (billing #16): the public form's fields, plus the payment marked by hand. */
-const empty = (): CreateAccountInput => ({ ...emptySignup(), payment: { method: "bank_transfer", reference: "", paidOn: format(new Date(), "yyyy-MM-dd") } });
+// `signedOnFile` starts unticked (privacy #8): the operator ticks it once they hold the signed copy.
+const empty = () => ({
+  ...emptySignup(),
+  payment: { method: "bank_transfer" as const, reference: "", paidOn: format(new Date(), "yyyy-MM-dd") },
+  signedOn: format(new Date(), "yyyy-MM-dd"),
+});
 
 /**
  * Billing #16: a clinic signed up by phone or in person, created at once: the same fields and branding choices as
@@ -69,6 +77,15 @@ export function CreateAccountDialog({ onClose }: { onClose: () => void }) {
                 <legend className="mb-3 text-base font-semibold">Payment received</legend>
                 <AmountDueSummary quote={amountDue(prices.data, tier, choice)} />
                 <PaymentFields prefix="payment." />
+              </fieldset>
+              <fieldset className="space-y-4 border-t border-line pt-5">
+                <legend className="mb-3 text-base font-semibold">Agreement</legend>
+                <CheckField name="signedOnFile">
+                  Signed agreement on file: the Owner signed the Terms of Service and the Data Processing Agreement
+                </CheckField>
+                <FormField name="signedOn" label="Signed on">
+                  <Input type="date" className="sm:w-56" {...form.register("signedOn")} />
+                </FormField>
               </fieldset>
               {create.error && !fieldConflict && <p role="alert" className="text-sm text-danger">{create.error.message}</p>}
               <DialogFooter>

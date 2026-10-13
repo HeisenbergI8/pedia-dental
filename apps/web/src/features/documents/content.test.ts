@@ -66,6 +66,7 @@ describe("document content", () => {
       receipt: { sourceId: "pay1" },
       patient_summary: {},
       notes_report: {},
+      privacy_consent: {},
     };
     for (const type of DocumentType.options) {
       const t = text({ ...choices[type], type });
@@ -98,6 +99,20 @@ describe("document content", () => {
     expect(t).toContain(JSON.stringify(["For", "Deposit on account"]));
     expect(t).toContain(JSON.stringify(["Deposit after this", formatPeso(pesos(1000))]));
     expect(text({ type: "receipt", sourceId: "pay1", issuedBy: "staff_cruz" })).toContain(JSON.stringify(["Balance after this", formatPeso(0)]));
+  });
+
+  it("fills the privacy consent form from the record, labelled pending legal review", () => {
+    const patient = {
+      ...src.patient,
+      privacyConsent: { guardianId: src.patient.guardians[0]!.id, guardianName: "Rosa Mendoza", relationship: "Mother", noticeVersion: 2, formVersion: 1, recordedById: "staff_cruz", recordedByName: "Liza Cruz", at: "2026-10-13T02:00:00.000Z" },
+      privacyChoices: [{ photos: false, reminders: true, by: "staff" as const, byName: "Liza Cruz", at: "2026-10-13T02:00:00.000Z" }],
+    };
+    const doc = buildDocument({ type: "privacy_consent", issuedBy: "staff_cruz" }, { ...src, patient });
+    const text = JSON.stringify(doc.blocks);
+    expect(text).toContain("Treatment records (required)");
+    expect(text).toContain("[ ] Yes   [x] No"); // photos declined
+    expect(text).toContain("privacy notice version 2");
+    expect(doc.footnote).toContain("Template, pending legal review");
   });
 });
 

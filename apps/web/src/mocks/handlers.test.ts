@@ -45,6 +45,7 @@ import {
   reminderSendAt,
   surfacesFor,
   type CreatePatientInput,
+  type RegisterPatientInput,
 } from "@pedia/shared";
 import { api, ApiError } from "@/lib/api-client";
 import { db } from "./db";
@@ -73,7 +74,7 @@ describe("clinic reference data", () => {
   });
 });
 
-const newPatient: CreatePatientInput = {
+const newPatient: RegisterPatientInput = {
   firstName: "Bea",
   lastName: "Mendoza",
   birthDate: "2020-07-02",
@@ -86,6 +87,7 @@ const newPatient: CreatePatientInput = {
   medications: [],
   alerts: [],
   dentalHistory: { previousClinic: "", notes: "" },
+  privacyConsent: { guardianId: "g_mother", photos: true, reminders: true, confirmed: true },
 };
 const send = (method: string, body: unknown) => ({ method, body: JSON.stringify(body) });
 
@@ -158,8 +160,9 @@ describe("patients", () => {
 
   it("quick-updates phone, nickname, tags and alerts, and the phone follows the guardian to siblings", async () => {
     const g = { ...newPatient.guardians[0], id: "g_quick" };
-    const older = await api("/patients", Patient, send("POST", { ...newPatient, guardians: [g] }));
-    const younger = await api("/patients", Patient, send("POST", { ...newPatient, firstName: "Mia", guardians: [g] }));
+    const consent = { ...newPatient.privacyConsent, guardianId: g.id };
+    const older = await api("/patients", Patient, send("POST", { ...newPatient, guardians: [g], privacyConsent: consent }));
+    const younger = await api("/patients", Patient, send("POST", { ...newPatient, firstName: "Mia", guardians: [g], privacyConsent: consent }));
     const input = { phone: "09998887777", nickname: "Bebe", tags: ["Anxious"], alerts: ["Strong gag reflex"] };
     const updated = await api(`/patients/${older.id}`, Patient, send("PATCH", input));
     expect(updated).toMatchObject({ nickname: "Bebe", tags: ["Anxious"], alerts: ["Strong gag reflex"] });
@@ -206,8 +209,9 @@ describe("patients", () => {
 
   it("names siblings in the header summary, computed by the server, for a dentist too", async () => {
     const g = { ...newPatient.guardians[0], id: "g_header_sib", phone: "09175550101" };
-    const older = await api("/patients", Patient, send("POST", { ...newPatient, firstName: "Ana", guardians: [g] }));
-    const younger = await api("/patients", Patient, send("POST", { ...newPatient, firstName: "Lia", guardians: [g] }));
+    const consent = { ...newPatient.privacyConsent, guardianId: g.id };
+    const older = await api("/patients", Patient, send("POST", { ...newPatient, firstName: "Ana", guardians: [g], privacyConsent: consent }));
+    const younger = await api("/patients", Patient, send("POST", { ...newPatient, firstName: "Lia", guardians: [g], privacyConsent: consent }));
     signIn("demo.clinic_demo.staff_reyes");
     try {
       const s = await api(`/patients/${older.id}/summary`, PatientHeaderSummary);

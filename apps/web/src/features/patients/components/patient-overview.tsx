@@ -9,6 +9,7 @@ import { Can, useCan } from "@/features/auth/access";
 import { formatDate, formatPhone } from "@/lib/format";
 import { CONSENT_LABEL } from "../api";
 import { ConsentDialog } from "./consent-dialog";
+import { PrivacyCard } from "./privacy-card";
 import { QuickUpdateDialog } from "./quick-update-dialog";
 
 /** Label above value: the label is secondary, the value is what staff read. */
@@ -126,6 +127,7 @@ export function PatientOverview({ patient: p }: { patient: PatientView }) {
         )}
       </SectionCard>
 
+      <PrivacyCard patient={p} />
       <SectionCard title="Consents" action={<Can permission="patients.write"><ConsentDialog patient={p} /></Can>}>
         {p.consents.length === 0 ? (
           <p className="text-sm text-ink-muted">No consents recorded.</p>

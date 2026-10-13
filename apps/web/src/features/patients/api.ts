@@ -12,7 +12,10 @@ import {
   PatientPage,
   type ConsentScope,
   type PatientListQuery,
+  type ChangePrivacyChoicesInput,
   type QuickUpdatePatientInput,
+  type RecordPrivacyConsentInput,
+  type RegisterPatientInput,
 } from "@pedia/shared";
 import { api } from "@/lib/api-client";
 import { env } from "@/lib/env";
@@ -25,7 +28,6 @@ export const CONSENT_LABEL: Record<ConsentScope, string> = {
   radiographs: "X-rays",
   clinical_photos: "Clinical photos",
   sedation: "Sedation",
-  data_privacy: "Data privacy (RA 10173)",
 };
 
 export const patientKeys = {
@@ -124,7 +126,7 @@ export function useRemovePatientPhoto(id: string) {
 export function useCreatePatient() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: CreatePatientInput) =>
+    mutationFn: (input: RegisterPatientInput) =>
       api("/patients", PatientView, { method: "POST", body: JSON.stringify(input) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: patientKeys.all }),
   });
@@ -147,5 +149,23 @@ export function useAddConsent(patientId: string) {
     mutationFn: (input: AddConsentInput) =>
       api(`/patients/${patientId}/consents`, PatientView, { method: "POST", body: JSON.stringify(input) }),
     onSuccess: (patient) => qc.setQueryData(patientKeys.detail(patientId), patient),
+  });
+}
+
+/** Privacy #18, P17: the parent's consent for a child registered before chunk 24. */
+export function useRecordPrivacyConsent(patientId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: RecordPrivacyConsentInput) => api(`/patients/${patientId}/privacy-consent`, PatientView, { method: "POST", body: JSON.stringify(input) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: patientKeys.all }),
+  });
+}
+
+/** Privacy #15: switch photos and reminders. Staff on the record; a parent in the portal. */
+export function useSetPrivacyChoices(patientId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ChangePrivacyChoicesInput) => api(`/patients/${patientId}/privacy-choices`, PatientView, { method: "POST", body: JSON.stringify(input) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: patientKeys.all }),
   });
 }

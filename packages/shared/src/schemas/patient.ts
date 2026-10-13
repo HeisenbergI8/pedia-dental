@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Centavos, ClinicScoped, Id, IsoDate, IsoDateTime, isoDate } from "./common";
+import { PrivacyChoice, PrivacyConsent, RecordPrivacyConsentInput } from "./legal";
 
 export const Sex = z.enum(["male", "female"], { error: "Choose the child's sex" });
 
@@ -27,7 +28,6 @@ export const ConsentScope = z.enum([
   "radiographs",
   "clinical_photos",
   "sedation",
-  "data_privacy",
 ]);
 export type ConsentScope = z.infer<typeof ConsentScope>;
 
@@ -94,6 +94,10 @@ export const Patient = ClinicScoped.extend({
   /** Set by the server when the child has a photo; also busts the <img> cache after a change. */
   photoUpdatedAt: IsoDateTime.optional(),
   consents: z.array(ConsentRecord),
+  /** Privacy #12: the parent's required consent. Absent for children registered before chunk 24 (#18, never a block). */
+  privacyConsent: PrivacyConsent.optional(),
+  /** Privacy #13–#15: the optional consents, append-only, newest last (`currentChoices`). */
+  privacyChoices: z.array(PrivacyChoice).optional(),
   createdAt: IsoDateTime,
 });
 export type Patient = z.infer<typeof Patient>;
@@ -132,6 +136,8 @@ const PatientInputBase = Patient.omit({
   clinicId: true,
   createdAt: true,
   consents: true,
+  privacyConsent: true, // set by POST /patients and the privacy routes, never by an edit
+  privacyChoices: true,
   patientNo: true, // server-assigned
   photoUpdatedAt: true, // set by the photo endpoints
 });
@@ -141,6 +147,20 @@ export const CreatePatientInput = PatientInputBase.refine(onePrimary, PRIMARY_RU
   .refine((p) => uniqueTags(p.tags), TAG_RULE)
   .superRefine(answersAgree);
 export type CreatePatientInput = z.infer<typeof CreatePatientInput>;
+
+/**
+ * POST /patients (privacy #12, P12): the child plus the parent's consent. No child is saved without it. The guardian
+ * who consented is one of the guardians being registered; the server copies their name and relationship.
+ */
+export const RegisterPatientInput = PatientInputBase.extend({ privacyConsent: RecordPrivacyConsentInput })
+  .refine(onePrimary, PRIMARY_RULE)
+  .refine((p) => uniqueTags(p.tags), TAG_RULE)
+  .superRefine(answersAgree)
+  .refine((p) => p.guardians.some((g) => g.id === p.privacyConsent.guardianId), {
+    message: "Choose one of this child's guardians",
+    path: ["privacyConsent", "guardianId"],
+  });
+export type RegisterPatientInput = z.infer<typeof RegisterPatientInput>;
 
 /**
  * PUT /patients/:id from a caller without patients.contact (a dentist). They were never sent the contacts, so the

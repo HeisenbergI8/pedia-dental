@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { z } from "zod";
-import { DemoAccounts, LoginResult, Session, type ChangePasswordInput, type LoginInput, type LogoutInput, type SwitchUserInput } from "@pedia/shared";
+import { AcknowledgementPrompt, DemoAccounts, LoginResult, Session, type AcknowledgeInput, type AcknowledgementKind, type ChangePasswordInput, type LoginInput, type LogoutInput, type SwitchUserInput } from "@pedia/shared";
 import { api } from "@/lib/api-client";
 import { useSessionStore } from "@/stores/session-store";
 import { ROLE_HOME } from "./access";
@@ -61,12 +61,25 @@ export function useSwitchUser() {
   });
 }
 
+/**
+ * RequireSession re-reads this login's steps from /auth/me; a fresh session must replace that cached answer too, or
+ * the old "must acknowledge" would put the step back on screen (privacy L6).
+ */
+const useTakeSession = () => {
+  const qc = useQueryClient();
+  const signIn = useSessionStore((s) => s.signIn);
+  return (session: Session) => {
+    qc.setQueryData(["session-user", session.user.id], session.user);
+    signIn(session);
+  };
+};
+
 /** Decision #21. The server answers with the session again, without `mustChangePassword`, so the app opens. */
 export function useChangePassword() {
-  const signIn = useSessionStore((s) => s.signIn);
+  const take = useTakeSession();
   return useMutation({
     mutationFn: (input: ChangePasswordInput) => api("/auth/password", Session, { method: "POST", body: JSON.stringify(input) }),
-    onSuccess: (session) => signIn(session),
+    onSuccess: take,
   });
 }
 
@@ -80,4 +93,19 @@ export function useSignOut() {
     qc.removeQueries();
     router.replace("/login");
   };
+}
+
+/** Privacy P10: the page waiting for this login (terms, confidentiality or the clinic's notice). */
+export function useAcknowledgementPrompt(kind: AcknowledgementKind) {
+  // Not under "auth": sign-in keeps "auth" keys, and a parent's prompt holds the children's names and consents.
+  return useQuery({ queryKey: ["acknowledgement", kind], queryFn: () => api("/auth/acknowledgement", AcknowledgementPrompt) });
+}
+
+/** Saves it and takes the fresh session, which names the next step or none, as useChangePassword does. */
+export function useAcknowledge() {
+  const take = useTakeSession();
+  return useMutation({
+    mutationFn: (input: AcknowledgeInput) => api("/auth/acknowledgement", Session, { method: "POST", body: JSON.stringify(input) }),
+    onSuccess: take,
+  });
 }

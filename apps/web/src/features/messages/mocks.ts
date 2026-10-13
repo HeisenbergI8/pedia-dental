@@ -1,11 +1,12 @@
 import { http, HttpResponse, delay } from "msw";
 import { format } from "date-fns";
-import { MessageStatus, UpdateMessageTemplateInput, birthdayGreeting, isBirthdayOn, isDueItemOpen } from "@pedia/shared";
+import { MessageStatus, UpdateMessageTemplateInput, birthdayGreeting, choiceDeclined, isBirthdayOn, isDueItemOpen } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { db, persist } from "@/mocks/db";
 import { queueMessage, runDailyJobs } from "@/mocks/outbox";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
+const DECLINED = "This family declined reminder messages. Change it under Privacy on the child's Overview.";
 
 /** API contract for apps/api's MessagesController. Messages are queued by events (mocks/outbox.ts), never sent. */
 export const messageHandlers = [
@@ -43,6 +44,8 @@ export const messageHandlers = [
     if (db.messages.some((m) => m.dueItemId === item.id && m.status === "queued")) {
       return new HttpResponse("A reminder is already queued for this", { status: 409 });
     }
+    const patient = db.patients.find((p) => p.id === item.patientId);
+    if (patient && choiceDeclined(patient, "reminders")) return new HttpResponse(DECLINED, { status: 409 });
     const kind = item.kind === "follow_up" ? "follow_up_reminder" : "recall";
     const message = queueMessage({ kind, patientId: item.patientId, dueItemId: item.id, dueOn: item.dueOn, sendAt: new Date().toISOString() });
     if (!message) return new HttpResponse("This patient has no primary guardian to message", { status: 409 });
@@ -54,6 +57,7 @@ export const messageHandlers = [
   http.post(url("/patients/:id/birthday-greeting"), async ({ params }) => {
     const patient = db.patients.find((p) => p.id === params.id);
     if (!patient) return new HttpResponse("Patient not found", { status: 404 });
+    if (choiceDeclined(patient, "reminders")) return new HttpResponse(DECLINED, { status: 409 });
     const today = format(new Date(), "yyyy-MM-dd");
     if (!isBirthdayOn(patient.birthDate, today)) return new HttpResponse(`It isn't ${patient.firstName}'s birthday today`, { status: 409 });
     if (birthdayGreeting(db.messages, patient.id, today)) {

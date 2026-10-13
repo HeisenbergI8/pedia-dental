@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { Id, Role } from "./common";
+import { Id, Role, isoDate } from "./common";
+import { AgreementRecord } from "./legal";
 import { DesignStatus, RecordUpfrontPaymentInput, SignupInput } from "./signup";
 import { ClinicAccount, HeadingFont, HexColor, Tier } from "./tenancy";
 
@@ -37,6 +38,12 @@ export const AccountOverview = z.strictObject({
   design: DesignStatus.nullable(),
   // With `design` only: the look the clinic has now, so Set branding starts from it rather than from Primolar's.
   look: z.strictObject({ brandColor: HexColor, headingFont: HeadingFont.nullable(), hasLogo: z.boolean() }).nullable(),
+  // Privacy #10, P21: the agreement in force, whether it is the current version, and a count. Never a patient (#25).
+  privacy: z.strictObject({
+    agreement: z.strictObject(AgreementRecord.shape).nullable(),
+    current: z.boolean(),
+    patientsWithoutConsent: z.number().int().nonnegative(),
+  }),
 });
 export type AccountOverview = z.infer<typeof AccountOverview>;
 
@@ -45,7 +52,12 @@ export type AccountOverview = z.infer<typeof AccountOverview>;
  * choices as the public form, plus the upfront payment marked by hand. Multipart, like POST /signups (the logo is a
  * file). Writes an approved sign-up with `source: "console"` (A5).
  */
-export const CreateAccountInput = SignupInput.extend({ payment: RecordUpfrontPaymentInput });
+/** Privacy #8 (P5): the operator holds a signed copy and says when it was signed. */
+export const CreateAccountInput = SignupInput.extend({
+  payment: RecordUpfrontPaymentInput,
+  signedOnFile: z.literal(true, { error: "Tick this once you hold the agreement the Owner signed" }),
+  signedOn: isoDate("Enter the date the agreement was signed"),
+});
 export type CreateAccountInput = z.infer<typeof CreateAccountInput>;
 
 /** The new account's row, and the only time the Owner's temporary password and PIN are sent (decision #21). */

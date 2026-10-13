@@ -4,12 +4,17 @@ import {
   AddConsentInput,
   CreatePatientInput,
   EditPatientWithoutContactsInput,
+  LEGAL_DOCUMENTS,
   PatientFilter,
   PatientListQuery,
+  ChangePrivacyChoicesInput,
   QuickUpdatePatientInput,
+  RecordPrivacyConsentInput,
+  RegisterPatientInput,
   accountCredit,
   accountSummary,
   comparePatients,
+  currentChoices,
   findDuplicates,
   isReservedTag,
   lastVisitOn,
@@ -25,13 +30,36 @@ import {
   type PatientView,
 } from "@pedia/shared";
 import { env } from "@/lib/env";
-import { inScope, sessionOf, type MockSession } from "@/mocks/access";
+import { inScope, recordAudit, sessionOf, type MockSession } from "@/mocks/access";
 import { deleteBlob, getBlob, putBlob } from "@/mocks/blob-store";
 import { currentClinicId, db, persist } from "@/mocks/db";
+import { currentNotice } from "@/mocks/privacy";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 
 /** Names are stored tidied, so lists sort and duplicates match the way staff expect. */
+/**
+ * Privacy #12, #16, #17: the consent as recorded: the guardian as named today (#23 keeps who it was), the notice and
+ * form versions agreed to (#20), and the staff member who recorded it. Undefined when the guardian isn't this child's.
+ */
+function consentFrom(p: Pick<Patient, "guardians">, input: RecordPrivacyConsentInput, recorder: MockSession, at: string): Pick<Patient, "privacyConsent" | "privacyChoices"> | undefined {
+  const g = p.guardians.find((x) => x.id === input.guardianId);
+  if (!g) return undefined;
+  return {
+    privacyConsent: {
+      guardianId: g.id,
+      guardianName: g.fullName,
+      relationship: g.relationship,
+      noticeVersion: currentNotice(db).version,
+      formVersion: LEGAL_DOCUMENTS.consent.version,
+      recordedById: recorder.staffId ?? recorder.id,
+      recordedByName: recorder.name,
+      at,
+    },
+    privacyChoices: [{ photos: input.photos, reminders: input.reminders, by: "staff", byName: recorder.name, at }],
+  };
+}
+
 const tidy = <T extends { firstName: string; lastName: string }>(p: T): T => ({
   ...p,
   firstName: normalizeName(p.firstName),
@@ -130,21 +158,27 @@ export const patientHandlers = [
   }),
 
   http.post(url("/patients"), async ({ request }) => {
-    const parsed = CreatePatientInput.safeParse(await request.json());
+    // Privacy #12: no child is saved without the parent's consent (RegisterPatientInput requires it).
+    const parsed = RegisterPatientInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
     const reserved = reservedTag(parsed.data.tags);
     if (reserved) return refuseTag(reserved);
+    const session = sessionOf(request)!; // behind the gate
+    const { privacyConsent: consent, ...details } = parsed.data;
+    const now = new Date().toISOString();
     const patient: Patient = {
-      ...tidy(parsed.data),
+      ...tidy(details),
       id: crypto.randomUUID(),
       patientNo: nextPatientNo(db.patients),
       clinicId: currentClinicId(),
       consents: [],
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      ...consentFrom(details, consent, session, now), // the schema already checked the guardian is one of these
     };
     db.patients.push(patient);
     persist();
-    return HttpResponse.json(visibleTo(sessionOf(request), patient), { status: 201 });
+    recordAudit(session, "create", "Privacy consent", patient.id); // #23: beside the gate's "Patient profile" entry
+    return HttpResponse.json(visibleTo(session, patient), { status: 201 });
   }),
 
   http.put(url("/patients/:id"), async ({ params, request }) => {
@@ -177,7 +211,8 @@ export const patientHandlers = [
     if (reserved) return refuseTag(reserved);
 
     const guardianIds = new Set(input.guardians.map((g) => g.id));
-    if (current.consents.some((c) => !guardianIds.has(c.guardianId))) {
+    const consenter = current.privacyConsent?.guardianId;
+    if (current.consents.some((c) => !guardianIds.has(c.guardianId)) || (consenter && !guardianIds.has(consenter))) {
       return new HttpResponse("A guardian who signed a consent can't be removed", { status: 409 });
     }
     // patientNo and photoUpdatedAt aren't in the input, so the spread keeps the server's values.
@@ -198,6 +233,40 @@ export const patientHandlers = [
     patient.consents.push({ ...parsed.data, id: crypto.randomUUID() });
     persist();
     return HttpResponse.json(visibleTo(sessionOf(request), patient), { status: 201 });
+  }),
+
+  // Privacy #18, P17: a child registered before chunk 24. Recorded once; after that only the optional ones change.
+  http.post(url("/patients/:id/privacy-consent"), async ({ params, request }) => {
+    const patient = db.patients.find((p) => p.id === params.id);
+    if (!patient) return new HttpResponse("Patient not found", { status: 404 });
+    if (patient.privacyConsent) return new HttpResponse("Consent is already recorded for this child. Change the optional consents instead.", { status: 409 });
+    const parsed = RecordPrivacyConsentInput.safeParse(await request.json());
+    if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
+    const session = sessionOf(request)!;
+    const recorded = consentFrom(patient, parsed.data, session, new Date().toISOString());
+    if (!recorded) return new HttpResponse("Choose one of this child's guardians", { status: 400 });
+    Object.assign(patient, recorded);
+    persist();
+    return HttpResponse.json(visibleTo(session, patient), { status: 201 });
+  }),
+
+  // Privacy #15: staff, or the parent for their own child (the gate's `own` check), switch photos and reminders. Each
+  // change is a new row; nothing is edited.
+  http.post(url("/patients/:id/privacy-choices"), async ({ params, request }) => {
+    const patient = db.patients.find((p) => p.id === params.id);
+    if (!patient) return new HttpResponse("Patient not found", { status: 404 });
+    if (!patient.privacyConsent) return new HttpResponse("Record the parent's consent first", { status: 409 });
+    const parsed = ChangePrivacyChoicesInput.safeParse(await request.json());
+    if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
+    const session = sessionOf(request)!;
+    const was = currentChoices(patient); // set at registration or with the consent, so present here
+    const next = { photos: parsed.data.photos ?? was?.photos ?? false, reminders: parsed.data.reminders ?? was?.reminders ?? false };
+    const row = { ...next, by: session.guardianId ? ("parent" as const) : ("staff" as const), byName: session.name, at: new Date().toISOString() };
+    patient.privacyChoices = [...(patient.privacyChoices ?? []), row];
+    // Privacy #14: a "no" to reminders also withdraws what is queued and not yet sent.
+    if (!next.reminders) for (const m of db.messages) if (m.patientId === patient.id && m.status === "queued") m.status = "cancelled";
+    persist();
+    return HttpResponse.json(visibleTo(session, patient));
   }),
 
   // Quick update: phone, nickname, tags and alerts without the full form.

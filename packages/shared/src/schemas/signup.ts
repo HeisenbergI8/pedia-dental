@@ -2,6 +2,7 @@ import { z } from "zod";
 import { PaymentMethod } from "./billing";
 import { AddStaffInput } from "./clinic";
 import { Centavos, Id, IsoDateTime, isoDate } from "./common";
+import { AgreementRecord } from "./legal";
 import { BranchInput, ClinicAccount, HeadingFont, HexColor, Tier } from "./tenancy";
 
 /** Billing #6: how the clinic will look on day one. */
@@ -43,6 +44,12 @@ export const SignupInput = z.object({
   branding: BrandingInput,
 });
 export type SignupInput = z.infer<typeof SignupInput>;
+
+/** POST /signups (privacy #7, P4): the public form also needs the unticked acceptance. The console's Fix keeps SignupInput. */
+export const GetStartedInput = SignupInput.extend({
+  acceptTerms: z.literal(true, { error: "Tick the box to accept the Terms of Service and the Data Processing Agreement" }),
+});
+export type GetStartedInput = z.infer<typeof GetStartedInput>;
 
 /** One plan's prices, VAT-inclusive centavos (billing #22, #23). */
 export const PlanPrice = z.object({ setupFee: Centavos.nonnegative(), monthlyFee: Centavos.nonnegative() });
@@ -107,6 +114,7 @@ export const Signup = SignupInput.extend({
   rejection: z.object({ reason: z.string(), at: IsoDateTime }).optional(),
   approval: z.object({ clinicId: Id, at: IsoDateTime }).optional(),
   design: z.object({ status: DesignStatus, deliveredAt: IsoDateTime.optional() }).optional(), // `designed` only
+  agreement: AgreementRecord, // privacy #7, #8: carried to the clinic on approval (Platform.agreements)
 });
 export type Signup = z.infer<typeof Signup>;
 

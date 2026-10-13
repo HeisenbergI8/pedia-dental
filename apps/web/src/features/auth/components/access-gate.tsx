@@ -3,13 +3,16 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { LockIcon } from "lucide-react";
-import { isStaffRole } from "@pedia/shared";
+import { useQuery } from "@tanstack/react-query";
+import { SessionUser, isStaffRole } from "@pedia/shared";
 import { LoadingScreen } from "@/components/brand";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
+import { api } from "@/lib/api-client";
 import { useSessionStore } from "@/stores/session-store";
 import { ROLE_HOME, ROLE_LABEL, useSession } from "../access";
 import { useSignOut } from "../api";
+import { AcknowledgeScreen } from "./acknowledge-screen";
 import { ChangePasswordScreen } from "./change-password-screen";
 
 /** True once the persisted session has been read, so a signed-in user is never bounced to /login. */
@@ -57,6 +60,13 @@ export function RequireSession({ area, children }: { area: "clinic" | "portal"; 
   useEffect(() => {
     if (hydrated && !role) router.replace("/login");
   }, [hydrated, role, router]);
+  // Privacy #9, #20, #21: a version published while signed in. Re-read this login's steps on focus, so the page to read
+  // appears instead of every request failing with 403. Keyed by user: a switch never applies another person's state.
+  const refreshUser = useSessionStore((s) => s.refreshUser);
+  const me = useQuery({ queryKey: ["session-user", user?.id], queryFn: () => api("/auth/me", SessionUser), enabled: hydrated && !!role, refetchOnWindowFocus: true });
+  useEffect(() => {
+    if (me.data && user && me.data.id === user.id && (me.data.mustAcknowledge !== user.mustAcknowledge || me.data.mustChangePassword !== user.mustChangePassword)) refreshUser(me.data);
+  }, [me.data, user, refreshUser]);
 
   if (!hydrated || !role) return <LoadingScreen />;
   if ((area === "clinic") !== isStaffRole(role)) {
@@ -69,6 +79,8 @@ export function RequireSession({ area, children }: { area: "clinic" | "portal"; 
   // A login the Owner just made: nothing else until they choose their own password (decision #21). The shell isn't
   // mounted, so none of its queries fire while the API would refuse them.
   if (user?.mustChangePassword) return <ChangePasswordScreen />;
+  // Privacy #9, #20, #21: the Owner's updated terms, a login's confidentiality, a parent's notice: read first (P10).
+  if (user?.mustAcknowledge) return <AcknowledgeScreen />;
   return <>{children}</>;
 }
 
