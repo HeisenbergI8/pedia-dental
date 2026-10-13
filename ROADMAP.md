@@ -1,12 +1,12 @@
 # Roadmap: Primolar (frontend prototype)
 
 Primolar is clinic management for pediatric dental clinics, sold as a service: each paying clinic is a
-**clinic account** with its own branches, staff, patients and branding (feature 16). Features 1–15 work
-inside one clinic account.
+**clinic account** with its own branches, staff, patients and branding (feature 16), which signs up and pays
+through feature 17. Features 1–15 work inside one clinic account.
 
 Two parts:
 
-1. **Features**: what each of the 16 features does, its screens, its data, and its rules.
+1. **Features**: what each of the 17 features does, its screens, its data, and its rules.
 2. **Build chunks**: the order to build them in. Each chunk depends only on chunks above it and ends
    with a "done when" you can check. Chunks 0–18 were sized for one or two sessions. From chunk 19 on,
    each chunk is one **Large** piece of work with its own architect plan: fewer, bigger chunks.
@@ -183,8 +183,7 @@ Turns the single-clinic app into a product many clinics use. Decisions settled o
   | Branches | 1 | up to 3 | unlimited |
   | Staff logins (the Owner counts) | 5 | 20 | unlimited |
   | Cross-branch dashboard and finance | — | ✓ | ✓ |
-  | Logo and brand colour | ✓ | ✓ | ✓ |
-  | Heading font | — | — | ✓ |
+  | Logo, brand colour and heading font | ✓ | ✓ | ✓ |
 
 - **What belongs where:** the clinic account owns patients and charts, the procedure price list,
   message templates and recalls (filterable by branch), plus its name, logo, contact email and TIN.
@@ -194,7 +193,7 @@ Turns the single-clinic app into a product many clinics use. Decisions settled o
   - *Operator console:* clinic accounts with tier, Owner and usage (branches, staff, patients);
     create an account and invite its Owner; change tier; suspend and reactivate; transfer ownership.
   - *Owner settings:* clinic profile; branches (add, edit, archive); staff (add with role and branches,
-    deactivate); branding (logo, brand colour, font on Big); the account's tier and usage.
+    deactivate); branding (logo, brand colour, heading font); the account's tier and usage.
   - *Branch switcher* in the top bar for staff at several branches, with "All branches" for the Owner.
   - *Clinic chooser* after sign-in when an email belongs to more than one clinic account.
 - **Rules:**
@@ -213,19 +212,54 @@ Turns the single-clinic app into a product many clinics use. Decisions settled o
     account-wide; front desk picks the branch when booking.
 - **Branding:** a logo (PNG, JPG or SVG, up to 1 MB) and one brand colour on every tier. The app derives
   the colour's tints, shades and dark-mode version and refuses a colour that fails WCAG AA contrast,
-  suggesting the nearest that passes. Big adds a heading font from a shortlist of 4–6 rounded fonts; it
-  applies to headings and the clinic name only. The clinic's logo replaces Primolar's everywhere staff
+  suggesting the nearest that passes. A heading font from a shortlist of six rounded fonts, on every plan
+  since feature 17 (it was Big-only); it applies to headings and the clinic name only. The clinic's logo replaces Primolar's everywhere staff
   and parents look (sidebar, portal, receipts, letterheads, PDFs); with no logo, the clinic name shows in
   its heading font. Primolar's wordmark stays on the sign-in page, the operator console, and a small
   "Powered by Primolar" line.
-- **Later:** self-signup and card payments for tiers; per-clinic web addresses; real email invites;
-  per-branch price lists; operator impersonation for support.
+- **Later:** per-clinic web addresses; real email invites; per-branch price lists; operator impersonation for
+  support. Sign-up and payments moved to feature 17.
+
+## 17. Onboarding and billing (sign-up form, setup fee, monthly subscription)
+
+How a new clinic signs up and pays. Decisions settled on 2026-10-13 live in
+`.claude/plans/feature-primolar-billing-plan/decisions.md`; they replace feature 16's "the operator types the
+account in", "no payments" and "font on Big only".
+
+- **The flow:** the client fills in a public **Get started** form → sees the amount due → pays the setup fee and
+  first month → Primolar reviews (fix or reject with a reason) and approves → the clinic is created already
+  branded, and its Owner signs in with a temporary password. Primolar can still create a clinic directly in the
+  console for sign-ups by phone or in person.
+- **The form:** clinic name, contact email, TIN; the first branch's name, address, phone and hours; the Owner's
+  name, email and whether they are a dentist; the plan; and one of three **branding choices**:
+  - *Use my own:* logo, one brand colour (contrast-checked) and a heading font from the shortlist.
+  - *Use the default look:* no logo (the clinic's name shows), Primolar's colours; changeable later in Settings.
+  - *Design it for me:* Primolar designs the logo, colour and font from a short brief and up to 3 reference
+    images, for a fixed extra fee. The clinic goes live with the default look; Primolar applies the finished
+    branding from the console ("Design in progress" → "Delivered").
+- **Prices:** Philippine pesos, VAT-inclusive. A setup fee and a monthly fee per plan, plus one design add-on, in a
+  price list the operator edits. Paid upfront: setup + first month (+ design). Monthly only: no annual billing,
+  trial or promo codes.
+- **Subscription rules:** due monthly on the approval date (the last day of shorter months). Upgrades apply at
+  once, downgrades on the next due date, no part-month charges. A missed payment gets 7 days' grace with a banner
+  for the Owner, then the clinic is paused (staff out, parents read-only, nothing deleted). A late payment
+  recorded by the operator reactivates it, and due dates stay on schedule. Cancelling goes through Primolar; data
+  is kept.
+- **Screens:**
+  - *Get started* (public): the form, then a thank-you page with the amount due.
+  - *Operator console:* sign-ups (waiting for payment, approved, rejected); record a payment; approve, fix or
+    reject; the price list; each clinic's subscription, due date and payment history; "Set branding" for
+    designed brands.
+  - *Owner:* Settings → Plan gains the next due date and amount, payment history and invoices; an overdue
+    banner during the grace period. Other staff see no billing.
+- **Prototype vs backend:** every payment is marked paid by hand in the prototype. PayMongo checkout (cards,
+  GCash, Maya), automatic monthly charging, emails and BIR official receipts come with the backend.
 
 ---
 
 # Part 2: Build chunks (in build order: 18 comes last)
 
-Total ≈ 212 hours (153 for features 1–15, 59 for the platform). Hours are estimates for one developer using Claude Code.
+Total ≈ 252 hours (153 for features 1–15, 59 for the platform, 40 for onboarding and billing). Hours are estimates for one developer using Claude Code.
 
 ## ✅ Chunk 0: Foundation (done)
 
@@ -474,6 +508,49 @@ downgrading it to Small blocks new additions without disabling anything.
 
 **Depends on:** 20, 13.
 
+## Chunk 22: Sign-ups, branding choices and approval (22 h) — feature 17, part 1 · Large
+
+**Plan:** `.claude/plans/feature-primolar-billing-plan/` (to be written)
+
+- A public **Get started** form: clinic, first branch, Owner, plan and the three branding choices (own logo,
+  colour and font; the default look; Design it for me with a brief and reference images). Duplicate clinic names
+  and contact emails refused. A thank-you page with the amount due.
+- The heading font on every plan (replaces Big-only).
+- The operator console's **Sign-ups**: waiting for payment, approved, rejected. Record the upfront payment by
+  hand; fix a sign-up; reject with a reason (refunded outside the app); approve to create the clinic already
+  branded, with its first branch and an Owner on a temporary password.
+- **Price list** in the console: a setup fee and monthly fee per plan and the design add-on, VAT-inclusive pesos.
+- **Set branding** in the console for *Design it for me* clinics, with the design status.
+- Demo data: one sign-up waiting for its setup fee.
+
+**Done when:** a client submits the form with each branding choice; the operator records the payment and
+approves; the new Owner signs in to a clinic already in their logo, colour and font (or the default look); a
+duplicate name is refused; a rejected sign-up shows its reason; and a *Design it for me* clinic gets its
+finished branding from the console.
+
+**Depends on:** 21.
+
+## Chunk 23: Subscriptions, payments and the overdue pause (18 h) — feature 17, part 2 · Large
+
+**Plan:** to be written
+
+- A subscription per clinic: plan, monthly price, due date (the approval date; the last day of shorter months).
+- The operator records monthly payments by hand; each payment gets a Primolar invoice (VAT shown).
+- Plan changes: upgrade at once, downgrade on the next due date, no part-month charges.
+- Missed payment: 7 days' grace with an overdue banner for the Owner, then the existing pause; a recorded late
+  payment reactivates it on the original schedule. Cancellation by Primolar pauses the clinic at the end of the
+  paid month.
+- The Owner's **Settings → Plan**: next due date and amount, payment history, downloadable invoices; reminders in
+  the app ("due in 3 days", "overdue"). Other staff see no billing.
+- The console's clinic page: subscription status, due date, payment history.
+- Demo data: Bulilit and Ngiti paid up; one clinic in its grace period.
+
+**Done when:** a clinic approved on the 31st is due on the 30th next month; a missed payment shows the Owner a
+banner for 7 days and then pauses the clinic; recording the payment reactivates it with the due date unchanged;
+an upgrade raises the next invoice and a downgrade waits for the due date; only the Owner sees any billing.
+
+**Depends on:** 22.
+
 ## Chunk 18: Demo polish and deploy (6 h)
 
 - A realistic demo scenario in the seed: one child mid-treatment, one due for recall, one with a
@@ -483,8 +560,10 @@ downgrading it to Small blocks new additions without disabling anything.
 
 **Done when:** the client can open a link and walk the demo script without your help.
 
-**Depends on:** all, 21 included. Built last so the demo, deploy and video show the whole product: several
-clinics, branches, clinic branding and the operator console.
+**Depends on:** all, 23 included. Built last so the demo, deploy and video show the whole product: several
+clinics, branches, clinic branding, the operator console, sign-up and billing. Already done: the demo data,
+the responsive and keyboard pass, the deploy (https://primolar.vercel.app) and `DEMO_SCRIPT.md`. Left: the
+video, after chunk 23 and a round of testing.
 
 ---
 
@@ -503,7 +582,8 @@ clinics, branches, clinic branding and the operator console.
 9 + 12 ─ 16 Documents
 10 + 11 + 12 + 14 + 15 ─ 17 Parent portal
 17 ─ 19 Tenancy foundation ─ 20 Owner settings & branding ─ 21 Cross-branch & operator ◄── 13
-everything, 21 included ─ 18 Polish & deploy
+21 ─ 22 Sign-ups & branding choices ─ 23 Subscriptions & payments
+everything, 23 included ─ 18 Polish & deploy (video left)
 ```
 
 Chunks 5–6 (the chart) carry the most risk. If time gets tight, cut scope from 17 (portal) and 13
