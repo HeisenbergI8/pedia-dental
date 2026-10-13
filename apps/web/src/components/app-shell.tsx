@@ -23,6 +23,7 @@ import { routePermission, useCan, useSession } from "@/features/auth/access";
 import { AccountMenu } from "@/features/auth/components/account-menu";
 import { NoAccess } from "@/features/auth/components/access-gate";
 import { PatientSearch } from "@/features/patients/components/patient-search";
+import { BillingBanner } from "@/features/clinic/components/billing-banner";
 import { BranchSwitcher } from "@/features/clinic/components/branch-switcher";
 import { BrandTheme } from "@/features/clinic/components/brand-theme";
 import { ClinicLogo, ClinicMark, ClinicPageLoading } from "@/features/clinic/components/clinic-logo";
@@ -239,6 +240,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {navigating && <ClinicPageLoading />}
         {/* Hidden, not unmounted, so a navigation that doesn't land leaves the page as it was. */}
         <div hidden={navigating} className="contents">
+          <BillingBanner />
           <RouteGate key={userId}>{children}</RouteGate>
         </div>
         {/* Keeps the end of the page clear of the bottom nav. */}

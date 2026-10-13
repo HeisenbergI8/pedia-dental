@@ -1,12 +1,17 @@
 "use client";
 import type { ReactNode } from "react";
-import { TIER_LABEL, TIER_LIMITS, type ClinicUsage } from "@pedia/shared";
+import { SUBSCRIPTION_STATE_LABEL, TIER_LABEL, TIER_LIMITS, formatBillingDate, formatPeso, type ClinicUsage } from "@pedia/shared";
 import { Loading } from "@/components/brand";
 import { ErrorState } from "@/components/error-state";
 import { SectionCard } from "@/components/section-card";
-import { useClinicUsage } from "../api";
+import { useClinicUsage, useSubscription } from "../api";
+import { BillingNotice } from "./billing-banner";
+import { PaymentHistory } from "./payment-history";
 
-/** Read-only: the operator sets the tier (decision #4). What is in use against the plan, and what the plan includes. */
+/**
+ * Read-only: Primolar changes the plan (billing #27). What is in use against the plan, what it includes, and the
+ * Owner's billing (#31): next due date and amount, reminders, payment history and invoices.
+ */
 export function PlanPanel() {
   const usage = useClinicUsage();
   if (usage.isLoading) return <Loading label="Loading your plan" />;
@@ -15,17 +20,65 @@ export function PlanPanel() {
   const limits = TIER_LIMITS[tier];
 
   return (
-    <SectionCard title={<>You&apos;re on the {TIER_LABEL[tier]} plan</>} description="To change your plan, contact Primolar.">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Allowance label="Open branches" allowance={usage.data.branches} />
-        <Allowance label="Staff logins" allowance={usage.data.staffLogins} />
-      </div>
+    <div className="space-y-5">
+      <SectionCard
+        title={<>You&apos;re on the {TIER_LABEL[tier]} plan</>}
+        description="To change your plan, contact Primolar. An upgrade starts at once; a downgrade starts on your next due date."
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Allowance label="Open branches" allowance={usage.data.branches} />
+          <Allowance label="Staff logins" allowance={usage.data.staffLogins} />
+        </div>
+        <div className="space-y-2 border-t border-line pt-4">
+          <h3 className="text-sm font-semibold">Also on your plan</h3>
+          <ul className="space-y-1 text-sm">
+            <Feature on>Your logo, brand colour and heading font</Feature>
+            <Feature on={limits.crossBranchViews}>Dashboard and finance views across branches</Feature>
+          </ul>
+        </div>
+      </SectionCard>
+      <BillingCard />
+    </div>
+  );
+}
+
+/** Billing #31, #32: what the Owner owes Primolar, when, and every payment so far. */
+function BillingCard() {
+  const sub = useSubscription();
+  if (sub.isLoading) return <Loading label="Loading your billing" />;
+  if (!sub.data) return <ErrorState what="your billing" onRetry={() => void sub.refetch()} />;
+  const s = sub.data;
+  return (
+    <SectionCard title="Billing" description="Primolar records your monthly payment. Every invoice shows the VAT included.">
+      <BillingNotice subscription={s} />
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+        <dt className="text-ink-muted">Status</dt>
+        <dd>{SUBSCRIPTION_STATE_LABEL[s.state]}</dd>
+        <dt className="text-ink-muted">{s.cancelledAt ? "Ends on" : "Next due"}</dt>
+        <dd>{formatBillingDate(s.nextDue)}</dd>
+        {!s.cancelledAt && (
+          <>
+            <dt className="text-ink-muted">Amount</dt>
+            <dd className="tabular-nums">
+              {formatPeso(s.nextAmount)} <span className="text-ink-muted">(includes {formatPeso(s.nextVat)} VAT)</span>
+            </dd>
+          </>
+        )}
+        {s.downgrade && (
+          <>
+            <dt className="text-ink-muted">Plan change</dt>
+            <dd>Moves to {TIER_LABEL[s.downgrade.tier]} on {formatBillingDate(s.downgrade.on)}. Nothing you have now is turned off.</dd>
+          </>
+        )}
+      </dl>
+      {s.cancelledAt && (
+        <p className="text-sm text-ink-muted">
+          Primolar has cancelled your subscription. Your clinic pauses on {formatBillingDate(s.nextDue)}, and every record is kept.
+        </p>
+      )}
       <div className="space-y-2 border-t border-line pt-4">
-        <h3 className="text-sm font-semibold">Also on your plan</h3>
-        <ul className="space-y-1 text-sm">
-          <Feature on>Your logo, brand colour and heading font</Feature>
-          <Feature on={limits.crossBranchViews}>Dashboard and finance views across branches</Feature>
-        </ul>
+        <h3 className="text-sm font-semibold">Payment history</h3>
+        <PaymentHistory subscription={s} />
       </div>
     </SectionCard>
   );

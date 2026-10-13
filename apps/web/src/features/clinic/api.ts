@@ -11,6 +11,7 @@ import {
   ClinicUsage,
   Procedure,
   StaffMember,
+  SubscriptionView,
   worksAt,
   type AddStaffInput,
   type BranchInput,
@@ -23,7 +24,13 @@ import { useSessionStore } from "@/stores/session-store";
 /** Reference data changes rarely, so it is cached for the whole session. */
 const forever = { staleTime: Infinity } as const;
 
-export const clinicKeys = { context: ["clinic"] as const, usage: ["clinic", "usage"] as const, branches: ["branches"] as const, staff: ["staff"] as const };
+export const clinicKeys = {
+  context: ["clinic"] as const,
+  usage: ["clinic", "usage"] as const,
+  subscription: ["clinic", "subscription"] as const,
+  branches: ["branches"] as const,
+  staff: ["staff"] as const,
+};
 
 /**
  * The signed-in clinic account, the branches this user may work at, and the one this device is on. Replaces the
@@ -91,6 +98,14 @@ export function useSwitchBranch() {
 /** Seats and open branches against the tier. Owner only. Not cached forever: it changes with every add or archive. */
 export function useClinicUsage() {
   return useQuery({ queryKey: clinicKeys.usage, queryFn: () => api("/clinic/usage", ClinicUsage) });
+}
+
+/**
+ * Billing #31, S8: the Owner's Primolar bill. Pass `enabled: false` for anyone else, so the app never even asks
+ * (the gate would answer 403). Refetched on focus, so a payment the operator records shows without a reload.
+ */
+export function useSubscription(enabled = true) {
+  return useQuery({ queryKey: clinicKeys.subscription, queryFn: () => api("/clinic/subscription", SubscriptionView), enabled });
 }
 
 const json = (method: string, body: unknown) => ({ method, body: JSON.stringify(body) });

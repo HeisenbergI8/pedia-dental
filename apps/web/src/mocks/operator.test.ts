@@ -21,6 +21,7 @@ import { read } from "@/design/source";
 import { signupFormData } from "@/features/signup/form-data";
 import { ApiError, api } from "@/lib/api-client";
 import { ACCESS_RULES } from "./access";
+import { today } from "./clock";
 import { currentClinicId, platform } from "./db";
 import { DEMO_PASSWORD } from "./demo-accounts";
 import { handlers } from "./handlers";
@@ -114,7 +115,7 @@ describe("the operator never reaches clinic data (decision #25)", () => {
   });
 
   it("keeps operator and sign-up handlers out of the tenant binding (decision #25, billing #4)", () => {
-    const files = ["features/operator/mocks.ts", "features/operator/signup-mocks.ts", "features/signup/mocks.ts", "mocks/signups.ts"];
+    const files = ["features/operator/mocks.ts", "features/operator/signup-mocks.ts", "features/signup/mocks.ts", "mocks/signups.ts", "mocks/subscriptions.ts"];
     for (const file of files) {
       const src = read(file);
       expect(src, file).not.toMatch(/\b(selectTenant|sessionOf|activeBranch|currentClinicId|currentAccount)\b/);
@@ -141,7 +142,7 @@ describe("operator account actions (chunk 21 done-when)", () => {
   it("creates a third account, and its new Owner signs in to it", async () => {
     asOperator();
     created = await api("/operator/accounts", CreateAccountResult, multipart(TALA));
-    expect(await accounts()).toHaveLength(3);
+    expect(await accounts()).toHaveLength(4); // Bulilit, Ngiti, Ipin (chunk 23) and Tala
     expect(created.overview).toMatchObject({ account: { tier: "mid", status: "active" }, owner: { email: "owner@tala.demo" }, usage: { branches: 1, staffLogins: 1, patients: 0 } });
     expect(await status(api("/operator/accounts", CreateAccountResult, multipart(TALA)))).toBe(409);
     // A5: written as an approved, paid sign-up from the console, so chunk 23 finds its first payment in one place.
@@ -164,7 +165,11 @@ describe("operator account actions (chunk 21 done-when)", () => {
     const branch = { name: "Dasmariñas", address: "9 Congressional Road, Dasmariñas", phone: "(046) 400 0301", openingHours: DEFAULT_OPENING_HOURS };
     await api("/branches", Branch, send("POST", branch)); // Mid allows 3
     asOperator();
-    await api(`/operator/accounts/${created.overview.account.id}/tier`, AccountOverview, send("PUT", { tier: "small" }));
+    const id = created.overview.account.id;
+    const waiting = await api(`/operator/accounts/${id}/tier`, AccountOverview, send("PUT", { tier: "small" }));
+    expect(waiting.account.tier).toBe("mid"); // billing #27: a downgrade waits for the next due date
+    // Bring that date to today; subscriptions.test.ts walks the calendar itself.
+    platform.subscriptions.find((s) => s.clinicId === id)!.downgrade!.on = today();
 
     asStaff(ownerToken);
     const open = (await api("/branches", z.array(Branch))).filter((b) => !b.archived);

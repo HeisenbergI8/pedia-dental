@@ -24,12 +24,15 @@ import type {
   StaffMember,
   StaffCredential,
   StaffPin,
+  Subscription,
   Visit,
 } from "@pedia/shared";
 import { clearBlobs } from "./blob-store";
 import { DEMO_ACCOUNT, DEMO_CLINIC_ID, seed } from "./seed";
+import { IPIN_ACCOUNT, seedIpin } from "./seed-ipin";
 import { NGITI_ACCOUNT, seedNgiti } from "./seed-ngiti";
 import { SEED_PRICES, seedSignups } from "./seed-signups";
+import { seedSubscriptions } from "./seed-subscriptions";
 
 /**
  * One clinic account's data (one tenant). Persisted inside `Platform` so demo data survives a refresh.
@@ -75,20 +78,27 @@ export const emptyDb = (): Db => ({
 
 /**
  * Everything the fake backend stores: the clinic accounts (what the operator sees), each account's own Db, and
- * Primolar's own records, which belong to no clinic: sign-ups (billing #12) and the price list (#23). Chunk 23 adds
- * subscriptions here, beside them, never inside a tenant.
+ * Primolar's own records, which belong to no clinic: sign-ups (billing #12), the price list (#23) and one subscription
+ * per clinic with its payments (#25–#30). Never inside a tenant.
  */
-export type Platform = { accounts: ClinicAccount[]; tenants: Record<string, Db>; signups: Signup[]; prices: PriceList };
+export type Platform = {
+  accounts: ClinicAccount[];
+  tenants: Record<string, Db>;
+  signups: Signup[];
+  prices: PriceList;
+  subscriptions: Subscription[];
+};
 
 export const seedPlatform = (): Platform => ({
-  accounts: [DEMO_ACCOUNT, NGITI_ACCOUNT],
-  tenants: { [DEMO_ACCOUNT.id]: seed(), [NGITI_ACCOUNT.id]: seedNgiti() },
+  accounts: [DEMO_ACCOUNT, NGITI_ACCOUNT, IPIN_ACCOUNT],
+  tenants: { [DEMO_ACCOUNT.id]: seed(), [NGITI_ACCOUNT.id]: seedNgiti(), [IPIN_ACCOUNT.id]: seedIpin() },
   signups: seedSignups(),
   prices: structuredClone(SEED_PRICES), // PUT /operator/prices replaces it; never share the constant
+  subscriptions: seedSubscriptions(),
 });
 
-// v26: sign-ups and the price list (chunk 22): Platform gains `signups` and `prices`, with one sign-up waiting.
-const KEY = "pedia-dental:mock-db:v26";
+// v27: subscriptions (chunk 23): Platform gains `subscriptions`, and a third clinic, Ipin, is in its grace period.
+const KEY = "pedia-dental:mock-db:v27";
 
 function load(): Platform {
   if (typeof window === "undefined") return seedPlatform();

@@ -3,6 +3,7 @@ import { differenceInYears, format, parseISO } from "date-fns";
 import {
   PriceList,
   Signup,
+  Subscription,
   TIER_LIMITS,
   amountDue,
   accountUsage,
@@ -13,7 +14,9 @@ import {
   matchesFilter,
   needsAttention,
   patientStanding,
+  primolarInvoiceNo,
   sameClinicName,
+  subscriptionStatus,
 } from "@pedia/shared";
 import { seedPlatform } from "./db";
 import { seed } from "./seed";
@@ -85,10 +88,11 @@ describe("platform seed", () => {
   const platform = seedPlatform();
   const tenants = Object.entries(platform.tenants);
 
-  it("has the demo clinic and a second, Small-tier account, each with its own store", () => {
+  it("has the demo clinic, a second Small-tier account and Ipin (chunk 23's grace demo), each with its own store", () => {
     expect(platform.accounts.map((a) => [a.id, a.tier, a.status])).toEqual([
       ["clinic_demo", "mid", "active"],
       ["clinic_ngiti", "small", "active"],
+      ["clinic_ipin", "small", "active"],
     ]);
     expect(tenants.map(([id]) => id)).toEqual(platform.accounts.map((a) => a.id));
   });
@@ -125,10 +129,9 @@ describe("demo accounts' branding and limits (chunk 20)", () => {
     const [demo, ngiti] = p.accounts;
     expect(demo!.brandColor).not.toBe(ngiti!.brandColor);
     expect(demo!.logoRef).not.toBe(ngiti!.logoRef);
-    for (const a of p.accounts) {
-      expect(brandColorProblem(a.brandColor), a.name).toBeUndefined();
-      expect(a.logoRef, a.name).toMatch(/^demo\/.+\.svg$/);
-    }
+    for (const a of p.accounts) expect(brandColorProblem(a.brandColor), a.name).toBeUndefined();
+    // Ipin (chunk 23) is in the default look, so only the two branded clinics carry a logo.
+    for (const a of [demo!, ngiti!]) expect(a.logoRef, a.name).toMatch(/^demo\/.+\.svg$/);
   });
   it("puts Ngiti (Small) exactly at its limits, so the next branch or login is refused", () => {
     const ngiti = p.tenants.clinic_ngiti!;
@@ -148,5 +151,28 @@ describe("sign-ups seed (billing #34)", () => {
   it("clashes with no clinic by name or contact email", () => {
     const s = p.signups[0]!;
     expect(p.accounts.some((a) => sameClinicName(a.name, s.account.name) || a.contactEmail === s.account.contactEmail)).toBe(false);
+  });
+});
+
+describe("demo subscriptions (billing #34, S11)", () => {
+  const p = seedPlatform();
+  const today = format(new Date(), "yyyy-MM-dd");
+
+  it("has Bulilit and Ngiti paid up and Ipin in its grace period, whatever today is", () => {
+    expect(p.subscriptions.map((s) => [s.clinicId, subscriptionStatus(s, today).state])).toEqual([
+      ["clinic_demo", "paid"],
+      ["clinic_ngiti", "due_soon"],
+      ["clinic_ipin", "overdue"],
+    ]);
+  });
+
+  it("gives every account one valid subscription, a payment per paid month, and invoice numbers without gaps", () => {
+    expect(p.subscriptions.map((s) => s.clinicId)).toEqual(p.accounts.map((a) => a.id));
+    for (const s of p.subscriptions) {
+      Subscription.parse(s);
+      expect(s.payments, s.clinicId).toHaveLength(s.paidMonths);
+    }
+    const numbers = p.subscriptions.flatMap((s) => s.payments.map((x) => x.invoiceNo));
+    expect(numbers).toEqual(numbers.map((_, i) => primolarInvoiceNo(i + 1)));
   });
 });

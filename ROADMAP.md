@@ -531,9 +531,10 @@ finished branding from the console.
 
 **Depends on:** 21.
 
-## Chunk 23: Subscriptions, payments and the overdue pause (18 h) — feature 17, part 2 · Large
+## ✅ Chunk 23: Subscriptions, payments and the overdue pause (18 h) — feature 17, part 2 · Large (done)
 
-**Plan:** to be written
+**Plan:** `.claude/plans/feature-primolar-subscriptions-plan/`
+**Status:** built 2026-10-13
 
 - A subscription per clinic: plan, monthly price, due date (the approval date; the last day of shorter months).
 - The operator records monthly payments by hand; each payment gets a Primolar invoice (VAT shown).
@@ -545,6 +546,7 @@ finished branding from the console.
   the app ("due in 3 days", "overdue"). Other staff see no billing.
 - The console's clinic page: subscription status, due date, payment history.
 - Demo data: Bulilit and Ngiti paid up; one clinic in its grace period.
+- Demo: Ipin Kids Dental (owner@ipin.demo) is the clinic in its grace period.
 
 **Done when:** a clinic approved on the 31st is due on the 30th next month; a missed payment shows the Owner a
 banner for 7 days and then pauses the clinic; recording the payment reactivates it with the due date unchanged;

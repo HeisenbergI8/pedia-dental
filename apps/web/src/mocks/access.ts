@@ -4,6 +4,7 @@ import { env } from "@/lib/env";
 import { accountById, credentialOf, currentAccount, currentClinicId, db, persist, platform, selectTenant } from "./db";
 import { accountForToken, childrenOf, type DemoAccountRecord } from "./demo-accounts";
 import { OPERATOR_COOKIE, operatorForToken } from "./operator";
+import { settleSubscriptions } from "./subscriptions";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 export const SESSION_COOKIE = "pd_session";
@@ -126,6 +127,7 @@ const RULES: Rule[] = [
   { method: "GET", path: "/note-templates", permission: "clinic.view" },
   // Owner settings (decision #11): the account, its branding, branches and staff logins
   { method: "GET", path: "/clinic/usage", permission: "clinic.manage" },
+  { method: "GET", path: "/clinic/subscription", permission: "clinic.manage" }, // billing #31: the Owner's alone
   { method: "PUT", path: "/clinic", permission: "clinic.manage" },
   { method: "PUT", path: "/clinic/branding", permission: "clinic.manage" },
   { method: "PUT", path: "/clinic/logo", permission: "clinic.manage" },
@@ -231,6 +233,9 @@ const OPERATOR_RULES: Pick<Rule, "method" | "path">[] = [
   { method: "GET", path: "/operator/accounts/:id/staff" },
   { method: "POST", path: "/operator/accounts/:id/owner" },
   { method: "PUT", path: "/operator/accounts/:id/branding" },
+  { method: "GET", path: "/operator/accounts/:id/subscription" },
+  { method: "POST", path: "/operator/accounts/:id/subscription/payments" },
+  { method: "POST", path: "/operator/accounts/:id/subscription/cancel" },
   { method: "GET", path: "/operator/signups" },
   { method: "GET", path: "/operator/signups/:id/files/:key" },
   { method: "PUT", path: "/operator/signups/:id" },
@@ -334,6 +339,8 @@ function refusal(session: MockSession, rule: Rule, params: Record<string, string
  * the handler then rejects its input; NestJS logs after the response instead.
  */
 export const accessGate = http.all(url("/*"), ({ request }) => {
+  // S2: due dates are checked lazily, here, before anything reads an account's status or tier.
+  settleSubscriptions();
   const u = new URL(request.url);
   const path = u.pathname.slice(new URL(env.apiUrl, u.origin).pathname.length);
   // The operator is not a clinic user (decision #25). Its requests branch off here, before sessionOf, so they never

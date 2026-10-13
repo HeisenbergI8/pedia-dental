@@ -28,6 +28,7 @@ import { branchOf, sessionOf, usableBranchesOf } from "@/mocks/access";
 import { deleteBlob, getBlob, putBlob } from "@/mocks/blob-store";
 import { currentAccount, currentClinicId, db, persist } from "@/mocks/db";
 import { emailTaken, newPin, staffEmail, temporaryPassword } from "@/mocks/demo-accounts";
+import { subscriptionView } from "@/mocks/subscriptions";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 const refuse = (status: 400 | 403 | 404 | 409 | 413, message: string) => new HttpResponse(message, { status });
@@ -81,6 +82,12 @@ export const clinicHandlers = [
   http.get(url("/clinic/usage"), async () => {
     await delay(100);
     return HttpResponse.json(usage());
+  }),
+
+  // Billing #31, S8: the Owner's own Primolar bill. Platform data, found by this account's id.
+  http.get(url("/clinic/subscription"), async () => {
+    await delay(100);
+    return HttpResponse.json(subscriptionView(currentClinicId()));
   }),
 
   http.put(url("/clinic"), async ({ request }) => {

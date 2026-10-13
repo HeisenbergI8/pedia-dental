@@ -3,7 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Building2Icon, ChevronLeftIcon } from "lucide-react";
 import { toast } from "sonner";
-import { DESIGN_STATUS_LABEL, TIER_LABEL, Tier, type AccountOverview } from "@pedia/shared";
+import { DESIGN_STATUS_LABEL, TIER_LABEL, Tier, isTierUpgrade, type AccountOverview } from "@pedia/shared";
 import { Loading } from "@/components/brand";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
@@ -18,6 +18,7 @@ import { useAccounts, useChangeTier, useOwnerCandidates, useSetSuspended, useTra
 import { allowance, overLimits } from "./allowance";
 import { SetBrandingDialog } from "./set-branding-dialog";
 import { StatusBadge } from "./status-badge";
+import { SubscriptionCard } from "./subscription-card";
 
 /**
  * One clinic account: its plan, whether it is paused, and who owns it (decisions #4, #13, #26). Read from the account
@@ -43,6 +44,7 @@ export function AccountDetail({ id }: { id: string }) {
             <PlanCard row={row} />
             <StatusCard row={row} />
           </div>
+          <SubscriptionCard row={row} />
           <OwnerCard row={row} />
           {row.design && <DesignCard row={row} />}
         </>
@@ -51,14 +53,14 @@ export function AccountDetail({ id }: { id: string }) {
   );
 }
 
-/** Decisions #4, #9: set by hand, and a downgrade disables nothing. Reversible, so no confirm. */
+/** Billing #27, platform #9: an upgrade now, a downgrade on the next due date, and nothing is disabled. Reversible, so no confirm. */
 function PlanCard({ row }: { row: AccountOverview }) {
   const [tier, setTier] = useState<Tier>(row.account.tier);
   const change = useChangeTier(row.account.id);
   const over = overLimits(tier, row.usage);
 
   return (
-    <SectionCard title="Plan" description="Primolar sets the plan by hand. Subscriptions and monthly payments come in a later chunk.">
+    <SectionCard title="Plan" description="An upgrade applies at once, billed at the new price from the next due date. A downgrade waits for the next due date.">
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
         <dt className="text-ink-muted">Open branches</dt>
         <dd className="tabular-nums">{allowance(row.account.tier, "branches", row.usage.branches).text}</dd>
@@ -83,7 +85,17 @@ function PlanCard({ row }: { row: AccountOverview }) {
         </div>
         <Button
           disabled={tier === row.account.tier || change.isPending}
-          onClick={() => change.mutate(tier, { onSuccess: () => toast.success(`${row.account.name} is on the ${TIER_LABEL[tier]} plan`), onError: (e) => toast.error(e.message) })}
+          onClick={() =>
+            change.mutate(tier, {
+              onSuccess: () =>
+                toast.success(
+                  isTierUpgrade(row.account.tier, tier)
+                    ? `${row.account.name} is on the ${TIER_LABEL[tier]} plan`
+                    : `${row.account.name} moves to the ${TIER_LABEL[tier]} plan on its next due date`,
+                ),
+              onError: (e) => toast.error(e.message),
+            })
+          }
         >
           Save plan
         </Button>
