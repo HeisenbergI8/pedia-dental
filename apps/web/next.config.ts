@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // A production build beside a running `next dev` must not share its `.next` (they corrupt each other):
+  // `NEXT_DIST_DIR=.next-build pnpm build`. Vercel builds alone and keeps the default.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   // The shared package ships TypeScript source; Next compiles it.
   transpilePackages: ["@pedia/shared"],
   webpack(config, { isServer }) {

@@ -15,16 +15,34 @@ import { useThemeStore } from "@/stores/theme-store";
 // Any validation message a schema doesn't word itself reads as plain English, not Zod's developer text.
 z.config({ customError: plainLanguageError });
 
-/** Holds rendering until MSW is ready, so the first request isn't missed. */
+/**
+ * Holds rendering until MSW is ready, so the first request isn't missed. The demo's data lives in a service worker,
+ * which some browsers refuse (Firefox private windows, locked-down work laptops): say so rather than load forever.
+ */
 function MockGate({ children }: { children: ReactNode }) {
-  const [ready, setReady] = useState(!env.apiMocking);
+  const [state, setState] = useState<"starting" | "ready" | "blocked">(env.apiMocking ? "starting" : "ready");
   useEffect(() => {
     if (!env.apiMocking) return;
     import("@/mocks/browser")
       .then(({ worker }) => worker.start({ onUnhandledFrame: "bypass", quiet: true }))
-      .then(() => setReady(true));
+      .then(
+        () => setState("ready"),
+        () => setState("blocked"),
+      );
   }, []);
-  return ready ? children : <LoadingScreen />;
+  if (state === "ready") return children;
+  if (state === "starting") return <LoadingScreen />;
+  return (
+    <main role="alert" className="flex min-h-screen items-center justify-center bg-ground px-4">
+      <div className="max-w-md space-y-3 rounded-2xl border border-line bg-surface p-6 text-center shadow-card">
+        <h1 className="text-xl font-semibold">This browser can&apos;t run the demo</h1>
+        <p className="text-sm text-ink-muted">
+          The Primolar demo keeps its sample data in your browser, and this browser blocked that. Open the link in a normal
+          (not private) window of Chrome, Edge, Safari or Firefox.
+        </p>
+      </div>
+    </main>
+  );
 }
 
 /** Keeps <html data-theme> in step with the saved preference, and with the OS while it is "System". */
