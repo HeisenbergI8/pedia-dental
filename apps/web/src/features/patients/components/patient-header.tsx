@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { AlertTriangleIcon, ChevronLeftIcon, CircleHelpIcon, CircleDollarSignIcon, HeartPulseIcon, InfoIcon, PhoneIcon, UsersIcon } from "lucide-react";
+import { AlertTriangleIcon, ChevronLeftIcon, CircleHelpIcon, CircleDollarSignIcon, HeartPulseIcon, InfoIcon, PhoneIcon, ShieldAlertIcon, UsersIcon } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { format, isThisYear, parseISO } from "date-fns";
 import { formatPeso, type PatientView, type PatientHeaderSummary } from "@pedia/shared";
@@ -91,6 +91,12 @@ export function PatientHeader({ patientId }: { patientId: string }) {
         </div>
       )}
       {p && <MedicalAlerts allergies={p.allergies} noKnownAllergies={p.noKnownAllergies} conditions={p.medicalConditions} alerts={p.alerts} />}
+      {/* Privacy #18: a prompt, never a block. */}
+      {p && !p.privacyConsent && (
+        <p className="mt-2 flex items-center gap-2 text-sm text-ink-muted">
+          <ShieldAlertIcon className="size-4 text-warning" aria-hidden /> Consent not recorded: record it at this visit (Overview, Privacy).
+        </p>
+      )}
     </header>
   );
 }

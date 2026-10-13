@@ -3,6 +3,7 @@ import { setupServer } from "msw/node";
 import { z } from "zod";
 import {
   AccountOverview,
+  CONFIDENTIALITY_NOTICE,
   ClinicContext,
   CreateAccountResult,
   DEFAULT_BRAND_COLOR,
@@ -14,7 +15,7 @@ import {
   amountDue,
   pesos,
   signupStatusLabel,
-  type SignupInput,
+  type GetStartedInput,
 } from "@pedia/shared";
 import { PAID_PLAN_LOCKED } from "@/features/operator/signup-mocks";
 import { signupFormData } from "@/features/signup/form-data";
@@ -34,14 +35,15 @@ const svg = () => new Blob(['<svg xmlns="http://www.w3.org/2000/svg"/>'], { type
 const png = () => new Blob([new Uint8Array([137, 80, 78, 71])], { type: "image/png" });
 const PAID = { method: "gcash", reference: "GC-0042", paidOn: "2026-10-13" } as const;
 
-const input = (n: string, branding: SignupInput["branding"]): SignupInput => ({
+const input = (n: string, branding: GetStartedInput["branding"]): GetStartedInput => ({
   account: { name: `Ngiti ${n} Kids`, contactEmail: `hello@${n}.demo`, tin: "678-901-234", tier: "mid" },
   branch: { name: "Lipa", address: "5 Rizal Avenue, Lipa", phone: "(043) 756 0000", openingHours: DEFAULT_OPENING_HOURS },
   owner: { fullName: `Dr. ${n} Reyes`, email: `owner@${n}.demo`, role: "dentist" },
   branding,
+  acceptTerms: true,
 });
 /** The client's side: a public submission, no cookie. Returns the stored sign-up as the operator sees it. */
-async function submitted(i: SignupInput, files?: Parameters<typeof signupFormData>[1]) {
+async function submitted(i: GetStartedInput, files?: Parameters<typeof signupFormData>[1]) {
   cookies();
   const view = await api("/signups", SignupStatusView, multipart("POST", i, files));
   asOperator();
@@ -56,6 +58,8 @@ async function ownerOpens(made: CreateAccountResult): Promise<ClinicContext> {
   asStaff(first.token);
   const fresh = await api("/auth/password", Session, json("POST", { current: made.temporaryPassword, next: "EXAMPLE-owner-chose-this" }));
   asStaff(fresh.token);
+  expect(fresh.user.mustAcknowledge).toBe("confidentiality"); // privacy #21: a new login reads it once
+  await api("/auth/acknowledgement", Session, json("POST", { kind: "confidentiality", version: CONFIDENTIALITY_NOTICE.version }));
   return api("/clinic", ClinicContext);
 }
 

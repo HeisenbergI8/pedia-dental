@@ -5,6 +5,7 @@ import type { Db } from "./db";
 import { defaultMessageTemplates } from "./message-templates";
 import { NOTE_TEMPLATES } from "./note-templates";
 import { PROCEDURES, seedPatient } from "./seed";
+import { firstNotice, staffAcknowledged, withConsent } from "./seed-privacy";
 
 /**
  * The second demo account (decision #33): Small tier, one branch, a handful of patients. It exists to prove that each
@@ -78,7 +79,7 @@ export function seedNgiti(): Db {
   }));
   return {
     branches: [BRANCH],
-    patients,
+    patients: withConsent(patients, STAFF.find((s) => s.id === "ngiti_staff_tan")!),
     staff: STAFF,
     chairs: [1, 2].map((n) => ({ id: `ngiti_chair_${n}`, clinicId: NGITI_ID, branchId: BRANCH.id, name: `Chair ${n}` })),
     procedures: PROCEDURES.map((p) => ({ ...p, clinicId: NGITI_ID })),
@@ -100,5 +101,7 @@ export function seedNgiti(): Db {
     auditEvents: [],
     staffPins: STAFF.map((s) => ({ clinicId: NGITI_ID, staffId: s.id, pin: PINS[s.id]!, failedAt: [] })),
     staffCredentials: [],
+    privacyNotices: [firstNotice(NGITI_ID, NGITI_ACCOUNT.name, "Dr. Bea Lim", NGITI_ACCOUNT.contactEmail)],
+    acknowledgements: staffAcknowledged(NGITI_ID, STAFF),
   };
 }

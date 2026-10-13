@@ -9,12 +9,14 @@ import {
   ClinicAccount,
   ClinicContext,
   ClinicUsage,
+  PrivacyNoticeView,
   Procedure,
   StaffMember,
   SubscriptionView,
   worksAt,
   type AddStaffInput,
   type BranchInput,
+  type SavePrivacyNoticeInput,
   type UpdateBrandingInput,
   type UpdateClinicProfileInput,
 } from "@pedia/shared";
@@ -28,6 +30,7 @@ export const clinicKeys = {
   context: ["clinic"] as const,
   usage: ["clinic", "usage"] as const,
   subscription: ["clinic", "subscription"] as const,
+  privacyNotice: ["clinic", "privacy-notice"] as const,
   branches: ["branches"] as const,
   staff: ["staff"] as const,
 };
@@ -143,3 +146,10 @@ export const useBranchArchive = () =>
 export const useAddStaff = () => useOwnerMutation((input: AddStaffInput) => api("/staff", AddStaffResult, json("POST", input)), [clinicKeys.staff]);
 export const useStaffActive = () =>
   useOwnerMutation(({ id, active }: { id: string; active: boolean }) => api(`/staff/${id}/${active ? "reactivate" : "deactivate"}`, StaffMember, { method: "POST" }), [clinicKeys.staff]);
+
+/** Privacy #19: the clinic's notice in force. Everyone signed in may read it (the consent dialog shows its version). */
+export function usePrivacyNotice() {
+  return useQuery({ queryKey: clinicKeys.privacyNotice, queryFn: () => api("/clinic/privacy-notice", PrivacyNoticeView) });
+}
+/** The Owner's save makes a new version. `["clinic"]` is a prefix, so the notice refetches with the context. */
+export const useSavePrivacyNotice = () => useOwnerMutation((input: SavePrivacyNoticeInput) => api("/clinic/privacy-notice", PrivacyNoticeView, json("PUT", input)));

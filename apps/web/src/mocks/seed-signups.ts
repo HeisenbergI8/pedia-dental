@@ -38,5 +38,6 @@ export const seedSignups = (): Signup[] => [
     referenceRefs: [],
     quote: amountDue(SEED_PRICES, "mid", "designed"),
     status: "waiting",
+    agreement: { termsVersion: 1, dpaVersion: 1, acceptedBy: "Dr. Bea Manalo", at: "2026-10-12T09:30:00.000+08:00", method: "online" },
   },
 ];

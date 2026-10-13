@@ -33,6 +33,7 @@ import {
 import type { Db } from "./db";
 import { composeMessage, defaultMessageTemplates, type MessageEvent, type MessageRefs } from "./message-templates";
 import { NOTE_TEMPLATES } from "./note-templates";
+import { firstNotice, staffAcknowledged, withConsent } from "./seed-privacy";
 
 /**
  * The demo clinic account's id, for seed rows only. Handlers stamp `currentClinicId()` (mocks/db.ts), never this:
@@ -193,11 +194,6 @@ function seedGrowth(patients: Patient[], visits: Visit[]): GrowthRecord[] {
 export function seed(): Db {
   faker.seed(42); // same fake data on every machine
   const patients: Patient[] = Array.from({ length: 24 }, seedPatient);
-  // Every sixth child has no data privacy consent yet, so the overview's "missing" notice has examples.
-  patients.forEach((p, i) => {
-    if (i % 6 === 5) return;
-    p.consents.push({ id: `consent_privacy_${i}`, guardianId: p.guardians[0].id, scope: "data_privacy", date: p.createdAt.slice(0, 10) });
-  });
 
   // Past visits, oldest first, all completed. No visit is left in progress.
   const visits: Visit[] = patients.flatMap((p) =>
@@ -257,7 +253,8 @@ export function seed(): Db {
 
   return {
     branches: BRANCHES,
-    patients: seedProfiles([...patients, ...family.patients, ...roster.patients]),
+    // Privacy #24 (P24): index 5 has no consent (the flag), index 11 declined photos (the block). The rest consented.
+    patients: withConsent(seedProfiles([...patients, ...family.patients, ...roster.patients]), STAFF.find((s) => s.id === "staff_cruz")!, { none: [5], noPhotos: [11] }),
     staff: STAFF,
     chairs: CHAIRS,
     procedures: PROCEDURES,
@@ -279,6 +276,8 @@ export function seed(): Db {
     auditEvents: seedAudit(patients, example.planItems[0]?.patientId),
     staffPins: STAFF.map((s) => ({ clinicId: CLINIC_ID, staffId: s.id, pin: STAFF_PINS[s.id], failedAt: [] })),
     staffCredentials: [], // every seeded login uses the demo password
+    privacyNotices: [firstNotice(CLINIC_ID, DEMO_ACCOUNT.name, STAFF.find((s) => s.isOwner)!.fullName, DEMO_ACCOUNT.contactEmail)],
+    acknowledgements: staffAcknowledged(CLINIC_ID, STAFF),
   };
 }
 

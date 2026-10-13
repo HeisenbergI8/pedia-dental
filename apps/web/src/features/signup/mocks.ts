@@ -1,7 +1,8 @@
 import { http, HttpResponse } from "msw";
-import { SignupInput } from "@pedia/shared";
+import { GetStartedInput } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { platform } from "@/mocks/db";
+import { onlineAgreement } from "@/mocks/seed-privacy";
 import { addSignup, brandingRefusal, duplicateOf, readSignupForm, statusView } from "@/mocks/signups";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
@@ -16,13 +17,13 @@ export const signupHandlers = [
 
   // Billing #10–#11: refused on a duplicate with "contact Primolar"; otherwise waiting for its setup fee.
   http.post(url("/signups"), async ({ request }) => {
-    const form = await readSignupForm(request, SignupInput);
+    const form = await readSignupForm(request, GetStartedInput); // privacy #7: refused (400) without the acceptance
     if (form instanceof Response) return form;
     const refused = brandingRefusal(form.data.branding, !!form.logo);
     if (refused) return refused;
     const clash = duplicateOf(form.data.account);
     if (clash) return new HttpResponse(clash, { status: 409 });
-    const signup = await addSignup(form.data, form, "form");
+    const signup = await addSignup(form.data, form, "form", onlineAgreement(form.data.owner.fullName)); // P4
     return HttpResponse.json(statusView(signup), { status: 201 });
   }),
 

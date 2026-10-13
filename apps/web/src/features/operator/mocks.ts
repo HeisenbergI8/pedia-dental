@@ -11,6 +11,7 @@ import {
   isActiveStaff,
   rolesOf,
   suggestBrandColor,
+  termsOutdated,
   transferProblem,
   type AccountOverview,
   type AccountStatus,
@@ -23,6 +24,8 @@ import { operatorOf } from "@/mocks/access";
 import { accountById, persist, platform } from "@/mocks/db";
 import { staffEmail } from "@/mocks/demo-accounts";
 import { OPERATORS, operatorPasswordOpens, operatorToken } from "@/mocks/operator";
+import { agreementView, latestAgreement } from "@/mocks/privacy";
+import { onFileAgreement } from "@/mocks/seed-privacy";
 import { addSignup, brandingRefusal, createClinic, duplicateOf, readSignupForm, replaceFile, signupOfClinic } from "@/mocks/signups";
 import { cancelSubscription, changePlan, forgetPause, reactivateRefusal, recordSubscriptionPayment, subscriptionView } from "@/mocks/subscriptions";
 
@@ -41,12 +44,19 @@ export function overviewOf(clinicId: string): AccountOverview {
   const tenant = platform.tenants[clinicId]!;
   const owner = tenant.staff.find((s) => s.isOwner);
   const { branches, staffLogins } = accountUsage(tenant);
+  const agreement = latestAgreement(clinicId);
   return {
     account: { id, name, contactEmail, tier, status },
     owner: owner ? { staffId: owner.id, name: owner.fullName, email: staffEmail(owner) } : null,
     usage: { branches, staffLogins, patients: tenant.patients.length },
     design: design ?? null,
     look: design ? { brandColor: account.brandColor, headingFont: account.headingFont ?? null, hasLogo: !!account.logoRef } : null,
+    // Privacy #10: the agreement in force and a count of patients without consent. Never a name (#25).
+    privacy: {
+      agreement: agreement ? agreementView(agreement) : null,
+      current: !termsOutdated(agreement),
+      patientsWithoutConsent: tenant.patients.filter((p) => !p.privacyConsent).length,
+    },
   };
 }
 
@@ -111,12 +121,12 @@ export const operatorHandlers = [
   http.post(url("/operator/accounts"), async ({ request }) => {
     const form = await readSignupForm(request, CreateAccountInput);
     if (form instanceof Response) return form;
-    const { payment, ...input } = form.data;
+    const { payment, signedOn, ...input } = form.data; // `signedOnFile` is already true (the schema requires it)
     const refused = brandingRefusal(input.branding, !!form.logo);
     if (refused) return refused;
     const clash = duplicateOf(input.account); // also stops a double-click making two copies
     if (clash) return refuse(409, clash);
-    const signup = await addSignup(input, form, "console");
+    const signup = await addSignup(input, form, "console", onFileAgreement(input.owner.fullName, signedOn)); // privacy #8
     signup.payment = { ...payment, amount: signup.quote.total, recordedAt: new Date().toISOString() };
     const made = await createClinic(signup);
     const result: CreateAccountResult = { overview: overviewOf(made.clinicId), temporaryPassword: made.temporaryPassword, pin: made.pin };

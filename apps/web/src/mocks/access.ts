@@ -1,9 +1,10 @@
 import { http, HttpResponse } from "msw";
-import { ALL_BRANCHES, TIER_LIMITS, permissionScopeFor, reportBranchFilter, usableBranches, type AuditAction, type Branch, type OperatorUser, type Permission } from "@pedia/shared";
+import { ALL_BRANCHES, TIER_LIMITS, permissionScopeFor, reportBranchFilter, usableBranches, type AcknowledgementKind, type AuditAction, type Branch, type OperatorUser, type Permission } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { accountById, credentialOf, currentAccount, currentClinicId, db, persist, platform, selectTenant } from "./db";
 import { accountForToken, childrenOf, type DemoAccountRecord } from "./demo-accounts";
 import { OPERATOR_COOKIE, operatorForToken } from "./operator";
+import { pendingAcknowledgement } from "./privacy";
 import { settleSubscriptions } from "./subscriptions";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
@@ -11,7 +12,13 @@ export const SESSION_COOKIE = "pd_session";
 /** The branch this device is working at, written by the session store like the session cookie. */
 export const BRANCH_COOKIE = "pd_branch";
 
-export type MockSession = DemoAccountRecord & { clinicId: string; patientIds: Set<string>; readOnly: boolean; mustChangePassword: boolean };
+export type MockSession = DemoAccountRecord & {
+  clinicId: string;
+  patientIds: Set<string>;
+  readOnly: boolean;
+  mustChangePassword: boolean;
+  mustAcknowledge: AcknowledgementKind | undefined; // privacy P10
+};
 
 const deny = (status: 401 | 403, message: string) => new HttpResponse(message, { status });
 
@@ -47,7 +54,7 @@ export function sessionOf(request: Request): MockSession | undefined {
   const { account, clinicId } = found;
   const children = account.guardianId ? childrenOf(db, account.guardianId) : [];
   const mustChangePassword = !!credentialOf(db, account.staffId)?.mustChange;
-  return { ...account, clinicId, patientIds: new Set(children.map((p) => p.id)), readOnly: suspended, mustChangePassword };
+  return { ...account, clinicId, patientIds: new Set(children.map((p) => p.id)), readOnly: suspended, mustChangePassword, mustAcknowledge: pendingAcknowledgement(account, clinicId) };
 }
 
 /** The branches this caller may work at: the Owner every open one, staff their assignments, parents every open one. */
@@ -128,6 +135,9 @@ const RULES: Rule[] = [
   // Owner settings (decision #11): the account, its branding, branches and staff logins
   { method: "GET", path: "/clinic/usage", permission: "clinic.manage" },
   { method: "GET", path: "/clinic/subscription", permission: "clinic.manage" }, // billing #31: the Owner's alone
+  // Privacy #19, #22: the clinic's notice (public anyway, so reading it isn't audited) and the Owner's new version
+  { method: "GET", path: "/clinic/privacy-notice", permission: "clinic.view" },
+  { method: "PUT", path: "/clinic/privacy-notice", permission: "clinic.manage", audit: "Privacy notice", action: "update" },
   { method: "PUT", path: "/clinic", permission: "clinic.manage" },
   { method: "PUT", path: "/clinic/branding", permission: "clinic.manage" },
   { method: "PUT", path: "/clinic/logo", permission: "clinic.manage" },
@@ -146,6 +156,9 @@ const RULES: Rule[] = [
   { method: "GET", path: "/patients/:id", permission: "patients.view", owner: byId, audit: "Patient profile" },
   { method: "PUT", path: "/patients/:id", permission: "patients.write", audit: "Patient profile" },
   { method: "POST", path: "/patients/:id/consents", permission: "patients.write", audit: "Consent" },
+  // Privacy #12–#17: the required consent once (a child registered before chunk 24), the optional ones any time
+  { method: "POST", path: "/patients/:id/privacy-consent", permission: "patients.write", audit: "Privacy consent" },
+  { method: "POST", path: "/patients/:id/privacy-choices", permission: "consents.manage", owner: byId, audit: "Privacy consent (changed)", action: "update" },
   { method: "POST", path: "/patients/:id/exports", permission: "patients.view", owner: byId, audit: "Copy of records", action: "export" },
   { method: "PATCH", path: "/patients/:id", permission: "patients.write", audit: "Patient profile" },
   // Same record name as GET /patients/:id: the 5-minute repeat window folds the header's summary into the profile view.
@@ -254,6 +267,7 @@ const PUBLIC_RULES: Pick<Rule, "method" | "path">[] = [
   { method: "GET", path: "/signups/prices" },
   { method: "POST", path: "/signups" },
   { method: "GET", path: "/signups/:reference" },
+  { method: "GET", path: "/legal/notices/:clinicId" }, // privacy #3: each clinic's notice, before sign-in
 ];
 
 function publicRefusal(request: Request, path: string) {
@@ -346,7 +360,7 @@ export const accessGate = http.all(url("/*"), ({ request }) => {
   // The operator is not a clinic user (decision #25). Its requests branch off here, before sessionOf, so they never
   // select a tenant: `db` is never pointed anywhere for them and no clinic rule can match them.
   if (path.startsWith("/operator/")) return operatorRefusal(request, path);
-  if (path === "/signups" || path.startsWith("/signups/")) return publicRefusal(request, path);
+  if (path === "/signups" || path.startsWith("/signups/") || path.startsWith("/legal/")) return publicRefusal(request, path);
   if (path.startsWith("/auth/")) return; // login, me and logout check the session themselves
 
   const session = sessionOf(request);
@@ -354,6 +368,10 @@ export const accessGate = http.all(url("/*"), ({ request }) => {
   // A login the Owner just made works only after its person picks their own password (decision #21). /auth/* is
   // outside this gate, so POST /auth/password still answers.
   if (session.mustChangePassword) return deny(403, "Choose your own password to continue");
+  // Privacy #9, #21 (P7, P8): the Owner's updated terms, then a login's confidentiality acknowledgement. A parent's
+  // notice is the portal's own step (P9). /auth/* is outside this gate, so /auth/acknowledgement still answers.
+  if (session.mustAcknowledge === "terms") return deny(403, "Accept Primolar's updated terms to continue");
+  if (session.mustAcknowledge === "confidentiality") return deny(403, "Acknowledge patient confidentiality to continue");
 
   const hit = RULES.filter((r) => r.method === request.method)
     .map((rule) => ({ rule, params: match(rule.path, path) }))

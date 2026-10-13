@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { PrimolarLogo } from "@/components/brand";
+import { LegalLinks } from "@/features/legal/components/legal-links";
 
 /**
  * The public sign-up's frame (billing #4): Primolar's wordmark and colours, as on the operator sign-in, since no clinic
@@ -22,6 +23,9 @@ export function SignupFrame({ children }: { children: ReactNode }) {
       <main id="main" className="mx-auto w-full max-w-3xl space-y-8 px-4 py-8 sm:px-6 lg:py-12">
         {children}
       </main>
+      <footer className="mx-auto max-w-3xl px-4 pb-10 sm:px-6">
+        <LegalLinks />
+      </footer>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { http, HttpResponse, delay } from "msw";
 import {
   AddStaffInput,
   BranchInput,
+  SavePrivacyNoticeInput,
   TIER_LIMITS,
   UpdateBrandingInput,
   UpdateClinicProfileInput,
@@ -28,6 +29,7 @@ import { branchOf, sessionOf, usableBranchesOf } from "@/mocks/access";
 import { deleteBlob, getBlob, putBlob } from "@/mocks/blob-store";
 import { currentAccount, currentClinicId, db, persist } from "@/mocks/db";
 import { emailTaken, newPin, staffEmail, temporaryPassword } from "@/mocks/demo-accounts";
+import { currentNotice, noticeView } from "@/mocks/privacy";
 import { subscriptionView } from "@/mocks/subscriptions";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
@@ -88,6 +90,19 @@ export const clinicHandlers = [
   http.get(url("/clinic/subscription"), async () => {
     await delay(100);
     return HttpResponse.json(subscriptionView(currentClinicId()));
+  }),
+
+  // Privacy #19, #22: the clinic's notice and privacy contact. Everyone signed in may read it; it is public anyway.
+  http.get(url("/clinic/privacy-notice"), () => HttpResponse.json(noticeView(currentClinicId()))),
+
+  // The Owner's edit makes a new version, so consents and acknowledgements stay tied to what was read (#20).
+  http.put(url("/clinic/privacy-notice"), async ({ request }) => {
+    const parsed = SavePrivacyNoticeInput.safeParse(await request.json());
+    if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
+    const session = sessionOf(request)!;
+    db.privacyNotices.push({ ...parsed.data, clinicId: currentClinicId(), version: currentNotice(db).version + 1, savedByName: session.name, at: new Date().toISOString() });
+    persist();
+    return HttpResponse.json(noticeView(currentClinicId()));
   }),
 
   http.put(url("/clinic"), async ({ request }) => {

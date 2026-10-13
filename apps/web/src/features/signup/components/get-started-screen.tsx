@@ -1,10 +1,12 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormProvider, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { SignupInput, amountDue, brandColorProblem } from "@pedia/shared";
+import { GetStartedInput, amountDue, brandColorProblem } from "@pedia/shared";
 import { Loading } from "@/components/brand";
+import { CheckField } from "@/components/check-field";
 import { ErrorState } from "@/components/error-state";
 import { SectionCard } from "@/components/section-card";
 import { Button } from "@/components/ui/button";
@@ -21,7 +23,7 @@ export function GetStartedScreen() {
   const send = useSubmitSignup();
   const [files, setFiles] = useState<SignupFiles>({ references: [] });
   const [logoError, setLogoError] = useState<string>();
-  const form = useForm<SignupInput>({ resolver: zodResolver(SignupInput), defaultValues: emptySignup() });
+  const form = useForm<GetStartedInput>({ resolver: zodResolver(GetStartedInput), defaultValues: emptySignup() });
   const [tier, choice] = useWatch({ control: form.control, name: ["account.tier", "branding.choice"] });
 
   const submit = form.handleSubmit((input) => {
@@ -63,6 +65,17 @@ export function GetStartedScreen() {
               Paid once, upfront: the setup fee and your first month{choice === "designed" ? ", and the design" : ""}. Primolar
               will send you a payment link.
             </p>
+            <CheckField name="acceptTerms">
+              I&apos;m authorised to act for this clinic and accept the{" "}
+              <Link href="/legal/terms" target="_blank" className="font-semibold text-brand underline underline-offset-2">
+                Terms of Service
+              </Link>{" "}
+              and the{" "}
+              <Link href="/legal/dpa" target="_blank" className="font-semibold text-brand underline underline-offset-2">
+                Data Processing Agreement
+              </Link>
+              .
+            </CheckField>
             {send.error && !fieldConflict && (
               <p role="alert" className="text-sm text-danger">{send.error.message}</p>
             )}

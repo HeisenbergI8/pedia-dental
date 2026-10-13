@@ -1,6 +1,6 @@
 "use client";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { PriceList, SignupStatusView, type SignupInput } from "@pedia/shared";
+import { PriceList, SignupStatusView, type GetStartedInput } from "@pedia/shared";
 import { api } from "@/lib/api-client";
 import { signupFormData } from "./form-data";
 
@@ -15,7 +15,7 @@ export const usePrices = () => useQuery({ queryKey: signupKeys.prices(), queryFn
 
 export const useSubmitSignup = () =>
   useMutation({
-    mutationFn: ({ input, logo, references }: { input: SignupInput; logo?: File; references: File[] }) =>
+    mutationFn: ({ input, logo, references }: { input: GetStartedInput; logo?: File; references: File[] }) =>
       api("/signups", SignupStatusView, { method: "POST", body: signupFormData(input, { logo, references }) }),
   });
 

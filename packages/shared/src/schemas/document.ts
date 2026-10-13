@@ -15,6 +15,7 @@ export const DocumentType = z.enum([
   "receipt",
   "patient_summary",
   "notes_report",
+  "privacy_consent",
 ]);
 export type DocumentType = z.infer<typeof DocumentType>;
 

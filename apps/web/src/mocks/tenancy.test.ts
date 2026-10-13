@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupServer } from "msw/node";
 import { z } from "zod";
 import { addDays, startOfDay } from "date-fns";
-import { Appointment, ClinicContext, FinanceSummary, Patient, Payment, Session, SessionUser, StaffMember, TodaySummary, depositBalance, invoiceBalance, type CreatePatientInput } from "@pedia/shared";
+import { Appointment, ClinicContext, FinanceSummary, Patient, Payment, Session, SessionUser, StaffMember, TodaySummary, depositBalance, invoiceBalance, type RegisterPatientInput } from "@pedia/shared";
 import { api } from "@/lib/api-client";
 import { platform } from "./db";
 import { handle } from "./demo-accounts";
@@ -24,7 +24,7 @@ afterAll(() => {
   vi.unstubAllGlobals();
 });
 
-const child: CreatePatientInput = {
+const child: RegisterPatientInput = {
   firstName: "Lia",
   lastName: "Santos",
   birthDate: "2021-03-04",
@@ -37,6 +37,7 @@ const child: CreatePatientInput = {
   medications: [],
   alerts: [],
   dentalHistory: { previousClinic: "", notes: "" },
+  privacyConsent: { guardianId: "g_mother", photos: true, reminders: true, confirmed: true },
 };
 
 describe("clinic account isolation", () => {

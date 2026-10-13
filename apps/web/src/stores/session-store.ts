@@ -20,6 +20,8 @@ type SessionState = {
   /** The branch this device is on; null means the server's default (the user's first branch). */
   branchId: string | null;
   signIn: (session: Session) => void;
+  /** The same login, its server state refreshed (a step that became due). Keeps drafts, unlike signIn. */
+  refreshUser: (user: Session["user"]) => void;
   signOut: () => void;
   setActiveChild: (id: string) => void;
   setBranch: (id: string) => void;
@@ -38,6 +40,7 @@ export const useSessionStore = create<SessionState>()(
         writeCookie(session.token);
         set({ session, activeChildId: null });
       },
+      refreshUser: (user) => set((s) => (s.session && s.session.user.id === user.id ? { session: { ...s.session, user } } : {})),
       signOut: () => {
         clearAllDrafts();
         writeCookie(null);

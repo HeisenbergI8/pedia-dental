@@ -7,6 +7,7 @@ import { BrandingForm } from "./branding-form";
 import { ClinicProfileForm } from "./clinic-profile-form";
 import { ClinicSettings } from "./clinic-settings";
 import { PlanPanel } from "./plan-panel";
+import { PrivacyNoticeForm } from "./privacy-notice-form";
 import { StaffPanel } from "./staff-panel";
 
 const TABS = [
@@ -38,6 +39,7 @@ export function SettingsScreen() {
         <TabsContent value="clinic" className="space-y-6 pt-4">
           <ClinicProfileForm />
           <BrandingForm />
+          <PrivacyNoticeForm />
         </TabsContent>
         <TabsContent value="branches" className="pt-4"><BranchesPanel /></TabsContent>
         <TabsContent value="staff" className="pt-4"><StaffPanel /></TabsContent>

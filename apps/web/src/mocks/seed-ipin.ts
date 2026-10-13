@@ -3,6 +3,7 @@ import type { Db } from "./db";
 import { defaultMessageTemplates } from "./message-templates";
 import { NOTE_TEMPLATES } from "./note-templates";
 import { PROCEDURES } from "./seed";
+import { firstNotice, staffAcknowledged } from "./seed-privacy";
 
 /**
  * Billing #34, S11: the clinic in its grace period. Small, one branch, its Owner only, no patients: it exists to show the
@@ -65,5 +66,7 @@ export function seedIpin(): Db {
     auditEvents: [],
     staffPins: [{ clinicId: IPIN_ID, staffId: OWNER.id, pin: "2468", failedAt: [] }],
     staffCredentials: [], // a seeded login: the demo password
+    privacyNotices: [firstNotice(IPIN_ID, IPIN_ACCOUNT.name, OWNER.fullName, IPIN_ACCOUNT.contactEmail)],
+    acknowledgements: staffAcknowledged(IPIN_ID, [OWNER]),
   };
 }

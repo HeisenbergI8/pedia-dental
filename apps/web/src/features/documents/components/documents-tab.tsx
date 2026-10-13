@@ -28,6 +28,7 @@ const DESCRIPTION: Record<DocumentType, string> = {
   receipt: "Acknowledgment receipt for a payment",
   patient_summary: "The whole record on one page",
   notes_report: "Every signed clinical note, with the services done and their prices",
+  privacy_consent: "The parent's privacy consent, to print and sign",
 };
 
 /**

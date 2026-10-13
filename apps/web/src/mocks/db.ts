@@ -1,10 +1,12 @@
 import type {
+  Acknowledgement,
   Appointment,
   AppointmentRequest,
   AuditEvent,
   Branch,
   Chair,
   ChartEntry,
+  ClinicAgreement,
   ClinicAccount,
   ClinicalNote,
   ClinicalPhoto,
@@ -19,6 +21,7 @@ import type {
   Payment,
   PlanItem,
   PriceList,
+  PrivacyNotice,
   Procedure,
   Signup,
   StaffMember,
@@ -32,6 +35,7 @@ import { DEMO_ACCOUNT, DEMO_CLINIC_ID, seed } from "./seed";
 import { IPIN_ACCOUNT, seedIpin } from "./seed-ipin";
 import { NGITI_ACCOUNT, seedNgiti } from "./seed-ngiti";
 import { SEED_PRICES, seedSignups } from "./seed-signups";
+import { seedAgreements } from "./seed-privacy";
 import { seedSubscriptions } from "./seed-subscriptions";
 
 /**
@@ -62,6 +66,8 @@ export type Db = {
   auditEvents: AuditEvent[]; // who touched which personal data (RA 10173); append-only, written by mocks/access.ts
   staffPins: StaffPin[]; // each staff member's own PIN for switching user on a shared device; never served
   staffCredentials: StaffCredential[]; // passwords of logins the Owner added or that changed theirs; never served
+  privacyNotices: PrivacyNotice[]; // privacy #19: append-only versions, newest in force (P20)
+  acknowledgements: Acknowledgement[]; // privacy #20, #21: who read which notice or confidentiality version, when
 };
 
 /**
@@ -72,7 +78,7 @@ export const emptyDb = (): Db => ({
   branches: [], patients: [], staff: [], chairs: [], procedures: [], visits: [], chartEntries: [], noteTemplates: [],
   notes: [], growth: [], planItems: [], appointments: [], photos: [], dueItems: [], invoices: [], payments: [],
   messageTemplates: [], messages: [], documents: [], appointmentRequests: [], auditEvents: [], staffPins: [],
-  staffCredentials: [],
+  staffCredentials: [], privacyNotices: [], acknowledgements: [],
 });
 
 
@@ -87,18 +93,24 @@ export type Platform = {
   signups: Signup[];
   prices: PriceList;
   subscriptions: Subscription[];
+  agreements: ClinicAgreement[]; // privacy #7, #8, #23: append-only, the newest per clinic in force (P6)
 };
 
-export const seedPlatform = (): Platform => ({
-  accounts: [DEMO_ACCOUNT, NGITI_ACCOUNT, IPIN_ACCOUNT],
-  tenants: { [DEMO_ACCOUNT.id]: seed(), [NGITI_ACCOUNT.id]: seedNgiti(), [IPIN_ACCOUNT.id]: seedIpin() },
-  signups: seedSignups(),
-  prices: structuredClone(SEED_PRICES), // PUT /operator/prices replaces it; never share the constant
-  subscriptions: seedSubscriptions(),
-});
+export const seedPlatform = (): Platform => {
+  const tenants = { [DEMO_ACCOUNT.id]: seed(), [NGITI_ACCOUNT.id]: seedNgiti(), [IPIN_ACCOUNT.id]: seedIpin() };
+  const subscriptions = seedSubscriptions();
+  return {
+    accounts: [DEMO_ACCOUNT, NGITI_ACCOUNT, IPIN_ACCOUNT],
+    tenants,
+    signups: seedSignups(),
+    prices: structuredClone(SEED_PRICES), // PUT /operator/prices replaces it; never share the constant
+    subscriptions,
+    agreements: seedAgreements(subscriptions, tenants), // privacy #11: signed on file, dated the approval day
+  };
+};
 
-// v27: subscriptions (chunk 23): Platform gains `subscriptions`, and a third clinic, Ipin, is in its grace period.
-const KEY = "pedia-dental:mock-db:v27";
+// v28: privacy (chunk 24): Platform gains `agreements`; each Db gains `privacyNotices` and `acknowledgements`; patients gain consents.
+const KEY = "pedia-dental:mock-db:v28";
 
 function load(): Platform {
   if (typeof window === "undefined") return seedPlatform();

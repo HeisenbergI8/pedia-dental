@@ -41,7 +41,7 @@ TanStack Query · React Hook Form + Zod 4 · Zustand (UI state, plus the demo se
 | Fake backend | `apps/web/src/mocks/` | MSW setup, localStorage-backed `db`, deterministic `seed` |
 | HTTP | `apps/web/src/lib/api-client.ts` | The only `fetch` in the app |
 | Access rules | `packages/shared/src/domain/permissions.ts` | `ROLE_PERMISSIONS`: who may do what. The only place access is decided. `branches.all` = works at every branch (Owner). `today.view` = Today at a glance (all staff); `dashboard.view` = finance (admin); `patients.contact` = guardian phones and emails, emergency contact and address, **left out of every patient response** without it (admin and front desk: all; a parent: their own family). Responses parse with `PatientView`; the stored record is `Patient` |
-| Access gate | `apps/web/src/mocks/access.ts` | Route → permission (`RULES`), 401 / 403, parent ownership. `/operator/*` branches off before `sessionOf` (`operatorRefusal`); `/signups/*` too (`publicRefusal`, deny-by-default `PUBLIC_RULES`) |
+| Access gate | `apps/web/src/mocks/access.ts` | Route → permission (`RULES`), 401 / 403, parent ownership. `/operator/*` branches off before `sessionOf` (`operatorRefusal`); `/signups/*` and `/legal/*` too (`publicRefusal`, deny-by-default `PUBLIC_RULES`) |
 | Operator console | `apps/web/src/features/operator/`, `apps/web/src/app/operator/` | Primolar's console: clinic accounts, tiers, Owners, usage counts; sign-ups (record payment, fix, reject, approve), the price list, Set branding for Design it for me clinics; each clinic's subscription (record a month's payment, cancel). Its own sign-in, session store and routes; never a clinic user |
 | Public sign-up | `apps/web/src/features/signup/`, `apps/web/src/app/get-started/` | Get started form and the status page by reference. No sign-in; `/signups/*` answered outside every clinic |
 
@@ -117,6 +117,13 @@ MSW handler (now) or NestJS (later).
   Each month is billed at the plan in force when it began: a plan change made while overdue keeps the running
   month's price (`priceTier`) and a downgrade waits for the next due date after today. Billing is the Owner's (`GET /clinic/subscription`,
   `clinic.manage`). Primolar invoices are `DocContent` with Primolar's letterhead (`features/clinic/primolar-invoice.ts`).
+- Privacy (feature 18): the templates and their versions are `LEGAL_DOCUMENTS` (`domain/legal.ts`), labelled
+  `PENDING_REVIEW` until a lawyer reviews them. A clinic's agreements are append-only in `Platform.agreements`;
+  `termsOutdated` decides when the Owner must accept again. The gate blocks the Owner (terms) and a staff login
+  (confidentiality) through `SessionUser.mustAcknowledge`; a parent's notice is a portal step, not a gate. `POST /patients`
+  takes `RegisterPatientInput`, which requires the parent's consent. Optional consents are enforced only on an explicit
+  "no" (`choiceDeclined`): intraoral and extraoral uploads, and every message through `queueMessage`. A clinic's notice is
+  versioned in `Db.privacyNotices`.
 - Branch-level reports (Today, finance, daily collections) take `?branch=` (a branch id or `all`), resolved only by
   `reportBranches(request)`. Who may ask for what is `reportBranchFilter` in `domain/tenancy.ts`: Mid and Big, two or
   more branches; `all` for the Owner.
@@ -131,13 +138,15 @@ MSW handler (now) or NestJS (later).
   and only import `@/mocks/browser` dynamically from `app/providers.tsx`.
 - `NEXT_PUBLIC_*` env vars are inlined at build time. Changing `.env.local` needs a dev-server restart.
 - Mock data lives in `localStorage`. After changing `seed()` or `Db`, bump the key in `mocks/db.ts`
-  or clear storage, or you'll keep seeing old data. The key is `pedia-dental:mock-db:v27`; each bump gets a
+  or clear storage, or you'll keep seeing old data. The key is `pedia-dental:mock-db:v28`; each bump gets a
   one-line comment above it saying why.
-- The mock store is partitioned by clinic account: `Platform = { accounts, tenants, signups, prices, subscriptions }` in
-  `mocks/db.ts`. Sign-ups, prices and subscriptions are Primolar's, never inside a tenant. `db` is a
+- The mock store is partitioned by clinic account: `Platform = { accounts, tenants, signups, prices, subscriptions, agreements }`
+  in `mocks/db.ts`. Sign-ups, prices, subscriptions and agreements are Primolar's, never inside a tenant. `db` is a
   live binding to the signed-in account's `Db`, repointed by `sessionOf()` (`selectTenant`). Never cache `db` in a
   module-level variable, and never call `selectTenant` from a feature handler. Stamp new records with
   `currentClinicId()`. Branch-level lists filter by `activeBranch(request)` (from the `pd_branch` cookie, validated).
+- A test that signs in with a login created in the test (staff the Owner adds, a new clinic's Owner) must `POST
+  /auth/acknowledgement` for confidentiality after the password step. Seeded staff have acknowledged already.
 - Demo tokens are `demo.<clinicId>.<accountId>`. Handler tests sign in with `pd_session=demo.clinic_demo.<id>`, and
   add `; pd_branch=<branch id>` to pick a branch. Cross-account tests live in `mocks/tenancy.test.ts`, not `handlers.test.ts`.
 - Opening hours are the branch's (`useActiveBranch().openingHours`, `Branch.openingHours` in mocks). The clinic name
@@ -157,8 +166,8 @@ MSW handler (now) or NestJS (later).
   clinic route). Operator query keys start with `"operator"`: the global 401 handler in `app/providers.tsx` signs out
   the operator, not the clinic user, on that prefix. Operator tests live in `mocks/operator.test.ts`, cross-branch
   report tests in `mocks/cross-branch.test.ts`. The same guard reads `features/operator/signup-mocks.ts`,
-  `features/signup/mocks.ts`, `mocks/signups.ts` and `mocks/subscriptions.ts`: public, sign-up and subscription code
-  works on `platform` alone. Tests that move the clock (`setToday`) live only in `mocks/subscriptions.test.ts`: a moved
+  `features/signup/mocks.ts`, `features/legal/mocks.ts`, `mocks/signups.ts` and `mocks/subscriptions.ts`: public,
+  sign-up, legal and subscription code works on `platform` alone. Tests that move the clock (`setToday`) live only in `mocks/subscriptions.test.ts`: a moved
   clock pauses seeded clinics for every later test in that file. To show grace or the pause in the browser, set
   `localStorage["pedia-dental:demo-today"]` to a `yyyy-MM-dd` date and reload; remove it to go back. Sign-up
   tests live in `mocks/signups.test.ts` (public) and `mocks/operator-signups.test.ts` (console); the latter's

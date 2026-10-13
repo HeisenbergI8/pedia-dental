@@ -1,25 +1,31 @@
 import { http, HttpResponse, delay } from "msw";
-import { ChangePasswordInput, LoginInput, LogoutInput, SwitchUserInput, pinLockout, rolesCan, worksAt, type AuditAction, type Session, type SessionUser } from "@pedia/shared";
+import { AcknowledgeInput, ChangePasswordInput, LoginInput, LogoutInput, SwitchUserInput, pinLockout, rolesCan, worksAt, type AuditAction, type Session, type SessionUser } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { branchOf, recordAudit, sessionOf } from "@/mocks/access";
 import { accountById, credentialOf, db, persist, platform, selectTenant } from "@/mocks/db";
 import { DEMO_PASSWORD, accountsByEmail, allAccounts, demoAccounts, demoLogins, passwordOpens, tokenFor, type AccountMatch, type DemoAccountRecord } from "@/mocks/demo-accounts";
+import { acknowledgementPrompt, expectedVersion, pendingAcknowledgement, recordAcknowledgement } from "@/mocks/privacy";
 import { DEMO_CLINIC_ID } from "@/mocks/seed";
+import { onlineAgreement } from "@/mocks/seed-privacy";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 
-const userOf = ({ id, role, name, email, staffId, guardianId, roles }: DemoAccountRecord, clinicId: string): SessionUser => ({
-  id,
-  role,
-  name,
-  email,
-  clinicId,
-  roles,
-  readOnly: accountById(clinicId)?.status === "active" ? undefined : true,
-  mustChangePassword: credentialOf(platform.tenants[clinicId]!, staffId)?.mustChange || undefined,
-  staffId,
-  guardianId,
-});
+const userOf = (account: DemoAccountRecord, clinicId: string): SessionUser => {
+  const { id, role, name, email, staffId, guardianId, roles } = account;
+  return {
+    id,
+    role,
+    name,
+    email,
+    clinicId,
+    roles,
+    readOnly: accountById(clinicId)?.status === "active" ? undefined : true,
+    mustChangePassword: credentialOf(platform.tenants[clinicId]!, staffId)?.mustChange || undefined,
+    mustAcknowledge: pendingAcknowledgement(account, clinicId), // privacy P10
+    staffId,
+    guardianId,
+  };
+};
 
 /** How a PIN switch reads in the audit trail. */
 const PIN_SWITCH = "Session (PIN switch)";
@@ -109,6 +115,41 @@ export const authHandlers = [
     else db.staffCredentials.push({ clinicId: session.clinicId, staffId: session.staffId, password: parsed.data.next, mustChange: false });
     persist();
     recordAudit(session, "update", "Password");
+    const fresh: Session = { token: tokenFor(session.clinicId, session), user: userOf(session, session.clinicId) };
+    return HttpResponse.json(fresh);
+  }),
+
+  /** Privacy P10: the page this login must read before continuing. Outside the gate (/auth/*), like /auth/password. */
+  http.get(url("/auth/acknowledgement"), ({ request }) => {
+    const session = sessionOf(request);
+    if (!session) return new HttpResponse("Sign in to continue", { status: 401 });
+    if (!session.mustAcknowledge) return new HttpResponse("Nothing is waiting for you to read", { status: 409 });
+    return HttpResponse.json(acknowledgementPrompt(session.mustAcknowledge, session, session.clinicId));
+  }),
+
+  /**
+   * Privacy #9, #20, #21, #23: accepts the Terms and DPA (a new agreement), or acknowledges confidentiality or the
+   * clinic's notice. Only the step waiting, at its current version, so a stale page can't accept an old text.
+   * Returns the session again, with the next step (or none).
+   */
+  http.post(url("/auth/acknowledgement"), async ({ request }) => {
+    const session = sessionOf(request);
+    if (!session) return new HttpResponse("Sign in to continue", { status: 401 });
+    if (session.mustChangePassword) return new HttpResponse("Choose your own password to continue", { status: 403 });
+    const parsed = AcknowledgeInput.safeParse(await request.json());
+    if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
+    const { kind, version } = parsed.data;
+    if (kind !== session.mustAcknowledge || version !== expectedVersion(kind, db)) {
+      return new HttpResponse("That isn't the version waiting for you. Reload the page and read it again.", { status: 409 });
+    }
+    if (kind === "terms") {
+      platform.agreements.push({ clinicId: session.clinicId, ...onlineAgreement(session.name) });
+      recordAudit(session, "create", "Terms and DPA (accepted)");
+    } else {
+      recordAcknowledgement(db, session.clinicId, session, kind, version);
+      recordAudit(session, "create", kind === "notice" ? "Privacy notice (acknowledged)" : "Confidentiality (acknowledged)");
+    }
+    persist();
     const fresh: Session = { token: tokenFor(session.clinicId, session), user: userOf(session, session.clinicId) };
     return HttpResponse.json(fresh);
   }),

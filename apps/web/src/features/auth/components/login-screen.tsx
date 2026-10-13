@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { env } from "@/lib/env";
 import { ROLE_HOME, ROLE_LABEL, useSession } from "../access";
 import { authKeys, useDemoAccounts, useSignIn } from "../api";
+import { LegalLinks } from "@/features/legal/components/legal-links";
 import { ClinicChooser } from "./clinic-chooser";
 
 const ROLE_ICON: Record<Role, LucideIcon> = {
@@ -97,6 +98,7 @@ export function LoginScreen() {
                 Get started with Primolar
               </Link>
             </p>
+            <LegalLinks className="mt-6" />
             {env.apiMocking && (
               <>
                 {demo.isLoading && <Loading label="Loading demo logins" />}

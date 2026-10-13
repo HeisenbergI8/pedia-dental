@@ -11,6 +11,7 @@ import {
   sameClinicName,
   suggestBrandColor,
   LOGO_RULES,
+  type AgreementRecord,
   type BrandingInput,
   type Branch,
   type ClinicAccount,
@@ -25,6 +26,7 @@ import { newPin, temporaryPassword } from "./demo-accounts";
 import { defaultMessageTemplates } from "./message-templates";
 import { NOTE_TEMPLATES } from "./note-templates";
 import { PROCEDURES } from "./seed";
+import { firstNotice } from "./seed-privacy";
 import { startSubscription } from "./subscriptions";
 
 /*
@@ -119,10 +121,14 @@ export function brandingRefusal(branding: BrandingInput, hasLogo: boolean): Resp
  * A new waiting sign-up, quoted from today's price list (A2). Pushed before its files are stored, so a double-click
  * sent while the first is still saving files meets the duplicate check instead of making a twin.
  */
-export async function addSignup(input: SignupInput, files: { logo?: Blob; references: Blob[] }, source: Signup["source"]): Promise<Signup> {
+export async function addSignup(input: SignupInput, files: { logo?: Blob; references: Blob[] }, source: Signup["source"], agreement: AgreementRecord): Promise<Signup> {
   const id = `signup_${shortId()}`;
   const signup: Signup = {
-    ...input,
+    // The four parts by name: the form's acceptance flag and the console's signed-on-file fields aren't stored as such.
+    account: input.account,
+    branch: input.branch,
+    owner: input.owner,
+    branding: input.branding,
     id,
     reference: newReference(),
     source,
@@ -130,6 +136,7 @@ export async function addSignup(input: SignupInput, files: { logo?: Blob; refere
     referenceRefs: [],
     quote: amountDue(platform.prices, input.account.tier, input.branding.choice),
     status: "waiting",
+    agreement, // privacy #7, #8
   };
   platform.signups.push(signup);
   if (input.branding.choice === "own" && files.logo) signup.logoRef = await keepFile(`${id}_logo`, files.logo);
@@ -178,6 +185,7 @@ export async function createClinic(signup: Signup): Promise<{ clinicId: string; 
   const pin = newPin();
   // Synchronous from here to the push, so the name is never free twice; the logo copy follows.
   platform.accounts.push(account);
+  platform.agreements.push({ clinicId, ...signup.agreement }); // privacy #7: carried to the clinic on approval
   platform.tenants[clinicId] = {
     ...emptyDb(),
     branches: [branch],
@@ -188,6 +196,20 @@ export async function createClinic(signup: Signup): Promise<{ clinicId: string; 
     messageTemplates: defaultMessageTemplates(clinicId, new Date().toISOString()),
     staffPins: [{ clinicId, staffId: owner.id, pin, failedAt: [] }],
     staffCredentials: [{ clinicId, staffId: owner.id, password, mustChange: true }],
+    // Privacy #23: the acceptance on Get started (or the signed copy on file) is the clinic's first audited event.
+    auditEvents: [
+      {
+        clinicId,
+        id: crypto.randomUUID(),
+        at: signup.agreement.at,
+        actorId: owner.id,
+        actorName: signup.agreement.acceptedBy,
+        actorRole: owner.role,
+        action: "create",
+        record: "Terms and DPA (accepted)",
+      },
+    ],
+    privacyNotices: [firstNotice(clinicId, account.name, owner.fullName, account.contactEmail)], // #19: from the template
   };
   signup.status = "approved";
   signup.approval = { clinicId, at: new Date().toISOString() };

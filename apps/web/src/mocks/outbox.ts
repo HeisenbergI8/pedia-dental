@@ -1,10 +1,13 @@
 import { format } from "date-fns";
-import { birthdayGreeting, isBirthdayOn, preVisitMessageFor, reminderSendAt, type Appointment, type Message } from "@pedia/shared";
+import { birthdayGreeting, choiceDeclined, isBirthdayOn, preVisitMessageFor, reminderSendAt, type Appointment, type Message } from "@pedia/shared";
 import { currentAccount, currentClinicId, db } from "./db";
 import { composeMessage, type MessageEvent } from "./message-templates";
 
 /** Feature 5's outbox. Events queue messages here and nothing is ever sent. The calling handler persists. */
 export function queueMessage(e: MessageEvent): Message | undefined {
+  // Privacy #14 (P15): a family that declined reminder messages gets no SMS or email at all. Manual sends say why first.
+  const patient = db.patients.find((p) => p.id === e.patientId);
+  if (patient && choiceDeclined(patient, "reminders")) return undefined;
   const refs = { templates: db.messageTemplates, patients: db.patients, staff: db.staff, clinicName: currentAccount().name };
   const message = composeMessage(e, refs, { id: crypto.randomUUID(), clinicId: currentClinicId(), createdAt: new Date().toISOString() });
   if (message) db.messages.push(message);

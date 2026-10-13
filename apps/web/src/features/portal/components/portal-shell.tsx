@@ -10,7 +10,9 @@ import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { useSession } from "@/features/auth/access";
 import { AccountMenu } from "@/features/auth/components/account-menu";
+import { LegalLinks } from "@/features/legal/components/legal-links";
 import { BrandTheme } from "@/features/clinic/components/brand-theme";
 import { ClinicLogo, ClinicPageLoading } from "@/features/clinic/components/clinic-logo";
 import { cn } from "@/lib/utils";
@@ -94,6 +96,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const navigating = useNavigationPending();
   const { kids, child, setActive, isLoading, error, refetch, isRefetching } = useChildren();
+  const clinicId = useSession()?.user.clinicId;
 
   return (
     <div className="min-h-screen bg-ground">
@@ -168,6 +171,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
           </>
         )}
         <PoweredByPrimolar className="py-6 text-center" />
+        <LegalLinks clinicId={clinicId} />
         {/* Keeps the end of the page clear of the bottom tab bar. */}
         <div aria-hidden className="h-(--bottom-nav-h)" />
       </main>

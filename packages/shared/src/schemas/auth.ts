@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ClinicScoped, Id, IsoDateTime, Role } from "./common";
+import { AcknowledgementKind } from "./legal";
 
 /**
  * Every access decision names one of these. Who holds which is `ROLE_PERMISSIONS` in
@@ -32,6 +33,7 @@ export const Permission = z.enum([
   "session.switch", // hand a shared device to another staff member, with their own PIN
   "branches.all", // works at every branch of the account, whatever their assignment: the Owner
   "clinic.manage", // Owner settings: the account's profile, branding, branches and staff logins (decision #11)
+  "consents.manage", // privacy #15 (P16): switch a child's optional consents (photos, reminders). A parent: their own
 ]);
 export type Permission = z.infer<typeof Permission>;
 
@@ -55,6 +57,9 @@ export const SessionUser = z.object({
   // A login the Owner just created (decision #21): until they choose their own password, every API route but /auth/*
   // answers 403 and the app shows only "Choose your password".
   mustChangePassword: z.boolean().optional(),
+  // Privacy #9, #20, #21 (P10): what this login must read first. `terms` and `confidentiality` make every API route but
+  // /auth/* answer 403; `notice` is the portal's own step. The app shows only the acknowledgement page meanwhile.
+  mustAcknowledge: AcknowledgementKind.optional(),
   staffId: Id.optional(),
   guardianId: Id.optional(),
 });

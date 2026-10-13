@@ -11,7 +11,7 @@ const PARENT_ONLY: readonly Permission[] = ["appointments.request", "uploads.cre
 export const OWNER_ONLY: readonly Permission[] = ["branches.all", "clinic.manage"];
 const STAFF_PERMISSIONS = Permission.options.filter((p) => !PARENT_ONLY.includes(p));
 /** What a read-only session (a parent of a suspended clinic, decision #44) can't do: the portal's write actions (#46). */
-export const READ_ONLY_DENIED: readonly Permission[] = ["appointments.confirm", "appointments.request", "uploads.create"];
+export const READ_ONLY_DENIED: readonly Permission[] = ["appointments.confirm", "appointments.request", "uploads.create", "consents.manage"];
 
 /**
  * Who may do what: the single source of truth, read by the web app (nav, route gate, `<Can>`) and by
@@ -27,6 +27,7 @@ export const ROLE_PERMISSIONS: Record<Role, Grants> = {
     "today.view",
     "patients.view",
     "patients.write",
+    "consents.manage",
     "appointments.view",
     "appointments.manage",
     "appointments.confirm",
@@ -46,6 +47,7 @@ export const ROLE_PERMISSIONS: Record<Role, Grants> = {
     "today.view",
     "patients.view",
     "patients.write",
+    "consents.manage",
     "patients.contact", // calls parents, books, chases balances
     "appointments.view",
     "appointments.manage",
@@ -75,6 +77,7 @@ export const ROLE_PERMISSIONS: Record<Role, Grants> = {
       "billing.view",
       "messages.view",
       "uploads.create",
+      "consents.manage",
     ),
     ...grant("all", "clinic.view"),
   },

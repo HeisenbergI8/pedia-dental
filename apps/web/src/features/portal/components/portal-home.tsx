@@ -12,6 +12,7 @@ import { formatAge } from "@/features/patients/age";
 import { usePlan } from "@/features/plan/api";
 import { useActiveChild } from "../use-child";
 import { ConfirmButton, nextAppointment, whenText } from "./portal-appointments";
+import { PortalPrivacy } from "./portal-privacy";
 
 const more = "inline-flex min-h-11 items-center font-medium text-brand underline-offset-2 hover:underline"; // 44 px target
 
@@ -79,6 +80,7 @@ export function PortalHome() {
         Allergies we have on file for {child.firstName}: {child.allergies.length ? child.allergies.join(", ") : "none"}. If this is wrong, please tell
         the clinic.
       </p>
+      <PortalPrivacy />
     </div>
   );
 }

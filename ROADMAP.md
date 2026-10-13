@@ -2,11 +2,12 @@
 
 Primolar is clinic management for pediatric dental clinics, sold as a service: each paying clinic is a
 **clinic account** with its own branches, staff, patients and branding (feature 16), which signs up and pays
-through feature 17. Features 1–15 work inside one clinic account.
+through feature 17 and handles children's records under the Data Privacy Act (feature 18). Features 1–15 work
+inside one clinic account.
 
 Two parts:
 
-1. **Features**: what each of the 17 features does, its screens, its data, and its rules.
+1. **Features**: what each of the 18 features does, its screens, its data, and its rules.
 2. **Build chunks**: the order to build them in. Each chunk depends only on chunks above it and ends
    with a "done when" you can check. Chunks 0–18 were sized for one or two sessions. From chunk 19 on,
    each chunk is one **Large** piece of work with its own architect plan: fewer, bigger chunks.
@@ -257,9 +258,34 @@ account in", "no payments" and "font on Big only".
 
 ---
 
+## 18. Privacy and consent (Data Privacy Act, RA 10173)
+
+What the app shows and records so a pilot clinic can put real children's records in. Children's health records are
+sensitive personal information: the **clinic** is the personal information controller, **Primolar** the processor
+that handles the data for it, and **parents** the data subjects. Decisions are settled in
+`.claude/plans/feature-primolar-privacy-plan/decisions.md` (25 decisions, settled 2026-10-13).
+
+- **Two agreements, two places:**
+  - *Primolar ↔ clinic:* Terms of Service and a Data Processing Agreement, accepted with an unticked checkbox on the
+    Get started form (or marked "signed, on file" by the operator for a phone sign-up).
+  - *Clinic ↔ parent:* the clinic's privacy notice and the parent's consent, recorded when the front desk registers
+    a child, and acknowledged by the parent the first time they open the portal.
+- **Proof, not just a checkbox:** who accepted what, when, and which version. A new version asks again.
+- **The clinic's privacy notice:** started from a Primolar template, edited by the Owner in Settings, shown in the
+  parent portal.
+- **Links everywhere a stranger lands:** "Privacy" and "Terms" on sign-in, Get started and the portal.
+- **Documents:** templated for the pilot (Terms of Service, Data Processing Agreement, Primolar Privacy Policy,
+  clinic privacy notice, parent consent form). A lawyer reviews them before Primolar grows past the pilot.
+- **Demo:** in Bulilit, one child has no consent recorded (the flag) and one declined clinical photos (the block); the
+  parent demo login reads the clinic's notice before the portal opens.
+- **Prototype vs backend:** the prototype shows and records everything on MSW data. Encryption at rest, backups,
+  real sessions, data export and deletion requests, and NPC registration belong to the backend phase.
+
+---
+
 # Part 2: Build chunks (in build order: 18 comes last)
 
-Total ≈ 252 hours (153 for features 1–15, 59 for the platform, 40 for onboarding and billing). Hours are estimates for one developer using Claude Code.
+Total ≈ 268 hours (153 for features 1–15, 59 for the platform, 40 for onboarding and billing, 16 for privacy and consent). Hours are estimates for one developer using Claude Code.
 
 ## ✅ Chunk 0: Foundation (done)
 
@@ -554,6 +580,29 @@ an upgrade raises the next invoice and a downgrade waits for the due date; only 
 
 **Depends on:** 22.
 
+## ✅ Chunk 24: Privacy, terms and consent (16 h) — feature 18 · Large (done)
+
+**Plan:** `.claude/plans/feature-primolar-privacy-plan/`
+**Status:** built 2026-10-14
+
+- Template documents in the app: Terms of Service, Data Processing Agreement, Primolar Privacy Policy, a clinic
+  privacy notice template and a parent consent form, each with a version.
+- Get started: a required, unticked "I accept the Terms and the Data Processing Agreement" with links; the
+  acceptance (version, time) is saved on the sign-up and carried to the clinic. Console direct creation: "signed
+  agreement on file".
+- Patient registration: the parent's consent recorded (who recorded it, when, which notice version), shown on the
+  child's record, with a printable consent form.
+- Parent portal: the clinic's privacy notice once on first sign-in, acknowledged.
+- Settings → Clinic: the clinic's privacy notice, from the template, editable by the Owner.
+- "Privacy" and "Terms" links on sign-in, Get started and the portal.
+- Demo data: existing patients with consent on record, and one without, to show the prompt.
+
+**Done when:** a clinic can't sign up without accepting the terms; a child can't be registered without the parent's
+consent recorded; a parent sees the clinic's notice once and the acknowledgement is saved; a new version of a
+document asks again; every record shows who accepted which version and when.
+
+**Depends on:** 23.
+
 ## Chunk 18: Demo polish and deploy (6 h)
 
 - A realistic demo scenario in the seed: one child mid-treatment, one due for recall, one with a
@@ -563,10 +612,10 @@ an upgrade raises the next invoice and a downgrade waits for the due date; only 
 
 **Done when:** the client can open a link and walk the demo script without your help.
 
-**Depends on:** all, 23 included. Built last so the demo, deploy and video show the whole product: several
+**Depends on:** all, 24 included. Built last so the demo, deploy and video show the whole product: several
 clinics, branches, clinic branding, the operator console, sign-up and billing. Already done: the demo data,
 the responsive and keyboard pass, the deploy (https://primolar.vercel.app) and `DEMO_SCRIPT.md`. Left: the
-video, after chunk 23 and a round of testing.
+video, after chunk 24 and a round of testing.
 
 ---
 
@@ -585,8 +634,8 @@ video, after chunk 23 and a round of testing.
 9 + 12 ─ 16 Documents
 10 + 11 + 12 + 14 + 15 ─ 17 Parent portal
 17 ─ 19 Tenancy foundation ─ 20 Owner settings & branding ─ 21 Cross-branch & operator ◄── 13
-21 ─ 22 Sign-ups & branding choices ─ 23 Subscriptions & payments
-everything, 23 included ─ 18 Polish & deploy (video left)
+21 ─ 22 Sign-ups & branding choices ─ 23 Subscriptions & payments ─ 24 Privacy, terms & consent
+everything, 24 included ─ 18 Polish & deploy (video left)
 ```
 
 Chunks 5–6 (the chart) carry the most risk. If time gets tight, cut scope from 17 (portal) and 13

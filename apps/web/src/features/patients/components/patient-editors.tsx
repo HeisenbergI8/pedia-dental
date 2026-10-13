@@ -6,7 +6,7 @@ import { useCallback, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { AlertTriangleIcon, HistoryIcon } from "lucide-react";
 import { toast } from "sonner";
-import { CreatePatientInput, type DuplicateMatch } from "@pedia/shared";
+import { CreatePatientInput, type DuplicateMatch, type RegisterPatientInput } from "@pedia/shared";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -16,6 +16,7 @@ import { formatDate } from "@/lib/format";
 import { duplicateQuery, useCreatePatient, usePatient, useUpdatePatient } from "../api";
 import { splitName } from "../intake";
 import { EMPTY_PATIENT, PatientForm, type PatientFormDraft, type PatientFormValues } from "./patient-form";
+import { PrivacyConsentDialog } from "./privacy-consent-dialog";
 import { Loading } from "@/components/brand";
 
 export function CreatePatient() {
@@ -40,8 +41,14 @@ export function CreatePatient() {
   const [checking, setChecking] = useState(false);
   // `book`: "Save and book appointment", carried through the duplicate warning so "Create anyway" keeps it.
   const [pending, setPending] = useState<{ input: CreatePatientInput; matches: DuplicateMatch[]; book: boolean }>();
+  // Privacy #12 (P12): every registration ends with the parent's consent; nothing is saved before it.
+  const [consentFor, setConsentFor] = useState<{ input: CreatePatientInput; book: boolean }>();
+  const askConsent = (input: CreatePatientInput, book: boolean) => {
+    setPending(undefined);
+    setConsentFor({ input, book });
+  };
 
-  const save = (input: CreatePatientInput, book: boolean) =>
+  const save = (input: RegisterPatientInput, book: boolean) =>
     create.mutate(input, {
       onSuccess: (p) => {
         clearDraft(draft);
@@ -59,7 +66,7 @@ export function CreatePatient() {
     const matches = await qc.fetchQuery(duplicateQuery(input)).catch(() => []);
     setChecking(false);
     if (matches.length) setPending({ input, matches, book });
-    else save(input, book);
+    else askConsent(input, book);
   }
 
   return (
@@ -112,12 +119,22 @@ export function CreatePatient() {
             <Button variant="outline" onClick={() => setPending(undefined)}>
               Go back and check
             </Button>
-            <Button disabled={create.isPending} onClick={() => pending && save(pending.input, pending.book)}>
+            <Button onClick={() => pending && askConsent(pending.input, pending.book)}>
               Create anyway
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {consentFor && (
+        <PrivacyConsentDialog
+          childName={consentFor.input.firstName}
+          guardians={consentFor.input.guardians}
+          pending={create.isPending}
+          submitLabel={consentFor.book ? "Save and book" : "Save patient"}
+          onClose={() => setConsentFor(undefined)}
+          onConfirm={(privacyConsent) => save({ ...consentFor.input, privacyConsent }, consentFor.book)}
+        />
+      )}
     </div>
   );
 }

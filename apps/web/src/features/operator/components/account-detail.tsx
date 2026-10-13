@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ROLE_LABEL } from "@/features/auth/access";
+import { formatDate } from "@/lib/format";
 import { useAccounts, useChangeTier, useOwnerCandidates, useSetSuspended, useTransferOwnership } from "../api";
 import { allowance, overLimits } from "./allowance";
 import { SetBrandingDialog } from "./set-branding-dialog";
@@ -45,6 +46,7 @@ export function AccountDetail({ id }: { id: string }) {
             <StatusCard row={row} />
           </div>
           <SubscriptionCard row={row} />
+          <AgreementCard row={row} />
           <OwnerCard row={row} />
           {row.design && <DesignCard row={row} />}
         </>
@@ -173,6 +175,37 @@ function DesignCard({ row }: { row: AccountOverview }) {
         Set branding
       </Button>
       {open && <SetBrandingDialog row={row} onClose={() => setOpen(false)} />}
+    </SectionCard>
+  );
+}
+
+/** Privacy #8, #10: the agreement in force and how many patients have no consent recorded. Counts only (platform #25). */
+function AgreementCard({ row }: { row: AccountOverview }) {
+  const { agreement, current, patientsWithoutConsent } = row.privacy;
+  const how = !agreement
+    ? "None on record"
+    : agreement.method === "on_file"
+      ? `Signed agreement on file, signed ${formatDate(agreement.signedOn ?? agreement.at.slice(0, 10))}`
+      : `Accepted online on ${formatDate(agreement.at.slice(0, 10))}`;
+  return (
+    <SectionCard
+      title="Agreement and consent"
+      description={current ? "Terms of Service and Data Processing Agreement up to date." : "A newer version is waiting: the Owner accepts it at their next sign-in."}
+    >
+      <dl className="grid gap-3 text-sm sm:grid-cols-2">
+        <div>
+          <dt className="text-ink-muted">Agreement</dt>
+          <dd className="font-medium">{how}</dd>
+        </div>
+        <div>
+          <dt className="text-ink-muted">Versions and who</dt>
+          <dd className="font-medium">{agreement ? `Terms v${agreement.termsVersion}, DPA v${agreement.dpaVersion}, by ${agreement.acceptedBy}` : "—"}</dd>
+        </div>
+        <div>
+          <dt className="text-ink-muted">Patients without consent recorded</dt>
+          <dd className="font-medium tabular-nums">{patientsWithoutConsent}</dd>
+        </div>
+      </dl>
     </SectionCard>
   );
 }
