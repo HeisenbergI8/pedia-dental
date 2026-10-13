@@ -1,15 +1,18 @@
-# Primolar demo script (5 minutes)
+# Primolar demo script (8 minutes)
 
-A walk through the prototype for a clinic owner. It follows one clinic's day, then shows what makes Primolar a
-product for many clinics. Every login uses the password **pass123**. All data is fake and lives in your browser.
+A walk through the prototype for a clinic owner. It follows one clinic's day, shows what makes Primolar a product for
+many clinics, then how a new clinic joins and pays. Every login uses the password **pass123**. All data is fake and lives in your browser.
 
 **Before you start:** open the link in a normal (not private) browser window. If an earlier walk-through left changes
 behind, sign in as anyone, open the account menu and choose **Reset demo data**.
 
-The demo has two clinics:
+The demo has three clinics and one waiting to join:
 
-- **Bulilit Smiles Pediatric Dental** (Mid plan): two branches, Imus and Dasmariñas, raspberry branding.
-- **Ngiti Kids Dental** (Small plan): one branch in Bacoor, blue branding, at its 5-login limit.
+- **Bulilit Smiles Pediatric Dental** (Mid plan): two branches, Imus and Dasmariñas, raspberry branding. Paid up.
+- **Ngiti Kids Dental** (Small plan): one branch in Bacoor, blue branding, at its 5-login limit. Paid up, with its next
+  payment due in about 2 days.
+- **Ipin Kids Dental** (Small plan): Primolar's default look, a few days overdue and in its 7-day grace period.
+- **Hagikgik Kids Dental**: signed up through the Get started form (Design it for me) and waiting for its setup fee.
 
 | Login | Who |
 | --- | --- |
@@ -19,6 +22,7 @@ The demo has two clinics:
 | frontdesk@gmail.com | Liza Cruz, front desk, Imus |
 | parent@gmail.com | A parent with two children at Bulilit, one mid-treatment |
 | owner@ngiti.demo | Dr. Bea Lim, Owner of Ngiti |
+| owner@ipin.demo | Dr. Lara Santiago, Owner of Ipin (overdue) |
 | operator@primolar.demo | Primolar's own console, at `/operator` |
 
 ---
@@ -74,14 +78,48 @@ record they open is written to the audit trail.
 ## 6. Primolar's console (40 s) · operator@primolar.demo at `/operator`
 
 1. Every clinic on Primolar with its plan, Owner, and counts of branches, logins and patients, never a patient record.
-2. **New clinic account**: create a clinic with its first branch and Owner. The Owner's temporary password shows once.
+2. **New clinic account**: for a clinic signing up by phone or in person. The same choices as the public form, plus the
+   payment received. The Owner's temporary password shows once.
 3. Open a clinic: change its **plan** (a downgrade disables nothing; it only stops new additions), **pause** it (its
    staff are signed out; parents keep read-only access), and **transfer ownership**.
 
-*Close with:* one product, many clinics, each with its own brand, branches and staff, and Primolar running them all
-without ever seeing a child's record.
+## 7. A new clinic joins (1 min) · no sign-in, then operator@primolar.demo
+
+1. On the sign-in page, click **Get started with Primolar**. Fill in a clinic, its first branch and Owner, pick a plan,
+   and choose how it looks: **Use my own** (logo, one colour, a heading font), **Use the default look**, or **Design it
+   for me**. The amount due shows the setup fee, the first month and the VAT inside it.
+2. Send it. The thank-you page gives a reference (`PRM-…`) the clinic can use later to check where it stands. Try the
+   same clinic name again: Primolar refuses it, ignoring case and spaces.
+3. In the console, **Sign-ups** → your clinic → **Record payment** → **Approve and create clinic**. The Owner's
+   temporary password shows once. Sign in with it: the clinic is already in the look it chose.
+4. **Hagikgik** chose Design it for me: approve it, open its clinic page and use **Set branding** to deliver the
+   finished logo, colour and font. **Price list** sets every plan's fees.
+
+*What to point out:* a rejected sign-up shows its reason on the client's status page, and a paid sign-up's plan can't
+be changed, so nobody is approved underpaid.
+
+## 8. Monthly billing (1 min) · owner@ipin.demo, then the console
+
+1. Sign in as Ipin's Owner: a banner says the payment is overdue and the date to pay by. **Settings → Plan** shows the
+   next amount with VAT, every payment, and a PDF invoice for each.
+2. Sign in as any other staff member, such as admin@gmail.com: no billing anywhere. Only the Owner sees it.
+3. In the console, open **Ipin Kids Dental**: **Record payment** marks the month paid, and the due date stays on the
+   same day of the month. Changing the plan: an upgrade starts at once, a downgrade on the next due date.
+
+*To show the pause:* set the demo clock past Ipin's pay-by date (below) and reload. Ipin's staff can't sign in, parents
+keep read-only access, and recording the payment reactivates it at once.
+
+*Close with:* one product, many clinics, each with its own brand, branches, staff and monthly plan, and Primolar
+running them all without ever seeing a child's record.
 
 ---
+
+## The demo clock
+
+Grace periods and pauses depend on today's date. To jump ahead, open the browser's developer console and run
+`localStorage.setItem("pedia-dental:demo-today", "2026-11-20")` (any `yyyy-mm-dd`), then reload. Run
+`localStorage.removeItem("pedia-dental:demo-today")` and reload to go back. If clinics look paused after moving the date
+around, **Reset demo data** (it keeps the demo clock; remove that separately).
 
 ## If something goes wrong
 
