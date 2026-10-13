@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
 import { ChevronLeftIcon, InboxIcon } from "lucide-react";
@@ -44,6 +44,14 @@ export function SignupDetail({ id }: { id: string }) {
   const [open, setOpen] = useState<Open>();
   const [created, setCreated] = useState<CreateAccountResult>();
   const approve = useApproveSignup(id);
+  // The dialogs mount without a Radix trigger, so focus goes back by hand: to the button that opened them, or to the
+  // page when that button is gone (WCAG 2.4.3).
+  const opener = useRef<HTMLElement | null>(null);
+  const openDialog = (kind: Open) => ((opener.current = document.activeElement as HTMLElement | null), setOpen(kind));
+  const returnFocus = (e: Event) => {
+    e.preventDefault();
+    (opener.current?.isConnected ? opener.current : document.getElementById("main"))?.focus();
+  };
   if (signups.isLoading) return <Loading label="Loading the sign-up" />;
   if (signups.error) return <ErrorState what="the sign-up" onRetry={() => void signups.refetch()} />;
   const s = signups.data?.find((x) => x.id === id);
@@ -65,7 +73,7 @@ export function SignupDetail({ id }: { id: string }) {
           />
           {waiting && (
             <div className="flex flex-wrap gap-2">
-              {!s.payment && <Button onClick={() => setOpen("payment")}>Record payment</Button>}
+              {!s.payment && <Button onClick={() => openDialog("payment")}>Record payment</Button>}
               <Button
                 disabled={!s.payment || approve.isPending}
                 aria-describedby={!s.payment ? "approve-hint" : undefined}
@@ -73,8 +81,8 @@ export function SignupDetail({ id }: { id: string }) {
               >
                 {approve.isPending ? "Approving" : "Approve and create clinic"}
               </Button>
-              <Button variant="outline" onClick={() => setOpen("fix")}>Fix details</Button>
-              <Button variant="ghost" onClick={() => setOpen("reject")}>Reject</Button>
+              <Button variant="outline" onClick={() => openDialog("fix")}>Fix details</Button>
+              <Button variant="ghost" onClick={() => openDialog("reject")}>Reject</Button>
               {!s.payment && <p id="approve-hint" className="w-full text-sm text-ink-muted">Approve opens once the setup fee is recorded (billing #12).</p>}
             </div>
           )}
@@ -102,12 +110,12 @@ export function SignupDetail({ id }: { id: string }) {
               </p>
             )}
           </SectionCard>
-          {open === "payment" && <PaymentDialog s={s} onClose={() => setOpen(undefined)} />}
-          {open === "fix" && <FixDialog s={s} onClose={() => setOpen(undefined)} />}
-          {open === "reject" && <RejectDialog s={s} onClose={() => setOpen(undefined)} />}
+          {open === "payment" && <PaymentDialog s={s} onClose={() => setOpen(undefined)} returnFocus={returnFocus} />}
+          {open === "fix" && <FixDialog s={s} onClose={() => setOpen(undefined)} returnFocus={returnFocus} />}
+          {open === "reject" && <RejectDialog s={s} onClose={() => setOpen(undefined)} returnFocus={returnFocus} />}
           {created && (
             <Dialog open>
-              <DialogContent showCloseButton={false}>
+              <DialogContent showCloseButton={false} onCloseAutoFocus={returnFocus}>
                 <DialogHeader>
                   <DialogTitle>{created.overview.account.name} is on Primolar</DialogTitle>
                   <DialogDescription>Pass the Owner&apos;s sign-in on in person or by phone.</DialogDescription>
@@ -188,7 +196,9 @@ function Look({ s }: { s: Signup }) {
 }
 
 /** A4: the quoted total, in one payment, marked by hand. */
-function PaymentDialog({ s, onClose }: { s: Signup; onClose: () => void }) {
+type DialogProps = { s: Signup; onClose: () => void; returnFocus: (e: Event) => void };
+
+function PaymentDialog({ s, onClose, returnFocus }: DialogProps) {
   const record = useRecordPayment(s.id);
   const form = useForm<RecordUpfrontPaymentInput>({ resolver: zodResolver(RecordUpfrontPaymentInput), defaultValues: { method: "bank_transfer", reference: "", paidOn: format(new Date(), "yyyy-MM-dd") } });
   const submit = form.handleSubmit((input) =>
@@ -196,7 +206,7 @@ function PaymentDialog({ s, onClose }: { s: Signup; onClose: () => void }) {
   );
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
+      <DialogContent onCloseAutoFocus={returnFocus}>
         <DialogHeader>
           <DialogTitle>Record payment</DialogTitle>
           <DialogDescription>{formatPeso(s.quote.total)}: the setup fee, first month{s.quote.designAddOn ? " and design" : ""}, in one payment.</DialogDescription>
@@ -217,7 +227,7 @@ function PaymentDialog({ s, onClose }: { s: Signup; onClose: () => void }) {
 }
 
 /** Billing #13: typos, a better logo, a plan change (re-quoted, A2). Only while waiting. */
-function FixDialog({ s, onClose }: { s: Signup; onClose: () => void }) {
+function FixDialog({ s, onClose, returnFocus }: DialogProps) {
   const fix = useFixSignup(s.id);
   const prices = useOperatorPrices();
   const [files, setFiles] = useState<SignupFiles>({ references: [] });
@@ -241,7 +251,7 @@ function FixDialog({ s, onClose }: { s: Signup; onClose: () => void }) {
   const locked = !!s.payment && !!requoted;
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent onCloseAutoFocus={returnFocus} className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Fix {s.account.name}</DialogTitle>
           <DialogDescription>Correct what the client sent. Leave a file unchosen to keep the one already sent.</DialogDescription>
@@ -273,13 +283,13 @@ function FixDialog({ s, onClose }: { s: Signup; onClose: () => void }) {
 }
 
 /** Billing #13, #14: the reason goes to the client word for word. A paid sign-up is refunded outside the app. */
-function RejectDialog({ s, onClose }: { s: Signup; onClose: () => void }) {
+function RejectDialog({ s, onClose, returnFocus }: DialogProps) {
   const reject = useRejectSignup(s.id);
   const form = useForm<RejectSignupInput>({ resolver: zodResolver(RejectSignupInput), defaultValues: { reason: "" } });
   const submit = form.handleSubmit(({ reason }) => reject.mutate(reason, { onSuccess: () => { toast.success(`${s.account.name} rejected`); onClose(); } }));
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
+      <DialogContent onCloseAutoFocus={returnFocus}>
         <DialogHeader>
           <DialogTitle>Reject {s.account.name}?</DialogTitle>
           <DialogDescription>
