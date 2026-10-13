@@ -1,7 +1,7 @@
-# Primolar demo script (8 minutes)
+# Primolar demo script (9 minutes)
 
 A walk through the prototype for a clinic owner. It follows one clinic's day, shows what makes Primolar a product for
-many clinics, then how a new clinic joins and pays. Every login uses the password **pass123**. All data is fake and lives in your browser.
+many clinics, how a new clinic joins and pays, and how children's records are handled under the Data Privacy Act. Every login uses the password **pass123**. All data is fake and lives in your browser.
 
 **Before you start:** open the link in a normal (not private) browser window. If an earlier walk-through left changes
 behind, sign in as anyone, open the account menu and choose **Reset demo data**.
@@ -20,7 +20,7 @@ The demo has three clinics and one waiting to join:
 | admin@gmail.com | Carmen Dela Cruz, Admin and dentist, Imus only |
 | dentist@gmail.com | Dr. Ana Reyes, a dentist at both clinics (shows the clinic chooser) |
 | frontdesk@gmail.com | Liza Cruz, front desk, Imus |
-| parent@gmail.com | A parent with two children at Bulilit, one mid-treatment |
+| parent@gmail.com | A parent with two children at Bulilit, one mid-treatment (reads the clinic's privacy notice first) |
 | owner@ngiti.demo | Dr. Bea Lim, Owner of Ngiti |
 | owner@ipin.demo | Dr. Lara Santiago, Owner of Ipin (overdue) |
 | operator@primolar.demo | Primolar's own console, at `/operator` |
@@ -52,9 +52,12 @@ record they open is written to the audit trail.
 
 ## 3. The parent at home (45 s) · parent@gmail.com, on a phone
 
-1. Two children at the top: switch between them.
-2. **Confirm** the next visit, **request** an appointment, see the **treatment plan** and the **bill**.
-3. Show that the portal is in Bulilit's colours with Bulilit's logo, and a small "Powered by Primolar" at the bottom.
+1. The first screen is Bulilit's **privacy notice**, with the consents on record for each child. **I've read this**
+   opens the portal; it doesn't ask again until the clinic changes the notice.
+2. Two children at the top: switch between them.
+3. **Confirm** the next visit, **request** an appointment, see the **treatment plan** and the **bill**.
+4. Show that the portal is in Bulilit's colours with Bulilit's logo, and a small "Powered by Primolar" at the bottom.
+5. **Home → Privacy and consent:** the parent can switch clinical photos and reminder messages off (or on) themselves.
 
 *What to point out:* a parent only ever sees their own children.
 
@@ -88,7 +91,8 @@ record they open is written to the audit trail.
 1. On the sign-in page, click **Get started with Primolar**. Fill in a clinic, its first branch and Owner, pick a plan,
    and choose how it looks: **Use my own** (logo, one colour, a heading font), **Use the default look**, or **Design it
    for me**. The amount due shows the setup fee, the first month and the VAT inside it.
-2. Send it. The thank-you page gives a reference (`PRM-…`) the clinic can use later to check where it stands. Try the
+2. Send it without ticking **I'm authorised to act for this clinic and accept the Terms… and the Data Processing
+   Agreement**: it's refused. Tick it and send. The thank-you page gives a reference (`PRM-…`) the clinic can use later to check where it stands. Try the
    same clinic name again: Primolar refuses it, ignoring case and spaces.
 3. In the console, **Sign-ups** → your clinic → **Record payment** → **Approve and create clinic**. The Owner's
    temporary password shows once. Sign in with it: the clinic is already in the look it chose.
@@ -108,6 +112,22 @@ be changed, so nobody is approved underpaid.
 
 *To show the pause:* set the demo clock past Ipin's pay-by date (below) and reload. Ipin's staff can't sign in, parents
 keep read-only access, and recording the payment reactivates it at once.
+
+## 9. Children's records and the Data Privacy Act (1 min) · frontdesk@gmail.com, then owner@gmail.com
+
+1. **Patients → New patient.** Fill in the child and a guardian, then **Save patient**: before anything is saved, the
+   **Parent's consent** step asks which guardian consented and records the clinic's notice version. Clinical photos and
+   reminder messages are separate, optional, and start unticked.
+2. Open **Calista Langworth**, whose header says **Consent not recorded** (registered before consent was required): care goes on, and
+   **Record privacy consent** on the Overview's Privacy card fixes it. **Print consent form** gives the paper version.
+3. **Coby Medhurst**'s family said no to photos: the dentist's **Add photo** for an intraoral photo is refused, X-rays still
+   work. A family that said no to reminders gets no SMS or email, and anything already queued is withdrawn.
+4. As the Owner, **Settings → Clinic → Privacy notice**: edit the notice and its privacy contact, **Save new version**.
+   Parents read the new version at their next portal visit.
+5. The **Privacy** and **Terms** links at the bottom of sign-in open Primolar's Terms, Data Processing Agreement and
+   Privacy Policy, each marked **Template, pending legal review**. A new staff login reads "Patient records are
+   confidential; every access is logged" once at first sign-in, and the console shows each clinic's signed agreement
+   and how many patients have no consent recorded, never their names.
 
 *Close with:* one product, many clinics, each with its own brand, branches, staff and monthly plan, and Primolar
 running them all without ever seeing a child's record.
