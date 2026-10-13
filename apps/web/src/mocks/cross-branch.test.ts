@@ -26,10 +26,13 @@ afterAll(() => {
 
 describe("cross-branch reports (decision #20)", () => {
   it("gives the Owner each branch and the combined total", async () => {
-    signIn(OWNER, DASMA);
-    // A cash deposit handed over at Dasmariñas (the body tenancy.test.ts "deposits across branches" sends), so both
-    // branches hold money; Dasmariñas has no seeded billing.
-    await api("/patients/patient_sibling/deposits", Payment, send("POST", { amount: 50_000, method: "cash", receivedBy: "staff_villanueva" }));
+    // A cash deposit handed over at each branch (the body tenancy.test.ts "deposits across branches" sends), so both
+    // branches hold money and took a payment today: Dasmariñas has no seeded billing, and Imus's seeded payments for
+    // today only cover visits already over, so there are none just after midnight.
+    for (const branch of [DASMA, IMUS]) {
+      signIn(OWNER, branch);
+      await api("/patients/patient_sibling/deposits", Payment, send("POST", { amount: 50_000, method: "cash", receivedBy: "staff_villanueva" }));
+    }
     const [imus, dasma, all] = await Promise.all([finance(IMUS), finance(DASMA), finance("all")]);
     expect(dasma.depositsHeld).toBeGreaterThan(0);
     expect(all.depositsHeld).toBe(imus.depositsHeld + dasma.depositsHeld);
