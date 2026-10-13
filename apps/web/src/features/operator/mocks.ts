@@ -2,31 +2,27 @@ import { http, HttpResponse } from "msw";
 import {
   ChangeTierInput,
   CreateAccountInput,
-  DEFAULT_BRAND_COLOR,
-  DEFAULT_OPENING_HOURS,
   OperatorLoginInput,
+  SetBrandingInput,
   TransferOwnershipInput,
   accountUsage,
+  brandColorProblem,
   isActiveStaff,
   rolesOf,
+  suggestBrandColor,
   transferProblem,
   type AccountOverview,
   type AccountStatus,
-  type Branch,
-  type ClinicAccount,
   type CreateAccountResult,
   type OperatorSession,
   type OwnerCandidate,
-  type StaffMember,
 } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { operatorOf } from "@/mocks/access";
-import { accountById, emptyDb, persist, platform } from "@/mocks/db";
-import { newPin, staffEmail, temporaryPassword } from "@/mocks/demo-accounts";
-import { defaultMessageTemplates } from "@/mocks/message-templates";
-import { NOTE_TEMPLATES } from "@/mocks/note-templates";
-import { PROCEDURES } from "@/mocks/seed";
+import { accountById, persist, platform } from "@/mocks/db";
+import { staffEmail } from "@/mocks/demo-accounts";
 import { OPERATORS, operatorPasswordOpens, operatorToken } from "@/mocks/operator";
+import { addSignup, brandingRefusal, createClinic, duplicateOf, readSignupForm, replaceFile, signupOfClinic } from "@/mocks/signups";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 const refuse = (status: 400 | 401 | 404 | 409, message: string) => new HttpResponse(message, { status });
@@ -37,7 +33,9 @@ const refuse = (status: 400 | 401 | 404 | 409, message: string) => new HttpRespo
  * tenant, and mocks/operator.test.ts fails if that changes.
  */
 export function overviewOf(clinicId: string): AccountOverview {
-  const { id, name, contactEmail, tier, status } = accountById(clinicId)!;
+  const account = accountById(clinicId)!;
+  const { id, name, contactEmail, tier, status } = account;
+  const design = signupOfClinic(clinicId)?.design?.status;
   const tenant = platform.tenants[clinicId]!;
   const owner = tenant.staff.find((s) => s.isOwner);
   const { branches, staffLogins } = accountUsage(tenant);
@@ -45,6 +43,8 @@ export function overviewOf(clinicId: string): AccountOverview {
     account: { id, name, contactEmail, tier, status },
     owner: owner ? { staffId: owner.id, name: owner.fullName, email: staffEmail(owner) } : null,
     usage: { branches, staffLogins, patients: tenant.patients.length },
+    design: design ?? null,
+    look: design ? { brandColor: account.brandColor, headingFont: account.headingFont ?? null, hasLogo: !!account.logoRef } : null,
   };
 }
 
@@ -57,8 +57,6 @@ function findAccount(id: unknown) {
   return account && Object.hasOwn(platform.tenants, account.id) ? { account, tenant: platform.tenants[account.id]! } : undefined;
 }
 const notFound = () => refuse(404, "Clinic account not found");
-/** "Bulilit  Smiles " and "bulilit smiles" are one clinic: spaces collapsed, case ignored (decision #63). */
-const sameName = (a: string, b: string) => a.replace(/\s+/g, " ").trim().toLowerCase() === b.replace(/\s+/g, " ").trim().toLowerCase();
 
 /**
  * Decisions #26, #41: suspended staff are refused at sign-in and on their very next request (the clinic gate reads
@@ -99,44 +97,27 @@ export const operatorHandlers = [
   ),
 
   /**
-   * Decision #3: a new clinic account, its first branch and its Owner, who signs in with the temporary password shown
-   * here once and must choose their own (decision #21). Starts with Primolar's brand colour, the default opening
-   * hours, one chair and the standard price list and templates; the Owner changes all of it in Settings.
+   * Billing #16: a clinic signed up by phone or in person. The same checks as the public form (duplicates against
+   * clinics and waiting sign-ups, the colour, the logo), then an approved sign-up with its payment (A5) and the clinic,
+   * whose Owner signs in with the temporary password shown here once (decision #21).
    */
   http.post(url("/operator/accounts"), async ({ request }) => {
-    const parsed = CreateAccountInput.safeParse(await request.json());
-    if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
-    const { account: details, branch: place, owner: person } = parsed.data;
-    // A double-click or a repeat must not make two copies of one clinic.
-    if (platform.accounts.some((a) => sameName(a.name, details.name))) {
-      return refuse(409, `There is already a clinic account called ${details.name}`);
-    }
-    const key = crypto.randomUUID().replaceAll("-", "").slice(0, 12); // no dots: tokens are demo.<clinicId>.<accountId>
-    const clinicId = `clinic_${key}`;
-    const account: ClinicAccount = { id: clinicId, ...details, status: "active", brandColor: DEFAULT_BRAND_COLOR };
-    const branch: Branch = { clinicId, id: `branch_${key}`, ...place, openingHours: DEFAULT_OPENING_HOURS, archived: false };
-    const owner: StaffMember = { clinicId, id: `staff_${key}`, fullName: person.fullName, email: person.email, role: person.role, isOwner: true, branchIds: [branch.id] };
-    const password = temporaryPassword();
-    const pin = newPin();
-    platform.accounts.push(account);
-    platform.tenants[clinicId] = {
-      ...emptyDb(),
-      branches: [branch],
-      staff: [owner],
-      chairs: [{ id: `chair_${key}_1`, clinicId, branchId: branch.id, name: "Chair 1" }],
-      procedures: PROCEDURES.map((p) => ({ ...p, clinicId })),
-      noteTemplates: NOTE_TEMPLATES,
-      messageTemplates: defaultMessageTemplates(clinicId, new Date().toISOString()),
-      staffPins: [{ clinicId, staffId: owner.id, pin, failedAt: [] }],
-      staffCredentials: [{ clinicId, staffId: owner.id, password, mustChange: true }],
-    };
-    persist();
-    const result: CreateAccountResult = { overview: overviewOf(clinicId), temporaryPassword: password, pin };
+    const form = await readSignupForm(request, CreateAccountInput);
+    if (form instanceof Response) return form;
+    const { payment, ...input } = form.data;
+    const refused = brandingRefusal(input.branding, !!form.logo);
+    if (refused) return refused;
+    const clash = duplicateOf(input.account); // also stops a double-click making two copies
+    if (clash) return refuse(409, clash);
+    const signup = await addSignup(input, form, "console");
+    signup.payment = { ...payment, amount: signup.quote.total, recordedAt: new Date().toISOString() };
+    const made = await createClinic(signup);
+    const result: CreateAccountResult = { overview: overviewOf(made.clinicId), temporaryPassword: made.temporaryPassword, pin: made.pin };
     return HttpResponse.json(result, { status: 201 });
   }),
 
   // Decisions #4, #9: set by hand; a downgrade disables nothing. Branches and logins over the new limit stay usable,
-  // and canAddUnder refuses only the next addition. A Big account's heading font stays (#50).
+  // and canAddUnder refuses only the next addition. The heading font is on every plan (billing #8).
   http.put(url("/operator/accounts/:id/tier"), async ({ params, request }) => {
     const found = findAccount(params.id);
     if (!found) return notFound();
@@ -186,6 +167,34 @@ export const operatorHandlers = [
       if (!from.branchIds.some((id) => open.includes(id))) from.branchIds = open;
     }
     tenant.staff.find((s) => s.id === parsed.data.staffId)!.isOwner = true;
+    persist();
+    return HttpResponse.json(overviewOf(account.id));
+  }),
+
+  /**
+   * Billing #17–#20, A9: the finished design for a Design it for me clinic, the operator's only branding power. One
+   * colour that passes AA, a font from the shortlist, and the logo (needed until one has been delivered). Sending it
+   * again corrects a delivery. The Owner may change any of it later in Settings, as every Owner can.
+   */
+  http.put(url("/operator/accounts/:id/branding"), async ({ params, request }) => {
+    const found = findAccount(params.id);
+    if (!found) return notFound();
+    const { account } = found;
+    const signup = signupOfClinic(account.id);
+    if (!signup?.design) {
+      return refuse(409, "Primolar sets the look only for clinics that chose Design it for me. Other clinics' Owners set theirs in Settings.");
+    }
+    const form = await readSignupForm(request, SetBrandingInput);
+    if (form instanceof Response) return form;
+    const { brandColor, headingFont } = form.data;
+    const problem = brandColorProblem(brandColor);
+    if (problem) return refuse(400, `${problem} Try ${suggestBrandColor(brandColor)}.`);
+    const delivered = signup.design.status === "delivered" && !!account.logoRef;
+    if (!form.logo && !delivered) return refuse(400, "Add the finished logo");
+    if (form.logo) account.logoRef = await replaceFile(account.logoRef, `logo_${account.id}`, form.logo);
+    account.brandColor = brandColor;
+    account.headingFont = headingFont;
+    signup.design = { status: "delivered", deliveredAt: new Date().toISOString() };
     persist();
     return HttpResponse.json(overviewOf(account.id));
   }),

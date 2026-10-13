@@ -19,11 +19,12 @@ describe("clinic branding (decisions #29, #31, #32)", () => {
 
   it("defaults to Primolar's own brand colour", () => expect(token("@theme {", "brand")).toBe(DEFAULT_BRAND_COLOR));
 
-  it("keeps Primolar's logo on sign-in, its own loaders and the operator console only (decision #32)", () => {
+  it("keeps Primolar's logo on sign-in, the public sign-up, its own loaders and the operator console only (decision #32)", () => {
     expect(filesMatching(/<PrimolarLogo\b/)).toEqual([
       "features/auth/components/login-screen.tsx",
       "features/operator/components/operator-login.tsx",
       "features/operator/components/operator-shell.tsx",
+      "features/signup/components/signup-frame.tsx",
     ]);
     expect(filesMatching(/primolar-logo\.png/)).toEqual([]);
   });

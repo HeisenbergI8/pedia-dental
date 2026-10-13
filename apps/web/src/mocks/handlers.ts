@@ -9,10 +9,12 @@ import { growthHandlers } from "@/features/growth/mocks";
 import { messageHandlers } from "@/features/messages/mocks";
 import { noteHandlers } from "@/features/notes/mocks";
 import { operatorHandlers } from "@/features/operator/mocks";
+import { operatorSignupHandlers } from "@/features/operator/signup-mocks";
 import { patientHandlers } from "@/features/patients/mocks";
 import { photoHandlers } from "@/features/photos/mocks";
 import { planHandlers } from "@/features/plan/mocks";
 import { recallHandlers } from "@/features/recalls/mocks";
+import { signupHandlers } from "@/features/signup/mocks";
 import { visitHandlers } from "@/features/visits/mocks";
 import { accessGate } from "./access";
 
@@ -24,6 +26,8 @@ export const handlers = [
   accessGate,
   ...authHandlers,
   ...operatorHandlers,
+  ...operatorSignupHandlers,
+  ...signupHandlers,
   ...patientHandlers,
   ...clinicHandlers,
   ...visitHandlers,

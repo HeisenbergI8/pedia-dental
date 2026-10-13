@@ -11,7 +11,7 @@ const bricolage = Bricolage_Grotesque({ subsets: ["latin"], axes: ["opsz"], vari
 // The Primolar name in the logo (components/brand.tsx).
 // Variable font, so the logo can use its exact weight (560).
 const outfit = Outfit({ subsets: ["latin"], variable: "--font-outfit" });
-// The Big tier's heading-font shortlist (decision #28), with Outfit and Fredoka above. Never preloaded: a clinic that
+// The heading-font shortlist (decision #28; every plan, billing #8), with Outfit and Fredoka above. Never preloaded: a clinic that
 // picks none downloads none. Applied to headings and the clinic name only (decision #30) by brandCss.
 const nunito = Nunito({ subsets: ["latin"], variable: "--font-nunito", preload: false });
 const poppins = Poppins({ subsets: ["latin"], weight: ["600", "700"], variable: "--font-poppins", preload: false });

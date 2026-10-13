@@ -22,7 +22,7 @@ export type OpeningHours = z.infer<typeof OpeningHours>;
 /** One colour as #rrggbb, stored lowercase. Whether it may be the brand colour is `brandColorProblem` (domain/branding). */
 export const HexColor = z.string().trim().toLowerCase().regex(/^#[0-9a-f]{6}$/, "Enter a colour as # and six letters or digits");
 
-/** The heading-font shortlist (decision #28): rounded, legible at heading sizes, on Google Fonts. Big tier only (#7). */
+/** The heading-font shortlist (decisions #28, #53): rounded, legible at heading sizes, on Google Fonts. On every plan (billing #8). */
 export const HeadingFont = z.enum(["nunito", "poppins", "lexend", "quicksand", "outfit", "fredoka"]);
 export type HeadingFont = z.infer<typeof HeadingFont>;
 export const HEADING_FONT_LABEL: Record<HeadingFont, string> = {
@@ -45,7 +45,7 @@ export const ClinicAccount = z.object({
   tier: Tier,
   status: AccountStatus,
   brandColor: HexColor, // decision #29: tints, shades and the dark version are derived (deriveBrandPalette), never stored
-  headingFont: HeadingFont.optional(), // decision #7: chosen on Big; unset = the app's own heading font
+  headingFont: HeadingFont.optional(), // billing #8: any plan; unset = the app's own heading font
 });
 export type ClinicAccount = z.infer<typeof ClinicAccount>;
 

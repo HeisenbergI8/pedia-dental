@@ -33,10 +33,10 @@ describe("tier limits", () => {
     expect(canAddUnder("big", "staffLogins", 10_000)).toBe(true);
   });
 
-  it("gives cross-branch views to Mid and Big, and the heading font to Big only", () => {
+  it("gives cross-branch views to Mid and Big; the heading font is on every plan (billing #8)", () => {
     expect(TIER_LIMITS.small.crossBranchViews).toBe(false);
     expect(TIER_LIMITS.mid.crossBranchViews).toBe(true);
-    expect([TIER_LIMITS.mid.headingFont, TIER_LIMITS.big.headingFont]).toEqual([false, true]);
+    expect(Object.values(TIER_LIMITS).every((l) => !("headingFont" in l))).toBe(true);
   });
 });
 

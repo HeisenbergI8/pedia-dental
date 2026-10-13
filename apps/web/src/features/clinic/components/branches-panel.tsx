@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Controller, FormProvider, useForm } from "react-hook-form";
+import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { PlusIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -12,19 +12,12 @@ import { FormField } from "@/components/form-field";
 import { SectionCard } from "@/components/section-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useBranchArchive, useBranches, useClinicUsage, useSaveBranch } from "../api";
 import { LimitNotice } from "./limit-notice";
+import { OpeningHoursFields, WEEKDAYS } from "./opening-hours-fields";
 
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-/** Minutes from midnight ⇄ the "08:00" a time input holds. */
-const toTime = (min: number) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
-const fromTime = (hhmm: string) => {
-  const [h, m] = hhmm.split(":").map(Number);
-  return (h ?? 0) * 60 + (m ?? 0);
-};
 const clock = (min: number) => new Date(2000, 0, 1, 0, min).toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" });
 const hoursLine = (h: OpeningHours) =>
   `${clock(h.opensAt)}–${clock(h.closesAt)}${h.closedWeekdays.length ? `, closed ${h.closedWeekdays.map((d) => WEEKDAYS[d]).join(", ")}` : ""}`;
@@ -132,40 +125,7 @@ function BranchDialog({ branch, onClose }: { branch?: Branch; onClose: () => voi
             <FormField name="phone" label="Phone">
               <Input type="tel" {...form.register("phone")} />
             </FormField>
-            <div className="grid grid-cols-2 gap-3">
-              {(["opensAt", "closesAt"] as const).map((key) => (
-                <FormField key={key} name={`openingHours.${key}`} label={key === "opensAt" ? "Opens" : "Closes"}>
-                  {(props) => (
-                    <Controller
-                      control={form.control}
-                      name={`openingHours.${key}`}
-                      render={({ field }) => <Input {...props} type="time" step={900} value={toTime(field.value)} onChange={(e) => e.target.value && field.onChange(fromTime(e.target.value))} />}
-                    />
-                  )}
-                </FormField>
-              ))}
-            </div>
-            <Controller
-              control={form.control}
-              name="openingHours.closedWeekdays"
-              render={({ field }) => (
-                <fieldset className="space-y-2">
-                  <legend className="text-sm font-semibold">Closed on</legend>
-                  <div className="flex flex-wrap gap-x-4 gap-y-2">
-                    {WEEKDAYS.map((label, day) => (
-                      <label key={label} className="flex items-center gap-2 text-sm">
-                        <Checkbox
-                          aria-label={label}
-                          checked={field.value.includes(day)}
-                          onCheckedChange={(on) => field.onChange(on ? [...field.value, day].sort() : field.value.filter((d) => d !== day))}
-                        />
-                        {label}
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
-              )}
-            />
+            <OpeningHoursFields name="openingHours" />
             {save.error && <p role="alert" className="text-sm text-danger">{save.error.message}</p>}
             <DialogFooter>
               <Button type="button" variant="ghost" onClick={onClose}>

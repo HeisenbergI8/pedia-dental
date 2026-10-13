@@ -91,8 +91,7 @@ export const clinicHandlers = [
     return HttpResponse.json(account);
   }),
 
-  // Refuses a colour below AA with the nearest that passes (decision #29). The font is Big's (decision #7), but a
-  // downgraded account keeps the font it has (decision #9): only choosing a different one is refused.
+  // Refuses a colour below AA with the nearest that passes (decision #29). The font is on every plan (billing #8).
   http.put(url("/clinic/branding"), async ({ request }) => {
     const parsed = UpdateBrandingInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
@@ -100,9 +99,6 @@ export const clinicHandlers = [
     const problem = brandColorProblem(brandColor);
     if (problem) return refuse(400, `${problem} Try ${suggestBrandColor(brandColor)}.`);
     const account = currentAccount();
-    if (headingFont && headingFont !== account.headingFont && !TIER_LIMITS[account.tier].headingFont) {
-      return refuse(403, "Heading fonts come with the Big plan. Contact Primolar to upgrade.");
-    }
     account.brandColor = brandColor;
     if (headingFont) account.headingFont = headingFont;
     else delete account.headingFont;

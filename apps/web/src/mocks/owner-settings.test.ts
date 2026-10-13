@@ -213,9 +213,11 @@ describe("branding (decisions #28–#31)", () => {
     expect((await api("/clinic", ClinicContext)).account.brandColor).toBe("#0d6e8c");
   });
 
-  it("keeps the heading font for Big (decision #7)", async () => {
+  it("lets a Small clinic choose a heading font (billing #8)", async () => {
     signIn(NGITI_OWNER);
-    await expect(api("/clinic/branding", ClinicAccount, send("PUT", { brandColor: "#1e5fb4", headingFont: "nunito" }))).rejects.toMatchObject({ status: 403 });
+    const saved = await api("/clinic/branding", ClinicAccount, send("PUT", { brandColor: "#1e5fb4", headingFont: "nunito" }));
+    expect(saved.headingFont).toBe("nunito");
+    expect((await api("/clinic", ClinicContext)).account.headingFont).toBe("nunito");
   });
 
   it("is the Owner's alone", async () => {
