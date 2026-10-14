@@ -29,7 +29,7 @@ export function BillingNotice({ subscription, link = false }: { subscription: Su
         {link && (
           <>
             {" "}
-            <Link href="/settings" className="font-semibold underline underline-offset-2">
+            <Link href="/settings?tab=plan" className="font-semibold underline underline-offset-2">
               See Settings → Plan
             </Link>
           </>

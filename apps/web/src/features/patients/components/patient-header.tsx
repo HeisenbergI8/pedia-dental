@@ -35,7 +35,7 @@ function AlertChip({ icon: Icon, label, strong }: { icon: LucideIcon; label: str
  * patient's identity, allergies and alerts are never out of sight.
  */
 export function PatientHeader({ patientId }: { patientId: string }) {
-  const { data: p, isLoading } = usePatient(patientId);
+  const { data: p, isLoading, error } = usePatient(patientId);
   const summary = usePatientSummary(patientId).data;
   const canEdit = useCan()("patients.write");
   // Same guardian phone = sibling, worked out by the server (phones never reach a dentist): named in the header so
@@ -53,7 +53,8 @@ export function PatientHeader({ patientId }: { patientId: string }) {
       >
         <ChevronLeftIcon className="size-4" aria-hidden /> Patients
       </Link>
-      {isLoading || !p ? (
+      {/* The record below explains an error; the header just stops loading. */}
+      {error && !p ? null : isLoading || !p ? (
         <Loading label="Loading patient" compact />
       ) : (
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-6">

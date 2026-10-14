@@ -1,7 +1,12 @@
 "use client";
 import { useEffect, useRef } from "react";
+import Link from "next/link";
+import { SearchXIcon } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
+import { Button } from "@/components/ui/button";
+import { ApiError } from "@/lib/api-client";
 import { BillingTab } from "@/features/billing/components/billing-tab";
 import { ChartTab } from "@/features/chart/components/chart-tab";
 import { DocumentsTab } from "@/features/documents/components/documents-tab";
@@ -70,6 +75,22 @@ export function PatientRecord({ patientId }: { patientId: string }) {
     const box = el.getBoundingClientRect();
     if (left < box.left || right > box.right) el.scrollLeft += left - box.left - 16;
   }, [tab, patient]);
+  // A link to a child who isn't in this clinic: say so. Retrying, or checking the connection, would never help.
+  if (error instanceof ApiError && error.status === 404) {
+    return (
+      <EmptyState
+        icon={SearchXIcon}
+        title="Patient not found"
+        action={
+          <Button asChild variant="outline">
+            <Link href="/patients">Go to Patients</Link>
+          </Button>
+        }
+      >
+        The link may be mistyped, or the patient isn&apos;t in this clinic.
+      </EmptyState>
+    );
+  }
   if (error) return <ErrorState what="this patient's record" onRetry={() => refetch()} retrying={isRefetching} />;
   if (!patient) return null; // PatientHeader shows the loading state
 

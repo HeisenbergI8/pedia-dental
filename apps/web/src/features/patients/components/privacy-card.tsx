@@ -122,7 +122,8 @@ export function PrivacyChoiceEditor({ patient: p }: { patient: PatientView }) {
       <legend className="mb-1 text-sm font-semibold">Optional consents</legend>
       {(["photos", "reminders"] as const).map((key) => (
         <div key={key} className="flex items-center gap-2">
-          <Checkbox id={`privacy-${p.id}-${key}`} checked={current[key]} onCheckedChange={(on) => change(key, on === true)} />
+          {/* A consent choice: drawn larger below desktop, not only given the 44px touch-hit area. */}
+          <Checkbox id={`privacy-${p.id}-${key}`} className="max-lg:size-6" checked={current[key]} onCheckedChange={(on) => change(key, on === true)} />
           <Label htmlFor={`privacy-${p.id}-${key}`} className="font-normal">
             {key === "photos" ? "Clinical photos allowed" : "Reminder messages allowed"}
           </Label>

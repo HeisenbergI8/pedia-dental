@@ -83,7 +83,7 @@ export function SignupDetail({ id }: { id: string }) {
               </Button>
               <Button variant="outline" onClick={() => openDialog("fix")}>Fix details</Button>
               <Button variant="ghost" onClick={() => openDialog("reject")}>Reject</Button>
-              {!s.payment && <p id="approve-hint" className="w-full text-sm text-ink-muted">Approve opens once the setup fee is recorded (billing #12).</p>}
+              {!s.payment && <p id="approve-hint" className="w-full text-sm text-ink-muted">Approve opens once the setup fee is recorded.</p>}
             </div>
           )}
           {s.approval && (

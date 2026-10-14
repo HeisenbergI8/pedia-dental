@@ -10,6 +10,13 @@ import { useEffect, useState } from "react";
 export function useNavigationPending() {
   const pathname = usePathname();
   const [pendingFrom, setPendingFrom] = useState<string | null>(null);
+  // Landed: clear it, or coming Back to the page the click left (pathname === pendingFrom again) shows the loader
+  // until the timeout below. Set during render, so the page never paints with the loader on.
+  const [landedOn, setLandedOn] = useState(pathname);
+  if (pathname !== landedOn) {
+    setLandedOn(pathname);
+    setPendingFrom(null);
+  }
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
