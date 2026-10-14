@@ -1,5 +1,5 @@
 "use client";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { MONEY_METHODS, PaymentMethod, RecordPaymentInput, formatPeso, invoiceBalance, isActiveStaff, invoiceTotal, pesos, type Invoice, type Payment } from "@pedia/shared";
 import { Button } from "@/components/ui/button";
@@ -40,8 +40,13 @@ export function PaymentDialog({ target, payments, onClose }: { target: PaymentTa
   // Whoever is signed in did it; else this branch's front desk (the server refuses unknown ids).
   const by = receivedBy || (staff.find((s) => s.id === myId) ?? branchStaff.find((s) => s.role === "front_desk"))?.id || "";
 
+  // isPending only re-renders after the first click, so a double-click would take the money twice. Held from the first
+  // valid submit until it fails (on success the dialog closes).
+  const sending = useRef(false);
+
   function submit(e: FormEvent) {
     e.preventDefault();
+    if (sending.current) return;
     const centavos = Math.abs(pesos(Number(amount) || 0));
     const parsed = RecordPaymentInput.safeParse({
       amount: refund ? -centavos : centavos,
@@ -54,12 +59,16 @@ export function PaymentDialog({ target, payments, onClose }: { target: PaymentTa
       setErrors(Object.fromEntries(parsed.error.issues.map((i) => [String(i.path[0]), i.message])));
       return;
     }
+    sending.current = true;
     const handlers = {
       onSuccess: (p: Payment) => {
         toast.success(`${what} recorded · receipt ${p.receiptNo}`);
         onClose();
       },
-      onError: (err: Error) => toast.error(err.message), // e.g. more than the balance; the dialog stays open
+      onError: (err: Error) => {
+        sending.current = false;
+        toast.error(err.message); // e.g. more than the balance; the dialog stays open
+      },
     };
     if (invoice) recordPayment.mutate({ invoiceId: invoice.id, ...parsed.data }, handlers);
     else recordDeposit.mutate(parsed.data, handlers);

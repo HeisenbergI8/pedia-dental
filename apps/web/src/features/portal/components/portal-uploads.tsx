@@ -99,14 +99,14 @@ export function PortalUploads() {
       ) : (
         <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           {files.map((f) => (
-            <li key={f.id} className="space-y-1.5">
+            <li key={f.id} className="min-w-0 space-y-1.5">
               {isPdf(f.contentType) ? (
                 <FileCard photo={f} label="Medical document" />
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element -- served by the mock API, not a static asset
                 <img src={photoFileUrl(f.id)} alt={f.caption || "Upload"} className="aspect-square w-full rounded-lg border border-line object-cover" />
               )}
-              <p className="text-sm font-medium">{f.caption}</p>
+              <p className="text-sm font-medium wrap-anywhere">{f.caption}</p>
               <p className="text-xs text-ink-muted">{format(parseISO(f.createdAt), "MMMM d, yyyy")}</p>
             </li>
           ))}

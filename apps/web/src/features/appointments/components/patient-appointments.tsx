@@ -9,6 +9,7 @@ import { StatusChip } from "./status-chip";
 import { AppointmentForm, type AppointmentDraft } from "./appointment-form";
 import { Loading } from "@/components/brand";
 import { ErrorState } from "@/components/error-state";
+import { useActiveBranch, useBranches } from "@/features/clinic/api";
 
 const UPCOMING = new Set(["booked", "confirmed", "arrived", "in_chair"]);
 
@@ -26,6 +27,10 @@ export function PatientAppointments({ patientId }: { patientId: string }) {
     q.delete("book");
     router.replace(q.size ? `${pathname}?${q}` : pathname, { scroll: false });
   }, [params, patientId, pathname, router]);
+  // A child's record is account-wide, but a booking belongs to its branch: name the branch when it isn't this one.
+  const activeBranchId = useActiveBranch()?.id;
+  const branches = useBranches().data;
+  const otherBranch = (branchId: string) => (branchId !== activeBranchId ? branches?.find((b) => b.id === branchId)?.name : undefined);
   const noShows = data?.filter((a) => a.status === "no_show").length ?? 0;
   const upcoming = data?.filter((a) => UPCOMING.has(a.status)) ?? [];
 
@@ -57,6 +62,7 @@ export function PatientAppointments({ patientId }: { patientId: string }) {
                 <span className="block text-ink-muted sm:inline">
                   <span className="hidden sm:inline"> · </span>
                   {a.reason}
+                  {otherBranch(a.branchId) && <span className="font-medium text-ink"> · at {otherBranch(a.branchId)}</span>}
                 </span>
               </span>
               <StatusChip status={a.status} />

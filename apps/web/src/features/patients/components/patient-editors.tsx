@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { AlertTriangleIcon, HistoryIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -48,15 +48,24 @@ export function CreatePatient() {
     setConsentFor({ input, book });
   };
 
-  const save = (input: RegisterPatientInput, book: boolean) =>
+  // isPending only re-renders after the first click, so a double-click would register the child twice. Held from the
+  // first click until it fails (on success the page moves on).
+  const saving = useRef(false);
+  const save = (input: RegisterPatientInput, book: boolean) => {
+    if (saving.current) return;
+    saving.current = true;
     create.mutate(input, {
       onSuccess: (p) => {
         clearDraft(draft);
         toast.success(`${p.firstName} ${p.lastName} added`);
         router.push(`/patients/${p.id}${book ? "?book=1" : ""}`);
       },
-      onError: (e) => toast.error(e.message),
+      onError: (e) => {
+        saving.current = false;
+        toast.error(e.message);
+      },
     });
+  };
 
   async function submit(values: PatientFormValues, book: boolean) {
     // A new patient is always validated by the strict schema (hideContacts is off), so this parse only narrows the type.

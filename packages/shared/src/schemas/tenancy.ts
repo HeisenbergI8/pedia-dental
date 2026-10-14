@@ -54,7 +54,11 @@ export const Branch = ClinicScoped.extend({
   id: Id,
   name: z.string().trim().min(1, "Enter the branch name"),
   address: z.string().trim().min(1, "Enter the branch address"),
-  phone: z.string().trim().min(1, "Enter the branch phone number"),
+  phone: z
+    .string()
+    .trim()
+    .min(1, "Enter the branch phone number")
+    .refine((p) => /^[\d\s()+-]+$/.test(p) && p.replace(/\D/g, "").length >= 7, "Enter a phone number, like (046) 471 2580 or 0917 123 4567"),
   openingHours: OpeningHours,
   archived: z.boolean(),
 });

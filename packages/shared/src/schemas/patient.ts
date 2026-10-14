@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { format } from "date-fns";
 import { Centavos, ClinicScoped, Id, IsoDate, IsoDateTime, isoDate } from "./common";
 import { PrivacyChoice, PrivacyConsent, RecordPrivacyConsentInput } from "./legal";
 
@@ -75,7 +76,7 @@ export const Patient = ClinicScoped.extend({
   lastName: z.string().trim().min(1, "Enter the child's last name"),
   /** What the child is called, shown next to the name: Lucas "Luke" Reyes. */
   nickname: z.string().trim().max(30, "Keep the nickname under 30 characters").optional(),
-  birthDate: isoDate("Enter the date of birth"),
+  birthDate: isoDate("Enter the date of birth").refine((d) => d <= format(new Date(), "yyyy-MM-dd"), "The date of birth can't be in the future"),
   sex: Sex,
   address: z.string().optional(),
   guardians: z.array(Guardian).min(1, "Add at least one guardian"),

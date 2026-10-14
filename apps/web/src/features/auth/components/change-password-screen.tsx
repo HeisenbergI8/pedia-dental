@@ -18,7 +18,11 @@ export function ChangePasswordScreen() {
   const change = useChangePassword();
   const signOut = useSignOut();
   const form = useForm<ChangePasswordInput>({ resolver: zodResolver(ChangePasswordInput), defaultValues: { current: "", next: "" } });
-  const submit = form.handleSubmit((input) => change.mutate(input, { onSuccess: () => toast.success("Password saved. Welcome!") }));
+  // Not mutate's onSuccess: the new session unmounts this screen first, and Query skips callbacks of an unmounted
+  // caller. The promise still settles. A failure shows from change.error below.
+  const submit = form.handleSubmit((input) =>
+    change.mutateAsync(input).then(() => toast.success("Password saved. Welcome!"), () => undefined),
+  );
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-ground px-4 py-12">

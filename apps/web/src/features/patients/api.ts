@@ -17,7 +17,8 @@ import {
   type RecordPrivacyConsentInput,
   type RegisterPatientInput,
 } from "@pedia/shared";
-import { api } from "@/lib/api-client";
+import { messageKeys } from "@/features/messages/api";
+import { ApiError, api } from "@/lib/api-client";
 import { env } from "@/lib/env";
 import { compressImage } from "@/lib/image";
 
@@ -62,6 +63,7 @@ export function usePatient(id: string) {
     queryKey: patientKeys.detail(id),
     queryFn: () => api(`/patients/${id}`, PatientView),
     enabled: !!id, // the booking form asks before a patient is picked
+    retry: (count, e) => !(e instanceof ApiError && e.status === 404) && count < 3, // not in this clinic stays so
   });
 }
 
@@ -166,6 +168,7 @@ export function useSetPrivacyChoices(patientId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: ChangePrivacyChoicesInput) => api(`/patients/${patientId}/privacy-choices`, PatientView, { method: "POST", body: JSON.stringify(input) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: patientKeys.all }),
+    // Saying no to reminders withdraws the family's queued texts (Privacy #15), so the message log changes too.
+    onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: patientKeys.all }), qc.invalidateQueries({ queryKey: messageKeys.all })]),
   });
 }
