@@ -5,7 +5,7 @@
 Primolar: pediatric dental clinic management sold as a service to many clinics. Each paying clinic is a
 **clinic account** with its own branches, staff, patients and branding (ROADMAP feature 16). **Current phase: frontend prototype.** Every API call is
 answered in the browser by MSW using fake, seeded data; there is no backend yet. A NestJS + MySQL API
-(`apps/api`) will replace the mocks later, endpoint by endpoint, without changing feature code. A clinic joins through
+(`apps/api`, scaffolded; its own rules are in `apps/api/CONVENTIONS.md`) will replace the mocks later, endpoint by endpoint, without changing feature code. A clinic joins through
 the public **Get started** form, and Primolar approves it in the operator console (ROADMAP feature 17). Each clinic
 then pays Primolar monthly; the operator records payments by hand, and a clinic 7 days overdue pauses itself.
 
