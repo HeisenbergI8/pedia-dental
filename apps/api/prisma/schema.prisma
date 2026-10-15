@@ -1,0 +1,12 @@
+// Models arrive feature by feature, mirroring the MSW handlers in apps/web/src/features/*/mocks.ts.
+// The connection URL lives in prisma.config.ts (Prisma 7).
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "mysql"
+}
