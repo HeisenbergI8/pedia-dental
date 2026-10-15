@@ -24,14 +24,16 @@ pnpm run check      # typecheck + all tests
 
 ```
 apps/web/           Next.js app (the prototype)
+apps/api/           NestJS + Prisma + MySQL backend (skeleton; see apps/api/README.md)
 packages/shared/    Zod schemas, types and domain logic, shared with the future NestJS API
 CONVENTIONS.md      How the code is organised and the rules it follows. Read before adding a feature.
+apps/api/CONVENTIONS.md  The same for the backend.
 ROADMAP.md          What each feature does, and the order to build them in.
 DEMO_SCRIPT.md      A 5-minute walk through the demo for a client, with every login.
 ```
 
 ## Moving to a real backend
 
-1. Add `apps/api` (NestJS + Prisma + MySQL), reusing `@pedia/shared` schemas.
+1. `apps/api` (NestJS + Prisma + MySQL) is scaffolded and reuses `@pedia/shared` schemas.
 2. Implement the endpoints described by each `features/*/mocks.ts`.
 3. Set `NEXT_PUBLIC_API_MOCKING=disabled` and point `NEXT_PUBLIC_API_URL` at the API.
