@@ -3,11 +3,14 @@ import { requestContext } from "../common/request-context";
 import type { Env } from "../config/env";
 import type { PrismaService } from "../prisma/prisma.service";
 import type { Hasher } from "../auth/hashing";
+import { appointmentData } from "../appointments/appointment.rows";
+import { requestData } from "../appointments/request.rows";
 import { chartEntryRow } from "../chart/chart.rows";
 import { growthRow } from "../growth/growth.rows";
 import { noteRow } from "../notes/note.rows";
 import { patientRows } from "../patients/patient.rows";
 import { planItemRow } from "../plan/plan.rows";
+import { dueItemData } from "../recalls/due-item.rows";
 import { visitRow } from "../visits/visit.rows";
 
 export class SeedRefused extends Error {
@@ -107,6 +110,12 @@ export async function seedDatabase(prisma: PrismaService, hasher: Hasher, env: P
       await prisma.clinicalNote.createMany({ data: db.notes.map((n) => ({ ...noteRow(n), clinicId })) });
       await prisma.growthRecord.createMany({ data: db.growth.map((g) => ({ ...growthRow(g), clinicId })) });
       await prisma.planItem.createMany({ data: db.planItems.map((i) => ({ ...planItemRow(i), clinicId })) });
+      // B7: with the seed's ids, so MSW's records and the API's agree in `hybrid` (the portal's appointments, MSW's
+      // recall messages naming due_<noteId>). A due item's visit is its source note's (E6).
+      await prisma.appointment.createMany({ data: db.appointments.map((a) => ({ ...appointmentData(a), clinicId })) });
+      await prisma.appointmentRequest.createMany({ data: db.appointmentRequests.map((q) => ({ ...requestData(q), clinicId })) });
+      const visitOf = new Map(db.notes.map((n) => [n.id, n.visitId]));
+      await prisma.dueItem.createMany({ data: db.dueItems.map((i) => ({ ...dueItemData(i, visitOf.get(i.sourceNoteId)!), clinicId })) });
     });
   }
 }

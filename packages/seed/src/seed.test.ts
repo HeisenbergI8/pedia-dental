@@ -67,6 +67,24 @@ describe("seed", () => {
     expect(db.appointmentRequests.filter((r) => r.status === "pending")).toHaveLength(2);
   });
 
+  it("gives the clinic's appointment requests distinct times, so every sort agrees on their order", () => {
+    const times = db.appointmentRequests.map((q) => q.createdAt);
+    expect(new Set(times).size).toBe(times.length);
+  });
+
+  it("never gives one patient two due items with the same day and creation time", () => {
+    const keys = db.dueItems.map((i) => `${i.patientId}|${i.dueOn}|${i.createdAt}`);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it("lists same-start appointments in chair order, so the API's chair-order tie-break matches it", () => {
+    const chair = new Map(db.chairs.map((c, i) => [c.id, i]));
+    db.appointments.forEach((a, i) => {
+      const prev = db.appointments.slice(0, i).filter((b) => b.startsAt === a.startsAt);
+      for (const b of prev) expect(chair.get(b.chairId)!).toBeLessThanOrEqual(chair.get(a.chairId)!);
+    });
+  });
+
   it("never double-books a chair or a dentist", () => {
     for (const a of db.appointments) expect(findConflict(a, db.appointments), a.id).toBeUndefined();
   });

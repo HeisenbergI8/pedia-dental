@@ -1,4 +1,4 @@
-import { AccountStatus, Acknowledgement, AgreementRecord, AuditAction, ConsentScope, HeadingFont, MessageKind, PrivacyChoice, Role, Sex, StaffRole, PlanItemStatus, Tier, ToothCondition, VisitStatus } from "@pedia/shared";
+import { AccountStatus, Acknowledgement, AgreementRecord, AuditAction, ConsentScope, HeadingFont, MessageKind, PrivacyChoice, Role, Sex, StaffRole, PlanItemStatus, Tier, ToothCondition, VisitStatus, AppointmentRequestStatus, AppointmentStatus, DueItem, TimeOfDay } from "@pedia/shared";
 import { describe, expect, it } from "vitest";
 import type { RequestContext } from "../common/request-context";
 import { $Enums, Prisma } from "../generated/prisma/client.ts";
@@ -40,6 +40,10 @@ describe("model registry", () => {
     expect(Object.values($Enums.PrivacyChoiceBy)).toEqual(PrivacyChoice.shape.by.options);
     expect(Object.values($Enums.VisitStatus)).toEqual(VisitStatus.options);
     expect(Object.values($Enums.PlanItemStatus)).toEqual(PlanItemStatus.options);
+    expect(Object.values($Enums.AppointmentStatus)).toEqual(AppointmentStatus.options);
+    expect(Object.values($Enums.AppointmentRequestStatus)).toEqual(AppointmentRequestStatus.options);
+    expect(Object.values($Enums.TimeOfDay)).toEqual(TimeOfDay.options);
+    expect(Object.values($Enums.DueKind)).toEqual(DueItem.shape.kind.options);
     expect(Object.values($Enums.ToothCondition)).toEqual(ToothCondition.options);
   });
 });

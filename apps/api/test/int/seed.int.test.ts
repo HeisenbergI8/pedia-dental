@@ -1,11 +1,14 @@
-import { patientSearchText, planProgress } from "@pedia/shared";
+import { findConflict, patientSearchText, planProgress } from "@pedia/shared";
 import { DEMO_CLINIC_ID, DEMO_PASSWORD, OPERATORS, accountsByEmail, demoLogins, seedPlatform } from "@pedia/seed";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Hasher } from "../../src/auth/hashing";
+import { APPOINTMENT_COLUMNS, toAppointment } from "../../src/appointments/appointment.rows";
+import { REQUEST_COLUMNS, toRequest } from "../../src/appointments/request.rows";
 import { CHART_COLUMNS, toChartEntry } from "../../src/chart/chart.rows";
 import { GROWTH_COLUMNS, toGrowth } from "../../src/growth/growth.rows";
 import { NOTE_COLUMNS, toNote } from "../../src/notes/note.rows";
 import { PLAN_COLUMNS, toPlanItem } from "../../src/plan/plan.rows";
+import { DUE_COLUMNS, toDueItem } from "../../src/recalls/due-item.rows";
 import { seedDatabase } from "../../src/seed/seed-database";
 import { VISIT_COLUMNS, toVisit } from "../../src/visits/visit.rows";
 import { inClinic, resetDatabase, testPrisma } from "./support/database";
@@ -87,6 +90,25 @@ describe("prisma db seed (seedDatabase) on MySQL", () => {
     const demo = platform.tenants[DEMO_CLINIC_ID]!; // not vacuous: the spec's example plan and the growth examples
     expect(planProgress(demo.planItems)).toEqual({ done: 3, total: 6 });
     expect(demo.growth.length).toBe(6);
+  });
+
+  it("writes each clinic's appointments, requests and due items with the mock's ids, with no double-booking (B7)", async () => {
+    const byId = <T extends { id: string }>(xs: T[]) => new Map(xs.map((x) => [x.id, x]));
+    for (const { id } of platform.accounts) {
+      const db = platform.tenants[id]!;
+      await inClinic(id, async () => {
+        const appointments = (await prisma.appointment.findMany({ select: APPOINTMENT_COLUMNS })).map(toAppointment);
+        const requests = (await prisma.appointmentRequest.findMany({ select: REQUEST_COLUMNS })).map(toRequest);
+        const due = await prisma.dueItem.findMany({ select: DUE_COLUMNS });
+        expect(byId(appointments)).toEqual(byId(db.appointments.map((a) => ({ ...a, clinicId: id }))));
+        expect(byId(requests)).toEqual(byId(db.appointmentRequests.map((q) => ({ ...q, clinicId: id }))));
+        expect(byId(due.map((r) => toDueItem(r)))).toEqual(byId(db.dueItems.map((i) => ({ ...i, clinicId: id }))));
+        const visitOf = new Map(db.notes.map((n) => [n.id, n.visitId]));
+        for (const r of due) expect(r.visitId).toBe(visitOf.get(r.sourceNoteId));
+        appointments.forEach((a, i) => expect(findConflict(a, appointments.slice(0, i))).toBeUndefined());
+      });
+    }
+    expect(platform.tenants[DEMO_CLINIC_ID]!.appointments.length).toBeGreaterThan(0);
   });
 
   it("gives every mock login the same email in the same clinics, opened by the demo password", async () => {

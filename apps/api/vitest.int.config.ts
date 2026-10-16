@@ -6,6 +6,7 @@ export default defineConfig({
   test: {
     include: ["test/int/**/*.int.test.ts"],
     globalSetup: ["test/int/support/global-setup.ts"],
+    setupFiles: ["src/clinic-time.ts"], // E3
     fileParallelism: false, // one database, emptied by each test: files run one at a time
     testTimeout: 20_000,
     hookTimeout: 60_000,

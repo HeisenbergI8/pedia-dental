@@ -1,4 +1,5 @@
 import { DEMO_CLINIC_ID } from "@pedia/seed";
+import { format, parseISO } from "date-fns";
 import { GrowthRecord, Visit, habitTimeline } from "@pedia/shared";
 import { z } from "zod";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -14,7 +15,8 @@ afterAll(() => t.app.close());
 
 const save = (visitId: string, body: unknown, cookie: string) => t.call("put", `/visits/${visitId}/growth`, cookie, body);
 const list = async (patientId: string, cookie: string) => t.ok(t.call("get", `/patients/${patientId}/growth`, cookie), z.array(GrowthRecord));
-const day = (iso: string) => iso.slice(0, 10);
+/** The clinic day of a timestamp, as habitTimeline computes it (local time: Manila since B7). */
+const day = (iso: string) => format(parseISO(iso), "yyyy-MM-dd");
 const thumb = { habit: "thumb_sucking", startedOn: "2023-06-01" } as const;
 
 describe("growth (apps/web handlers.test.ts → growth)", () => {

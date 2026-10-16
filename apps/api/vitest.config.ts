@@ -3,6 +3,7 @@ import { configDefaults, defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     include: ["src/**/*.test.ts", "test/**/*.test.ts"],
+    setupFiles: ["src/clinic-time.ts"], // E3: every worker reads local time as Manila's, as the API does
     // test/int/** needs MySQL, so it runs only in `test:int` (CONVENTIONS → Traps: `pnpm run check` never needs MySQL).
     exclude: [...configDefaults.exclude, "test/int/**"],
   },
