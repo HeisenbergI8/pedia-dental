@@ -119,3 +119,12 @@ they happen, with the reason; "none" when there are none.
 - CONVENTIONS also records the snapshot trap from Phase 5 (lock before the first plain read) and the lock order (visit then patient in `complete`); the plan's trap (1) wording ("looks the visit up once before the lock") is replaced, since that lookup was the defect.
 **Gate:** `pnpm run check` green; `test:int` green (Phase 6); `e2e/api-chart.spec.ts` 3/3 twice in a row on `pedia_dental_e2e_b5`.
 **Notes:** B5c closes here. API on :4110 and hybrid web on :3160 left running for the tester.
+
+## Review fixes — 2026-10-16
+
+**From:** tester (`verification.md`).
+**Fixed:** finding 2 (test gap). New `chart.int.test.ts` case: "never stamps a finding after its visit was completed, when the two race". Six chart writes and a complete run in parallel, three rounds. It goes red when `lockPatient` is removed from `complete` (checked) and is green with it.
+**Not changed, with reasons:**
+- Finding 1 (a note over 65,535 bytes, or an `appointmentId` over 191 characters, answers 500 instead of 400; nothing is written): the fix is a length cap in `@pedia/shared` (`note`, `Id`), a contract change for the mock and the web too. Recorded as a follow-up.
+- Finding 3 (GET orders a batch by id): plan Follow Up 3, no effect on `deriveChart`.
+**Gate:** the new case passes.

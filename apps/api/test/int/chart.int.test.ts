@@ -204,6 +204,24 @@ describe("chart (apps/web handlers.test.ts → chart)", () => {
     }
   });
 
+  it("never stamps a finding after its visit was completed, when the two race (decision 5)", async () => {
+    const admin = await as(ADMIN);
+    for (let round = 0; round < 3; round++) {
+      const id = await register();
+      const visit = await start(id, admin);
+      const writes = [74, 84, 75, 85, 54, 64].map((tooth) =>
+        call("post", chart(id), admin, { visitId: visit.id, tooth, surfaces: [], condition: "sealant" }));
+      const [done] = await Promise.all([call("post", `/visits/${visit.id}/complete`, admin), ...writes]);
+      const completedAt = Visit.parse(done!.body).completedAt!;
+      const recorded = await entries(id, admin);
+      expect(recorded.every((e) => e.recordedAt <= completedAt)).toBe(true);
+      for (const res of await Promise.all(writes)) {
+        expect([201, 409]).toContain(res.status);
+        if (res.status === 409) expect(res.text).toBe("Findings can only be recorded during a visit in progress");
+      }
+    }
+  });
+
   it("answers in the mock's order, with its words", async () => {
     const admin = await as(ADMIN);
     const id = await register();
