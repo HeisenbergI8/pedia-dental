@@ -118,4 +118,42 @@ describe("the outbox", () => {
     await stuck; // attempt 1 settles late: refused, attempts no longer match
     expect(await prisma.outboxMessage.findFirstOrThrow()).toMatchObject({ status: "done", attempts: 2 });
   });
+
+  it("never lets a late worker's failure undo a newer claim's success", async () => {
+    await enqueue(1);
+    let fail: ((e: Error) => void) | undefined;
+    vi.spyOn(b.get(NoopHandler), "handle").mockImplementation(() => new Promise<void>((_, reject) => (fail = reject)));
+    const stuck = b.get(OutboxWorker).drain(); // claims (attempt 1) and hangs
+
+    await vi.waitFor(() => expect(fail).toBeDefined());
+    clock.set(new Date(NOW.getTime() + OUTBOX_POLICY.leaseMs));
+    expect(await a.get(OutboxWorker).drain()).toBe(1); // attempt 2 takes it over and succeeds
+
+    fail!(new Error("provider timeout"));
+    await stuck; // attempt 1 would schedule a retry: refused, attempts no longer match
+    expect(await prisma.outboxMessage.findFirstOrThrow()).toMatchObject({ status: "done", attempts: 2, lastError: null });
+  });
+
+  it("skips rows another worker holds locked, instead of waiting for them (SKIP LOCKED)", async () => {
+    await enqueue(2);
+    const [held] = await prisma.outboxMessage.findMany({ orderBy: { createdAt: "asc" }, select: { id: true } });
+    let release!: () => void;
+    let locked!: () => void;
+    const lockTaken = new Promise<void>((resolve) => (locked = resolve));
+    const holder = prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT id FROM OutboxMessage WHERE id = ${held!.id} FOR UPDATE`;
+        locked();
+        await new Promise<void>((resolve) => (release = resolve));
+      },
+      { timeout: 30_000 },
+    );
+    await lockTaken;
+    // Without SKIP LOCKED the claim waits on the held row until MySQL's lock-wait timeout (50 s) and this times out.
+    const timeout = new Promise<"blocked">((resolve) => setTimeout(() => resolve("blocked"), 5_000));
+    expect(await Promise.race([a.get(OutboxWorker).drain(), timeout])).toBe(1); // the other row
+    release();
+    await holder;
+    expect(await a.get(OutboxWorker).drain()).toBe(1); // the held row, once free
+  });
 });

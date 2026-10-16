@@ -44,3 +44,13 @@ shuts down cleanly. A lost settle on shutdown is re-sent after its lease (at lea
 **Files changed:** `apps/api/CONVENTIONS.md`, `apps/api/CHUNKS.md`
 **Deviations from plan:** the current-phase line was rewritten to cover B1 and B2 together (it still described B2c).
 **Gate:** `pnpm run check` green (shared 186, seed 19, api 131, web 342); `pnpm --filter api test:int` green, 72 tests.
+
+## Review follow-up — 2026-10-16
+**From the tester:** two mutations survived the suite. Without `SKIP LOCKED` claims just serialise; without the
+`attempts` match on settle, the lease test's late worker settled `done`, the same value as the new claim. Two
+`outbox.int.test.ts` cases added: a late worker's *failure* must not undo a newer claim's success (`lastError` stays
+null), and a claim must skip a row another transaction holds `FOR UPDATE` instead of waiting (5 s race). Mutation
+checks: each mutant now fails its new case; restored, the suite passes (74 tests).
+**From the auditor:** the at-least-once trap now says to pass the row id as the provider's idempotency key, and
+`jobs.int.test.ts` checks `outbox.prune` is scheduled too. The auditor's runtime probe answered Q1: an app closed
+mid-handler finished and settled its batch before Prisma disconnected.

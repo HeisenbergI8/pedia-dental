@@ -4,6 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AUTH_SWEEP, AuthJobs } from "../../src/auth/auth.jobs";
 import { FixedClock } from "../../src/common/clock";
 import { JobRunner } from "../../src/jobs/job-runner";
+import { OUTBOX_PRUNE } from "../../src/outbox/outbox.jobs";
 import { resetDatabase, testPrisma } from "./support/database";
 import { createIntApp } from "./support/int-app";
 
@@ -77,6 +78,7 @@ describe("scheduled jobs across two API instances", () => {
     const worker = await createIntApp({ clock, background: true });
     try {
       expect(worker.get(SchedulerRegistry).getCronJobs().has(AUTH_SWEEP.name)).toBe(true);
+      expect(worker.get(SchedulerRegistry).getCronJobs().has(OUTBOX_PRUNE.name)).toBe(true);
     } finally {
       await worker.close();
     }

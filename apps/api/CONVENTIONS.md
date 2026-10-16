@@ -230,7 +230,8 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **Lists keep the clinic's order:** `Branch.position` and `Staff.position` (the mock's array order). New rows go last.
 - **Background work starts only from `main.ts`** (`AppModule.forRoot(env, { background })`). Tests call
   `worker.drain()` and job methods directly; `createIntApp({ background: true })` only to check scheduling.
-- **The outbox delivers at least once.** A handler must be idempotent. Never call `enqueue` outside
+- **The outbox delivers at least once.** A handler must be idempotent and pass the row id to the provider as its
+  idempotency key. Never call `enqueue` outside
   `runInTransaction`'s `tx`: TypeScript can't tell the root client from a transaction.
 - **A job's `leaseMs` must be longer than a run and shorter than its cron period**, or it runs twice or skips ticks.
 - **`LocalDiskStorage` is per instance.** A multi-instance deployment needs B10's driver before files are uploaded.
