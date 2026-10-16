@@ -1,5 +1,5 @@
 import { expect as baseExpect, test, type Locator, type Page } from "@playwright/test";
-import { addDays, format, isSunday } from "date-fns";
+import { addDays, format, isSunday, parse } from "date-fns";
 import { USERS, expectSignedIn, signIn } from "./support/users";
 
 /**
@@ -36,6 +36,20 @@ const iso = (d: Date) => format(d, "yyyy-MM-dd");
 
 /** Toasts appear in the Notifications region. */
 const toast = (page: Page, text: string | RegExp) => page.getByRole("region", { name: /Notifications/ }).getByText(text);
+
+/**
+ * The demo data is laid out around today, so which slots are taken and which texts are queued change with the day of
+ * the week. Tests book only where the seed never does, and make the state they need through the UI.
+ */
+const withdrawnCount = async (page: Page) =>
+  Number((await page.getByRole("button", { name: /^Withdrawn/ }).textContent())?.match(/\((\d+)\)/)?.[1]);
+
+/** From Recalls: queues a recall reminder for this child, so a "no" to reminders has a text to withdraw. */
+async function queueRecallReminder(page: Page, child: string) {
+  await openNav(page, "Recalls");
+  await page.getByRole("button", { name: new RegExp(`^Send reminder about .* for ${child}$`) }).click();
+  await expect(toast(page, /^Reminder queued for /)).toBeVisible();
+}
 
 /** Opens the patient through the "Find a patient" search, the way staff jump to a child. */
 async function findPatient(page: Page, query: string, linkName: RegExp) {
@@ -192,13 +206,14 @@ test.describe("happy paths", () => {
     await signInFrontDesk(page);
     const day = openDay(3);
     const dialog = await startBooking(page, { patientQuery: "Gerlach", patientOption: /Gerlach, Savanna/, procedure: "Oral examination", dentist: "Dr. Miguel Santos" });
-    await typeTime(page, dialog, { date: iso(day), time: "17:15", chair: "Chair 3" });
-    await expect(dialog.getByRole("button", { name: new RegExp(`Book ${format(day, "EEE, MMM d")}, 5:15 PM`) })).toBeVisible();
+    // 5:30 PM: the seed never books Dr. Santos or Chair 3 then (a sibling's check-up takes 5:00 on some days).
+    await typeTime(page, dialog, { date: iso(day), time: "17:30", chair: "Chair 3" });
+    await expect(dialog.getByRole("button", { name: new RegExp(`Book ${format(day, "EEE, MMM d")}, 5:30 PM`) })).toBeVisible();
     await dialog.getByRole("button", { name: /^Book / }).click();
     await expect(toast(page, "Appointment booked")).toBeVisible();
     await goToDay(page, day);
     await page.getByRole("group", { name: "Calendar view" }).getByRole("button", { name: "List" }).click();
-    await expect(appointmentRow(page, "Savanna Gerlach", "5:15 PM")).toContainText("Oral examination · Chair 3");
+    await expect(appointmentRow(page, "Savanna Gerlach", "5:30 PM")).toContainText("Oral examination · Chair 3");
     // A booking queues a confirmation text to the parent.
     await openNav(page, "Messages");
     await expect(page.getByText(/Savanna/).first()).toBeVisible();
@@ -422,6 +437,9 @@ test.describe("happy paths", () => {
 
   test("a family's no to reminders stops the front desk's recall reminder", async ({ page }) => {
     await signInFrontDesk(page);
+    await queueRecallReminder(page, "Medhurst, Coby");
+    await openNav(page, "Messages");
+    const withdrawnBefore = await withdrawnCount(page);
     await findPatient(page, "Coby", /Medhurst, Coby/);
     const reminders = page.getByRole("tabpanel", { name: "Overview" }).getByRole("checkbox", { name: "Reminder messages allowed" });
     await expect(reminders).toBeChecked();
@@ -434,14 +452,16 @@ test.describe("happy paths", () => {
     await expect(toast(page, "This family declined reminder messages. Change it under Privacy on the child's Overview.")).toBeVisible();
     // After a reload the log shows the queued text withdrawn.
     await openNav(page, "Messages");
+    await expect(page).toHaveURL(/\/messages/); // reload Messages, not the page the click was leaving
     await page.reload();
-    await expect(page.getByRole("button", { name: /^Withdrawn/ })).toHaveText(/Withdrawn \(1\)/);
+    await expect(page.getByRole("button", { name: /^Withdrawn/ })).toHaveText(`Withdrawn (${withdrawnBefore + 1})`);
   });
 
   test("BUG: the message log is stale after a family says no to reminders (withdrawn text still shows as queued)", async ({ page }) => {
     await signInFrontDesk(page);
+    await queueRecallReminder(page, "Medhurst, Coby");
     await openNav(page, "Messages");
-    await expect(page.getByRole("button", { name: /^Withdrawn/ })).toHaveText(/Withdrawn \(0\)/);
+    const withdrawnBefore = await withdrawnCount(page);
     await findPatient(page, "Coby", /Medhurst, Coby/);
     const reminders = page.getByRole("tabpanel", { name: "Overview" }).getByRole("checkbox", { name: "Reminder messages allowed" });
     await reminders.click();
@@ -449,7 +469,7 @@ test.describe("happy paths", () => {
     await expect(toast(page, "Consent updated")).toBeVisible();
     // Back to Messages through the menu, no reload: Coby's queued reminder must now read as withdrawn.
     await openNav(page, "Messages");
-    await expect(page.getByRole("button", { name: /^Withdrawn/ })).toHaveText(/Withdrawn \(1\)/);
+    await expect(page.getByRole("button", { name: /^Withdrawn/ })).toHaveText(`Withdrawn (${withdrawnBefore + 1})`);
   });
 
   test("front desk takes the Billing day view but sees no finance dashboard", async ({ page }) => {
@@ -701,9 +721,13 @@ test.describe("edge cases", () => {
 
   test("front desk is warned when registering a child who may already be registered", async ({ page }) => {
     await signInFrontDesk(page);
+    // The seed's birth dates are ages counted back from today, so read Calista's from her record.
+    await findPatient(page, "Calista", /Langworth, Calista/);
+    const bornText = (await page.getByText(/^Born \w{3} \d{1,2}, \d{4}$/).first().textContent())!.replace(/^Born /, "");
+    const born = format(parse(bornText, "MMM d, yyyy", new Date()), "yyyy-MM-dd");
     await openNav(page, "Patients");
     await page.getByRole("link", { name: "New patient" }).click();
-    await fillNewChild(page, { first: "Calista", last: "Langworth", born: "2018-01-15", sex: "Female", guardian: "Diane Langworth", phone: "9675443989" });
+    await fillNewChild(page, { first: "Calista", last: "Langworth", born, sex: "Female", guardian: "Diane Langworth", phone: "9675443989" });
     await saveBar(page).click();
     const warning = page.getByRole("dialog", { name: /This child may already be registered/ });
     await expect(warning).toBeVisible();
@@ -928,8 +952,9 @@ test.describe("edge cases", () => {
     const box = (await event.boundingBox())!;
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 - 40, { steps: 8 });
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 - 80, { steps: 8 });
+    // Down half an hour, to 5:30 PM: the seed never books Chair 1 or Dr. Reyes after 5:00 PM (4:00 is taken on some days).
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + 20, { steps: 8 });
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + 40, { steps: 8 });
     await page.mouse.up();
     await expect(toast(page, "Appointment moved")).toBeVisible();
     await page.getByRole("group", { name: "Calendar view" }).getByRole("button", { name: "List" }).click();

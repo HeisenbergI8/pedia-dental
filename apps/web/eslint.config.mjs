@@ -15,7 +15,7 @@ const eslintConfig = [
     ignores: [
       "node_modules/**",
       ".next/**",
-      ".next-build/**",
+      ".next-*/**", // .next-build, .next-hybrid: production and hybrid runs beside `next dev`
       "test-results/**",
       "playwright-report/**",
       "out/**",
