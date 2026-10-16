@@ -1,4 +1,4 @@
-import { AccountStatus, Acknowledgement, AgreementRecord, AuditAction, ConsentScope, HeadingFont, MessageKind, PrivacyChoice, Role, Sex, StaffRole, Tier, ToothCondition, VisitStatus } from "@pedia/shared";
+import { AccountStatus, Acknowledgement, AgreementRecord, AuditAction, ConsentScope, HeadingFont, MessageKind, PrivacyChoice, Role, Sex, StaffRole, PlanItemStatus, Tier, ToothCondition, VisitStatus } from "@pedia/shared";
 import { describe, expect, it } from "vitest";
 import type { RequestContext } from "../common/request-context";
 import { $Enums, Prisma } from "../generated/prisma/client.ts";
@@ -39,6 +39,7 @@ describe("model registry", () => {
     expect(Object.values($Enums.ConsentScope)).toEqual(ConsentScope.options);
     expect(Object.values($Enums.PrivacyChoiceBy)).toEqual(PrivacyChoice.shape.by.options);
     expect(Object.values($Enums.VisitStatus)).toEqual(VisitStatus.options);
+    expect(Object.values($Enums.PlanItemStatus)).toEqual(PlanItemStatus.options);
     expect(Object.values($Enums.ToothCondition)).toEqual(ToothCondition.options);
   });
 });
@@ -117,5 +118,12 @@ describe("append-only", () => {
     expect(APPEND_ONLY.has("Visit")).toBe(false);
     expect(() => scopeArgs("ChartEntry", "update", { where: { id: "e1" }, data: { condition: "sound" } }, clinicA)).toThrow(/append-only/);
     expect(() => scopeArgs("ChartEntry", "deleteMany", { where: {} }, clinicA)).toThrow(/append-only/);
+  });
+
+  it("leaves B6's tables editable: a draft note, a growth record and a plan item change in place", () => {
+    for (const model of ["ClinicalNote", "GrowthRecord", "PlanItem"]) {
+      expect(APPEND_ONLY.has(model)).toBe(false);
+      expect(() => scopeArgs(model, "updateMany", { where: { id: "x" }, data: {} }, clinicA)).not.toThrow();
+    }
   });
 });

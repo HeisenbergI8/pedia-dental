@@ -1,19 +1,15 @@
-import { HttpException, Injectable } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import type { ChartEntry, CreateChartBatchInput, CreateChartEntryInput, Visit } from "@pedia/shared";
 import { AuditService } from "../audit/audit.service";
 import { Clock } from "../common/clock";
+import { refuse } from "../common/refusal";
 import { lockPatientIfExists } from "../patients/patient-lock";
 import { PrismaService } from "../prisma/prisma.service";
 import { clinicData } from "../prisma/tenant-scope";
 import { runInTransaction, type Tx } from "../prisma/transaction";
 import { VisitsService } from "../visits/visits.service";
 import { CHART_COLUMNS, CHART_ORDER, toChartEntry } from "./chart.rows";
-import { batchRefusal, entryRefusal, type Refusal } from "./chart.rules";
-
-/** A refusal as the mock's plain-text answer (HttpErrorFilter sends an HttpException's message as text). */
-function refuse(refusal: Refusal | undefined): void {
-  if (refusal) throw new HttpException(refusal.message, refusal.status);
-}
+import { batchRefusal, entryRefusal } from "./chart.rules";
 
 type Finding = Omit<CreateChartEntryInput, "tooth" | "supersedes">;
 

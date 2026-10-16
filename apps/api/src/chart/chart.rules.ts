@@ -1,7 +1,5 @@
 import { deriveChart, isToothGone, surfacesFor, type ChartEntry, type CreateChartBatchInput, type CreateChartEntryInput, type Visit } from "@pedia/shared";
-
-/** A refusal: the status and the mock's plain-text words (chart/mocks.ts). */
-export type Refusal = { status: 400 | 404 | 409; message: string };
+import type { Refusal } from "../common/refusal";
 
 export const VISIT_NOT_FOUND = "Visit not found for this patient";
 export const NOT_IN_PROGRESS = "Findings can only be recorded during a visit in progress";
