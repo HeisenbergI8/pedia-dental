@@ -20,6 +20,14 @@ const B3_ROUTES: [Method, string][] = [
   ["get", "/clinic/logo"],
   ["put", "/clinic/logo"],
   ["delete", "/clinic/logo"],
+  ["get", "/clinic/usage"],
+  ["post", "/branches"],
+  ["put", "/branches/b1"],
+  ["post", "/branches/b1/archive"],
+  ["post", "/branches/b1/reopen"],
+  ["post", "/staff"],
+  ["post", "/staff/s1/deactivate"],
+  ["post", "/staff/s1/reactivate"],
 ];
 
 describe("B3's routes are served and guarded (no database)", () => {

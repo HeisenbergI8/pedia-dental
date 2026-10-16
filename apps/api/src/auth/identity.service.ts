@@ -12,6 +12,7 @@ import { clinicData } from "../prisma/tenant-scope";
 import type { Tx } from "../prisma/transaction";
 import { runInTransaction } from "../prisma/transaction";
 import { Hasher, pinAttempt, type PinAttempt } from "./hashing";
+import { newPin, temporaryPassword } from "./secrets";
 
 /** Who a live clinic session is, right now. What the guard puts in the request context and checks. */
 export type ClinicIdentity = {
@@ -274,5 +275,29 @@ export class IdentityService {
   /** Sign-in's lookup. The hash never leaves this service and AuthService. */
   async operatorByEmail(email: string) {
     return (await this.prisma.operatorUser.findUnique({ where: { email }, select: { id: true, name: true, email: true, passwordHash: true } })) ?? undefined;
+  }
+
+  /** A new staff login's one-time secrets (decision #21) and their argon2id hashes. Call it before the transaction. */
+  async newStaffSecrets(): Promise<{ temporaryPassword: string; pin: string; passwordHash: string; pinHash: string }> {
+    const secrets = { temporaryPassword: temporaryPassword(), pin: newPin() };
+    const [passwordHash, pinHash] = await Promise.all([this.hasher.hash(secrets.temporaryPassword), this.hasher.hash(secrets.pin)]);
+    return { ...secrets, passwordHash, pinHash };
+  }
+
+  /**
+   * The credential for a staff login the Owner just added, in the caller's transaction beside its staff row. It must
+   * choose its own password before anything else (mustChange) and then acknowledge confidentiality (B2's gates).
+   */
+  async createStaffLogin(tx: Tx, login: { clinicId: string; staffId: string; email: string; name: string; passwordHash: string; pinHash: string }): Promise<void> {
+    const { clinicId, staffId, email, name, passwordHash, pinHash } = login;
+    await tx.credential.create({
+      data: { clinicId, accountId: staffId, email, staffId, guardianId: null, name, passwordHash, mustChange: true, pinHash, pinFailedAt: [] },
+      select: { id: true },
+    });
+  }
+
+  /** Does a parent of this clinic sign in with this email? (decision #27: one login per email per account). */
+  async parentHasEmail(tx: Tx, clinicId: string, email: string): Promise<boolean> {
+    return !!(await tx.credential.findFirst({ where: { clinicId, email, guardianId: { not: null } }, select: { id: true } }));
   }
 }

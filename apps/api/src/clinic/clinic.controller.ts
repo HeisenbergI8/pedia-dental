@@ -1,6 +1,6 @@
 import {
-  type ArgumentsHost, Body, Catch, Controller, Delete, type ExceptionFilter, ForbiddenException, Get, NotFoundException,
-  PayloadTooLargeException, Put, Req, Res, StreamableFile, UploadedFile, UseFilters, UseInterceptors,
+  type ArgumentsHost, Body, Catch, Controller, Delete, type ExceptionFilter, ForbiddenException, Get, HttpCode, NotFoundException,
+  Param, PayloadTooLargeException, Post, Put, Req, Res, StreamableFile, UploadedFile, UseFilters, UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { LOGO_RULES, UpdateBrandingInput, UpdateClinicProfileInput } from "@pedia/shared";
@@ -8,7 +8,9 @@ import type { Request, Response } from "express";
 import { identityOf } from "../auth/access.guard";
 import { requireContext } from "../common/request-context";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
+import { BranchesService } from "./branches.service";
 import { ClinicService } from "./clinic.service";
+import { StaffService } from "./staff.service";
 import { LOGO_HEADERS, LOGO_TOO_LARGE, type LogoUpload } from "./logo";
 
 /** Multer stops reading at LOGO_RULES.maxBytes and Nest answers "File too large"; this gives the shared rule's words. */
@@ -25,7 +27,11 @@ class LogoTooLarge implements ExceptionFilter {
  */
 @Controller()
 export class ClinicController {
-  constructor(private readonly clinic: ClinicService) {}
+  constructor(
+    private readonly clinic: ClinicService,
+    private readonly branchWrites: BranchesService,
+    private readonly staffWrites: StaffService,
+  ) {}
 
   @Get("clinic")
   context(@Req() req: Request) {
@@ -53,6 +59,11 @@ export class ClinicController {
   @Get("procedures")
   procedures() {
     return this.clinic.procedures();
+  }
+
+  @Get("clinic/usage")
+  usage() {
+    return this.clinic.usage();
   }
 
   @Put("clinic")
@@ -85,5 +96,47 @@ export class ClinicController {
   @Delete("clinic/logo")
   removeLogo() {
     return this.clinic.removeLogo();
+  }
+
+  // Bodies parsed in the service, after the limit (CONVENTIONS → Traps: check before the body). Nest's POST default is
+  // 201; the mock answers 201 only for a new branch, and 200 for archive and reopen.
+  @Post("branches")
+  createBranch(@Body() body: unknown) {
+    return this.branchWrites.create(body);
+  }
+
+  @Put("branches/:id")
+  updateBranch(@Param("id") id: string, @Body() body: unknown) {
+    return this.branchWrites.update(id, body);
+  }
+
+  @Post("branches/:id/archive")
+  @HttpCode(200)
+  archiveBranch(@Param("id") id: string) {
+    return this.branchWrites.archive(id);
+  }
+
+  @Post("branches/:id/reopen")
+  @HttpCode(200)
+  reopenBranch(@Param("id") id: string) {
+    return this.branchWrites.reopen(id);
+  }
+
+  // 201 for a new login (as the mock); the two actions answer 200.
+  @Post("staff")
+  addStaff(@Body() body: unknown) {
+    return this.staffWrites.add(body);
+  }
+
+  @Post("staff/:id/deactivate")
+  @HttpCode(200)
+  deactivateStaff(@Param("id") id: string) {
+    return this.staffWrites.deactivate(id);
+  }
+
+  @Post("staff/:id/reactivate")
+  @HttpCode(200)
+  reactivateStaff(@Param("id") id: string) {
+    return this.staffWrites.reactivate(id);
   }
 }

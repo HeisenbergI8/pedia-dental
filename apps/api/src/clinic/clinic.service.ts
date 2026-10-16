@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, PayloadTooLargeException } from "@nestjs/common";
 import {
   Branch, Chair, ClinicContext, Procedure,
-  type ClinicAccount, type Role, type StaffMember, type UpdateBrandingInput, type UpdateClinicProfileInput,
+  type ClinicAccount, type ClinicUsage, type Role, type StaffMember, type UpdateBrandingInput, type UpdateClinicProfileInput,
 } from "@pedia/shared";
 import type { ClinicIdentity } from "../auth/identity.service";
 import { OutboxService } from "../outbox/outbox.service";
@@ -11,6 +11,7 @@ import { DELETE_FILE } from "../storage/delete-file.handler";
 import { StorageService, type StoredFile } from "../storage/storage.service";
 import { lockAccount, ownClinicId } from "./account-lock";
 import { brandingRefusal, logoUrlOf, toClinicAccount, toStaffMember } from "./clinic.views";
+import { countUsage, usageOf } from "./limits";
 import { cleanLogo, isDemoLogo, type LogoUpload } from "./logo";
 
 /** The clinic account's reads (features/clinic/mocks.ts). Tenant reads are scoped by the extension; ClinicAccount by the identity's clinic. */
@@ -51,6 +52,12 @@ export class ClinicService {
       orderBy: [{ position: "asc" }, { code: "asc" }],
     });
     return rows.map((p) => Procedure.parse(p));
+  }
+
+  /** GET /clinic/usage (Owner only): open branches and active logins against the tier. No lock: the write it informs checks again under it. */
+  async usage(): Promise<ClinicUsage> {
+    const { tier } = await this.prisma.clinicAccount.findUniqueOrThrow({ where: { id: ownClinicId() }, select: { tier: true } });
+    return usageOf(tier, await countUsage(this.prisma));
   }
 
   /** PUT /clinic: name, contact email and TIN (decision #18). Tier and status are the operator's (B12). */

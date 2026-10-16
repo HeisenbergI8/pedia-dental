@@ -76,3 +76,35 @@ One entry per phase, added when its gate passes. Format (as B2d):
 - `logo.test.ts` also asserts `viewBox` keeps its case (the plan's Issue on HTML serialisation).
 **Gate:** `pnpm run check` green (api 148); `test:int test/int/clinic-branding.int.test.ts` 8/8; full `test:int` 16 files / 90 tests green.
 **Notes:** B3b closes here.
+
+## Phase 6: Limits and usage — 2026-10-16
+
+**Steps completed:** 6.1, 6.2
+**Files changed:** `apps/api/src/clinic/limits.ts` + `limits.test.ts` (new), `apps/api/src/clinic/clinic.{service,controller}.ts`
+**Deviations from plan:** none.
+**Gate:** `pnpm run check` green (api 151).
+**Notes:** none.
+
+## Phase 7: Branch writes — 2026-10-16
+
+**Steps completed:** 7.1
+**Files changed:** `apps/api/src/clinic/branches.service.ts` (new), `apps/api/src/clinic/clinic.{controller,module}.ts`, `apps/api/test/clinic-routes.test.ts`
+**Deviations from plan:** none.
+**Gate:** `pnpm run check` green (api 156).
+**Notes:** behaviour is proven on MySQL in Phase 9.
+
+## Phase 8: Staff writes — 2026-10-16
+
+**Steps completed:** 8.1, 8.2
+**Files changed:** `apps/api/src/auth/secrets.ts` + `secrets.test.ts` (new), `apps/api/src/auth/identity.service.ts`, `apps/api/src/clinic/staff.service.ts` (new), `apps/api/src/clinic/clinic.{controller,module}.ts`
+**Deviations from plan:** `newStaffSecrets` hashes the password and PIN in parallel (`Promise.all`) rather than one after the other.
+**Gate:** `pnpm run check` green (api 157).
+**Notes:** behaviour is proven on MySQL in Phase 9.
+
+## Phase 9: owner-settings.test.ts on MySQL — 2026-10-16
+
+**Steps completed:** 9.1, 9.2
+**Files changed:** `apps/api/test/int/owner-settings.int.test.ts` (new), `apps/api/test/int/tier-limits.int.test.ts` (new), `apps/api/test/clinic-routes.test.ts` (now all 18 B3 routes)
+**Deviations from plan:** the plan's port read two tenant tables (`Staff` for Joy's email, `AuditEvent` for the audit case) from the root client outside any request context, which the tenant extension refuses ("needs a clinic"). Both reads now run in `inClinic("clinic_ngiti", …)` and drop their explicit `clinicId`.
+**Gate:** `pnpm run check` green (api 160); full `test:int` 18 files, 112 passed + 1 todo (B7 bookings). `tier-limits.int.test.ts` run 5 times in a row: green each time.
+**Notes:** B3c closes here.
