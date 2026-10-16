@@ -73,3 +73,14 @@ already says a new variable goes in `Env`, `.env.example` and `.env`, which is w
 **Gate:** prose; no check (as planned). `pnpm run check` re-run at close.
 **Notes:** Not implemented from the plan's Follow Ups (by design, they are questions): branch widening for Owner
 reports, operator audit, table names, the check allowlist, `customProps` for `requestId`, `pino-pretty`.
+
+## Review follow-up — 2026-10-16
+
+**From the tester:** Prisma queries are lazy, so `requestContext.run(ctx, () => prisma.x.findMany())` runs the
+query outside the context. Added a trap for it to `apps/api/CONVENTIONS.md` (not in Step 6.1's list).
+**From the auditor (Finding 1):** `prisma.service.test.ts`'s in-clinic case didn't await inside the context, so it
+passed without the clinic reaching the extension. It now awaits inside `run`, and a new case proves the context
+arrives: clinic A naming `clinic_b` is refused as a mismatch (without the context it would be "needs a clinic").
+**Left as is:** requests outside `/api` (e.g. `GET /`) get no request id, because Nest prefixes the middleware's
+route; the API serves only `/api`. The injected client isn't `instanceof PrismaService` (the constructor returns the
+extended client); nothing checks that.
