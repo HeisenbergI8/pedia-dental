@@ -240,8 +240,9 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   `pd_session` and `pd_operator` are httpOnly, and operator sessions have their own table. Passwords and PINs are
   argon2id (`@node-rs/argon2`).
 - **Identity tables** (B2): `Credential`, `Session` and `DemoLogin` are platform tables that hold a `clinicId`, because
-  sign-in reads them before a clinic is known. Only `IdentityService`, `SessionService` and the seed touch them, and
-  every query names `clinicId` itself.
+  sign-in reads them before a clinic is known. Only `IdentityService`, `SessionService` and the seed touch them.
+  `Credential` and `DemoLogin` queries name `clinicId` themselves; `Session` is found and closed by its unique
+  `tokenHash` alone (the cookie is all there is), and by `clinicId` + `accountId` to close one login's sessions.
 - **Body tokens** (B2): `Session.token` / `OperatorSession.token` carry placeholders (`"cookie"`, `"operator.cookie"`);
   the real tokens are only in the httpOnly cookies. A switch or password change rotates the session.
 - **Rate limits** (B2): fixed windows in `RateLimitCounter`, per client address: 20 sign-ins per 5 minutes and 120 auth

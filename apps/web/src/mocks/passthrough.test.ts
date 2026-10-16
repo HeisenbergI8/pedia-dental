@@ -13,8 +13,18 @@ describe("which routes the API serves", () => {
     expect(servedBy(routes, "POST", "/branches")).toBe(false);
     expect(servedBy(routes, "GET", "/branches/b1")).toBe(false);
   });
-  it("serves nothing from the API until a chunk cuts over (B2d fills the list)", () => {
-    expect(API_ROUTES).toEqual([]);
+  it("serves B2's sign-in and clinic reads from the API, and their mocked neighbours from MSW", () => {
+    const api = (method: string, path: string) => servedBy(API_ROUTES, method, path);
+    for (const path of ["/auth/login", "/auth/logout", "/auth/switch", "/auth/password", "/auth/acknowledgement", "/operator/auth/login"]) {
+      expect(api("POST", path), path).toBe(true);
+    }
+    for (const path of ["/auth/demo-accounts", "/auth/me", "/auth/acknowledgement", "/operator/auth/me", "/clinic", "/branches", "/staff"]) {
+      expect(api("GET", path), path).toBe(true);
+    }
+    expect(API_ROUTES).toHaveLength(14);
+    // Same paths, other chunks (B3, B12): still MSW's.
+    expect([api("PUT", "/clinic"), api("GET", "/clinic/usage"), api("GET", "/clinic/subscription"), api("POST", "/branches"), api("POST", "/staff")]).toEqual([false, false, false, false, false]);
+    expect([api("GET", "/operator/accounts"), api("GET", "/patients")]).toEqual([false, false]);
   });
 });
 

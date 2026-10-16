@@ -2,11 +2,12 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { OperatorSession } from "@pedia/shared";
+import { env } from "@/lib/env";
+import { operatorSessionWrites, writeCookie } from "@/lib/session-cookies";
 
-/** Read by the mock API (operatorOf in mocks/access.ts). Never `pd_session`: the operator isn't a clinic user. */
-const COOKIE = "pd_operator";
-const writeCookie = (token: string | null) => {
-  document.cookie = token ? `${COOKIE}=${token}; path=/; SameSite=Lax` : `${COOKIE}=; path=/; max-age=0`;
+/** pd_operator in `enabled`, the pd_mock_operator bridge in `hybrid`, nothing in `disabled`. Never `pd_session`. */
+const writeSession = (session: OperatorSession | null) => {
+  for (const [name, value] of operatorSessionWrites(env.apiMockingMode, session)) writeCookie(name, value);
 };
 
 type OperatorState = { session: OperatorSession | null; signIn: (s: OperatorSession) => void; signOut: () => void };
@@ -17,11 +18,11 @@ export const useOperatorSessionStore = create<OperatorState>()(
     (set) => ({
       session: null,
       signIn: (session) => {
-        writeCookie(session.token);
+        writeSession(session);
         set({ session });
       },
       signOut: () => {
-        writeCookie(null);
+        writeSession(null);
         set({ session: null });
       },
     }),
@@ -29,7 +30,7 @@ export const useOperatorSessionStore = create<OperatorState>()(
       name: "primolar:operator-session:v1",
       // The cookie has no expiry, so the browser drops it on quit; storage brings it back (as session-store.ts).
       onRehydrateStorage: () => (state) => {
-        if (state?.session) writeCookie(state.session.token);
+        if (state?.session) writeSession(state.session);
       },
     },
   ),

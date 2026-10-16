@@ -5,8 +5,8 @@ import { DEMO_PASSWORD } from "./demo-accounts";
 /** Primolar's own staff (decisions #3, #25), from packages/seed so the API seeds the same operator. */
 export const OPERATORS: OperatorUser[] = SEED_OPERATORS;
 
-/** The operator console's cookie, written by stores/operator-session-store.ts. Never `pd_session`. */
-export const OPERATOR_COOKIE = "pd_operator";
+/** The operator console's cookie (lib/session-cookies.ts). Never `pd_session`. Kept here for the mock tests. */
+export { OPERATOR_COOKIE } from "@/lib/session-cookies";
 
 /** `operator.<operator id>`: a shape no clinic token has (those are `demo.<clinic id>.<account id>`). */
 export const operatorToken = (operator: Pick<OperatorUser, "id">) => `operator.${operator.id}`;
