@@ -117,6 +117,17 @@ One entry per phase, added when its gate passes. Format (as B2d):
 **Gate:** `pnpm run check` green (web 342).
 **Notes:** no feature code, schema or mock handler changed.
 
+## Phase 11: The Owner's Settings in a browser, against the API — 2026-10-16
+
+**Steps completed:** 11.1
+**Files changed:** `apps/web/e2e/api-owner-settings.spec.ts` (new)
+**Deviations from plan:**
+- Follow Up 5 resolved: user `pedia` may create databases, so the run used a new `pedia_dental_e2e_b3` (db:deploy + db:seed), not root.
+- `fromServiceWorker()` is true for passed-through requests too (MSW fetches them from its worker), so the first test failed as the plan's Issue predicted. It now tells an API answer by Nest's `x-request-id` header (`fromApi`), asserting true for `/procedures` and `/clinic/usage` and false for MSW's `/clinic/subscription`.
+- Run with an uncommitted `playwright.tmp.config.ts` (workers 1, the chromium executablePath).
+**Gate:** `pnpm run typecheck` green. The spec passed 7/7 twice in a row against the same database (after a 5-minute rate-limit pause), then `api-sign-in.spec.ts` 10/10.
+**Notes:** API on :4110 and hybrid web on :3160 (`NEXT_DIST_DIR=.next-hybrid`) left running for the tester.
+
 ## Phase 12: Record it — 2026-10-16
 
 **Steps completed:** 12.1, 12.2
