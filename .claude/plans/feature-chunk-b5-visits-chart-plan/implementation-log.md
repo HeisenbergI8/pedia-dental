@@ -128,3 +128,4 @@ they happen, with the reason; "none" when there are none.
 - Finding 1 (a note over 65,535 bytes, or an `appointmentId` over 191 characters, answers 500 instead of 400; nothing is written): the fix is a length cap in `@pedia/shared` (`note`, `Id`), a contract change for the mock and the web too. Recorded as a follow-up.
 - Finding 3 (GET orders a batch by id): plan Follow Up 3, no effect on `deriveChart`.
 **Gate:** the new case passes.
+**Auditor (80/100):** no plan step missing. Its Finding 1, an uncommitted race test, was this review fix, now committed. Its stray blank line in `clinic.service.ts` is removed. Servers stopped, `tsconfig.json` reverted, temp config and the auditor's scratch database removed. Final: `pnpm run check` green; `test:int` 24 files, 183 passed + 5 todo.

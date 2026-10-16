@@ -46,7 +46,6 @@ export class ClinicService {
     return holdsRole({ role: s.role, alsoRoles }, "dentist") && isActiveStaff({ deactivatedAt: s.deactivatedAt?.toISOString() });
   }
 
-
   /** GET /chairs: every branch's, archived branches' too, so a chair in a child's history still resolves (useChairs). */
   async chairs(): Promise<Chair[]> {
     const rows = await this.prisma.chair.findMany({ select: { id: true, clinicId: true, branchId: true, name: true }, orderBy: [{ position: "asc" }, { id: "asc" }] });
