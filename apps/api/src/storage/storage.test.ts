@@ -7,6 +7,8 @@ import { Test } from "@nestjs/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { requestContext } from "../common/request-context";
 import { ENV, loadEnv } from "../config/env";
+import { OutboxHandlers } from "../outbox/outbox.handlers";
+import { OutboxModule } from "../outbox/outbox.module";
 import { LocalDiskStorage } from "./local-disk.storage";
 import { clinicKey, parseKey } from "./storage";
 import { StorageModule } from "./storage.module";
@@ -14,15 +16,23 @@ import { StorageService } from "./storage.service";
 
 let root: string;
 let storage: StorageService;
+let handlers: OutboxHandlers;
 
 /** Stands in for AppModule's global ENV. */
 @Global()
 @Module({ providers: [{ provide: ENV, useFactory: () => loadEnv({ DATABASE_URL: "mysql://unused", STORAGE_DIR: root }) }], exports: [ENV] })
 class TestEnv {}
 
+/** Stands in for OutboxModule: StorageModule only registers its storage.delete handler there. */
+@Module({ providers: [OutboxHandlers], exports: [OutboxHandlers] })
+class TestOutbox {}
+
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "pd-storage-"));
-  storage = (await Test.createTestingModule({ imports: [TestEnv, StorageModule] }).compile()).get(StorageService);
+  const moduleRef = await Test.createTestingModule({ imports: [TestEnv, StorageModule] }).overrideModule(OutboxModule).useModule(TestOutbox).compile();
+  await moduleRef.init();
+  storage = moduleRef.get(StorageService);
+  handlers = moduleRef.get(OutboxHandlers);
 });
 afterAll(() => rm(root, { recursive: true, force: true }));
 
@@ -31,6 +41,10 @@ const as = <T>(clinicId: string | undefined, fn: () => Promise<T>) =>
 const svg = Buffer.from("<svg xmlns='http://www.w3.org/2000/svg'/>");
 
 describe("StorageService on the local disk", () => {
+  it("registers storage.delete with the outbox (B3: a replaced logo's file is removed after commit)", () => {
+    expect(handlers.get("storage.delete")).toBeDefined();
+  });
+
   it("keys a file by clinic and reads it back with its content type", async () => {
     const key = await as("clinic_a", () => storage.put("branding", "svg", svg));
     expect(key).toMatch(/^clinics\/clinic_a\/branding\/[0-9a-f-]{36}\.svg$/);

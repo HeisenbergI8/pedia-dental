@@ -57,3 +57,22 @@ One entry per phase, added when its gate passes. Format (as B2d):
 **Deviations from plan:** none.
 **Gate:** `pnpm run check` green (api 136); `test:int test/int/clinic-reference.int.test.ts` 7/7.
 **Notes:** B3a closes here.
+
+## Phase 4: Profile and branding — 2026-10-16
+
+**Steps completed:** 4.1, 4.2
+**Files changed:** `apps/api/src/clinic/account-lock.ts` (new), `apps/api/src/clinic/clinic.{views,views.test,service,controller}.ts`, `apps/api/test/clinic-routes.test.ts`
+**Deviations from plan:** none.
+**Gate:** `pnpm run check` green (api 139).
+**Notes:** none.
+
+## Phase 5: The logo — 2026-10-16
+
+**Steps completed:** 5.1, 5.2, 5.3
+**Files changed:** `apps/api/package.json`, `pnpm-lock.yaml`, `apps/api/src/clinic/logo.ts` + `logo.test.ts` (new), `apps/api/src/clinic/account-lock.ts`, `apps/api/src/storage/delete-file.handler.ts` (new), `apps/api/src/storage/storage.module.ts`, `apps/api/src/storage/storage.test.ts`, `apps/api/src/clinic/clinic.{module,service,controller}.ts`, `apps/api/test/clinic-routes.test.ts`, `apps/api/test/int/clinic-branding.int.test.ts` (new)
+**Deviations from plan:**
+- Versions: `dompurify@3.4.16` and `jsdom@29.1.1` (newest at least two weeks old whose engines accept this machine's Node 22.22.0; jsdom 30 needs ^22.22.2), `@types/jsdom@28.0.3`.
+- `storage.test.ts` (not in the plan) broke: StorageModule now imports OutboxModule, whose worker needs PrismaService. The test overrides OutboxModule with a stand-in that provides only `OutboxHandlers`, and gains a case proving `storage.delete` registers.
+- `logo.test.ts` also asserts `viewBox` keeps its case (the plan's Issue on HTML serialisation).
+**Gate:** `pnpm run check` green (api 148); `test:int test/int/clinic-branding.int.test.ts` 8/8; full `test:int` 16 files / 90 tests green.
+**Notes:** B3b closes here.

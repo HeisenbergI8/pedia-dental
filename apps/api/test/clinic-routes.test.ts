@@ -15,6 +15,11 @@ const B3_ROUTES: [Method, string][] = [
   ["get", "/note-templates"],
   ["get", "/message-templates"],
   ["put", "/message-templates/recall"],
+  ["put", "/clinic"],
+  ["put", "/clinic/branding"],
+  ["get", "/clinic/logo"],
+  ["put", "/clinic/logo"],
+  ["delete", "/clinic/logo"],
 ];
 
 describe("B3's routes are served and guarded (no database)", () => {
