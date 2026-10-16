@@ -70,3 +70,7 @@ Asked before building (grill): any clinical staff may sign a draft (decision 5);
 ## Review fixes (auditor, 80/100) — 2026-10-16
 
 F1: the unused `openTooth` helper is gone and the spec asserts two visits in the "Growth timeline" (to be run again after the tester). F2: the plan audit case now refuses a 409 and a 404 too, and they leave nothing. F3: `apps/api/CONVENTIONS.md` records decisions 2, 3, 8 and 9 in the B6 entry. F5: the empty template stubs at the top of this log are removed. F4 (tsconfig and temp config): cleaned when the servers stop.
+
+## Review fixes (tester) — 2026-10-16
+
+Finding 5: race case 15 now asserts that the note which signed first completed the item. The tester saw that is always true, and it can't hold without the lock and the guard. Finding 6: the e2e picks the seeded example (six items, three done by notes), not any patient with six items. Finding 1's `fee` overflow and finding 2's 192+-character path id are recorded with decision 9 in CONVENTIONS. Findings 3, 4 and 7 match the mock or predate B6. The e2e then ran 4/4. Servers stopped, `tsconfig.json` reverted, temp config removed. Final: `pnpm run check` green; `test:int` 27 files, 229 passed + 5 todo.

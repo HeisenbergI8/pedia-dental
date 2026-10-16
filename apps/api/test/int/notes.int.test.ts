@@ -223,7 +223,9 @@ describe("notes (apps/web handlers.test.ts → notes, treatment plan)", () => {
       expect(results.map((r) => r.status)).toEqual([200, 200]);
       const done = (await planOf(id)).filter((i) => i.status === "done");
       expect(done.map((i) => i.id)).toEqual([item.id]);
-      expect([a.id, b.id]).toContain(done[0]!.completedNoteId);
+      // The note that signed first completed it; the later one found it done and left it alone.
+      const [first] = results.map((r) => ClinicalNote.parse(r.body)).sort((x, y) => x.signedAt!.localeCompare(y.signedAt!));
+      expect(done[0]!.completedNoteId).toBe(first!.id);
     });
 
     it.each(rounds)("never re-plans an item that a signing completed, when the two race (round %i)", async () => {

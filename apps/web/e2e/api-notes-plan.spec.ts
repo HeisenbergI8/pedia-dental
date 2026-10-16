@@ -146,8 +146,9 @@ test("the seeded example plan shows 3 of 6 done (done-when)", async ({ page }) =
   const page1 = (await (await page.request.get("/api/patient-summaries?pageSize=100")).json()) as { rows: { id: string }[] };
   let example = "";
   for (const { id } of page1.rows) {
-    const items = (await (await page.request.get(`/api/patients/${id}/plan`)).json()) as unknown[];
-    if (items.length === 6) {
+    const items = (await (await page.request.get(`/api/patients/${id}/plan`)).json()) as { status: string; completedNoteId?: string }[];
+    // The seeded example: six items, three done by signed notes (not a run's own child with six items).
+    if (items.length === 6 && items.filter((i) => i.status === "done" && i.completedNoteId).length === 3) {
       example = id;
       break;
     }
