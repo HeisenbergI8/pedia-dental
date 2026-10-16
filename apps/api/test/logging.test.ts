@@ -40,6 +40,13 @@ describe("logs over HTTP", () => {
 
   const linesFor = (requestId: string) => lines.filter((line) => line.includes(requestId));
 
+  it("logs a request's path, never its query (B4: searches and duplicate checks carry names)", async () => {
+    const res = await request(app.getHttpServer()).get("/api/probe/log?q=rosa%20mendoza&birthDate=2019-03-02");
+    const mine = linesFor(res.headers["x-request-id"]!).join("\n");
+    expect(mine).toContain("/api/probe/log");
+    expect(mine).not.toMatch(/rosa|mendoza|2019-03-02/i);
+  });
+
   it("stamps a handler's log line with the request id and no patient name", async () => {
     const res = await request(app.getHttpServer()).get("/api/probe/log");
     const mine = linesFor(res.headers["x-request-id"]!);

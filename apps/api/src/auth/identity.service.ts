@@ -13,6 +13,7 @@ import type { Tx } from "../prisma/transaction";
 import { runInTransaction } from "../prisma/transaction";
 import { Hasher, pinAttempt, type PinAttempt } from "./hashing";
 import { newPin, temporaryPassword } from "./secrets";
+import { FamilyService } from "../patients/family.service";
 
 /** Who a live clinic session is, right now. What the guard puts in the request context and checks. */
 export type ClinicIdentity = {
@@ -27,6 +28,8 @@ export type ClinicIdentity = {
   mustAcknowledge?: AcknowledgementKind;
   /** The branches this login may work at (usableBranches): the Owner every open one, staff their assignments. */
   branches: BranchSchema[];
+  /** A parent's children, by patient id (decision 5): what own-scope rules and the services check. Staff: absent. */
+  children?: ReadonlySet<string>;
 };
 
 const Tries = z.array(z.string());
@@ -71,6 +74,7 @@ export class IdentityService {
     private readonly prisma: PrismaService,
     private readonly clock: Clock,
     private readonly hasher: Hasher,
+    private readonly family: FamilyService,
   ) {}
 
   /**
@@ -107,6 +111,7 @@ export class IdentityService {
       mustChangePassword: cred.mustChange,
       mustAcknowledge: await this.pendingAcknowledgement(clinicId, accountId, roles, !!staff, !!cred.guardianId),
       branches: usableBranches(roles, assigned, all),
+      children: cred.guardianId ? await this.family.childrenOf(cred.guardianId) : undefined,
     };
   }
 

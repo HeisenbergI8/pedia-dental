@@ -1,4 +1,5 @@
-import { DuplicateMatch, Patient, PatientView, permissionScopeFor, type Permission, type Role } from "@pedia/shared";
+import { DuplicateMatch, Patient, PatientSummary, PatientView, permissionScopeFor, type Permission, type Role } from "@pedia/shared";
+import type { ClinicIdentity } from "../auth/identity.service";
 import type {
   Patient as PatientRow, PatientConsent, PatientGuardian, PatientPrivacyConsent, PrivacyChoice,
 } from "../generated/prisma/client.ts";
@@ -12,6 +13,11 @@ export type Viewer = {
   guardianId?: string;
   children: ReadonlySet<string>;
 };
+
+export const viewerOf = (who: ClinicIdentity): Viewer => ({
+  userId: who.user.id, name: who.user.name, roles: who.user.roles, staffId: who.staffId, guardianId: who.guardianId,
+  children: who.children ?? new Set(),
+});
 
 /** The mock's `inScope` (access.ts:100): held at `all`, or at `own` for one of this parent's children. */
 export function inScope(viewer: Viewer, permission: Permission, patientId: string): boolean {
@@ -89,3 +95,17 @@ export function visibleTo(viewer: Viewer, p: Patient): PatientView {
 /** GET /patient-duplicates: id, number, names and birth date. Never guardians or phones (mocks.ts:300). */
 export const toDuplicate = ({ id, patientNo, firstName, lastName, birthDate }: Patient): DuplicateMatch =>
   DuplicateMatch.parse({ id, patientNo, firstName, lastName, birthDate });
+
+/** One row of GET /patient-summaries. Decision 3: no flags, visits or balances before B5/B7/B8 fill them. */
+export function toSummary(viewer: Viewer, p: Patient, siblings: string[], money: boolean): PatientSummary {
+  const g = p.guardians.find((x) => x.isPrimary) ?? p.guardians[0]!;
+  return PatientSummary.parse({
+    id: p.id, firstName: p.firstName, lastName: p.lastName, birthDate: p.birthDate,
+    allergies: p.allergies, medicalConditions: p.medicalConditions, alerts: p.alerts,
+    guardianName: g.fullName,
+    ...(inScope(viewer, "patients.contact", p.id) && { guardianPhone: g.phone }),
+    siblings,
+    ...(money && { balance: 0 }), // B8: accountSummary over invoices and payments
+    flags: { recallDue: false, balanceDue: false, noContact: false }, // B7, B8, B9
+  });
+}

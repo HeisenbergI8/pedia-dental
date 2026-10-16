@@ -135,9 +135,15 @@ export function matchesSearch(
   return searchWords(q).every((w) => names.includes(w.text) || (phones && w.digits !== undefined && digits.includes(w.digits)));
 }
 
+/** The page `paginate` returns for `total` rows: asking for page 9 of 4 gives page 4, and no rows gives page 1. */
+export function pageWindow(total: number, page: number, pageSize: number) {
+  const last = Math.max(1, Math.ceil(total / pageSize));
+  const p = Math.min(Math.max(1, page), last);
+  return { page: p, offset: (p - 1) * pageSize };
+}
+
 /** One page, clamped: asking for page 9 of 4 returns page 4, and an empty list returns page 1. */
 export function paginate<T>(rows: T[], page: number, pageSize: number) {
-  const last = Math.max(1, Math.ceil(rows.length / pageSize));
-  const p = Math.min(Math.max(1, page), last);
-  return { rows: rows.slice((p - 1) * pageSize, p * pageSize), total: rows.length, page: p, pageSize };
+  const { page: p, offset } = pageWindow(rows.length, page, pageSize);
+  return { rows: rows.slice(offset, offset + pageSize), total: rows.length, page: p, pageSize };
 }

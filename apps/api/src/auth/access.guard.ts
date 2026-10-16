@@ -9,7 +9,7 @@ import { SessionService } from "./session.service";
 /** The path the rules are written in: no `/api` prefix, no query. */
 export const rulePath = (url: string) => new URL(url, "http://api").pathname.replace(/^\/api(?=\/|$)/, "") || "/";
 
-/** A parent's children, by patient id. Empty until patients exist (B4); B11 fills it, so own-scope routes fail closed. */
+/** Staff carry no children: they hold patient permissions at `all`, or not at all. */
 const NO_CHILDREN: ReadonlySet<string> = new Set();
 
 /** The identity the guard loaded for each request, for the handlers that serve it (/auth/me, /clinic, /staff). */
@@ -57,7 +57,7 @@ export class AccessGuard implements CanActivate {
     if (who.readOnly && req.method !== "GET" && !hit.rule.exportRead) {
       throw new ForbiddenException("Your clinic's account is paused, so you can view records but not make changes. Contact your clinic.");
     }
-    const refused = clinicRefusal(who.user.roles, hit.rule, hit.params, new URL(req.originalUrl, "http://api").searchParams, NO_CHILDREN);
+    const refused = clinicRefusal(who.user.roles, hit.rule, hit.params, new URL(req.originalUrl, "http://api").searchParams, who.children ?? NO_CHILDREN);
     if (refused) throw new ForbiddenException(refused);
     return true;
   }
