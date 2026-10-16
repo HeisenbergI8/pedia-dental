@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE `Branch` ADD COLUMN `position` INTEGER NOT NULL DEFAULT 0;
+
+-- AlterTable
+ALTER TABLE `Staff` ADD COLUMN `position` INTEGER NOT NULL DEFAULT 0;

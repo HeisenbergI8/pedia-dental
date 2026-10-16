@@ -118,6 +118,8 @@ model Branch {
   /// OpeningHours (@pedia/shared), parsed with that schema on read. Json: never filtered on.
   openingHours Json
   archived     Boolean @default(false)
+  /// List order, as the clinic set them up (the mock's array order). New branches go last (B3).
+  position     Int     @default(0)
 
   @@index([clinicId, archived])
 }
@@ -137,6 +139,8 @@ model Staff {
   /// The sign-in email: typed by the Owner, or derived by the seed (staffEmail in @pedia/seed).
   email         String
   deactivatedAt DateTime?
+  /// List order, as the clinic added them (the mock's array order). New staff go last (B3).
+  position      Int       @default(0)
 
   @@index([clinicId, email])
 }
@@ -266,4 +270,17 @@ model DemoLogin {
   featured  Boolean @default(false)
 
   @@index([clinicId, position])
+}
+
+/// Fixed-window request counters for the auth routes (CONVENTIONS → Stateless instances: rate-limit counters live in
+/// MySQL, so every instance shares them). Platform: counted before anyone is signed in. Written only by
+/// RateLimitService, with raw SQL (INSERT … ON DUPLICATE KEY UPDATE). Old windows are swept by B1-c's scheduler.
+model RateLimitCounter {
+  /// `<group>:<client ip>`, e.g. `login:203.0.113.7` (rate-limit.ts → bucketOf).
+  bucket      String   @db.VarChar(191)
+  windowStart DateTime
+  hits        Int
+
+  @@id([bucket, windowStart])
+  @@index([windowStart])
 }

@@ -3,6 +3,7 @@ import { APP_FILTER } from "@nestjs/core";
 import { LoggerModule } from "nestjs-pino";
 import type { DestinationStream } from "pino";
 import { AuthModule } from "./auth/auth.module";
+import { ClinicModule } from "./clinic/clinic.module";
 import { ENV, type Env } from "./config/env";
 import { Clock, SystemClock } from "./common/clock";
 import { HttpErrorFilter } from "./common/http-error.filter";
@@ -18,7 +19,7 @@ export class AppModule implements NestModule {
     return {
       module: AppModule,
       global: true,
-      imports: [LoggerModule.forRoot(loggerParams(env, logStream)), PrismaModule, AuthModule],
+      imports: [LoggerModule.forRoot(loggerParams(env, logStream)), PrismaModule, AuthModule, ClinicModule],
       controllers: [HealthController],
       providers: [
         { provide: ENV, useValue: env },

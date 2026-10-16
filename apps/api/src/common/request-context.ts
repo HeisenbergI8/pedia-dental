@@ -36,4 +36,11 @@ export const requestContext = {
   assign(patch: Partial<Omit<RequestContext, "requestId">>): void {
     Object.assign(requireContext(), patch);
   },
+  /**
+   * Runs `fn` as this request with `patch` applied, then returns to it: sign-in reading or auditing in a clinic it
+   * hasn't chosen yet. Awaited inside, because Prisma queries are lazy (CONVENTIONS → Traps).
+   */
+  within<T>(patch: Partial<Omit<RequestContext, "requestId">>, fn: () => Promise<T>): Promise<T> {
+    return storage.run({ ...requireContext(), ...patch }, async () => await fn());
+  },
 };

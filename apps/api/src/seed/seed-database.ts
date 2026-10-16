@@ -64,11 +64,11 @@ export async function seedDatabase(prisma: PrismaService, hasher: Hasher, env: P
     });
 
     await requestContext.run({ requestId: `seed-${clinicId}`, clinicId, operator: false }, async () => {
-      await prisma.branch.createMany({ data: db.branches.map(({ id, name, address, phone, openingHours, archived }) => ({ id, clinicId, name, address, phone, openingHours, archived })) });
+      await prisma.branch.createMany({ data: db.branches.map(({ id, name, address, phone, openingHours, archived }, position) => ({ id, clinicId, name, address, phone, openingHours, archived, position })) });
       await prisma.staff.createMany({
-        data: db.staff.map((s) => ({
+        data: db.staff.map((s, position) => ({
           id: s.id, clinicId, fullName: s.fullName, role: s.role, alsoRoles: s.alsoRoles ?? [], isOwner: s.isOwner ?? false,
-          branchIds: s.branchIds, licenseNo: s.licenseNo ?? null, email: staffEmail(s), deactivatedAt: s.deactivatedAt ? new Date(s.deactivatedAt) : null,
+          branchIds: s.branchIds, licenseNo: s.licenseNo ?? null, email: staffEmail(s), deactivatedAt: s.deactivatedAt ? new Date(s.deactivatedAt) : null, position,
         })),
       });
       await prisma.privacyNotice.createMany({ data: db.privacyNotices.map(({ at, ...n }) => ({ ...n, at: new Date(at) })) });

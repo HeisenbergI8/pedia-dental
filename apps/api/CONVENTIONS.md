@@ -6,10 +6,10 @@ The Primolar backend. It replaces the browser mocks (MSW) in `apps/web` **endpoi
 feature code in the web app**. The product, the users and the domain are the ones in the root `CONVENTIONS.md`
 and `ROADMAP.md`; read those first. This file covers only how the API is built.
 
-**Current phase: B2b done** (2026-10-16). On top of B1-a's runtime core (request context, `Clock`, pino logs, tenant
-scoping, transactions, audit writer) and B2a (`@pedia/seed`, the `test:int` suite on MySQL, CI, the web's `hybrid`
-switch): the identity tables, `prisma db seed`, argon2id, server-side sessions and the deny-by-default access guard.
-No `/auth` endpoints yet: B2c adds them, B2d cuts the web's sign-in over. B1-c (outbox, scheduler, storage) after. The build order is [CHUNKS.md](CHUNKS.md).
+**Current phase: B2c done** (2026-10-16). On top of B1-a's runtime core and B2a/B2b (`@pedia/seed`, `test:int`, CI, the
+identity tables, seed, sessions and the access guard), the API serves `/auth/*`, `/operator/auth/*` and `GET /clinic`,
+`/branches` and `/staff`, rate-limited and audited. B2d cuts the web's sign-in over; B1-c (outbox, scheduler, storage)
+after. The build order is [CHUNKS.md](CHUNKS.md).
 
 **Stack:** NestJS 12 (ESM, Express) · Prisma 7 + MySQL 8.4 (MariaDB driver adapter) · Zod 4 schemas from
 `@pedia/shared` · SWC at runtime (`@swc-node/register`) · Vitest + Supertest · Docker Compose for local MySQL.
@@ -55,7 +55,8 @@ Run from the repo root.
 | Cross-cutting | `src/common/` | `ZodValidationPipe`, `HttpErrorFilter`, the request context (`request-context*.ts`: context + request id), `Clock` (`clock.ts`) |
 | Logging | `src/logging/logger.ts` | pino options and the redaction list (`PERSONAL_FIELDS`) |
 | Audit trail | `src/audit/` | `AuditService.record` (import `AuditModule`) |
-| Identity and access | `src/auth/` | `access-rules.ts` (the route → permission map, held to the mock's `RULES` by a test), `access.guard.ts` (the global guard), `session.service.ts` (sessions), `identity.service.ts` (who a session is, PINs), `hashing.ts` (argon2id), `cookies.ts` |
+| Identity and access | `src/auth/` | `auth.controller.ts` / `operator-auth.controller.ts` and `auth.service.ts` (sign-in, sign-out, switch, password, acknowledgement), `rate-limit.ts` (`RATE_LIMITS`), `access-rules.ts` (the route → permission map, held to the mock's `RULES` by a test), `access.guard.ts` (the global guard), `session.service.ts` (sessions), `identity.service.ts` (who a session is, PINs), `hashing.ts` (argon2id), `cookies.ts` |
+| Clinic | `src/clinic/` | `GET /clinic`, `/branches`, `/staff`; row → contract shaping in `clinic.views.ts`. Reads only until B3 |
 | Demo seed | `src/seed/seed-database.ts`, `prisma/seed.ts` | Maps `@pedia/seed`'s `seedPlatform()` to rows |
 | Features | `src/<name>/` | `<name>.module.ts`, `<name>.controller.ts`, `<name>.service.ts`. Same `<name>` as `apps/web/src/features/<name>` |
 | Tests | `src/**/*.test.ts` (unit), `test/*.test.ts` (HTTP) | Run without a database, in `pnpm run check`. HTTP tests build the app with `test/support/test-app.ts` |
@@ -216,6 +217,14 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   access use the real guard with fake `SessionService`/`IdentityService` (`test/access-guard.test.ts`).
 - **A path with no controller is Nest's 404**, before any guard. "No access rule" (403) means a controller route
   missing from `access-rules.ts`.
+- **A handler that must check the session before the body** (the mock's order: 401/403 before 400) takes
+  `@Body() body: unknown` and parses after its checks, with the same `ZodValidationPipe`.
+- **`identityOf(req)`** is set only where the guard loaded a clinic session (clinic routes, and `/auth/*` when a cookie
+  was presented).
+- **Integration tests that sign in repeatedly** clear `RateLimitCounter` in `beforeEach`: the limit counts per address.
+- **Behind a proxy, set `trust proxy`** in `main.ts` (B13), or every client shares one rate-limit bucket.
+- **Prisma 7's `migrate dev` doesn't regenerate the client.** Run `pnpm --filter api db:generate` after it.
+- **Lists keep the clinic's order:** `Branch.position` and `Staff.position` (the mock's array order). New rows go last.
 - **`COOKIE_SECURE=false` only on local http.** It defaults to true; `DEMO_LOGINS` defaults to false.
 - `test/app.test.ts` logs a stack trace on purpose (the "unexpected error" case). It isn't a failure.
 
@@ -233,7 +242,11 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **Identity tables** (B2): `Credential`, `Session` and `DemoLogin` are platform tables that hold a `clinicId`, because
   sign-in reads them before a clinic is known. Only `IdentityService`, `SessionService` and the seed touch them, and
   every query names `clinicId` itself.
-- **Demo login** (B2): `/auth/demo-accounts` and `DemoLogin` rows exist only when `DEMO_LOGINS=true` (demo deployments).
+- **Body tokens** (B2): `Session.token` / `OperatorSession.token` carry placeholders (`"cookie"`, `"operator.cookie"`);
+  the real tokens are only in the httpOnly cookies. A switch or password change rotates the session.
+- **Rate limits** (B2): fixed windows in `RateLimitCounter`, per client address: 20 sign-ins per 5 minutes and 120 auth
+  calls per minute (`RATE_LIMITS`), bound to the two auth controllers.
+- **Demo login** (B2): `/auth/demo-accounts` and `DemoLogin` rows exist only when `DEMO_LOGINS=true` (demo deployments). There, the demo password can't be changed.
 - **Outbox** (B1): polled from MySQL with `SELECT … FOR UPDATE SKIP LOCKED`; no Redis or BullMQ until volume says so.
 - **Seed** (B1): `packages/seed` (`@pedia/seed`), so MSW and `prisma db seed` run the same `seedPlatform()`. Not
   `@pedia/shared`: the seed needs faker and is built from `new Date()`, which don't belong in the contract package.

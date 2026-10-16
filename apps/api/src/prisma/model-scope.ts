@@ -25,6 +25,8 @@ export const MODEL_SCOPE = {
   Credential: "platform",
   Session: "platform",
   DemoLogin: "platform",
+  // Counted before sign-in, per client address, never per clinic.
+  RateLimitCounter: "platform",
 } as const satisfies Record<Prisma.ModelName, ModelScope>;
 
 /**

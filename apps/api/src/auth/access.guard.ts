@@ -17,6 +17,10 @@ const NO_CHILDREN: ReadonlySet<string> = new Set();
  * request context (clinic, branch, user, or the operator) and applies the route map, deny by default. Registered as
  * APP_GUARD with useExisting (AuthModule), so a test can replace this class and the global guard follows.
  */
+/** The identity the guard loaded for each request, for the handlers that serve it (/auth/me, /clinic, /staff). */
+const identities = new WeakMap<Request, ClinicIdentity>();
+export const identityOf = (req: Request): ClinicIdentity | undefined => identities.get(req);
+
 @Injectable()
 export class AccessGuard implements CanActivate {
   constructor(
@@ -71,6 +75,7 @@ export class AccessGuard implements CanActivate {
       return undefined;
     }
     requestContext.assign({ user: who.user, branchId: this.identity.branchFor(who, readCookie(req.headers.cookie, BRANCH_COOKIE))?.id });
+    identities.set(req, who);
     return who;
   }
 
