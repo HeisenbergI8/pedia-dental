@@ -82,3 +82,21 @@ they happen, with the reason; "none" when there are none.
 **Deviations from plan:** none.
 **Gate:** `pnpm run check` green; `test:int test/int/seed.int.test.ts` 8/8; full `test:int` green.
 **Notes:** B5a closes here.
+
+## Phase 4: Visits — 2026-10-16
+
+**Steps completed:** 4.1, 4.2, 4.3, 4.4
+**Files changed:** `apps/api/src/patients/patient-lock.ts` (new), `apps/api/src/patients/patient-writes.service.ts` (lock moved out, three now-unused imports dropped), `apps/api/src/clinic/clinic.service.ts` (`isActiveDentist`), `apps/api/src/visits/visits.{service,controller,module}.ts` (new), `apps/api/src/app.module.ts`, `apps/api/test/clinical-routes.test.ts` (new), `apps/api/test/int/visits.int.test.ts` (new)
+**Deviations from plan:** the int test's fixed clock moves on one second between steps (`tick()`): audit rows are ordered by `at`, and a 30-minute jump would idle the session out. The deactivated-dentist case runs last because it deactivates `staff_santos`.
+**Gate:** `pnpm run check` green (api 220); `test:int test/int/visits.int.test.ts` 10/10.
+**Notes:** none.
+
+## Phase 5: Chart — 2026-10-16
+
+**Steps completed:** 5.1, 5.2
+**Files changed:** `apps/api/src/chart/chart.{service,controller,module}.ts` (new), `apps/api/src/app.module.ts`, `apps/api/test/clinical-routes.test.ts`, `apps/api/test/int/chart.int.test.ts` (new); and, from the defect below, `apps/api/src/patients/patient-lock.ts`, `apps/api/src/visits/visits.service.ts`, `apps/api/test/int/visits.int.test.ts`
+**Deviations from plan:**
+- **Plan defect, fixed (InnoDB snapshot).** The plan's `lockedVisit` read the visit before `lockPatient`, and `complete` read the visit with `findUnique` before locking. Under MySQL's REPEATABLE READ the snapshot starts at the first plain read, so reads after the lock didn't see what the request holding the lock had just committed. Parallel corrections then hit the unique `supersedes` backstop and answered 500, and parallel completes all answered 200. Fix: `patient-lock.ts` gains `lockPatientIfExists` (a locking read that doesn't 404, so an unknown patient still answers the chart's "Visit not found for this patient"), which `lockedVisit` takes before any read. `complete` reads the visit's patient with a raw `SELECT … FOR UPDATE` (visit, then patient: no B5 path locks them in the other order). New case in `visits.int.test.ts`: "completes a visit exactly once under parallel requests". It fails without the fix (10× 200) and passes with it.
+- `chart.int.test.ts`: the cross-clinic case picks a patient other than the one the repository-level case gave a backstop correction to. The upsert attempt names `clinicId`, which its create type requires.
+**Gate:** `pnpm run check` green (api 223); `test:int` 24 files, 181 passed + 5 todo.
+**Notes:** B5b closes here. The snapshot rule goes into CONVENTIONS in Phase 7.

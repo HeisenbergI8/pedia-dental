@@ -1,12 +1,12 @@
 import { BadRequestException, Injectable, PayloadTooLargeException } from "@nestjs/common";
 import {
-  Branch, Chair, ClinicContext, Procedure,
+  Branch, Chair, ClinicContext, Procedure, StaffRole, holdsRole, isActiveStaff,
   type ClinicAccount, type ClinicUsage, type Role, type StaffMember, type UpdateBrandingInput, type UpdateClinicProfileInput,
 } from "@pedia/shared";
 import type { ClinicIdentity } from "../auth/identity.service";
 import { OutboxService } from "../outbox/outbox.service";
 import { PrismaService } from "../prisma/prisma.service";
-import { runInTransaction } from "../prisma/transaction";
+import { runInTransaction, type Tx } from "../prisma/transaction";
 import { DELETE_FILE } from "../storage/delete-file.handler";
 import { StorageService, type StoredFile } from "../storage/storage.service";
 import { lockAccount, ownClinicId } from "./account-lock";
@@ -38,6 +38,14 @@ export class ClinicService {
   async staff(viewer: readonly Role[]): Promise<StaffMember[]> {
     return (await this.prisma.staff.findMany({ orderBy: [{ position: "asc" }, { id: "asc" }] })).map((s) => toStaffMember(s, viewer));
   }
+  /** Is `id` an active login of this clinic holding the dentist role (visits/mocks.ts)? In the caller's transaction. */
+  async isActiveDentist(id: string, tx: Tx = this.prisma): Promise<boolean> {
+    const s = await tx.staff.findUnique({ where: { id }, select: { role: true, alsoRoles: true, deactivatedAt: true } });
+    if (!s) return false; // another clinic's id reads as missing (tenant extension)
+    const alsoRoles = StaffRole.array().parse(s.alsoRoles);
+    return holdsRole({ role: s.role, alsoRoles }, "dentist") && isActiveStaff({ deactivatedAt: s.deactivatedAt?.toISOString() });
+  }
+
 
   /** GET /chairs: every branch's, archived branches' too, so a chair in a child's history still resolves (useChairs). */
   async chairs(): Promise<Chair[]> {

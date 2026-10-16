@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, PayloadTooLargeException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, PayloadTooLargeException } from "@nestjs/common";
 import {
   AddConsentInput, ChangePrivacyChoicesInput, CreatePatientInput, EditPatientWithoutContactsInput, QuickUpdatePatientInput,
   RecordPrivacyConsentInput, currentChoices, nextPatientNo, patientSearchText, type PatientView, type RegisterPatientInput,
@@ -7,7 +7,6 @@ import type { z } from "zod";
 import { AuditService } from "../audit/audit.service";
 import { lockAccount } from "../clinic/account-lock";
 import { Clock } from "../common/clock";
-import { requireContext } from "../common/request-context";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { PrivacyNoticeService } from "../legal/privacy-notice.service";
 import { OutboxService } from "../outbox/outbox.service";
@@ -16,19 +15,15 @@ import { clinicData } from "../prisma/tenant-scope";
 import { runInTransaction, type Tx } from "../prisma/transaction";
 import { DELETE_FILE } from "../storage/delete-file.handler";
 import { StorageService } from "../storage/storage.service";
+import { lockPatient } from "./patient-lock";
 import { cleanPhoto, type PhotoUpload } from "./patient-photo";
-import { PATIENT_NOT_FOUND, PatientsService } from "./patients.service";
+import { PatientsService } from "./patients.service";
 import { consentFrom, dropsConsenter, guardianRows, mergeEdit, patientColumns, refusedTag, tidy, withStoredContacts } from "./patient.rows";
 import { inScope, visibleTo, type Viewer } from "./patient.views";
 
 /** A body parsed after the route's own checks (404 before 400, the mock's order). */
 const parse = <T extends z.ZodType>(schema: T, body: unknown): z.infer<T> => new ZodValidationPipe(schema).transform(body);
 
-/** Locks one patient's row for this transaction, or 404s with the mock's words. Raw SQL names clinicId itself. */
-export async function lockPatient(tx: Tx, id: string): Promise<void> {
-  const rows = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM Patient WHERE clinicId = ${requireContext().clinicId!} AND id = ${id} FOR UPDATE`;
-  if (!rows.length) throw new NotFoundException(PATIENT_NOT_FOUND);
-}
 
 /** The patient writes (features/patients/mocks.ts). Each runs in one transaction with its audit entry. */
 @Injectable()
