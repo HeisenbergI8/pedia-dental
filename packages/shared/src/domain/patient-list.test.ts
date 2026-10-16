@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  comparePatients, hasNoContact, lastVisitOn, matchesFilter, matchesSearch, paginate, patientStanding, recallDueOn,
+  comparePatients, hasNoContact, lastVisitOn, matchesFilter, matchesSearch, paginate, patientSearchText, patientStanding, recallDueOn,
+  searchWords,
 } from "./patient-list";
 
 const today = "2026-10-03"; // a Saturday
@@ -85,5 +86,22 @@ describe("search and paging", () => {
     expect(paginate(rows, 3, 20)).toMatchObject({ rows: [40, 41, 42, 43, 44], total: 45, page: 3 });
     expect(paginate(rows, 9, 20).page).toBe(3);
     expect(paginate([], 2, 20)).toMatchObject({ rows: [], total: 0, page: 1 });
+  });
+});
+
+describe("patientSearchText and searchWords (decision 1)", () => {
+  const p = { firstName: "Bea", lastName: "Mendoza", nickname: "Bebe", guardians: [{ fullName: "Rosa Mendoza", phone: "0917 123-4567" }] } as Parameters<typeof patientSearchText>[0];
+  it("lowercases the child's and guardians' names, and keeps phone digits apart", () => {
+    expect(patientSearchText(p)).toEqual({ names: "bea mendoza bebe rosa mendoza", digits: "09171234567" });
+  });
+  it("splits on spaces and marks phone words with their digits", () => {
+    expect(searchWords("  Bea 0917-123-4567 (02) ")).toEqual([{ text: "bea" }, { text: "0917-123-4567", digits: "09171234567" }, { text: "(02)", digits: "02" }]);
+    expect(searchWords("")).toEqual([]);
+    expect(searchWords("abc-1")).toEqual([{ text: "abc-1" }]);
+  });
+  it("still finds by name for everyone and by phone only with phones", () => {
+    expect(matchesSearch(p, "mendoza rosa", { phones: false })).toBe(true);
+    expect(matchesSearch(p, "1234567", { phones: false })).toBe(false);
+    expect(matchesSearch(p, "1234567", { phones: true })).toBe(true);
   });
 });

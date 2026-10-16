@@ -100,21 +100,39 @@ export function comparePatients(sort: PatientSort) {
   };
 }
 
+/** What a patient is found by (decision 1): the API stores these two strings; the mock builds them per request. */
+export function patientSearchText(p: Pick<Patient, "firstName" | "lastName" | "nickname" | "guardians">): { names: string; digits: string } {
+  return {
+    names: [`${p.firstName} ${p.lastName} ${p.nickname ?? ""}`, ...p.guardians.map((g) => g.fullName)].join(" ").toLowerCase(),
+    digits: p.guardians.map((g) => g.phone.replace(/\D/g, "")).join(" "),
+  };
+}
+
+/** A search, as words: each lowercased, with its digits when it reads as a phone number ("0917-123-4567", "1234567"). */
+export type SearchWord = { text: string; digits?: string };
+export function searchWords(q: string): SearchWord[] {
+  const isPhone = (w: string) => /^[\d()+-]+$/.test(w) && /\d/.test(w);
+  return q
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((text) => (isPhone(text) ? { text, digits: text.replace(/\D/g, "") } : { text }));
+}
+
 /**
  * Front desk finds a child by the child's or a guardian's name, or a guardian's phone. Every word must match
  * somewhere. Phone digits only match when `phones` is true, so a caller who may not see numbers can't probe them.
- * Moved here unchanged from features/patients/mocks.ts (GET /patients).
+ * Moved here unchanged from features/patients/mocks.ts (GET /patients). apps/api runs the same rule in SQL over the
+ * stored `patientSearchText` (src/patients/patient-search.ts).
  */
 export function matchesSearch(
   p: Pick<Patient, "firstName" | "lastName" | "nickname" | "guardians">,
   q: string,
   { phones }: { phones: boolean },
 ): boolean {
-  const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const names = [`${p.firstName} ${p.lastName} ${p.nickname ?? ""}`, ...p.guardians.map((g) => g.fullName)].join(" ").toLowerCase();
-  const digits = p.guardians.map((g) => g.phone.replace(/\D/g, "")).join(" ");
-  const isPhone = (w: string) => /^[\d()+-]+$/.test(w) && /\d/.test(w);
-  return words.every((w) => names.includes(w) || (phones && isPhone(w) && digits.includes(w.replace(/\D/g, ""))));
+  const { names, digits } = patientSearchText(p);
+  return searchWords(q).every((w) => names.includes(w.text) || (phones && w.digits !== undefined && digits.includes(w.digits)));
 }
 
 /** One page, clamped: asking for page 9 of 4 returns page 4, and an empty list returns page 1. */
