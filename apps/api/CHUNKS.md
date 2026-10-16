@@ -30,11 +30,13 @@ NestJS 12, Prisma 7 + MySQL 8.4 in Docker, Zod-validated env, `GET /api/health`,
 
 ---
 
-## Chunk B1: Platform foundation (~20 h) · Large
+## ✅ Chunk B1: Platform foundation (done, 2026-10-16) · Large
 
 **Status (2026-10-16):** split in three. **B1-a done** (runtime core: context, clock, logs, tenant scoping, transactions,
 audit). **B1-b done inside B2a** (`@pedia/seed`, `test:int` on MySQL with the two-clinics and deadlock proofs, CI,
-the web's `hybrid` switch and `/api` proxy); `prisma db seed` lands in B2b. **B1-c open** (outbox, scheduler, storage).
+the web's `hybrid` switch and `/api` proxy); `prisma db seed` lands in B2b. **B1-c done**: the outbox and its worker, scheduled jobs with the B2 sweeps, and the storage interface with a
+local-disk driver. Two-instance proofs: `test/int/jobs.int.test.ts` (a job runs once) and `outbox.int.test.ts` (no row
+goes to two workers).
 
 **Goal:** the plumbing every feature relies on, built once, with no feature endpoints.
 

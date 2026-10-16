@@ -3,6 +3,7 @@ import { APP_GUARD } from "@nestjs/core";
 import { AuditModule } from "../audit/audit.module";
 import { AccessGuard } from "./access.guard";
 import { AuthController } from "./auth.controller";
+import { AuthJobs } from "./auth.jobs";
 import { AuthService } from "./auth.service";
 import { Hasher } from "./hashing";
 import { IdentityService } from "./identity.service";
@@ -18,7 +19,7 @@ import { SessionService } from "./session.service";
 @Module({
   imports: [AuditModule],
   controllers: [AuthController, OperatorAuthController],
-  providers: [Hasher, SessionService, IdentityService, AuthService, RateLimitService, AccessGuard, { provide: APP_GUARD, useExisting: AccessGuard }],
+  providers: [Hasher, SessionService, IdentityService, AuthService, RateLimitService, AuthJobs, AccessGuard, { provide: APP_GUARD, useExisting: AccessGuard }],
   exports: [Hasher, SessionService, IdentityService],
 })
 export class AuthModule implements NestModule {

@@ -23,6 +23,9 @@ export const groupOf = (method: string, path: string): RateLimitGroup =>
 
 export const bucketOf = (group: RateLimitGroup, ip: string) => `${group}:${ip}`.slice(0, 191);
 
+/** A counter whose window started this long ago has ended, in every group. */
+const LONGEST_WINDOW_MS = Math.max(...Object.values(RATE_LIMITS).map((l) => l.windowSeconds)) * 1000;
+
 /** The start of the fixed window `now` falls in. */
 export const windowStart = (now: Date, windowSeconds: number) => new Date(Math.floor(now.getTime() / (windowSeconds * 1000)) * windowSeconds * 1000);
 
@@ -51,6 +54,12 @@ export class RateLimitService {
       return Number(row!.hits);
     });
     return { allowed: hits <= limit.hits, retryAfter: retryAfter(now, limit) };
+  }
+
+  /** Deletes the counters of ended windows (AuthJobs). Indexed on `windowStart`. */
+  async sweep(): Promise<number> {
+    const cutoff = new Date(this.clock.now().getTime() - LONGEST_WINDOW_MS);
+    return (await this.prisma.rateLimitCounter.deleteMany({ where: { windowStart: { lte: cutoff } } })).count;
   }
 }
 

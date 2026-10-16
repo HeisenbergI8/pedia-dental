@@ -29,7 +29,7 @@ const SELECT_TIMES = { id: true, createdAt: true, lastSeenAt: true, expiresAt: t
 /**
  * Server-side sessions (CONVENTIONS → Stateless instances): clinic sessions in `Session`, operator sessions in
  * `OperatorSession`, never one table for both (decision #25). Callers check passwords and PINs first (IdentityService).
- * Expired rows are deleted when they are next presented; a periodic sweep is B1-c's scheduler.
+ * Expired rows are deleted when they are next presented, and the rest by `sweepExpired` (AuthJobs, every 15 minutes).
  */
 @Injectable()
 export class SessionService {
@@ -102,5 +102,18 @@ export class SessionService {
 
   async closeOperator(token: string): Promise<void> {
     await this.prisma.operatorSession.deleteMany({ where: { tokenHash: hashToken(token) } });
+  }
+
+  /**
+   * Deletes every expired clinic and operator session, by `sessionExpiry`'s rule (both limits are `>=`, so `lte`).
+   * The one cross-clinic write on `Session` outside sign-in (CONVENTIONS → Decisions: identity tables). Indexed on
+   * `expiresAt` and `lastSeenAt`.
+   */
+  async sweepExpired(): Promise<number> {
+    const now = this.clock.now();
+    const idleSince = new Date(now.getTime() - SESSION_POLICY.idleMinutes * MINUTE);
+    const where = { OR: [{ expiresAt: { lte: now } }, { lastSeenAt: { lte: idleSince } }] };
+    const [clinic, operator] = await Promise.all([this.prisma.session.deleteMany({ where }), this.prisma.operatorSession.deleteMany({ where })]);
+    return clinic.count + operator.count;
   }
 }
