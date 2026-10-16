@@ -1,5 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { StartVisitInput, type Visit } from "@pedia/shared";
+import { AppointmentRecordsService } from "../appointments/appointment-records.service";
+import { APPOINTMENT_NOT_FOUND } from "../appointments/appointment.rules";
 import { AuditService } from "../audit/audit.service";
 import { ClinicService } from "../clinic/clinic.service";
 import { Clock } from "../common/clock";
@@ -21,6 +23,7 @@ export class VisitsService {
     private readonly audit: AuditService,
     private readonly clinic: ClinicService,
     private readonly clock: Clock,
+    private readonly appointments: AppointmentRecordsService,
   ) {}
 
   /** GET /patients/:id/visits, newest first (mocks.ts:13). An unknown patient has none: [], as the mock. Audited (decision 6). */
@@ -38,7 +41,15 @@ export class VisitsService {
       if (!(await this.clinic.isActiveDentist(input.dentistId, tx))) throw new BadRequestException("Unknown dentist");
       const open = await tx.visit.findFirst({ where: { patientId, status: "in_progress" }, select: { id: true } });
       if (open) throw new ConflictException("This patient already has a visit in progress");
-      // Decision 1: stored as given. B7 checks the appointment (404 / 409) and seats it here, in this transaction.
+      // Starting from an appointment seats the child: arrived → in chair (visits/mocks.ts:31–41). Under the patient's
+      // lock, as every status change (E2), so a parallel cancel or second start sees the result.
+      if (input.appointmentId) {
+        const appointment = await this.appointments.one(tx, input.appointmentId);
+        if (!appointment || appointment.patientId !== patientId) throw new NotFoundException(APPOINTMENT_NOT_FOUND);
+        if (!(await this.appointments.advance(tx, appointment.id, "arrived", "in_chair"))) {
+          throw new ConflictException("Check the patient in before starting the visit");
+        }
+      }
       const row = await tx.visit.create({
         data: {
           ...clinicData(), patientId, dentistId: input.dentistId, appointmentId: input.appointmentId ?? null,
@@ -59,9 +70,11 @@ export class VisitsService {
       const [found] = await tx.$queryRaw<{ patientId: string }[]>`SELECT patientId FROM Visit WHERE clinicId = ${requireContext().clinicId!} AND id = ${id} FOR UPDATE`;
       if (!found) throw new NotFoundException(VISIT_NOT_FOUND);
       await lockPatient(tx, found.patientId);
-      const { status } = await tx.visit.findUniqueOrThrow({ where: { id }, select: { status: true } });
+      const { status, appointmentId } = await tx.visit.findUniqueOrThrow({ where: { id }, select: { status: true, appointmentId: true } });
       if (status !== "in_progress") throw new ConflictException("Visit is already completed");
-      // B7: the appointment it was started from moves from in chair to done here (visits/mocks.ts:63).
+      // The appointment it was started from: in chair → done (visits/mocks.ts:63–64). Any other status (or a pre-B7 id
+      // that names nothing) is left as it is, as the mock.
+      if (appointmentId) await this.appointments.advance(tx, appointmentId, "in_chair", "done");
       const row = await tx.visit.update({ where: { id }, data: { status: "completed", completedAt: this.clock.now() }, select: VISIT_COLUMNS });
       await this.audit.record("update", "Visit (completed)", found.patientId, tx);
       return toVisit(row);
@@ -89,5 +102,19 @@ export class VisitsService {
   async one(tx: Tx, id: string): Promise<Visit | undefined> {
     const row = await tx.visit.findUnique({ where: { id }, select: VISIT_COLUMNS });
     return row ? toVisit(row) : undefined;
+  }
+
+  /** Each visit's dentist (a due item's `dentistId`, through the visit stored on it: E6). One query. */
+  async dentistsOf(visitIds: readonly string[]): Promise<Map<string, string>> {
+    if (!visitIds.length) return new Map();
+    const rows = await this.prisma.visit.findMany({ where: { id: { in: [...new Set(visitIds)] } }, select: { id: true, dentistId: true } });
+    return new Map(rows.map((r) => [r.id, r.dentistId]));
+  }
+
+  /** Each visit's day as yyyy-MM-dd (the backfill's visitDate). One query. */
+  async datesOf(tx: Tx, visitIds: readonly string[]): Promise<Map<string, string>> {
+    if (!visitIds.length) return new Map();
+    const rows = await tx.visit.findMany({ where: { id: { in: [...new Set(visitIds)] } }, select: { id: true, date: true } });
+    return new Map(rows.map((r) => [r.id, r.date.toISOString().slice(0, 10)]));
   }
 }

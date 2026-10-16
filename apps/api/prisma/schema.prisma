@@ -550,7 +550,7 @@ model Visit {
   clinicId      String
   patientId     String
   dentistId     String
-  /// Stored as given until B7 brings appointments (decision 1): nothing checks or seats it yet.
+  /// The appointment it was started from (B7): checked and seated (arrived → in chair) on start, done on complete.
   appointmentId String?
   /// The clinic's calendar day it started on (Clock.today(), Asia/Manila).
   date          DateTime    @db.Date

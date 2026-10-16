@@ -1,6 +1,6 @@
 import type { INestApplication } from "@nestjs/common";
 import { DEMO_CLINIC_ID, seedPlatform } from "@pedia/seed";
-import { Patient, PatientHeaderSummary, PatientPage, Visit, type RegisterPatientInput } from "@pedia/shared";
+import { Appointment, Patient, PatientHeaderSummary, PatientPage, Visit, type RegisterPatientInput } from "@pedia/shared";
 import request from "supertest";
 import { z } from "zod";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -82,10 +82,82 @@ describe("visits (apps/web handlers.test.ts → visits)", () => {
     expect([visit.date, visit.startedAt]).toEqual(["2026-06-02", "2026-06-01T16:30:00.000Z"]);
   });
 
-  it("keeps the appointment a visit was started from, unchecked until B7 (decision 1)", async () => {
-    const admin = await as(ADMIN);
-    expect((await ok(start(await register(), admin, { dentistId: "staff_reyes", appointmentId: "appointment_x" }), Visit, 201)).appointmentId).toBe("appointment_x");
-    expect(await ok(start(await register(), admin), Visit, 201)).not.toHaveProperty("appointmentId");
+  it("keeps no appointment for a visit started without one", async () => {
+    expect(await ok(start(await register(), await as(ADMIN)), Visit, 201)).not.toHaveProperty("appointmentId");
+  });
+
+  describe("started from an appointment (B7, appointments/mocks.ts #2, #4)", () => {
+    // One 30-minute slot each, far from the seeded fortnight: Mondays in 2030, Manila times (E3).
+    let k = 0;
+    const slotAt = () => { const i = k++; return new Date(`2030-02-${String(4 + 7 * Math.floor(i / 18)).padStart(2, "0")}T08:00:00+08:00`).getTime() + (i % 18) * 30 * 60_000; };
+    const book = async (patientId: string, admin: string) =>
+      ok(call("post", "/appointments", admin, { patientId, dentistId: "staff_reyes", chairId: "chair_1", startsAt: new Date(slotAt()).toISOString(), durationMin: 30, reason: "Check-up" }), Appointment, 201);
+    const setStatus = (id: string, admin: string, body: object) => call("post", `/appointments/${id}/status`, admin, body);
+    const arrived = async (patientId: string, admin: string) => {
+      const a = await book(patientId, admin);
+      return ok(setStatus(a.id, admin, { status: "arrived" }), Appointment);
+    };
+    const statusOf = async (id: string) => (await inClinic(DEMO_CLINIC_ID, () => prisma.appointment.findUniqueOrThrow({ where: { id }, select: { status: true } }))).status;
+    const visits = (patientId: string) => inClinic(DEMO_CLINIC_ID, () => prisma.visit.count({ where: { patientId } }));
+
+    it("seats an arrived appointment, and completing the visit marks it done", async () => {
+      const admin = await as(ADMIN);
+      const id = await register();
+      const a = await arrived(id, admin);
+      const visit = await ok(start(id, admin, { dentistId: "staff_reyes", appointmentId: a.id }), Visit, 201);
+      expect([visit.appointmentId, await statusOf(a.id)]).toEqual([a.id, "in_chair"]);
+      tick();
+      await ok(call("post", `/visits/${visit.id}/complete`, admin), Visit);
+      expect(await statusOf(a.id)).toBe("done");
+      const header = await ok(call("get", `/patients/${id}/summary`, admin), PatientHeaderSummary);
+      expect(header.lastVisitOn).toBe(clock.today());
+    });
+
+    it("refuses a booked appointment not yet checked in, another child's, and an unknown one", async () => {
+      const admin = await as(ADMIN);
+      const [id, other] = [await register(), await register()];
+      const booked = await book(id, admin);
+      const notIn = await start(id, admin, { dentistId: "staff_reyes", appointmentId: booked.id });
+      expect([notIn.status, notIn.text]).toEqual([409, "Check the patient in before starting the visit"]);
+      const theirs = await arrived(other, admin);
+      for (const appointmentId of [theirs.id, "appointment_nobody"]) {
+        const res = await start(id, admin, { dentistId: "staff_reyes", appointmentId });
+        expect([res.status, res.text]).toEqual([404, "Appointment not found"]);
+      }
+      expect([await visits(id), await statusOf(booked.id), await statusOf(theirs.id)]).toEqual([0, "booked", "arrived"]);
+    });
+
+    it("answers a visit in progress before looking at the appointment", async () => {
+      const admin = await as(ADMIN);
+      const id = await register();
+      await ok(start(id, admin), Visit, 201);
+      const res = await start(id, admin, { dentistId: "staff_reyes", appointmentId: "appointment_nobody" });
+      expect([res.status, res.text]).toEqual([409, "This patient already has a visit in progress"]);
+    });
+
+    it("seats one of five parallel starts from the same arrived appointment", async () => {
+      const admin = await as(ADMIN);
+      const id = await register();
+      const a = await arrived(id, admin);
+      const answers = await Promise.all(Array.from({ length: 5 }, () => start(id, admin, { dentistId: "staff_reyes", appointmentId: a.id })));
+      expect(answers.map((r) => r.status).sort()).toEqual([201, 409, 409, 409, 409]);
+      expect([await visits(id), await statusOf(a.id)]).toEqual([1, "in_chair"]);
+    });
+
+    it("lets exactly one of a start and a cancel win, round after round", async () => {
+      const admin = await as(ADMIN);
+      for (let round = 0; round < 20; round++) {
+        const id = await register();
+        const a = await arrived(id, admin);
+        const [started, cancelled] = await Promise.all([
+          start(id, admin, { dentistId: "staff_reyes", appointmentId: a.id }),
+          setStatus(a.id, admin, { status: "cancelled", cancelReason: "Family left" }),
+        ]);
+        const status = await statusOf(a.id);
+        if (started.status === 201) expect([cancelled.status, status, await visits(id)], `round ${round}`).toEqual([409, "in_chair", 1]);
+        else expect([started.status, cancelled.status, status, await visits(id)], `round ${round}`).toEqual([409, 200, "cancelled", 0]);
+      }
+    });
   });
 
   it("serves the seeded visits newest first, all completed", async () => {

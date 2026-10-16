@@ -12,6 +12,7 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
+    "db:backfill-due-items": "node --import @swc-node/register/esm-register prisma/backfill-due-items.ts",
     "db:studio": "prisma studio",
     "postinstall": "prisma generate",
     "lint": "echo 'no lint in api'",

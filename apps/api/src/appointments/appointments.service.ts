@@ -8,6 +8,7 @@ import { refuse } from "../common/refusal";
 import { requireContext } from "../common/request-context";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { lockPatient } from "../patients/patient-lock";
+import { DueItemsService } from "../recalls/due-items.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { clinicData } from "../prisma/tenant-scope";
 import { runInTransaction, type Tx } from "../prisma/transaction";
@@ -30,6 +31,7 @@ export class AppointmentsService implements OnModuleInit {
     private readonly clinic: ClinicService,
     private readonly audit: AuditService,
     private readonly owners: RecordOwners,
+    private readonly dueItems: DueItemsService,
   ) {}
 
   onModuleInit() {
@@ -63,7 +65,8 @@ export class AppointmentsService implements OnModuleInit {
       refuse(slotRefusal(slot, { ...refs, existing: await this.records.near(tx, slot) }));
       const { id: _, ...data } = slot;
       const booked = await this.records.create(tx, { ...clinicData(), ...data, procedureCode: input.procedureCode ?? null, sourceRuleId: input.sourceRuleId ?? null });
-      // B7c (Step 6.2): the patient's earliest open item for sourceRuleId takes this appointment.
+      // Booked from the due list: the patient's earliest open item for that rule is now booked (mocks.ts:85–91).
+      await this.dueItems.takeFor(tx, booked);
       // B9: queueBookingMessages(booked): a confirmation now, a reminder the day before (mocks.ts:92).
       await this.audit.record("create", "Appointment", input.patientId, tx);
       return booked;

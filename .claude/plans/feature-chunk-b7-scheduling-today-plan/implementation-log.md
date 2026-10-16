@@ -62,3 +62,15 @@ plan recommends. Engineering decisions E1–E8 as the plan records them.
 - Case 2's 404 and case 3's "staff ask on a parent's behalf" aren't reachable over HTTP: only parents hold `appointments.request` (PARENT_ONLY), and the guard refuses them a child that isn't theirs. The int test asserts those 403s and checks `primaryGuardianId` directly. `RegisterPatientInput` needs exactly one primary, so "else the first" covers only legacy data.
 - Mutation check: with `lockPatient` removed from `create`, the 10-request race goes red.
 **Gate:** `pnpm run check` green (api 285); `test:int` 29 files, 267 passed + 5 todo.
+
+## Phase 6: Due items, signing, visits, backfill — 2026-10-16
+
+**Steps completed:** 6.1, 6.2, 6.3, 6.4, 6.5
+**Files changed:** `apps/api/src/recalls/{due-items.service,recalls.controller,recalls.module}.ts` (new), `apps/api/src/visits/{visits.service,visits.module}.ts` (appointment check/seat/done; `dentistsOf`, `datesOf`), `apps/api/src/notes/{notes.service,notes.module}.ts` (`afterSign` in sign; `signedForBackfill`), `apps/api/src/appointments/{appointments.service,appointments.module}.ts` (`takeFor` in book), `apps/api/src/app.module.ts`, `apps/api/prisma/backfill-due-items.ts` (new), `apps/api/package.json`, `apps/api/tsconfig.json` (typechecks the script), `apps/api/prisma/schema.prisma` (Visit.appointmentId comment only: empty diff), `apps/api/test/clinical-routes.test.ts`, `apps/api/test/int/{recalls,visits}.int.test.ts`
+**Deviations from plan:**
+- `DueItemsService` takes no `Clock`: signing passes its `signedAt`, and nothing else needs the time.
+- The backfill script's request context is `{ requestId, clinicId, operator: false }`, as `seed-database.ts` (the plan's QUESTION).
+- Case 7 (sign vs book race) asserts both succeed, one closed item and one open, and the booking took exactly one item. Mutation: removing `lockPatient` from `book` leaves it green. Any interleaving matches one of the two serial orders, because signing closes the old item either way. So the lock isn't what keeps this pair consistent, and the test checks for no 500 and no lost write.
+- Case 16 (start vs cancel) runs 20 rounds: with `setStatus`'s `lockPatient` removed it fails (round 3 of 30), and 6 rounds passed by chance.
+- Smoke: `db:backfill-due-items` on a freshly seeded scratch database with every DueItem deleted: clinic_demo 54 opened (the seed's 54), then 0 on a second run.
+**Gate:** `pnpm run check` exit 0; `test:int` 30 files, 283 passed + 5 todo.
