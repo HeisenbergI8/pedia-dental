@@ -1,6 +1,6 @@
 import type { INestApplication } from "@nestjs/common";
 import { DEMO_CLINIC_ID, seedPlatform } from "@pedia/seed";
-import { Patient, Visit, type RegisterPatientInput } from "@pedia/shared";
+import { Patient, PatientHeaderSummary, PatientPage, Visit, type RegisterPatientInput } from "@pedia/shared";
 import request from "supertest";
 import { z } from "zod";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -169,6 +169,21 @@ describe("visits (apps/web handlers.test.ts → visits)", () => {
       const results = await Promise.all(Array.from({ length: 10 }, () => call("post", `/visits/${visit.id}/complete`, admin)));
       expect(results.map((r) => r.status).sort()).toEqual([200, ...Array(9).fill(409)]);
     }
+  });
+
+  it("fills the last visit in the header and the list, from completed visits only", async () => {
+    const admin = await as(ADMIN);
+    const id = await register();
+    const header = () => ok(call("get", `/patients/${id}/summary`, admin), PatientHeaderSummary);
+    expect(await header()).not.toHaveProperty("lastVisitOn");
+    tick();
+    const visit = await ok(start(id, admin), Visit, 201);
+    expect(await header()).not.toHaveProperty("lastVisitOn"); // in progress doesn't count
+    tick();
+    await ok(call("post", `/visits/${visit.id}/complete`, admin), Visit);
+    expect((await header()).lastVisitOn).toBe(visit.date);
+    const page = await ok(call("get", `/patient-summaries?q=${encodeURIComponent(`Visit${n}`)}`, admin), PatientPage);
+    expect(page.rows.find((r) => r.id === id)?.lastVisitOn).toBe(visit.date);
   });
 
   // Last: it deactivates a seeded dentist.

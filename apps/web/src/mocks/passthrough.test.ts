@@ -13,7 +13,7 @@ describe("which routes the API serves", () => {
     expect(servedBy(routes, "POST", "/branches")).toBe(false);
     expect(servedBy(routes, "GET", "/branches/b1")).toBe(false);
   });
-  it("serves B2's sign-in, B3's clinic setup and B4's patients from the API, and their mocked neighbours from MSW", () => {
+  it("serves B2's sign-in, B3's clinic setup, B4's patients and B5's chart from the API, and their mocked neighbours from MSW", () => {
     const api = (method: string, path: string) => servedBy(API_ROUTES, method, path);
     for (const path of ["/auth/login", "/auth/logout", "/auth/switch", "/auth/password", "/auth/acknowledgement", "/operator/auth/login"]) {
       expect(api("POST", path), path).toBe(true);
@@ -38,9 +38,16 @@ describe("which routes the API serves", () => {
       ["GET", "/clinic/privacy-notice"], ["PUT", "/clinic/privacy-notice"], ["GET", "/legal/notices/clinic_demo"],
     ] as const;
     for (const [method, path] of b4) expect(api(method, path), `${method} ${path}`).toBe(true);
-    expect(API_ROUTES).toHaveLength(14 + b3.length + b4.length);
-    // Same prefixes, other chunks (B12, B13, B5, B6, B7, B9): still MSW's.
-    expect([api("GET", "/clinic/subscription"), api("POST", "/patients/p1/exports"), api("GET", "/patients/p1/visits"), api("GET", "/patients/p1/plan")]).toEqual([false, false, false, false]);
+    // B5: visits and the chart. Their neighbours (growth on a visit, notes, the plan) stay on MSW until B6.
+    const b5 = [
+      ["GET", "/patients/p1/visits"], ["POST", "/patients/p1/visits"], ["POST", "/visits/v1/complete"],
+      ["GET", "/patients/p1/chart"], ["POST", "/patients/p1/chart"], ["POST", "/patients/p1/chart/batch"],
+    ] as const;
+    for (const [method, path] of b5) expect(api(method, path), `${method} ${path}`).toBe(true);
+    expect(API_ROUTES).toHaveLength(14 + b3.length + b4.length + b5.length);
+    // Same prefixes, other chunks (B12, B13, B6, B7, B9): still MSW's.
+    expect([api("GET", "/clinic/subscription"), api("POST", "/patients/p1/exports"), api("GET", "/patients/p1/plan")]).toEqual([false, false, false]);
+    expect([api("PUT", "/visits/v1/growth"), api("GET", "/patients/p1/notes"), api("GET", "/patients/p1/growth")]).toEqual([false, false, false]);
     expect([api("GET", "/operator/accounts"), api("GET", "/patients/p1/photos"), api("GET", "/messages"), api("DELETE", "/branches/b1")]).toEqual([false, false, false, false]);
   });
 });

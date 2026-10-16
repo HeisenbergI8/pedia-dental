@@ -65,6 +65,14 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "GET", path: "/clinic/privacy-notice" },
   { method: "PUT", path: "/clinic/privacy-notice" },
   { method: "GET", path: "/legal/notices/:clinicId" },
+  // B5: visits and the dental chart (VisitsController, ChartController). Notes, growth and photos stay mocked until
+  // B6/B10: in hybrid they find the seeded visits (same ids) but not one the API started (CONVENTIONS → Traps).
+  { method: "GET", path: "/patients/:id/visits" },
+  { method: "POST", path: "/patients/:id/visits" },
+  { method: "POST", path: "/visits/:id/complete" },
+  { method: "GET", path: "/patients/:id/chart" },
+  { method: "POST", path: "/patients/:id/chart" },
+  { method: "POST", path: "/patients/:id/chart/batch" },
 ];
 
 export const servedBy = (routes: readonly ApiRoute[], method: string, path: string) =>

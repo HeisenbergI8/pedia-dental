@@ -9,6 +9,7 @@ import { Prisma } from "../generated/prisma/client.ts";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService, type StoredFile } from "../storage/storage.service";
 import type { Tx } from "../prisma/transaction";
+import { VisitDaysService } from "../visits/visit-days.service";
 import { photoFileName } from "./patient-photo";
 import { scopeCondition, searchCondition } from "./patient-search";
 import { inScope, toDuplicate, toPatient, toSummary, visibleTo, type Viewer } from "./patient.views";
@@ -23,6 +24,7 @@ export class PatientsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly storage: StorageService,
+    private readonly visitDays: VisitDaysService,
   ) {}
 
   /** Full records for these ids, in this order. Five queries whatever the count (no N+1). Missing ids are skipped. */
@@ -66,10 +68,11 @@ export class PatientsService {
     const ids = total ? await this.matching(viewer, query.q, { limit: query.pageSize, offset }) : [];
     const patients = await this.records(ids);
     const siblings = await this.siblingsOf(viewer, patients);
+    const lastVisits = await this.visitDays.lastVisitOn(ids);
     const money = rolesCan(viewer.roles, "billing.view");
     const counts = Object.fromEntries(PatientFilter.options.map((f) => [f, f === "all" ? all : 0]));
     return PatientPage.parse({
-      rows: patients.map((p) => toSummary(viewer, p, (siblings.get(p.id) ?? []).map((s) => s.firstName), money)),
+      rows: patients.map((p) => toSummary(viewer, p, (siblings.get(p.id) ?? []).map((s) => s.firstName), money, lastVisits.get(p.id))),
       total, page, pageSize: query.pageSize, counts,
     });
   }
@@ -81,13 +84,15 @@ export class PatientsService {
     return visibleTo(viewer, p);
   }
 
-  /** GET /patients/:id/summary: the pinned header. Money is zero until B8; the last visit arrives with B5. */
+  /** GET /patients/:id/summary: the pinned header. Money is zero until B8; the last visit is B5's (completed visits). */
   async headerSummary(viewer: Viewer, id: string): Promise<PatientHeaderSummary> {
     const p = await this.one(id);
     await this.audit.record("view", "Patient profile", id);
     const money = inScope(viewer, "billing.view", id);
+    const lastVisitOn = (await this.visitDays.lastVisitOn([id])).get(id);
     return PatientHeaderSummary.parse({
       patientId: p.id, patientNo: p.patientNo,
+      ...(lastVisitOn && { lastVisitOn }),
       ...(money && { balance: 0, credit: 0 }),
       siblings: (await this.siblingsOf(viewer, [p])).get(p.id) ?? [],
     });

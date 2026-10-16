@@ -1,6 +1,6 @@
 import type { INestApplication } from "@nestjs/common";
 import { DEMO_CLINIC_ID, childrenOf, seedPlatform } from "@pedia/seed";
-import { DuplicateMatch, PatientHeaderSummary, PatientPage, PatientView, type Patient } from "@pedia/shared";
+import { DuplicateMatch, PatientHeaderSummary, PatientPage, PatientView, lastVisitOn, type Patient } from "@pedia/shared";
 import request from "supertest";
 import { z } from "zod";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -127,12 +127,15 @@ describe("the list (decision 3)", () => {
     expect([past.page, past.rows.length > 0]).toEqual([Math.ceil(first.total / 10), true]);
   });
 
-  it("counts every patient under All, and nothing under the filters later chunks fill", async () => {
+  it("counts every patient under All, and nothing under the filters B7 and B8 fill", async () => {
     const cookie = await as(ADMIN);
     const page = await ok(get("/patient-summaries?pageSize=100", cookie), PatientPage);
     expect(page.counts).toEqual({ all: page.total, needs_attention: 0, recent_visit: 0, balance_due: 0, recall_due: 0 });
     expect(page.rows.every((r) => !r.flags.recallDue && !r.flags.balanceDue && !r.flags.noContact)).toBe(true);
-    expect(page.rows.every((r) => r.balance === 0 && r.lastVisitOn === undefined && r.recallDueOn === undefined)).toBe(true);
+    expect(page.rows.every((r) => r.balance === 0 && r.recallDueOn === undefined)).toBe(true);
+    // B5: the last completed visit's day, the shared rule over the seed's visits (B5 decision 2: done appointments in B7).
+    expect(page.rows.map((r) => r.lastVisitOn)).toEqual(page.rows.map((r) => lastVisitOn(r.id, db.visits, [])));
+    expect(page.rows.some((r) => r.lastVisitOn)).toBe(true); // not vacuous
     const due = await ok(get("/patient-summaries?filter=recall_due", cookie), PatientPage);
     expect([due.total, due.rows]).toEqual([0, []]);
   });

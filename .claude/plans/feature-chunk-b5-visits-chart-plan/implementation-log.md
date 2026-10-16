@@ -100,3 +100,22 @@ they happen, with the reason; "none" when there are none.
 - `chart.int.test.ts`: the cross-clinic case picks a patient other than the one the repository-level case gave a backstop correction to. The upsert attempt names `clinicId`, which its create type requires.
 **Gate:** `pnpm run check` green (api 223); `test:int` 24 files, 181 passed + 5 todo.
 **Notes:** B5b closes here. The snapshot rule goes into CONVENTIONS in Phase 7.
+
+## Phase 6: Last visit in the summaries — 2026-10-16
+
+**Steps completed:** 6.1, 6.2, 6.3
+**Files changed:** `apps/api/src/visits/visit-days.{service,module}.ts` (new), `apps/api/src/patients/{patient.views,patient.views.test,patients.service,patients.module}.ts`, `apps/api/test/int/patients-read.int.test.ts`, `apps/api/test/int/visits.int.test.ts`
+**Deviations from plan:** none (no unit test constructs `PatientsService` by hand, so nothing needed a stub).
+**Gate:** `pnpm run check` green (api 224); `test:int` 24 files, 182 passed + 5 todo.
+**Notes:** none.
+
+## Phase 7: Cut-over — 2026-10-16
+
+**Steps completed:** 7.1, 7.2, 7.3
+**Files changed:** `apps/web/src/mocks/passthrough.ts`, `apps/web/src/mocks/passthrough.test.ts`, `apps/web/e2e/api-chart.spec.ts` (new), `apps/api/CONVENTIONS.md`, `apps/api/CHUNKS.md`, `CONVENTIONS.md`
+**Deviations from plan:**
+- `passthrough.test.ts`: B4's case asserted `GET /patients/p1/visits` stayed mocked; that assertion moves to the B5 list (served) and the neighbours (growth, notes, plan) are asserted mocked.
+- The fresh database was made with the `mysql` client as `pedia` (no docker here); the API ran with `pnpm dev:api` and the web with `next dev` on `.next-hybrid`, as in B3. Run with an uncommitted `playwright.tmp.config.ts` (workers 1, chromium path).
+- CONVENTIONS also records the snapshot trap from Phase 5 (lock before the first plain read) and the lock order (visit then patient in `complete`); the plan's trap (1) wording ("looks the visit up once before the lock") is replaced, since that lookup was the defect.
+**Gate:** `pnpm run check` green; `test:int` green (Phase 6); `e2e/api-chart.spec.ts` 3/3 twice in a row on `pedia_dental_e2e_b5`.
+**Notes:** B5c closes here. API on :4110 and hybrid web on :3160 left running for the tester.
