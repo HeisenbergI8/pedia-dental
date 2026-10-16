@@ -113,7 +113,17 @@ answers 403; a staff member at two branches switches branch; a suspended account
 
 ---
 
-## Chunk B3: Clinic setup and Owner settings (~20 h) · Large — features 16 (rest), part of 2
+## ✅ Chunk B3: Clinic setup and Owner settings (done, 2026-10-16) · Large — features 16 (rest), part of 2
+
+**Status (2026-10-16): done**, in four parts. **B3a**: chairs, procedures, note and message templates (tables, seed,
+reads, `PUT /message-templates/:kind`). **B3b**: profile, branding and the logo (sniffed, SVGs sanitised by DOMPurify,
+old files deleted through the outbox). **B3c**: `/clinic/usage`, branch and staff writes, tier limits under a per-clinic
+lock. **B3d**: the 18 routes in `API_ROUTES`, and `e2e/api-owner-settings.spec.ts` drives Settings against the API.
+"Decide first" answered in the B3 plan (limits stay `TIER_LIMITS`; the sixth login counts active staff with the Owner;
+DOMPurify on jsdom). Done-when proofs: `test:int` `owner-settings.int.test.ts` (every case with its routes),
+`tier-limits.int.test.ts` (parallel adds at the last seat leave one), `clinic-branding.int.test.ts`,
+`clinic-reference.int.test.ts`. **Deferred by design:** "won't archive a branch with upcoming bookings" (B7, `it.todo`),
+the privacy notice (B4) and the subscription (B12) on the Settings screen, `denied` audit entries (Follow Up 2 of the plan).
 
 **Goal:** everything a clinic configures, so clinical chunks have procedures, chairs, templates and limits.
 
@@ -336,9 +346,9 @@ restoring last night's backup to a fresh database works; the load test meets its
 
 ```
 B0 Skeleton ✅
- └─ B1 Platform foundation (context, tenant scoping, outbox, jobs, logs, audit, storage, test harness, cut-over switch)
-     └─ B2 Identity, sessions & access
-         └─ B3 Clinic setup & Owner settings
+ └─ B1 Platform foundation (context, tenant scoping, outbox, jobs, logs, audit, storage, test harness, cut-over switch) ✅
+     └─ B2 Identity, sessions & access ✅
+         └─ B3 Clinic setup & Owner settings ✅
              └─ B4 Patients & privacy consent
                  └─ B5 Visits & dental chart
                      └─ B6 Notes, growth, behavior & plan

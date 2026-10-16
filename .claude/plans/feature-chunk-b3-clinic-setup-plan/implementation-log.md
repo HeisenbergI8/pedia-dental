@@ -108,3 +108,19 @@ One entry per phase, added when its gate passes. Format (as B2d):
 **Deviations from plan:** the plan's port read two tenant tables (`Staff` for Joy's email, `AuditEvent` for the audit case) from the root client outside any request context, which the tenant extension refuses ("needs a clinic"). Both reads now run in `inClinic("clinic_ngiti", …)` and drop their explicit `clinicId`.
 **Gate:** `pnpm run check` green (api 160); full `test:int` 18 files, 112 passed + 1 todo (B7 bookings). `tier-limits.int.test.ts` run 5 times in a row: green each time.
 **Notes:** B3c closes here.
+
+## Phase 10: Serve B3's routes in hybrid — 2026-10-16
+
+**Steps completed:** 10.1
+**Files changed:** `apps/web/src/mocks/passthrough.ts`, `apps/web/src/mocks/passthrough.test.ts`
+**Deviations from plan:** none.
+**Gate:** `pnpm run check` green (web 342).
+**Notes:** no feature code, schema or mock handler changed.
+
+## Phase 12: Record it — 2026-10-16
+
+**Steps completed:** 12.1, 12.2
+**Files changed:** `apps/api/CONVENTIONS.md`, `CONVENTIONS.md`, `apps/api/CHUNKS.md`
+**Deviations from plan:** besides the plan's text: two more API traps (the non-interactive `migrate dev` workaround from Phase 1, and overriding `OutboxModule` when a unit test builds `StorageModule`, from Phase 5); the root `hybrid` trap also says how to tell an API answer in Playwright (`x-request-id`, Phase 11); the root intro line names B3; the "Order at a glance" diagram ticks B1–B3.
+**Gate:** none (prose).
+**Notes:** none.
