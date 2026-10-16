@@ -2,7 +2,7 @@
   "name": "pedia-dental",
   "private": true,
   "packageManager": "pnpm@9.15.9",
-  "engines": { "node": ">=22" },
+  "engines": { "node": "22.x" },
   "scripts": {
     "dev": "pnpm --filter web dev",
     "dev:api": "pnpm --filter api dev",
