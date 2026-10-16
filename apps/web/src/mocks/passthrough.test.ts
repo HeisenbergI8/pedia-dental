@@ -13,7 +13,7 @@ describe("which routes the API serves", () => {
     expect(servedBy(routes, "POST", "/branches")).toBe(false);
     expect(servedBy(routes, "GET", "/branches/b1")).toBe(false);
   });
-  it("serves B2's sign-in and clinic reads from the API, and their mocked neighbours from MSW", () => {
+  it("serves B2's sign-in and B3's clinic setup from the API, and their mocked neighbours from MSW", () => {
     const api = (method: string, path: string) => servedBy(API_ROUTES, method, path);
     for (const path of ["/auth/login", "/auth/logout", "/auth/switch", "/auth/password", "/auth/acknowledgement", "/operator/auth/login"]) {
       expect(api("POST", path), path).toBe(true);
@@ -21,10 +21,18 @@ describe("which routes the API serves", () => {
     for (const path of ["/auth/demo-accounts", "/auth/me", "/auth/acknowledgement", "/operator/auth/me", "/clinic", "/branches", "/staff"]) {
       expect(api("GET", path), path).toBe(true);
     }
-    expect(API_ROUTES).toHaveLength(14);
-    // Same paths, other chunks (B3, B12): still MSW's.
-    expect([api("PUT", "/clinic"), api("GET", "/clinic/usage"), api("GET", "/clinic/subscription"), api("POST", "/branches"), api("POST", "/staff")]).toEqual([false, false, false, false, false]);
-    expect([api("GET", "/operator/accounts"), api("GET", "/patients")]).toEqual([false, false]);
+    // B3: every Owner settings write, the usage, the logo and the reference data.
+    const b3 = [
+      ["PUT", "/clinic"], ["PUT", "/clinic/branding"], ["GET", "/clinic/logo"], ["PUT", "/clinic/logo"], ["DELETE", "/clinic/logo"],
+      ["GET", "/clinic/usage"], ["POST", "/branches"], ["PUT", "/branches/b1"], ["POST", "/branches/b1/archive"], ["POST", "/branches/b1/reopen"],
+      ["POST", "/staff"], ["POST", "/staff/s1/deactivate"], ["POST", "/staff/s1/reactivate"],
+      ["GET", "/chairs"], ["GET", "/procedures"], ["GET", "/note-templates"], ["GET", "/message-templates"], ["PUT", "/message-templates/recall"],
+    ] as const;
+    for (const [method, path] of b3) expect(api(method, path), `${method} ${path}`).toBe(true);
+    expect(API_ROUTES).toHaveLength(14 + b3.length);
+    // Same prefixes, other chunks (B4, B12, B7, B9): still MSW's.
+    expect([api("GET", "/clinic/subscription"), api("GET", "/clinic/privacy-notice"), api("PUT", "/clinic/privacy-notice")]).toEqual([false, false, false]);
+    expect([api("GET", "/operator/accounts"), api("GET", "/patients"), api("GET", "/messages"), api("DELETE", "/branches/b1")]).toEqual([false, false, false, false]);
   });
 });
 

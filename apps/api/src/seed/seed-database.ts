@@ -19,10 +19,11 @@ export function assertSeedAllowed(env: Pick<Env, "DEMO_LOGINS">, existingAccount
 const dateOnly = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
 
 /**
- * Writes `seedPlatform()`'s identity data: accounts, branches, staff, every login's credentials (argon2id), notices,
- * acknowledgements, agreements, the operator and the login page's DemoLogin rows. Clinic rows are written inside that
- * clinic's request context, so the tenant extension stamps and checks them (awaited inside, CONVENTIONS → Traps).
- * Patients, visits and the rest arrive with their chunks.
+ * Writes `seedPlatform()`'s identity data and each clinic's setup: accounts, branches, staff, every login's credentials
+ * (argon2id), notices, acknowledgements, agreements, the operator, the login page's DemoLogin rows, and (B3) chairs,
+ * procedures, note templates and message templates. Clinic rows are written inside that clinic's request context, so
+ * the tenant extension stamps and checks them (awaited inside, CONVENTIONS → Traps). `position` keeps the mock's array
+ * order. Patients, visits and the rest arrive with their chunks.
  */
 export async function seedDatabase(prisma: PrismaService, hasher: Hasher, env: Pick<Env, "DEMO_LOGINS">, platform: Platform): Promise<void> {
   assertSeedAllowed(env, await prisma.clinicAccount.count());
@@ -73,6 +74,15 @@ export async function seedDatabase(prisma: PrismaService, hasher: Hasher, env: P
       });
       await prisma.privacyNotice.createMany({ data: db.privacyNotices.map(({ at, ...n }) => ({ ...n, at: new Date(at) })) });
       await prisma.acknowledgement.createMany({ data: db.acknowledgements.map(({ at, ...a }) => ({ ...a, at: new Date(at) })) });
+      // B3: what the clinic configures. The seed's own clinicId on these records is ignored (PROCEDURES say clinic_demo).
+      await prisma.chair.createMany({ data: db.chairs.map(({ id, branchId, name }, position) => ({ id, clinicId, branchId, name, position })) });
+      await prisma.procedure.createMany({
+        data: db.procedures.map(({ code, name, defaultDurationMin, fee, perTooth }, position) => ({ clinicId, code, name, defaultDurationMin, fee, perTooth, position })),
+      });
+      await prisma.noteTemplate.createMany({ data: db.noteTemplates.map(({ id, name, procedure, fields }, position) => ({ clinicId, id, name, procedure, fields, position })) });
+      await prisma.messageTemplate.createMany({
+        data: db.messageTemplates.map(({ kind, name, body, updatedAt }, position) => ({ clinicId, kind, name, body, updatedAt: new Date(updatedAt), position })),
+      });
     });
   }
 }

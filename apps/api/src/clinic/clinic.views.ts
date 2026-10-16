@@ -1,4 +1,4 @@
-import { ClinicAccount, StaffMember, StaffRole, isStaffRole, rolesCan, type Role } from "@pedia/shared";
+import { ClinicAccount, StaffMember, StaffRole, brandColorProblem, isStaffRole, rolesCan, suggestBrandColor, type Role } from "@pedia/shared";
 import { z } from "zod";
 
 type AccountRow = Omit<ClinicAccount, "logoRef" | "headingFont"> & { logoRef: string | null; headingFont: ClinicAccount["headingFont"] | null };
@@ -34,4 +34,10 @@ export function toStaffMember(row: StaffRow, viewer: readonly Role[]): StaffMemb
     ...(rolesCan(viewer, "clinic.manage") ? { email: row.email } : {}),
     ...(isStaffRole(viewer[0]!) && row.deactivatedAt ? { deactivatedAt: row.deactivatedAt.toISOString() } : {}),
   });
+}
+
+/** PUT /clinic/branding's 400, word for word the mock's: the problem, then the nearest colour that passes (decision #29). */
+export function brandingRefusal(brandColor: string): string | undefined {
+  const problem = brandColorProblem(brandColor);
+  return problem && `${problem} Try ${suggestBrandColor(brandColor)}.`;
 }

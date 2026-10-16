@@ -7,7 +7,7 @@ export type ApiRoute = { method: string; path: string };
 /**
  * The routes apps/api serves (CHUNKS.md: cut over chunk by chunk). In `hybrid` mode MSW lets these reach the network,
  * through the dev proxy to the API; every other route stays mocked. Same patterns as RULES in access.ts. Exact method
- * and path: `PUT /clinic`, `POST /branches` and `/clinic/usage` stay mocked until their chunk (B3).
+ * and path: `GET /clinic/subscription` (B12) and `/clinic/privacy-notice` (B4) stay mocked beside B3's `/clinic/*`.
  */
 export const API_ROUTES: readonly ApiRoute[] = [
   // B2: sign-in and sessions (AuthController). demo-accounts answers only with DEMO_LOGINS=true.
@@ -27,6 +27,26 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "GET", path: "/clinic" },
   { method: "GET", path: "/branches" },
   { method: "GET", path: "/staff" },
+  // B3: the Owner's settings (ClinicController): profile, look, logo, usage, branches and staff logins.
+  { method: "PUT", path: "/clinic" },
+  { method: "PUT", path: "/clinic/branding" },
+  { method: "GET", path: "/clinic/logo" },
+  { method: "PUT", path: "/clinic/logo" },
+  { method: "DELETE", path: "/clinic/logo" },
+  { method: "GET", path: "/clinic/usage" },
+  { method: "POST", path: "/branches" },
+  { method: "PUT", path: "/branches/:id" },
+  { method: "POST", path: "/branches/:id/archive" },
+  { method: "POST", path: "/branches/:id/reopen" },
+  { method: "POST", path: "/staff" },
+  { method: "POST", path: "/staff/:id/deactivate" },
+  { method: "POST", path: "/staff/:id/reactivate" },
+  // B3: the clinic's reference data (ClinicController, NotesController, MessagesController).
+  { method: "GET", path: "/chairs" },
+  { method: "GET", path: "/procedures" },
+  { method: "GET", path: "/note-templates" },
+  { method: "GET", path: "/message-templates" },
+  { method: "PUT", path: "/message-templates/:kind" },
 ];
 
 export const servedBy = (routes: readonly ApiRoute[], method: string, path: string) =>

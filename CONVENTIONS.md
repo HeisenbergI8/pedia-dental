@@ -4,7 +4,7 @@
 
 Primolar: pediatric dental clinic management sold as a service to many clinics. Each paying clinic is a
 **clinic account** with its own branches, staff, patients and branding (ROADMAP feature 16). **Current phase: frontend prototype.** In the demo every API call is
-answered in the browser by MSW using fake, seeded data; in `hybrid` mode the routes apps/api already serves (B2: sign-in) go to it. A NestJS + MySQL API
+answered in the browser by MSW using fake, seeded data; in `hybrid` mode the routes apps/api already serves (B2: sign-in; B3: the Owner's settings and reference data) go to it. A NestJS + MySQL API
 (`apps/api`, scaffolded; its own rules are in `apps/api/CONVENTIONS.md`) will replace the mocks later, endpoint by endpoint, without changing feature code. A clinic joins through
 the public **Get started** form, and Primolar approves it in the operator console (ROADMAP feature 17). Each clinic
 then pays Primolar monthly; the operator records payments by hand, and a clinic 7 days overdue pauses itself.
@@ -26,8 +26,9 @@ TanStack Query · React Hook Form + Zod 4 · Zustand (UI state, plus the demo se
 | Tests, one file | `pnpm --filter <web|@pedia/shared|@pedia/seed> exec vitest run <path>` |
 | Design guards (contrast, tokens, shell, screens) | `pnpm run check -- design` (typecheck + every `src/design/design-*.test.ts`) |
 | Run the app locally | `pnpm dev` → http://localhost:3000 |
-| Run against the real API | `NEXT_PUBLIC_API_MOCKING=hybrid API_PROXY_TARGET=http://localhost:4100 pnpm dev` with `pnpm dev:api` running (`DEMO_LOGINS=true COOKIE_SECURE=false`, seeded with `pnpm --filter api db:seed`). `enabled` = MSW answers everything (the demo); `hybrid` = MSW answers all but `API_ROUTES` (`mocks/passthrough.ts`: since B2, sign-in, `/operator/auth/*` and `GET /clinic|/branches|/staff`), which go through Next's `/api` proxy to the API; `disabled`/unset = no MSW |
+| Run against the real API | `NEXT_PUBLIC_API_MOCKING=hybrid API_PROXY_TARGET=http://localhost:4100 pnpm dev` with `pnpm dev:api` running (`DEMO_LOGINS=true COOKIE_SECURE=false`, seeded with `pnpm --filter api db:seed`). `enabled` = MSW answers everything (the demo); `hybrid` = MSW answers all but `API_ROUTES` (`mocks/passthrough.ts`: since B2, sign-in, `/operator/auth/*` and the clinic reads; since B3, the Owner's settings, `/clinic/usage`, the logo and the reference data), which go through Next's `/api` proxy to the API; `disabled`/unset = no MSW |
 | Sign-in against the API, end to end | Both servers on free ports (the web on its own `NEXT_DIST_DIR=.next-hybrid`), then in `apps/web`: `E2E_API=1 E2E_BASE_URL=… npx playwright test e2e/api-sign-in.spec.ts --project=desktop`. Start-up commands: the B2d plan, Step 4.1. It signs in 10 times; the API allows 20 sign-ins per 5 minutes per address |
+| Owner settings against the API, end to end | As sign-in, against a fresh database that has B3's rows: `E2E_API=1 E2E_BASE_URL=… npx playwright test e2e/api-owner-settings.spec.ts --project=desktop` (9 sign-ins a run). Start-up commands: the B3 plan, Step 11.1 |
 | Reset demo data | account menu → Reset demo data (keeps you signed in). `localStorage.clear()` then reload also works, but signs you out |
 
 ---
@@ -155,9 +156,13 @@ MSW handler (now) or NestJS (later).
   write them), so the stores write the non-secret bridge `pd_mock_session` / `pd_mock_operator` (the mock token for
   the same login) and MSW reads only that. `disabled`: no session cookie from script. `pd_branch` is script-written in
   every mode and validated by both sides. The body's `token` is `"cookie"` from the API and is never read in `hybrid`.
-- In `hybrid`, the clinic reads come from MySQL but `PUT /clinic`, branch and staff writes still go to MSW's
-  localStorage (until B3). An Owner's settings edit there succeeds and never shows. MSW's and the API's data are
-  seeded from the same `@pedia/seed`; resetting one doesn't reset the other.
+- In `hybrid`, the clinic, its branches, staff logins and reference data live in MySQL (B3) while every other record is
+  MSW's localStorage. Both are seeded from the same `@pedia/seed`, with the same ids, and never synced: a staff login or
+  branch added in `hybrid` exists only on the API, so that login's MSW screens answer 401 (the app signs it out) and MSW
+  lists fall back to its own first branch. Archiving ignores MSW's bookings until B7, and an edited message template
+  doesn't change messages MSW composes until B9. The privacy notice (B4) and the subscription (B12) stay on MSW.
+  Resetting one store doesn't reset the other. MSW passes a request through by fetching it from its worker, so in
+  Playwright `fromServiceWorker()` is true either way: tell an API answer by its `x-request-id` header.
 - `next dev` with a custom `NEXT_DIST_DIR` rewrites `apps/web/tsconfig.json` (adds that dir's types). Revert it
   (`git checkout -- apps/web/tsconfig.json`); never commit it.
 - Demo tokens are `demo.<clinicId>.<accountId>`. Handler tests sign in with `pd_session=demo.clinic_demo.<id>`, and
@@ -172,7 +177,8 @@ MSW handler (now) or NestJS (later).
   it can't sign in, switch in or be picked, and `worksAt` refuses it. Name lookups still use the full `db.staff`.
   `GET /staff` serves `email` to the Owner only and `deactivatedAt` to staff only. An email is one login per account,
   deactivated logins included (`emailTaken`).
-  Owner-settings tests live in `mocks/owner-settings.test.ts`, since they change tiers, staff and branches.
+  Owner-settings tests live in `mocks/owner-settings.test.ts`, since they change tiers, staff and branches. The same
+  cases run against the API in `apps/api/test/int/owner-settings.int.test.ts`; change both together.
 - The operator is not a clinic user: token `operator.<id>`, cookie `pd_operator`, routes `/operator/*`, store
   `stores/operator-session-store.ts`. Operator handlers read `platform.tenants[id]` and never touch `db`,
   `selectTenant` or `sessionOf` (guarded in `mocks/operator.test.ts`, which also sends the operator token to every
@@ -224,7 +230,7 @@ MSW handler (now) or NestJS (later).
 ## Reporting rules
 
 - **A deferral is not a gap.** Deliberately deferred for the prototype: real authentication (the demo
-  login is a demo control: anyone can sign in as any account with the shown password; the token is the account id; staff PINs and Owner-added passwords are stored as typed and PINs are listed in the Switch user dialog's "Demo PINs" hint; the operator's demo sign-in, operator@primolar.demo with the demo password), the NestJS backend, real SMS/email sending and staff email invites, real file storage (and sanitising uploaded SVG logos), BIR
+  login is a demo control: anyone can sign in as any account with the shown password; the token is the account id; staff PINs and Owner-added passwords are stored as typed and PINs are listed in the Switch user dialog's "Demo PINs" hint; the operator's demo sign-in, operator@primolar.demo with the demo password), the NestJS backend, real SMS/email sending and staff email invites, real file storage in the demo (MSW keeps files in the browser; the API sanitises uploaded SVG logos since B3), BIR
   official receipts, and every screen that currently renders `ComingSoon`. Their absence is intentional.
 - **A claim that ages carries the date it was measured.** Any count or "every / all / none" statement
   written into something durable says when it was measured.

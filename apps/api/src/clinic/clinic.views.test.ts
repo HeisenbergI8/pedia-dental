@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { logoUrlOf, toClinicAccount, toStaffMember } from "./clinic.views";
+import { brandingRefusal, logoUrlOf, toClinicAccount, toStaffMember } from "./clinic.views";
 
 const row = {
   id: "staff_x", clinicId: "c1", fullName: "Dr. Ana Cruz", role: "dentist" as const, alsoRoles: [], isOwner: false,
@@ -7,6 +7,11 @@ const row = {
 };
 
 describe("clinic views", () => {
+  it("refuses a colour below AA with the nearest that passes, in the mock's words, and passes one that is fine", () => {
+    expect(brandingRefusal("#e07a48")).toMatch(/too light for text and buttons.*Try #[0-9a-f]{6}\.$/);
+    expect(brandingRefusal("#0d6e8c")).toBeUndefined();
+  });
+
   it("serves a staff member's email to the Owner only, and who was deactivated to staff only", () => {
     expect(toStaffMember(row, ["owner", "dentist"])).toMatchObject({ email: "ana@clinic.ph", deactivatedAt: "2026-10-01T00:00:00.000Z" });
     const dentist = toStaffMember(row, ["dentist"]);

@@ -6,10 +6,12 @@ The Primolar backend. It replaces the browser mocks (MSW) in `apps/web` **endpoi
 feature code in the web app**. The product, the users and the domain are the ones in the root `CONVENTIONS.md`
 and `ROADMAP.md`; read those first. This file covers only how the API is built.
 
-**Current phase: B1 and B2 done** (2026-10-16). The runtime core (request context, `Clock`, logs, tenant scoping,
+**Current phase: B1–B3 done** (2026-10-16). The runtime core (request context, `Clock`, logs, tenant scoping,
 transactions, audit), `@pedia/seed`, the `test:int` suite on MySQL and CI, identity, sessions and the access guard,
 `/auth/*`, `/operator/auth/*` and the clinic reads, with the web signing in against them in `hybrid` mode. B1-c added
-the outbox, scheduled jobs and file storage. B3 (clinic setup and Owner settings) is next. The build order is [CHUNKS.md](CHUNKS.md).
+the outbox, scheduled jobs and file storage. B3: the Owner's settings
+(profile, look, logo, branches, staff logins, tier limits) and the clinic's reference data (chairs, procedures, note
+and message templates), served in `hybrid`. B4 (patients and privacy consent) is next. The build order is [CHUNKS.md](CHUNKS.md).
 
 **Stack:** NestJS 12 (ESM, Express) · Prisma 7 + MySQL 8.4 (MariaDB driver adapter) · Zod 4 schemas from
 `@pedia/shared` · SWC at runtime (`@swc-node/register`) · Vitest + Supertest · Docker Compose for local MySQL.
@@ -56,13 +58,14 @@ Run from the repo root.
 | Logging | `src/logging/logger.ts` | pino options and the redaction list (`PERSONAL_FIELDS`) |
 | Audit trail | `src/audit/` | `AuditService.record` (import `AuditModule`) |
 | Identity and access | `src/auth/` | `auth.controller.ts` / `operator-auth.controller.ts` and `auth.service.ts` (sign-in, sign-out, switch, password, acknowledgement), `rate-limit.ts` (`RATE_LIMITS`), `access-rules.ts` (the route → permission map, held to the mock's `RULES` by a test), `access.guard.ts` (the global guard), `session.service.ts` (sessions), `identity.service.ts` (who a session is, PINs), `hashing.ts` (argon2id), `cookies.ts` |
-| Clinic | `src/clinic/` | `GET /clinic`, `/branches`, `/staff`; row → contract shaping in `clinic.views.ts`. Reads only until B3 |
+| Clinic | `src/clinic/` | The account and its setup: `ClinicService` (context, profile, branding, logo, usage, chairs, procedures), `BranchesService`, `StaffService`; `limits.ts` (tier limits, from `TIER_LIMITS`), `account-lock.ts` (`ownClinicId`, `lockAccount`), `logo.ts` (`cleanLogo`: type sniffing and the SVG sanitiser), row shaping in `clinic.views.ts` |
+| Notes, messages | `src/notes/`, `src/messages/` | B3: `GET /note-templates`, `GET`/`PUT /message-templates`. B6 and B9 add the notes and the queue |
 | Outbox | `src/outbox/` | `OutboxService.enqueue(tx, …)` (the write side, inside the caller's transaction), `OutboxWorker` (claim, run, settle), `OutboxHandlers` (features register a handler per kind), `NoopHandler` |
 | Scheduled jobs | `src/jobs/`, `src/<feature>/<feature>.jobs.ts` | `JobRunner.run(job, fn)` (the `JobLock` lease). Each `@Cron` lives in the module that owns its tables: `auth.jobs.ts` (session and rate-limit sweeps), `outbox.jobs.ts` (prune) |
-| File storage | `src/storage/` | `StorageService` (clinic-scoped keys), `FileStorage` (the driver), `LocalDiskStorage`. Import `StorageModule` where files are kept |
+| File storage | `src/storage/` | `StorageService` (clinic-scoped keys), `FileStorage` (the driver), `LocalDiskStorage`, and the `storage.delete` outbox handler (`delete-file.handler.ts`). Import `StorageModule` where files are kept |
 | Demo seed | `src/seed/seed-database.ts`, `prisma/seed.ts` | Maps `@pedia/seed`'s `seedPlatform()` to rows |
 | Features | `src/<name>/` | `<name>.module.ts`, `<name>.controller.ts`, `<name>.service.ts`. Same `<name>` as `apps/web/src/features/<name>` |
-| Tests | `src/**/*.test.ts` (unit), `test/*.test.ts` (HTTP) | Run without a database, in `pnpm run check`. HTTP tests build the app with `test/support/test-app.ts` |
+| Tests | `src/**/*.test.ts` (unit), `test/*.test.ts` (HTTP) | Run without a database, in `pnpm run check`. HTTP tests build the app with `test/support/test-app.ts`. `test/clinic-routes.test.ts` holds every B3 route to "reaches a controller and the guard" (401 without a session); add a route there with its controller |
 | Integration tests | `test/int/*.int.test.ts`, helpers in `test/int/support/` (`testPrisma`, `resetDatabase`, `inClinic`, `createIntApp`) | Real MySQL test database, `test:int`, run in CI (`.github/workflows/api.yml`, MySQL 8.4) |
 
 ### Porting a feature from MSW (fails silently if missed)
@@ -236,6 +239,23 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **A job's `leaseMs` must be longer than a run and shorter than its cron period**, or it runs twice or skips ticks.
 - **`LocalDiskStorage` is per instance.** A multi-instance deployment needs B10's driver before files are uploaded.
 - **`COOKIE_SECURE=false` only on local http.** It defaults to true; `DEMO_LOGINS` defaults to false.
+- **Nest answers every `@Post` with 201.** The mock answers 201 only when it creates something (`POST /branches`,
+  `POST /staff`); an action (`/archive`, `/deactivate`) answers 200. Give those `@HttpCode(200)`.
+- **A rule checked before a write takes the clinic's lock first** (`lockAccount(tx)`, B3): tier limits, the
+  one-email rule, the logo swap. Take it before any other row, so B3's transactions can't deadlock on each other.
+- **Slow work goes before the transaction.** argon2 (a new login's secrets) and storing a file run first; the
+  transaction only writes rows. A transaction can rerun (`runInTransaction`), and a lock is held for its whole length.
+- **A database seeded before B3 has no reference rows** (chairs, procedures, templates), and `db:seed` refuses a
+  database with accounts. Use a fresh volume (`docker compose down -v`) or a new database; `migrate reset` isn't used.
+- **`migrate dev` won't run non-interactively when it warns** (a new unique index on existing rows). Write the SQL with
+  `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` into a new
+  `prisma/migrations/<timestamp>_<name>/migration.sql`, then `db:deploy` and `db:generate` (B3 did).
+- **The logo passes through the API's memory** (multer, at most 1 MB). B10's presigned uploads are for photos; don't
+  raise `LOGO_RULES.maxBytes` without moving the logo to them.
+- **`"branch"` scope narrows reads to the device's branch.** A branch-level table that is read account-wide (`Chair`)
+  is `"clinic"` in `MODEL_SCOPE`, with `branchId` as a plain column.
+- **A unit test that builds `StorageModule`** must override `OutboxModule` (it registers `storage.delete` there), as
+  `storage.test.ts` does; the real one needs `PrismaService`.
 - `test/app.test.ts` logs a stack trace on purpose (the "unexpected error" case). It isn't a failure.
 
 ---
@@ -269,6 +289,19 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   skips; a failed run releases it.
 - **Storage** (B1): keys are `clinics/<clinicId>/<area>/<uuid>.<ext>`, built and checked only by `StorageService`;
   another clinic's key reads as missing. The content type comes from an extension allowlist. Local disk until B10.
+- **Tier limits** (B3): `TIER_LIMITS` in `@pedia/shared` is the only copy; the tier is `ClinicAccount.tier`. What
+  counts is `accountUsage` (open branches; active staff logins, the Owner included, parents never). Every limit-checked
+  write locks the clinic's `ClinicAccount` row (`SELECT … FOR UPDATE`) and counts inside the transaction; proven with
+  parallel requests in `test/int/tier-limits.int.test.ts`. `Staff(clinicId, email)` is unique as a backstop.
+- **Logos** (B3): the declared type must match the first bytes (PNG, JPEG); an SVG is rebuilt by DOMPurify (jsdom, SVG
+  profile) and refused when no `<svg>` root survives. Served with the mock's `sandbox` CSP and `nosniff`. A replaced or
+  removed file is deleted through the outbox (`storage.delete`), queued in the transaction that unlinks it.
+- **Reference keys** (B3): the contract's natural keys with the clinic, `Procedure(clinicId, code)`,
+  `MessageTemplate(clinicId, kind)` and `NoteTemplate(clinicId, id)`; `Chair` keeps a cuid id. The seed's ids are kept,
+  so MSW's records and the API's agree in `hybrid`.
+- **Archiving and bookings** (B3): `BranchesService.upcomingAt` is 0 until B7 brings appointments; B7 replaces it.
+- **Audit** (B3): the mock's entries for staff writes (`Staff login`, `… (deactivated)`, `… (reactivated)`), in the
+  write's transaction. Profile, branding and branch changes aren't audited, as in the mock.
 - **Seed** (B1): `packages/seed` (`@pedia/seed`), so MSW and `prisma db seed` run the same `seedPlatform()`. Not
   `@pedia/shared`: the seed needs faker and is built from `new Date()`, which don't belong in the contract package.
 
