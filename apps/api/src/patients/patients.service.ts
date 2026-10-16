@@ -65,6 +65,12 @@ export class PatientsService {
     return g!.guardianId; // every patient has a guardian (CreatePatientInput)
   }
 
+  /** Every patient's name and birthday: Today's names and birthdays (todaySummary's `patients`). */
+  async basics(): Promise<{ id: string; firstName: string; lastName: string; birthDate: string }[]> {
+    const rows = await this.prisma.patient.findMany({ select: { id: true, firstName: true, lastName: true, birthDate: true }, orderBy: { id: "asc" } });
+    return rows.map((r) => ({ ...r, birthDate: r.birthDate.toISOString().slice(0, 10) }));
+  }
+
   /** GET /patients: the directory (⌘K, pickers). Unpaged, as the mock (see Follow Ups). Not audited (decision 4). */
   async directory(viewer: Viewer, q: string): Promise<PatientView[]> {
     const ids = await this.matching(viewer, q);

@@ -87,3 +87,16 @@ plan recommends. Engineering decisions E1–E8 as the plan records them.
 - Int test: the B4 "nothing under the filters" case became parity with the mock's `patientStanding` over the seed, row by row, plus each chip's total. `sort=balance` without `billing.view` stays a unit case: every staff role and the parent hold `billing.view`. The archive case reopens Dasmariñas after archiving it, so the downgrade case still counts 3 open branches.
 - The visits case "seats … marks it done" now expects the header's `lastVisitOn` to be the done appointment's day (2030), the mock's rule, not the fixed clock's.
 **Gate:** `pnpm run check` exit 0; `test:int` 30 files, 286 passed + 3 todo (B8, B9).
+
+## Phase 8: Today — 2026-10-16
+
+**Steps completed:** 8.1, 8.2, 8.3
+**Files changed:** `apps/api/src/reports/{report-branches,report-branches.test,reports.service,reports.controller,reports.module}.ts` (new), `apps/api/src/clinic/clinic.service.ts` (`staffNames`, `tier`, `scheduleRefs` defaults its tx; a misplaced Phase 4 doc comment moved back to `isActiveDentist`), `apps/api/src/visits/visit-days.service.ts` (`visitorsBetween`), `apps/api/src/patients/patients.service.ts` (`basics`), `apps/api/src/appointments/{appointment-requests.service,appointments.module}.ts` (`pending`, exported), `apps/api/src/app.module.ts`, `apps/api/test/clinical-routes.test.ts`, `apps/api/test/int/today.int.test.ts` (new)
+**Deviations from plan:**
+- The tier comes from `ClinicService.tier()`: `ClinicIdentity` carries no account (the plan's QUESTION). Usable branches are `who.branches`.
+- `ReportsService` doesn't take Prisma: `scheduleRefs(tx = this.prisma)`.
+- Ngiti's two seeded appointments are on the next open day, not today, so its case checks parity today and on that day.
+- Case 8: the child's first visit day is today (the visit is dated by the real clock), so on the 2030 day they count as returning, not new.
+- Expected values use `messages: []` (decision 4: no greetings until B9).
+- Mutation: without the dedupe by id, "every day of this week" and the live booking case go red.
+**Gate:** `pnpm run check` exit 0; `test:int` 31 files, 295 passed + 3 todo.

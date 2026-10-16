@@ -29,6 +29,11 @@ export class AppointmentRequestsService {
     return rows.map(toRequest);
   }
 
+  /** The pending requests' statuses: Today's request count (todaySummary counts them account-wide, as the mock). */
+  async pending(): Promise<{ status: "pending" }[]> {
+    return (await this.prisma.appointmentRequest.findMany({ where: { status: "pending" }, select: { id: true } })).map(() => ({ status: "pending" }));
+  }
+
   /** GET /patients/:id/appointment-requests: newest first; an unknown patient has none. Audited per child. */
   async forPatient(patientId: string): Promise<AppointmentRequest[]> {
     const rows = await this.prisma.appointmentRequest.findMany({ where: { patientId }, select: REQUEST_COLUMNS, orderBy: REQUEST_ORDER });

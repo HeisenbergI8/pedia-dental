@@ -6,6 +6,7 @@ import type { DestinationStream } from "pino";
 import { AuthModule } from "./auth/auth.module";
 import { AppointmentsModule } from "./appointments/appointments.module";
 import { RecallsModule } from "./recalls/recalls.module";
+import { ReportsModule } from "./reports/reports.module";
 import { ChartModule } from "./chart/chart.module";
 import { GrowthModule } from "./growth/growth.module";
 import { PlanModule } from "./plan/plan.module";
@@ -54,6 +55,7 @@ export class AppModule implements NestModule {
         PlanModule,
         AppointmentsModule,
         RecallsModule,
+        ReportsModule,
         LegalModule,
       ],
       controllers: [HealthController],

@@ -23,6 +23,14 @@ export class VisitDaysService {
     return { visits: rows.map((r) => ({ patientId: r.patientId, status: r.status, date: r.date.toISOString().slice(0, 10) })), done };
   }
 
+  /** Patients with a completed visit dated in [from, to] (yyyy-MM-dd, any branch): Today's week (visitMix). */
+  async visitorsBetween(from: string, to: string): Promise<string[]> {
+    const rows = await this.prisma.visit.findMany({
+      where: { status: "completed", date: { gte: new Date(`${from}T00:00:00.000Z`), lte: new Date(`${to}T00:00:00.000Z`) } }, select: { patientId: true }, distinct: ["patientId"],
+    });
+    return rows.map((r) => r.patientId);
+  }
+
   async lastVisitOn(patientIds: readonly string[]): Promise<Map<string, string>> {
     const byPatient = groupBy(await this.facts(patientIds));
     return new Map(patientIds.flatMap((id) => {
