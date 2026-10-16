@@ -142,7 +142,7 @@ the privacy notice (B4) and the subscription (B12) on the Settings screen, `deni
 
 ## ✅ Chunk B4: Patients and privacy consent (done, 2026-10-16) · Large — features 1 and 18 (part)
 
-**Status (2026-10-16): done**, in five parts. **B4a**: the patient tables, the `PatientView` serializer and the seeded
+**Status (2026-10-17): done**, in five parts. **B4a**: the patient tables, the `PatientView` serializer and the seeded
 patients. **B4b**: reads, search (the mock's rule, as SQL) and the list, parents linked to their children, no query
 strings in logs. **B4c**: register (refused without consent), edit, quick update, treatment consents. **B4d**: privacy
 consent and choices, the Owner's and the public privacy notice, a parent's children on their notice page. **B4e**: the
@@ -227,7 +227,7 @@ a habit stopped in a later visit shows correctly.
 
 ---
 
-## ✅ Chunk B7: Scheduling, follow-ups and Today (done, 2026-10-16) · Large — features 4, 14, 15
+## ✅ Chunk B7: Scheduling, follow-ups and Today (done, 2026-10-17) · Large — features 4, 14, 15
 
 **Status (2026-10-16): done**, in five parts. **B7a**: the process pinned to Asia/Manila, `Appointment`,
 `AppointmentRequest` and `DueItem`, their mappers and the mock's refusals as pure functions, the seeded rows with the
@@ -246,8 +246,8 @@ API appointments (B8), ownership checks beyond a parent confirming an appointmen
 **Goal:** the clinic's day, safe under concurrent booking.
 
 - Appointments (book, move, status, check-in, no-show), chairs per branch.
-- **No double-booking under concurrency:** the check and the insert happen in one transaction with a row lock on the
-  chair's day (or a unique slot constraint), tested with parallel requests, not only in sequence.
+- **No double-booking under concurrency:** the check and the insert happen in one transaction under a row lock (B7
+  took the clinic's row, E1: a dentist clash spans chairs and branches), tested with parallel requests, not only in sequence.
 - Appointment requests and handling them.
 - Follow-up and recall due items from `DEFAULT_FOLLOW_UP_RULES` (data, not `if` statements); booking one clears it.
 - `/reports/today` and branch filtering through `reportBranchFilter`.

@@ -72,8 +72,8 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "GET", path: "/patients/:id/chart" },
   { method: "POST", path: "/patients/:id/chart" },
   { method: "POST", path: "/patients/:id/chart/batch" },
-  // B6: notes, growth and the treatment plan (NotesController, GrowthController, PlanController). MSW's recall list,
-  // billing and documents still read their own notes and plan items until B7/B8/B10 (B6 decision 2).
+  // B6: notes, growth and the treatment plan (NotesController, GrowthController, PlanController). MSW's billing
+  // and documents still read their own notes and plan items until B8/B10 (B6 decision 2).
   { method: "GET", path: "/patients/:id/notes" },
   { method: "POST", path: "/patients/:id/notes" },
   { method: "PUT", path: "/notes/:id" },

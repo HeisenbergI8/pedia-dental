@@ -6,7 +6,7 @@ The Primolar backend. It replaces the browser mocks (MSW) in `apps/web` **endpoi
 feature code in the web app**. The product, the users and the domain are the ones in the root `CONVENTIONS.md`
 and `ROADMAP.md`; read those first. This file covers only how the API is built.
 
-**Current phase: B1–B7 done** (2026-10-16). The runtime core (request context, `Clock`, logs, tenant scoping,
+**Current phase: B1–B7 done** (2026-10-17). The runtime core (request context, `Clock`, logs, tenant scoping,
 transactions, audit), `@pedia/seed`, the `test:int` suite on MySQL and CI, identity, sessions and the access guard,
 `/auth/*`, `/operator/auth/*` and the clinic reads, with the web signing in against them in `hybrid` mode. B1-c added
 the outbox, scheduled jobs and file storage. B3: the Owner's settings

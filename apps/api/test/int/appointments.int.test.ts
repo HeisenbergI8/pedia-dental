@@ -144,6 +144,10 @@ describe("appointments (apps/web handlers.test.ts → appointments)", () => {
   it("lets front desk book but not a parent", async () => {
     const id = await t.register();
     expect((await book(slot(id, { startsAt: at("2030-01-21", "09:00") }), await t.as(FRONT_DESK))).status).toBe(201);
+    const guardianId = t.platform.tenants[DEMO_CLINIC_ID]!.patients.find((p) => p.id === "patient_sibling")!.guardians[0]!.id;
+    const parent = await t.as([DEMO_CLINIC_ID, `guardian.${guardianId}`]);
+    const res = await book(slot("patient_sibling", { startsAt: at("2030-01-21", "10:00") }), parent);
+    expect([res.status, res.text]).toEqual([403, "You don't have access to this"]); // own child or not: staff book
   });
 
   it("has a seeded schedule with no double-bookings", async () => {
