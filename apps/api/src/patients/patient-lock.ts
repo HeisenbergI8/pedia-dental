@@ -1,7 +1,8 @@
 import { NotFoundException } from "@nestjs/common";
 import { requireContext } from "../common/request-context";
 import type { Tx } from "../prisma/transaction";
-import { PATIENT_NOT_FOUND } from "./patients.service";
+
+export const PATIENT_NOT_FOUND = "Patient not found"; // the mock's words (mocks.ts:157)
 
 /**
  * Locks one patient's row until the transaction ends; false when this clinic has no such patient. Every patient write

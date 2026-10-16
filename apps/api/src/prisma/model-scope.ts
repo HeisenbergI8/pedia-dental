@@ -35,6 +35,11 @@ export const MODEL_SCOPE = {
   ClinicalNote: "clinic",
   GrowthRecord: "clinic",
   PlanItem: "clinic",
+  // B7: the schedule. Appointment is branch-level data read account-wide (conflicts across branches, a child's list,
+  // branch=all reports), so "clinic" with branchId as a plain column, as Chair (E5). Requests and due items are ClinicScoped.
+  Appointment: "clinic",
+  AppointmentRequest: "clinic",
+  DueItem: "clinic",
   // Platform: Primolar's own records
   ClinicAccount: "platform",
   Agreement: "platform",

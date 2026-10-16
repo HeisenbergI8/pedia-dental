@@ -1,6 +1,9 @@
 import type { INestApplication } from "@nestjs/common";
 import { DEMO_CLINIC_ID, childrenOf, seedPlatform } from "@pedia/seed";
-import { DuplicateMatch, PatientHeaderSummary, PatientPage, PatientView, lastVisitOn, type Patient } from "@pedia/shared";
+import {
+  DueItem, DuplicateMatch, PatientFilter, PatientHeaderSummary, PatientPage, PatientView, RECALL_DUE_BUCKETS, dueBucket, matchesFilter, patientStanding, type Patient,
+} from "@pedia/shared";
+import { format } from "date-fns";
 import request from "supertest";
 import { z } from "zod";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -127,21 +130,51 @@ describe("the list (decision 3)", () => {
     expect([past.page, past.rows.length > 0]).toEqual([Math.ceil(first.total / 10), true]);
   });
 
-  it("counts every patient under All, and nothing under the filters B7 and B8 fill", async () => {
+  // The mock's standing over the seed (patients/mocks.ts:126): money and messages are B8/B9, so none yet.
+  const today = () => format(new Date(), "yyyy-MM-dd"); // Manila: the process is pinned (E3)
+  const facts = { visits: db.visits, appointments: db.appointments, dueItems: db.dueItems, invoices: [], payments: [], messages: [] };
+  const standingOf = (id: string) => patientStanding(id, facts, today());
+
+  it("shows each row's last visit, recall and flags as the mock computes them, and counts every chip", async () => {
+    const page = await ok(get("/patient-summaries?pageSize=100", await as(ADMIN)), PatientPage);
+    expect(page.rows.map((r) => [r.id, r.lastVisitOn, r.recallDueOn, r.flags])).toEqual(page.rows.map((r) => {
+      const s = standingOf(r.id);
+      return [r.id, s.lastVisitOn, s.recallDueOn, s.flags];
+    }));
+    expect(page.rows.every((r) => r.balance === 0 && !r.flags.balanceDue && !r.flags.noContact)).toBe(true); // B8, B9
+    const counts = Object.fromEntries(PatientFilter.options.map((f) => [f, page.rows.filter((r) => matchesFilter(f, r, today())).length]));
+    expect(page.counts).toEqual(counts);
+    expect(page.counts.needs_attention).toBe(page.counts.recall_due); // until B8/B9
+    for (const f of PatientFilter.options) {
+      expect([f, (await ok(get(`/patient-summaries?filter=${f}&pageSize=100`, await as(ADMIN)), PatientPage)).total]).toEqual([f, page.counts[f]]);
+    }
+  });
+
+  it("recall due matches /recall (B7)", async () => {
     const cookie = await as(ADMIN);
-    const page = await ok(get("/patient-summaries?pageSize=100", cookie), PatientPage);
-    expect(page.counts).toEqual({ all: page.total, needs_attention: 0, recent_visit: 0, balance_due: 0, recall_due: 0 });
-    expect(page.rows.every((r) => !r.flags.recallDue && !r.flags.balanceDue && !r.flags.noContact)).toBe(true);
-    expect(page.rows.every((r) => r.balance === 0 && r.recallDueOn === undefined)).toBe(true);
-    // B5: the last completed visit's day, the shared rule over the seed's visits (B5 decision 2: done appointments in B7).
-    expect(page.rows.map((r) => r.lastVisitOn)).toEqual(page.rows.map((r) => lastVisitOn(r.id, db.visits, [])));
-    expect(page.rows.some((r) => r.lastVisitOn)).toBe(true); // not vacuous
-    const due = await ok(get("/patient-summaries?filter=recall_due", cookie), PatientPage);
-    expect([due.total, due.rows]).toEqual([0, []]);
+    const due = await ok(get("/patient-summaries?filter=recall_due&pageSize=100", cookie), PatientPage);
+    const items = await ok(get("/due-items", cookie), z.array(DueItem));
+    const urgent = items.filter((i) => RECALL_DUE_BUCKETS.includes(dueBucket(i.dueOn, today())!));
+    expect(ids(due.rows).sort()).toEqual([...new Set(urgent.map((i) => i.patientId))].sort());
+    expect(due.total).toBeGreaterThan(0); // not vacuous
+    for (const r of due.rows) expect(r.recallDueOn).toBe(urgent.filter((i) => i.patientId === r.id).map((i) => i.dueOn).sort()[0]);
+  });
+
+  it("counts a done appointment as a visit: recent visits, the last-visit sort and the header", async () => {
+    const cookie = await as(ADMIN);
+    const recent = await ok(get("/patient-summaries?filter=recent_visit&pageSize=100", cookie), PatientPage);
+    const apptOnly = recent.rows.filter((r) => !db.visits.some((v) => v.patientId === r.id && v.status === "completed"));
+    expect(apptOnly.length).toBeGreaterThan(0); // the roster's newer patients have no Visit row
+    const pageOf = (n: number) => ok(get(`/patient-summaries?sort=last_visit&pageSize=20&page=${n}`, cookie), PatientPage);
+    const both = [...(await pageOf(1)).rows, ...(await pageOf(2)).rows];
+    expect(new Set(ids(both)).size).toBe(both.length); // stable across pages
+    const days = both.map((r) => r.lastVisitOn ?? "");
+    expect(days).toEqual([...days].sort().reverse());
+    const header = await ok(get(`/patients/${apptOnly[0]!.id}/summary`, cookie), PatientHeaderSummary);
+    expect(header.lastVisitOn).toBe(apptOnly[0]!.lastVisitOn);
   });
 
   it.todo("balances agree with the financial dashboard (B8)");
-  it.todo("recall due matches /recall (B7)");
 });
 
 describe("parents (decision 5)", () => {

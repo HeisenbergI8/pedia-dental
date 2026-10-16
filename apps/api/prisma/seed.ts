@@ -1,3 +1,4 @@
+import "../src/clinic-time"; // first: the seed's setHours(day, 9) is 9:00 in Manila on any machine
 import "reflect-metadata";
 import { existsSync } from "node:fs";
 import { seedPlatform } from "@pedia/seed";

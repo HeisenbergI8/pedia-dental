@@ -1,3 +1,4 @@
+import "./clinic-time"; // first: everything below reads local time as Manila's (E3)
 import "reflect-metadata";
 import { existsSync } from "node:fs";
 import { NestFactory } from "@nestjs/core";

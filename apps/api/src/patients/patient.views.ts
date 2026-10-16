@@ -1,5 +1,6 @@
 import { DuplicateMatch, Patient, PatientSummary, PatientView, permissionScopeFor, type Permission, type Role } from "@pedia/shared";
 import type { ClinicIdentity } from "../auth/identity.service";
+import type { Standing } from "./patient-standing";
 import type {
   Patient as PatientRow, PatientConsent, PatientGuardian, PatientPrivacyConsent, PrivacyChoice,
 } from "../generated/prisma/client.ts";
@@ -96,8 +97,8 @@ export function visibleTo(viewer: Viewer, p: Patient): PatientView {
 export const toDuplicate = ({ id, patientNo, firstName, lastName, birthDate }: Patient): DuplicateMatch =>
   DuplicateMatch.parse({ id, patientNo, firstName, lastName, birthDate });
 
-/** One row of GET /patient-summaries. Decision 3: no flags, visits or balances before B5/B7/B8 fill them. */
-export function toSummary(viewer: Viewer, p: Patient, siblings: string[], money: boolean, lastVisitOn?: string): PatientSummary {
+/** One row of GET /patient-summaries: last visit and recall from B5/B7 (standingPage); balance and noContact wait for B8/B9. */
+export function toSummary(viewer: Viewer, p: Patient, siblings: string[], money: boolean, s: Pick<Standing, "lastVisitOn" | "recallDueOn" | "balance" | "flags">): PatientSummary {
   const g = p.guardians.find((x) => x.isPrimary) ?? p.guardians[0]!;
   return PatientSummary.parse({
     id: p.id, firstName: p.firstName, lastName: p.lastName, birthDate: p.birthDate,
@@ -105,8 +106,9 @@ export function toSummary(viewer: Viewer, p: Patient, siblings: string[], money:
     guardianName: g.fullName,
     ...(inScope(viewer, "patients.contact", p.id) && { guardianPhone: g.phone }),
     siblings,
-    ...(lastVisitOn && { lastVisitOn }), // B5: completed visits; B7 adds done appointments
-    ...(money && { balance: 0 }), // B8: accountSummary over invoices and payments
-    flags: { recallDue: false, balanceDue: false, noContact: false }, // B7, B8, B9
+    ...(s.lastVisitOn && { lastVisitOn: s.lastVisitOn }),
+    ...(money && { balance: s.balance }),
+    ...(s.recallDueOn && { recallDueOn: s.recallDueOn }),
+    flags: s.flags,
   });
 }

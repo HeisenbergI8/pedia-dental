@@ -1,20 +1,23 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import {
-  PatientFilter, PatientHeaderSummary, PatientPage, findDuplicates, pageWindow, permissionScopeFor, rolesCan, searchWords,
+  PatientHeaderSummary, PatientPage, findDuplicates, permissionScopeFor, rolesCan, searchWords,
   type DuplicateMatch, type Patient, type PatientListQuery, type PatientView,
 } from "@pedia/shared";
 import { AuditService } from "../audit/audit.service";
+import { Clock } from "../common/clock";
 import { requireContext } from "../common/request-context";
 import { Prisma } from "../generated/prisma/client.ts";
 import { PrismaService } from "../prisma/prisma.service";
+import { DueItemsService } from "../recalls/due-items.service";
 import { StorageService, type StoredFile } from "../storage/storage.service";
 import type { Tx } from "../prisma/transaction";
 import { VisitDaysService } from "../visits/visit-days.service";
+import { PATIENT_NOT_FOUND } from "./patient-lock";
 import { photoFileName } from "./patient-photo";
+import { standingPage, type Named } from "./patient-standing";
 import { scopeCondition, searchCondition } from "./patient-search";
 import { inScope, toDuplicate, toPatient, toSummary, visibleTo, type Viewer } from "./patient.views";
 
-export const PATIENT_NOT_FOUND = "Patient not found"; // the mock's words (mocks.ts:157)
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** The patient reads (features/patients/mocks.ts). Every response passes through visibleTo or toSummary. */
@@ -25,6 +28,8 @@ export class PatientsService {
     private readonly audit: AuditService,
     private readonly storage: StorageService,
     private readonly visitDays: VisitDaysService,
+    private readonly dueItems: DueItemsService,
+    private readonly clock: Clock,
   ) {}
 
   /** Full records for these ids, in this order. Five queries whatever the count (no N+1). Missing ids are skipped. */
@@ -54,25 +59,36 @@ export class PatientsService {
     return p;
   }
 
+  /** Who a request is from when staff ask on a family's behalf: the primary guardian, else the first (mock's `find(isPrimary) ?? guardians[0]`). */
+  async primaryGuardianId(tx: Tx, patientId: string): Promise<string> {
+    const g = await tx.patientGuardian.findFirst({ where: { patientId }, select: { guardianId: true }, orderBy: [{ isPrimary: "desc" }, { position: "asc" }] });
+    return g!.guardianId; // every patient has a guardian (CreatePatientInput)
+  }
+
+  /** Every patient's name and birthday: Today's names and birthdays (todaySummary's `patients`). */
+  async basics(): Promise<{ id: string; firstName: string; lastName: string; birthDate: string }[]> {
+    const rows = await this.prisma.patient.findMany({ select: { id: true, firstName: true, lastName: true, birthDate: true }, orderBy: { id: "asc" } });
+    return rows.map((r) => ({ ...r, birthDate: r.birthDate.toISOString().slice(0, 10) }));
+  }
+
   /** GET /patients: the directory (⌘K, pickers). Unpaged, as the mock (see Follow Ups). Not audited (decision 4). */
   async directory(viewer: Viewer, q: string): Promise<PatientView[]> {
     const ids = await this.matching(viewer, q);
     return (await this.records(ids)).map((p) => visibleTo(viewer, p));
   }
 
-  /** GET /patient-summaries: one page, its total and the chip counts. Decision 3 empties every flag-based filter. */
+  /** GET /patient-summaries: search (SQL), then the mock's standing, filters, counts, sort and page (E7). */
   async summaries(viewer: Viewer, query: PatientListQuery): Promise<PatientPage> {
-    const all = await this.count(viewer, query.q);
-    const total = query.filter === "all" ? all : 0;
-    const { page, offset } = pageWindow(total, query.page, query.pageSize);
-    const ids = total ? await this.matching(viewer, query.q, { limit: query.pageSize, offset }) : [];
-    const patients = await this.records(ids);
-    const siblings = await this.siblingsOf(viewer, patients);
-    const lastVisits = await this.visitDays.lastVisitOn(ids);
+    const matched = await this.names(await this.matching(viewer, query.q)); // every match: the counts need them all
+    const ids = matched.map((p) => p.id);
+    const [facts, due] = await Promise.all([this.visitDays.facts(ids), this.dueItems.openFor(ids)]);
     const money = rolesCan(viewer.roles, "billing.view");
-    const counts = Object.fromEntries(PatientFilter.options.map((f) => [f, f === "all" ? all : 0]));
+    const { rows, total, page, counts } = standingPage(matched, facts, due, query, this.clock.today(), money);
+    const patients = await this.records(rows.map((r) => r.id)); // the page's records, in the page's order
+    const siblings = await this.siblingsOf(viewer, patients);
+    const standing = new Map(rows.map((r) => [r.id, r]));
     return PatientPage.parse({
-      rows: patients.map((p) => toSummary(viewer, p, (siblings.get(p.id) ?? []).map((s) => s.firstName), money, lastVisits.get(p.id))),
+      rows: patients.map((p) => toSummary(viewer, p, (siblings.get(p.id) ?? []).map((s) => s.firstName), money, standing.get(p.id)!)),
       total, page, pageSize: query.pageSize, counts,
     });
   }
@@ -84,7 +100,7 @@ export class PatientsService {
     return visibleTo(viewer, p);
   }
 
-  /** GET /patients/:id/summary: the pinned header. Money is zero until B8; the last visit is B5's (completed visits). */
+  /** GET /patients/:id/summary: the pinned header. Money is zero until B8; the last visit counts done appointments (B7). */
   async headerSummary(viewer: Viewer, id: string): Promise<PatientHeaderSummary> {
     const p = await this.one(id);
     await this.audit.record("view", "Patient profile", id);
@@ -142,17 +158,17 @@ export class PatientsService {
   }
 
   /** The ids matching a search, in the list's order. `clinicId` is written here: the tenant extension can't see raw SQL. */
-  private async matching(viewer: Viewer, q: string, page?: { limit: number; offset: number }): Promise<string[]> {
-    const where = this.where(viewer, q);
-    const rows = page
-      ? await this.prisma.$queryRaw<{ id: string }[]>`SELECT id FROM Patient WHERE ${where} ORDER BY lastName, firstName, id LIMIT ${page.limit} OFFSET ${page.offset}`
-      : await this.prisma.$queryRaw<{ id: string }[]>`SELECT id FROM Patient WHERE ${where} ORDER BY lastName, firstName, id`;
+  private async matching(viewer: Viewer, q: string): Promise<string[]> {
+    const rows = await this.prisma.$queryRaw<{ id: string }[]>`SELECT id FROM Patient WHERE ${this.where(viewer, q)} ORDER BY lastName, firstName, id`;
     return rows.map((r) => r.id);
   }
 
-  private async count(viewer: Viewer, q: string): Promise<number> {
-    const [row] = await this.prisma.$queryRaw<{ n: bigint }[]>`SELECT COUNT(*) AS n FROM Patient WHERE ${this.where(viewer, q)}`;
-    return Number(row!.n); // bigint through the mariadb driver (CONVENTIONS → Traps)
+  /** What the list sorts by, in `ids`' order. */
+  private async names(ids: readonly string[]): Promise<Named[]> {
+    if (!ids.length) return [];
+    const rows = await this.prisma.patient.findMany({ where: { id: { in: [...ids] } }, select: { id: true, firstName: true, lastName: true } });
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    return ids.flatMap((id) => byId.get(id) ?? []);
   }
 
   private where(viewer: Viewer, q: string): Prisma.Sql {

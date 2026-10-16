@@ -368,12 +368,13 @@ function seedRoster(paymentsSoFar: number, refs: Pick<MessageRefs, "templates" |
     }
   });
 
-  for (const [i, days, status] of [[2, 3, "pending"], [8, 5, "pending"], [14, 4, "handled"]] as const) {
+  for (const [k, [i, days, status]] of ([[2, 3, "pending"], [8, 5, "pending"], [14, 4, "handled"]] as const).entries()) {
     const p = patients[i]!;
     out.requests.push({
       id: `request_roster_${i + 1}`, clinicId: CLINIC_ID, patientId: p.id, guardianId: p.guardians[0]!.id,
       preferredDate: format(addDays(today, days), "yyyy-MM-dd"), timeOfDay: i === 8 ? "afternoon" : "morning",
-      reason: "Check-up and cleaning", status, createdAt: at(subDays(today, 1), 19).toISOString(),
+      // A minute apart: the API sorts same-time records by id (CONVENTIONS → Traps), MSW by insertion.
+      reason: "Check-up and cleaning", status, createdAt: at(subDays(today, 1), 19, k).toISOString(),
     });
   }
   return out;

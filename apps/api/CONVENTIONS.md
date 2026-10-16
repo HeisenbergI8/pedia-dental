@@ -6,7 +6,7 @@ The Primolar backend. It replaces the browser mocks (MSW) in `apps/web` **endpoi
 feature code in the web app**. The product, the users and the domain are the ones in the root `CONVENTIONS.md`
 and `ROADMAP.md`; read those first. This file covers only how the API is built.
 
-**Current phase: B1–B6 done** (2026-10-16). The runtime core (request context, `Clock`, logs, tenant scoping,
+**Current phase: B1–B7 done** (2026-10-17). The runtime core (request context, `Clock`, logs, tenant scoping,
 transactions, audit), `@pedia/seed`, the `test:int` suite on MySQL and CI, identity, sessions and the access guard,
 `/auth/*`, `/operator/auth/*` and the clinic reads, with the web signing in against them in `hybrid` mode. B1-c added
 the outbox, scheduled jobs and file storage. B3: the Owner's settings
@@ -15,7 +15,8 @@ and message templates), served in `hybrid`. B4: patients, guardians, consents, s
 and the clinic's privacy notice (Owner's and public), served in `hybrid`. B5: visits, the dental chart (append-only
 entries, corrections as new rows) and the last visit in the patient list and header, served in `hybrid`. B6: clinical notes
 (read-only once signed; signing completes plan items), growth and habits, and the treatment plan, served in `hybrid`.
-B7 (scheduling, follow-ups and Today) is next. The
+B7: appointments without double-booking, parents' requests, follow-ups and recalls, the patient list's recall and visit
+filters, and Today, served in `hybrid`. B8 (billing) is next. The
 build order is [CHUNKS.md](CHUNKS.md).
 
 **Stack:** NestJS 12 (ESM, Express) · Prisma 7 + MySQL 8.4 (MariaDB driver adapter) · Zod 4 schemas from
@@ -62,10 +63,14 @@ Run from the repo root.
 | Cross-cutting | `src/common/` | `ZodValidationPipe`, `HttpErrorFilter`, the request context (`request-context*.ts`: context + request id), `Clock` (`clock.ts`), `refusal.ts` (`Refusal`, `refuse()`: the mock's plain-text refusals that rules modules return) |
 | Logging | `src/logging/logger.ts` | pino options and the redaction list (`PERSONAL_FIELDS`) |
 | Audit trail | `src/audit/` | `AuditService.record` (import `AuditModule`) |
-| Identity and access | `src/auth/` | `auth.controller.ts` / `operator-auth.controller.ts` and `auth.service.ts` (sign-in, sign-out, switch, password, acknowledgement), `rate-limit.ts` (`RATE_LIMITS`), `access-rules.ts` (the route → permission map, held to the mock's `RULES` by a test), `access.guard.ts` (the global guard), `session.service.ts` (sessions), `identity.service.ts` (who a session is, PINs), `hashing.ts` (argon2id), `cookies.ts` |
+| Identity and access | `src/auth/` | `auth.controller.ts` / `operator-auth.controller.ts` and `auth.service.ts` (sign-in, sign-out, switch, password, acknowledgement), `rate-limit.ts` (`RATE_LIMITS`), `access-rules.ts` (the route → permission map, held to the mock's `RULES` by a test), `access.guard.ts` (the global guard), `record-owners.ts` (`RecordOwners`: features register who owns an `owner: "record"` route's record; the guard asks for parents only), `session.service.ts` (sessions), `identity.service.ts` (who a session is, PINs), `hashing.ts` (argon2id), `cookies.ts` |
 | Clinic | `src/clinic/` | The account and its setup: `ClinicService` (context, profile, branding, logo, usage, chairs, procedures), `BranchesService`, `StaffService`; `limits.ts` (tier limits, from `TIER_LIMITS`), `account-lock.ts` (`ownClinicId`, `lockAccount`), `logo.ts` (`cleanLogo`: type sniffing and the SVG sanitiser), row shaping in `clinic.views.ts` |
 | Patients | `src/patients/` | `PatientsService` (reads: `records`/`one` for other features, search, the list, the header summary, duplicates, the photo), `PatientWritesService` (register, edit, quick update, consents, privacy consent and choices, the photo swap), `patient.views.ts` (`visibleTo`: **the only producer of `PatientView`**; `toPatient`, `toSummary`, `viewerOf`), `patient.rows.ts` (contract → rows, the edit rules), `patient-search.ts` (the search as SQL), `patient-photo.ts`, `patient-lock.ts` (`lockPatient`, `lockPatientIfExists`). `FamilyService` (a parent's children) sits in its own `FamilyModule`, imported by `AuthModule` and `PatientsModule` |
-| Visits | `src/visits/` | B5: `VisitsService` (list, start, complete, `forPatient` for the chart), `visit.rows.ts` (rows ↔ `Visit`), `VisitDaysService` (the last visit's day) in its own `VisitDaysModule`, imported by `PatientsModule` |
+| Visits | `src/visits/` | B5: `VisitsService` (list, start, complete, `forPatient` for the chart; B7 seats and finishes the appointment), `visit.rows.ts` (rows ↔ `Visit`), `VisitDaysService` (the days patients were seen: completed visits and done appointments) in its own `VisitDaysModule`, imported by `PatientsModule` |
+| Appointments | `src/appointments/` | B7: `AppointmentRecordsService` in its own `AppointmentRecordsModule` (**the only reader and writer of `Appointment`**, Prisma only, so any feature can import it), `AppointmentsService` (calendar, book, move, status), `AppointmentRequestsService` (parents' requests), `appointment.rules.ts` (the mock's refusals: slot, move, status, request), `appointment.rows.ts`, `request.rows.ts` |
+| Recalls | `src/recalls/` | B7: `DueItemsService` (owns `DueItem`: the due list, `afterSign`, `takeFor`, `backfill`), `due-item.rules.ts` (`signChange`, `bookedItem`, `dueBackfill`), `due-item.rows.ts`; `prisma/backfill-due-items.ts` |
+| Reports | `src/reports/` | B7: `ReportsService` (`/reports/today`: the shared `todaySummary` over the branches' share), `report-branches.ts` (the mock's `reportBranches`; B8's finance report reuses it) |
+| Clinic time | `src/clinic-time.ts` | Pins the process to Asia/Manila. Imported first by `main.ts`, the seed and the backfill, and a `setupFiles` of both test runners |
 | Chart | `src/chart/` | B5: `ChartService` (reads and appends only), `chart.rules.ts` (the mock's refusals as a pure function), `chart.rows.ts` (rows ↔ `ChartEntry`, `CHART_ORDER`) |
 | Legal | `src/legal/` | `PrivacyNoticeService` (owns `PrivacyNotice`: the version in force, the Owner's save, the public read) and the public `LegalController` (`GET /legal/notices/:clinicId`) |
 | Notes | `src/notes/` | `NotesService`: templates (B3), notes and signing (B6); `note.rows.ts`, `note.rules.ts` (the mock's refusals, `checkValues`) |
@@ -77,7 +82,7 @@ Run from the repo root.
 | File storage | `src/storage/` | `StorageService` (clinic-scoped keys), `FileStorage` (the driver), `LocalDiskStorage`, and the `storage.delete` outbox handler (`delete-file.handler.ts`). Import `StorageModule` where files are kept |
 | Demo seed | `src/seed/seed-database.ts`, `prisma/seed.ts` | Maps `@pedia/seed`'s `seedPlatform()` to rows |
 | Features | `src/<name>/` | `<name>.module.ts`, `<name>.controller.ts`, `<name>.service.ts`. Same `<name>` as `apps/web/src/features/<name>` |
-| Tests | `src/**/*.test.ts` (unit), `test/*.test.ts` (HTTP) | Run without a database, in `pnpm run check`. HTTP tests build the app with `test/support/test-app.ts`. `test/clinic-routes.test.ts` (B3), `test/patients-routes.test.ts` (B4) and `test/clinical-routes.test.ts` (B5, B6) hold every route to "reaches a controller and the guard" (401 without a session); add a route there with its controller |
+| Tests | `src/**/*.test.ts` (unit), `test/*.test.ts` (HTTP) | Run without a database, in `pnpm run check`. HTTP tests build the app with `test/support/test-app.ts`. `test/clinic-routes.test.ts` (B3), `test/patients-routes.test.ts` (B4) and `test/clinical-routes.test.ts` (B5–B7) hold every route to "reaches a controller and the guard" (401 without a session); add a route there with its controller |
 | Integration tests | `test/int/*.int.test.ts`, helpers in `test/int/support/` (`testPrisma`, `resetDatabase`, `inClinic`, `createIntApp`) | Real MySQL test database, `test:int`, run in CI (`.github/workflows/api.yml`, MySQL 8.4) |
 
 ### Porting a feature from MSW (fails silently if missed)
@@ -296,14 +301,29 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   first: sign holds the patient, then updates plan items, so a path that locked an item first would deadlock with it.
 - **A signed note is read-only twice over:** the check under the lock, and every change is an `updateMany … signedAt:
   null` that must touch one row. A race test only fails when both are removed.
-- **Growth's "can't be in the future" uses the process clock** (`SaveGrowthInput`): on a UTC server a habit dated today
-  in Manila is refused between 00:00 and 08:00 Manila time until B13 (B6 decision 8).
-- **In `hybrid`, MSW's recall list, billing and documents don't see API-created notes or plan items** until B7/B8/B10
-  (B6 decision 2), and signing on the API makes nothing due and queues no care message until B7/B9 (decision 1).
+- **Growth's "can't be in the future" uses the process clock** (`SaveGrowthInput`), which reads Manila time since B7
+  (`clinic-time.ts`), so B6 decision 8's 00:00–08:00 window is closed.
+- **In `hybrid`, MSW's billing and documents don't see API-created notes or plan items** until B8/B10 (B6 decision 2),
+  and signing on the API queues no care message until B9 (decision 1).
 - **Records that share a time sort by id**, not insertion order: give seeded records that must read in order distinct
   times (B6 fixed the growth examples' tie).
-- **A visit started from an appointment stores `appointmentId` unchecked** until B7, which checks and seats it in
-  `VisitsService.start` and marks it done in `complete` (B5 decision 1). MSW's appointment stays "arrived" in `hybrid`.
+- **The process runs in Asia/Manila** (`src/clinic-time.ts`, the first import of every entry point and test runner).
+  The shared rules read local time (`outsideClinicHours`, `format`, `startOfWeek`); a new entry point that skips the
+  import gets UTC days. `clinic-time.test.ts` is the guard.
+- **Bookings and moves take `lockAccount` first** (E1: no double-booking); status changes, requests, visits and signing
+  take the patient's lock. The global order is account → visit → patient → child rows (E2); no path takes them the
+  other way round.
+- **Every `Appointment` read and write goes through `AppointmentRecordsService`** (E4), so `VisitsService`,
+  `BranchesService`, `VisitDaysService` and `DueItemsService` share one owner without a module cycle.
+- **A database seeded before B7 has no appointments, requests or due items:** use a fresh one. On a live database,
+  `pnpm --filter api db:backfill-due-items` opens the due items of notes signed before B7 (idempotent), and nothing else.
+- **In `hybrid` until B8/B9:** no booking, move or no-show texts are queued for API appointments, and Today shows no
+  greeting ticks (B7 decisions 3, 4); MSW's `POST /due-items/:id/message` answers 404 for items created on the API
+  (seeded ones keep their ids); "No contact" stays false and balances zero on the API's patient list; MSW's billing and
+  `/reports/finance` don't see API-booked appointments.
+- **A file import cycle reads as a Nest "can't resolve dependencies" error**, not a cycle: `patient-lock.ts` imported
+  `PATIENT_NOT_FOUND` from `patients.service.ts`, and B7's `PatientsService → DueItemsService → VisitsService →
+  patient-lock` made the provider undefined at decoration time. Keep shared constants in the leaf file.
 - **A batch's chart entries share `recordedAt`**; `GET /patients/:id/chart` breaks the tie by id, not insertion order.
 - `test/app.test.ts` logs a stack trace on purpose (the "unexpected error" case). It isn't a failure.
 
@@ -348,7 +368,8 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **Reference keys** (B3): the contract's natural keys with the clinic, `Procedure(clinicId, code)`,
   `MessageTemplate(clinicId, kind)` and `NoteTemplate(clinicId, id)`; `Chair` keeps a cuid id. The seed's ids are kept,
   so MSW's records and the API's agree in `hybrid`.
-- **Archiving and bookings** (B3): `BranchesService.upcomingAt` is 0 until B7 brings appointments; B7 replaces it.
+- **Archiving and bookings** (B3, filled in B7): `BranchesService.upcomingAt` counts the branch's booked, confirmed,
+  arrived and in-chair appointments from now on, in the archive's transaction after its clinic lock.
 - **Audit** (B3): the mock's entries for staff writes (`Staff login`, `… (deactivated)`, `… (reactivated)`), in the
   write's transaction. Profile, branding and branch changes aren't audited, as in the mock.
 - **Patients** (B4, decisions in `.claude/plans/feature-chunk-b4-patients-plan/decisions.md`):
@@ -356,8 +377,8 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
     for `patients.contact`), as `LIKE '%word%'` over two stored columns built by the shared `patientSearchText`. A
     leading wildcard can't use an index, so a search scans one clinic's rows; full-text when a clinic passes ~10k.
   - **No column encryption** of medical fields: the disk is encrypted (B13).
-  - **`/patient-summaries` and the header summary** are the API's now; last visit, recall date, balance and flags are
-    empty or zero until B5, B7 and B8 fill them.
+  - **`/patient-summaries` and the header summary** are the API's; last visit and recall are filled (B5, B7), balance
+    and "no contact" stay zero and false until B8 and B9.
   - **Audit**: one `view` "Patient profile" per single-record read (`GET /patients/:id`, its summary) and `view`
     "Patient photo", except that the same user viewing the same record again within five minutes isn't logged twice
     (`REPEAT_WINDOW_MS`, B1, as the mock); **lists, searches and duplicate checks aren't audited**, unlike the mock's "Patient list" entries.
@@ -376,13 +397,12 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   - The mock's chart refusals live in `chart.rules.ts`, a pure function with a unit test per branch.
   - Every visit and chart write locks the patient first: one visit in progress per patient and one correction per entry
     hold under parallel requests (tested).
-  - `lastVisitOn` is the shared rule over completed visits; B7 adds done appointments, the `recent_visit` filter and
-    the `last_visit` sort.
+  - `lastVisitOn` is the shared rule over completed visits and (since B7) done appointments.
   - Audit: the mock's names (`view` "Visits"/"Dental chart", `create` "Visit", `update` "Visit (completed)", `update`
     "Dental chart" once per request), written in the write's transaction.
 - **Notes, growth and the plan** (B6, decisions in the B6 plan; the user confirmed 1, 4, 5 and 8):
-  - Signing completes the plan items it covers (`itemsCompletedBy`) in its transaction; due items (B7) and care
-    messages (B9) are left as markers in `NotesService.sign`.
+  - Signing completes the plan items it covers (`itemsCompletedBy`) and (since B7) opens its due item, in its
+    transaction; the care message (B9) is a marker in `NotesService.sign`.
   - Any staff with `clinical.write` may edit and sign a draft, even after the visit; the author is the visit's dentist.
   - A signed note is read-only in `NotesService` (lock + guarded update); `ClinicalNote` isn't append-only (drafts edit).
   - `sourceChartEntryId` is stored as given, unchecked, as the mock.
@@ -393,6 +413,19 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
     B13 (decision 8); an over-long `speech`, free-text note value or `sourceChartEntryId` answers 500 and writes nothing
     until `@pedia/shared` caps their lengths, together with B5's `note` and `appointmentId` (decision 9). The same for a
     plan item `fee` above MySQL's `Int` (2,147,483,647 centavos) and a path id of 192+ characters on the audited reads.
+- **Scheduling, follow-ups and Today** (B7, decisions in the B7 plan; the user confirmed 1–4 and 6):
+  - Double-booking is the demo's rule: the same chair or the same dentist at an overlapping time, at any branch; the
+    same child twice is allowed (1). Bookings and moves serialise on the clinic's row (E1), tested with parallel requests.
+  - A parent may confirm their own child's appointment, and nothing else on it (2): `RecordOwners` resolves the record's
+    patient for own-scope callers only.
+  - Same-time appointments list in chair order (5). Whole-day screens (the calendar, the inbox, the due list, Today)
+    aren't audited, as the patient list (6); a child's appointments and requests are.
+  - Due items store the visit they came from (`visitId`, E6) to name the dentist; whether an item is open is computed
+    (`isDueItemOpen`), never stored, except signing's `closedAt` when a newer item replaces it.
+  - The patient list computes each row's standing in memory with the shared rules (E7): every match's visit days and
+    open items per request, three indexed queries. A clinic past ~10k patients needs stored columns.
+  - Today runs the shared `todaySummary` unchanged over a narrowed input (today's appointments, the week's patients'
+    visit days, the pending requests, every patient's name and birthday); parity is tested against the mock.
 - **Seed** (B1): `packages/seed` (`@pedia/seed`), so MSW and `prisma db seed` run the same `seedPlatform()`. Not
   `@pedia/shared`: the seed needs faker and is built from `new Date()`, which don't belong in the contract package.
 

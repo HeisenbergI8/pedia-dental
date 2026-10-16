@@ -142,7 +142,7 @@ the privacy notice (B4) and the subscription (B12) on the Settings screen, `deni
 
 ## ✅ Chunk B4: Patients and privacy consent (done, 2026-10-16) · Large — features 1 and 18 (part)
 
-**Status (2026-10-16): done**, in five parts. **B4a**: the patient tables, the `PatientView` serializer and the seeded
+**Status (2026-10-17): done**, in five parts. **B4a**: the patient tables, the `PatientView` serializer and the seeded
 patients. **B4b**: reads, search (the mock's rule, as SQL) and the list, parents linked to their children, no query
 strings in logs. **B4c**: register (refused without consent), edit, quick update, treatment consents. **B4d**: privacy
 consent and choices, the Owner's and the public privacy notice, a parent's children on their notice page. **B4e**: the
@@ -227,13 +227,27 @@ a habit stopped in a later visit shows correctly.
 
 ---
 
-## Chunk B7: Scheduling, follow-ups and Today (~24 h) · Large — features 4, 14, 15
+## ✅ Chunk B7: Scheduling, follow-ups and Today (done, 2026-10-17) · Large — features 4, 14, 15
+
+**Status (2026-10-16): done**, in five parts. **B7a**: the process pinned to Asia/Manila, `Appointment`,
+`AppointmentRequest` and `DueItem`, their mappers and the mock's refusals as pure functions, the seeded rows with the
+mock's ids. **B7b**: book, move and status under the clinic's lock (no double-booking), requests (one pending per child),
+and parents confirming their own child's appointment (`RecordOwners`). **B7c**: due items from signing, taken by
+booking, given back on a cancel or no-show; visits seat and finish their appointment; `db:backfill-due-items`.
+**B7d**: the patient list's recall and visit filters with the mock's rules, branch archiving counting bookings, and
+`/reports/today`. **B7e**: the 11 routes in `API_ROUTES` and `e2e/api-scheduling.spec.ts`. Done-when proofs:
+`appointments.int.test.ts` (18 parallel booking and move races leave one booking each), `recalls.int.test.ts` (an
+extraction signed today is due in 7 days; booking takes it, a cancel gives it back), `today.int.test.ts` (Today equals
+the shared `todaySummary` over the same seed for both demo clinics, every branch choice and every day of the week),
+and the e2e. **Deferred by design:** booking, move and no-show texts and Today's greeting ticks (B9), billing views of
+API appointments (B8), ownership checks beyond a parent confirming an appointment (B11).
+
 
 **Goal:** the clinic's day, safe under concurrent booking.
 
 - Appointments (book, move, status, check-in, no-show), chairs per branch.
-- **No double-booking under concurrency:** the check and the insert happen in one transaction with a row lock on the
-  chair's day (or a unique slot constraint), tested with parallel requests, not only in sequence.
+- **No double-booking under concurrency:** the check and the insert happen in one transaction under a row lock (B7
+  took the clinic's row, E1: a dentist clash spans chairs and branches), tested with parallel requests, not only in sequence.
 - Appointment requests and handling them.
 - Follow-up and recall due items from `DEFAULT_FOLLOW_UP_RULES` (data, not `if` statements); booking one clears it.
 - `/reports/today` and branch filtering through `reportBranchFilter`.
@@ -393,7 +407,7 @@ B0 Skeleton ✅
              └─ B4 Patients & privacy consent ✅
                  └─ B5 Visits & dental chart ✅
                      └─ B6 Notes, growth, behavior & plan ✅
-                         └─ B7 Scheduling, follow-ups & Today
+                         └─ B7 Scheduling, follow-ups & Today ✅
                              └─ B8 Billing, payments & dashboard
                                  └─ B9 Parent messages & real sending
                                      └─ B10 Photos & documents

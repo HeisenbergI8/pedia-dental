@@ -550,7 +550,7 @@ model Visit {
   clinicId      String
   patientId     String
   dentistId     String
-  /// Stored as given until B7 brings appointments (decision 1): nothing checks or seats it yet.
+  /// The appointment it was started from (B7): checked and seated (arrived → in chair) on start, done on complete.
   appointmentId String?
   /// The clinic's calendar day it started on (Clock.today(), Asia/Manila).
   date          DateTime    @db.Date
@@ -675,4 +675,91 @@ model PlanItem {
 
   /// GET /patients/:id/plan, oldest first, and sign's lookup of a patient's open items.
   @@index([clinicId, patientId, createdAt])
+}
+
+enum AppointmentStatus {
+  booked
+  confirmed
+  arrived
+  in_chair
+  done
+  no_show
+  cancelled
+}
+
+/// features/appointments/mocks.ts. Branch-owned in the contract, read account-wide (conflicts across branches, a child's
+/// appointments, branch=all reports), so "clinic" in MODEL_SCOPE with branchId as a plain column (E5). Every read and
+/// write goes through AppointmentRecordsService (E4).
+model Appointment {
+  id            String            @id @default(cuid(2))
+  clinicId      String
+  branchId      String
+  patientId     String
+  dentistId     String
+  chairId       String
+  startsAt      DateTime
+  durationMin   Int
+  reason        String            @db.Text
+  procedureCode String?           @db.VarChar(64)
+  status        AppointmentStatus
+  cancelReason  String?           @db.Text
+  sourceRuleId  String?           @db.VarChar(64)
+
+  @@index([clinicId, branchId, startsAt])
+  @@index([clinicId, chairId, startsAt])
+  @@index([clinicId, dentistId, startsAt])
+  @@index([clinicId, patientId, startsAt])
+}
+
+enum TimeOfDay {
+  morning
+  afternoon
+  any
+}
+
+enum AppointmentRequestStatus {
+  pending
+  handled
+}
+
+/// A parent's request from the portal (appointments/mocks.ts:137–183). Not an appointment: staff book it.
+model AppointmentRequest {
+  id            String                   @id @default(cuid(2))
+  clinicId      String
+  patientId     String
+  guardianId    String
+  preferredDate DateTime                 @db.Date
+  timeOfDay     TimeOfDay
+  reason        String                   @db.VarChar(200)
+  note          String?                  @db.VarChar(500)
+  status        AppointmentRequestStatus
+  createdAt     DateTime
+
+  @@index([clinicId, status, createdAt])
+  @@index([clinicId, patientId, createdAt])
+}
+
+enum DueKind {
+  follow_up
+  recall
+}
+
+/// A follow-up or recall a signed note made due (dueItemFor). Open is computed (isDueItemOpen), never stored.
+model DueItem {
+  id            String    @id @default(cuid(2))
+  clinicId      String
+  patientId     String
+  ruleId        String    @db.VarChar(64)
+  kind          DueKind
+  procedure     String    @db.VarChar(64)
+  dueOn         DateTime  @db.Date
+  sourceNoteId  String
+  visitId       String
+  appointmentId String?
+  closedAt      DateTime?
+  createdAt     DateTime
+
+  @@unique([clinicId, sourceNoteId])
+  @@index([clinicId, closedAt, dueOn])
+  @@index([clinicId, patientId, procedure])
 }

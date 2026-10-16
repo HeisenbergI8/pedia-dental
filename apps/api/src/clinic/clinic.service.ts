@@ -1,8 +1,10 @@
 import { BadRequestException, Injectable, PayloadTooLargeException } from "@nestjs/common";
 import {
   Branch, Chair, ClinicContext, Procedure, StaffRole, holdsRole, isActiveStaff,
-  type ClinicAccount, type ClinicUsage, type Role, type StaffMember, type UpdateBrandingInput, type UpdateClinicProfileInput,
+  type ClinicAccount, type ClinicUsage, type Role, type StaffMember, type Tier, type UpdateBrandingInput, type UpdateClinicProfileInput,
 } from "@pedia/shared";
+import { z } from "zod";
+import type { SlotRefs } from "../appointments/appointment.rules";
 import type { ClinicIdentity } from "../auth/identity.service";
 import { OutboxService } from "../outbox/outbox.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -10,6 +12,7 @@ import { runInTransaction, type Tx } from "../prisma/transaction";
 import { DELETE_FILE } from "../storage/delete-file.handler";
 import { StorageService, type StoredFile } from "../storage/storage.service";
 import { lockAccount, ownClinicId } from "./account-lock";
+import { BRANCH_COLUMNS } from "./branches.service";
 import { brandingRefusal, logoUrlOf, toClinicAccount, toStaffMember } from "./clinic.views";
 import { countUsage, usageOf } from "./limits";
 import { cleanLogo, isDemoLogo, type LogoUpload } from "./logo";
@@ -38,6 +41,29 @@ export class ClinicService {
   async staff(viewer: readonly Role[]): Promise<StaffMember[]> {
     return (await this.prisma.staff.findMany({ orderBy: [{ position: "asc" }, { id: "asc" }] })).map((s) => toStaffMember(s, viewer));
   }
+  /** The reference data slotRefusal needs, read in the booking's transaction (after lockAccount): small tables. */
+  async scheduleRefs(tx: Tx = this.prisma): Promise<Pick<SlotRefs, "staff" | "branches" | "chairs"> & { chairOrder: Map<string, number> }> {
+    const staff = await tx.staff.findMany({ select: { id: true, fullName: true, role: true, alsoRoles: true, isOwner: true, branchIds: true, deactivatedAt: true } });
+    const branches = await tx.branch.findMany({ select: BRANCH_COLUMNS });
+    const chairs = await tx.chair.findMany({ select: { id: true, branchId: true, name: true }, orderBy: [{ position: "asc" }, { id: "asc" }] });
+    return {
+      staff: staff.map((s) => ({
+        ...s, alsoRoles: StaffRole.array().parse(s.alsoRoles), branchIds: z.array(z.string()).parse(s.branchIds), deactivatedAt: s.deactivatedAt?.toISOString(),
+      })),
+      branches: branches.map((b) => Branch.parse(b)), chairs, chairOrder: new Map(chairs.map((c, i) => [c.id, i])),
+    };
+  }
+
+  /** The names Today shows (todaySummary's `staff`): deactivated ones too, as their appointments keep them. */
+  async staffNames(): Promise<{ id: string; fullName: string }[]> {
+    return this.prisma.staff.findMany({ select: { id: true, fullName: true }, orderBy: [{ position: "asc" }, { id: "asc" }] });
+  }
+
+  /** The account's tier (the reports' cross-branch rule). */
+  async tier(): Promise<Tier> {
+    return (await this.prisma.clinicAccount.findUniqueOrThrow({ where: { id: ownClinicId() }, select: { tier: true } })).tier;
+  }
+
   /** Is `id` an active login of this clinic holding the dentist role (visits/mocks.ts)? In the caller's transaction. */
   async isActiveDentist(id: string, tx: Tx = this.prisma): Promise<boolean> {
     const s = await tx.staff.findUnique({ where: { id }, select: { role: true, alsoRoles: true, deactivatedAt: true } });
@@ -69,8 +95,7 @@ export class ClinicService {
 
   /** GET /clinic/usage (Owner only): open branches and active logins against the tier. No lock: the write it informs checks again under it. */
   async usage(): Promise<ClinicUsage> {
-    const { tier } = await this.prisma.clinicAccount.findUniqueOrThrow({ where: { id: ownClinicId() }, select: { tier: true } });
-    return usageOf(tier, await countUsage(this.prisma));
+    return usageOf(await this.tier(), await countUsage(this.prisma));
   }
 
   /** PUT /clinic: name, contact email and TIN (decision #18). Tier and status are the operator's (B12). */

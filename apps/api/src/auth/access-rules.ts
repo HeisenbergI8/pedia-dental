@@ -191,11 +191,11 @@ export function matchRoute(method: string, path: string): Match | undefined {
  * `rolesCan`: a permission held at `all` passes; one held only at `own` passes a `filtered` route (the service narrows
  * the list) or a route about one of `children`; anything else is refused.
  */
-export function clinicRefusal(roles: readonly Role[], rule: ClinicRule, params: Record<string, string>, query: URLSearchParams, children: ReadonlySet<string>): string | undefined {
+export function clinicRefusal(roles: readonly Role[], rule: ClinicRule, params: Record<string, string>, query: URLSearchParams, children: ReadonlySet<string>, recordPatient?: string): string | undefined {
   const permissions = [rule.permission].flat();
   if (permissions.some((p) => rolesCan(roles, p, "all"))) return undefined;
   if (!permissions.some((p) => rolesCan(roles, p)) || !rule.owner) return "You don't have access to this";
   if (rule.owner === "filtered") return undefined;
-  const patientId = rule.owner === "id" ? params.id : rule.owner === "query" ? (query.get("patientId") ?? undefined) : undefined;
+  const patientId = rule.owner === "id" ? params.id : rule.owner === "query" ? (query.get("patientId") ?? undefined) : recordPatient;
   return patientId && children.has(patientId) ? undefined : "This isn't one of your children's records";
 }

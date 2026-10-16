@@ -1,6 +1,8 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { Branch, BranchInput, archiveProblem } from "@pedia/shared";
 import { z } from "zod";
+import { AppointmentRecordsService } from "../appointments/appointment-records.service";
+import { Clock } from "../common/clock";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { PrismaService } from "../prisma/prisma.service";
 import { clinicData } from "../prisma/tenant-scope";
@@ -9,7 +11,7 @@ import { lockAccount } from "./account-lock";
 import { assertRoomFor } from "./limits";
 
 /** The contract's columns: never `position`. */
-const BRANCH = { id: true, clinicId: true, name: true, address: true, phone: true, openingHours: true, archived: true } as const;
+export const BRANCH_COLUMNS = { id: true, clinicId: true, name: true, address: true, phone: true, openingHours: true, archived: true } as const;
 const Ids = z.array(z.string());
 
 /**
@@ -18,7 +20,7 @@ const Ids = z.array(z.string());
  */
 @Injectable()
 export class BranchesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly appointments: AppointmentRecordsService, private readonly clock: Clock) {}
 
   /** POST /branches: the limit first, so a full account says so whatever was typed; new branches go last. */
   create(body: unknown): Promise<Branch> {
@@ -27,7 +29,7 @@ export class BranchesService {
       await assertRoomFor(tx, clinicId, "branches");
       const input = new ZodValidationPipe(BranchInput).transform(body);
       const last = await tx.branch.findFirst({ orderBy: { position: "desc" }, select: { position: true } });
-      const row = await tx.branch.create({ data: { ...clinicData(), ...input, archived: false, position: (last?.position ?? -1) + 1 }, select: BRANCH });
+      const row = await tx.branch.create({ data: { ...clinicData(), ...input, archived: false, position: (last?.position ?? -1) + 1 }, select: BRANCH_COLUMNS });
       return Branch.parse(row);
     });
   }
@@ -71,16 +73,16 @@ export class BranchesService {
 
   /** This clinic's branch (the extension scopes it), or 404 in the mock's words. Another clinic's id reads as missing. */
   private async find(db: Pick<Tx, "branch">, id: string): Promise<Branch> {
-    const row = await db.branch.findFirst({ where: { id }, select: BRANCH });
+    const row = await db.branch.findFirst({ where: { id }, select: BRANCH_COLUMNS });
     if (!row) throw new NotFoundException("Branch not found");
     return Branch.parse(row);
   }
 
   /**
    * Bookings still to happen at the branch (the mock's UPCOMING: booked, confirmed, arrived, in chair, from now on).
-   * Appointments arrive in B7, which replaces this body; until then nothing is booked (B3, Decision 6).
+   * Counted in the archive's transaction, after its clinic lock: a booking can't land between the count and the archive (E1).
    */
-  private async upcomingAt(_tx: Tx, _branchId: string): Promise<number> {
-    return 0;
+  private async upcomingAt(tx: Tx, branchId: string): Promise<number> {
+    return this.appointments.upcomingAt(tx, branchId, this.clock.now());
   }
 }

@@ -7,6 +7,8 @@ import { ZodIssuesException, ZodValidationPipe } from "../common/zod-validation.
 import type { Prisma } from "../generated/prisma/client.ts";
 import { lockPatient, lockPatientIfExists } from "../patients/patient-lock";
 import { PlanService } from "../plan/plan.service";
+import { DueItemsService } from "../recalls/due-items.service";
+import type { SignedNote } from "../recalls/due-item.rules";
 import { PrismaService } from "../prisma/prisma.service";
 import { clinicData } from "../prisma/tenant-scope";
 import { runInTransaction, type Tx } from "../prisma/transaction";
@@ -33,6 +35,7 @@ export class NotesService {
     private readonly visits: VisitsService,
     private readonly plan: PlanService,
     private readonly clock: Clock,
+    private readonly dueItems: DueItemsService,
   ) {}
 
   /** GET /note-templates: the clinic's forms in the mock's order (one per catalog procedure). */
@@ -91,14 +94,31 @@ export class NotesService {
       await lockPatient(tx, patientId);
       const note = await this.read(tx, id);
       refuse(signRefusal(note));
-      await this.guarded(tx, id, { signedAt: this.clock.now() }, "This note is already signed");
+      const signedAt = this.clock.now();
+      await this.guarded(tx, id, { signedAt }, "This note is already signed");
       const procedure = (await this.template(note.templateId, tx))?.procedure ?? "";
       await this.plan.completeBy(tx, patientId, procedure, teethOf(note.values), note);
-      // B7: dueItemFor(procedure, visit.date, note.values): close this procedure's open due item and open the new one,
-      //     here, in this transaction (notes/mocks.ts:81–97, B6 decision 1).
+      // Signing makes a follow-up or recall due (DEFAULT_FOLLOW_UP_RULES), from the visit's day (notes/mocks.ts:83–97).
+      const visit = await this.visits.one(tx, note.visitId);
+      if (visit) await this.dueItems.afterSign(tx, { ...note, patientId }, procedure, visit.date, signedAt);
       // B9: NOTE_MESSAGES[procedure] → OutboxService.enqueue(tx, …), the parent's care instructions (notes/mocks.ts:98–100).
       await this.audit.record("update", "Clinical note (signed)", patientId, tx);
       return this.read(tx, id);
+    });
+  }
+
+  /**
+   * Every signed note of the clinic as the backfill reads it (E8): its template's procedure and its visit's day. Three
+   * queries whatever the count (no N+1).
+   */
+  async signedForBackfill(tx: Tx): Promise<SignedNote[]> {
+    const rows = await tx.clinicalNote.findMany({ where: { signedAt: { not: null } }, select: NOTE_COLUMNS, orderBy: [{ signedAt: "asc" }, { id: "asc" }] });
+    const templates = await tx.noteTemplate.findMany({ where: { id: { in: [...new Set(rows.map((r) => r.templateId))] } }, select: { id: true, procedure: true } });
+    const procedureOf = new Map(templates.map((t) => [t.id, t.procedure]));
+    const dates = await this.visits.datesOf(tx, rows.map((r) => r.visitId));
+    return rows.map(toNote).flatMap((n) => {
+      const visitDate = dates.get(n.visitId);
+      return visitDate && n.signedAt ? [{ id: n.id, patientId: n.patientId, visitId: n.visitId, procedure: procedureOf.get(n.templateId) ?? "", visitDate, values: n.values, signedAt: n.signedAt }] : [];
     });
   }
 

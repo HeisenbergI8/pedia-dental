@@ -9,6 +9,7 @@ import { AuthService } from "./auth.service";
 import { Hasher } from "./hashing";
 import { IdentityService } from "./identity.service";
 import { OperatorAuthController } from "./operator-auth.controller";
+import { RecordOwners } from "./record-owners";
 import { RateLimitMiddleware, RateLimitService } from "./rate-limit";
 import { SessionService } from "./session.service";
 
@@ -20,8 +21,8 @@ import { SessionService } from "./session.service";
 @Module({
   imports: [AuditModule, FamilyModule],
   controllers: [AuthController, OperatorAuthController],
-  providers: [Hasher, SessionService, IdentityService, AuthService, RateLimitService, AuthJobs, AccessGuard, { provide: APP_GUARD, useExisting: AccessGuard }],
-  exports: [Hasher, SessionService, IdentityService],
+  providers: [Hasher, SessionService, IdentityService, AuthService, RateLimitService, AuthJobs, RecordOwners, AccessGuard, { provide: APP_GUARD, useExisting: AccessGuard }],
+  exports: [Hasher, SessionService, IdentityService, RecordOwners],
 })
 export class AuthModule implements NestModule {
   /** Every /auth route is rate-limited before the guard runs (CHUNKS B2). Bound by controller: no path syntax to drift. */
