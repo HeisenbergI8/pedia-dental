@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import {
-  AddConsentInput, CreatePatientInput, EditPatientWithoutContactsInput, QuickUpdatePatientInput, nextPatientNo, patientSearchText,
-  type PatientView, type RegisterPatientInput,
+  AddConsentInput, ChangePrivacyChoicesInput, CreatePatientInput, EditPatientWithoutContactsInput, QuickUpdatePatientInput,
+  RecordPrivacyConsentInput, currentChoices, nextPatientNo, patientSearchText, type PatientView, type RegisterPatientInput,
 } from "@pedia/shared";
 import type { z } from "zod";
 import { AuditService } from "../audit/audit.service";
@@ -123,6 +123,49 @@ export class PatientWritesService {
         select: { id: true },
       });
       await this.audit.record("create", "Consent", id, tx);
+      return visibleTo(viewer, await this.patients.one(id, tx));
+    });
+  }
+
+  /** POST /patients/:id/privacy-consent (#18): a child registered before chunk 24. Recorded once. */
+  async recordConsent(viewer: Viewer, id: string, body: unknown): Promise<PatientView> {
+    return runInTransaction(this.prisma, async (tx) => {
+      await lockPatient(tx, id);
+      const current = await this.patients.one(id, tx);
+      if (current.privacyConsent) throw new ConflictException("Consent is already recorded for this child. Change the optional consents instead.");
+      const input = parse(RecordPrivacyConsentInput, body);
+      const at = this.clock.now();
+      const recorded = consentFrom(current, input, { id: viewer.staffId ?? viewer.userId, name: viewer.name }, await this.notices.currentVersion(tx), at.toISOString());
+      if (!recorded) throw new BadRequestException("Choose one of this child's guardians");
+      await tx.patientPrivacyConsent.create({ data: { ...clinicData(), patientId: id, ...recorded.privacyConsent, at }, select: { patientId: true } });
+      await tx.privacyChoice.create({ data: { ...clinicData(), patientId: id, position: current.privacyChoices?.length ?? 0, ...recorded.choice, at }, select: { id: true } });
+      await this.audit.record("create", "Privacy consent", id, tx);
+      return visibleTo(viewer, await this.patients.one(id, tx));
+    });
+  }
+
+  /**
+   * POST /patients/:id/privacy-choices (#15): staff, or the parent for their own child, switch photos or reminders.
+   * Only what changed is sent; it is merged onto the choices on record, and the result is a new row.
+   */
+  async changeChoices(viewer: Viewer, id: string, body: unknown): Promise<PatientView> {
+    return runInTransaction(this.prisma, async (tx) => {
+      await lockPatient(tx, id);
+      const current = await this.patients.one(id, tx);
+      if (!current.privacyConsent) throw new ConflictException("Record the parent's consent first");
+      const input = parse(ChangePrivacyChoicesInput, body);
+      const was = currentChoices(current);
+      await tx.privacyChoice.create({
+        data: {
+          ...clinicData(), patientId: id, position: current.privacyChoices?.length ?? 0,
+          photos: input.photos ?? was?.photos ?? false, reminders: input.reminders ?? was?.reminders ?? false,
+          by: viewer.guardianId ? "parent" : "staff", byName: viewer.name, at: this.clock.now(),
+        },
+        select: { id: true },
+      });
+      // #14: a "no" to reminders also withdraws queued messages (mocks.ts:267). Messages arrive with B9, which adds
+      // that withdrawal here, in this transaction. Until then there is nothing queued on the API to withdraw.
+      await this.audit.record("update", "Privacy consent (changed)", id, tx);
       return visibleTo(viewer, await this.patients.one(id, tx));
     });
   }

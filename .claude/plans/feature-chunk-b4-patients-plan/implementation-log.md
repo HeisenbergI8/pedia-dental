@@ -47,3 +47,11 @@
 **Deviations from plan:** `lockPatient` is exported (Phases 7 and 8 lock the same row). Added one case beyond the plan's list: PUT/PATCH/consents answer 404 before reading the body (the mock's order).
 **Gate:** `pnpm run check` green (api 189, web 342); `pnpm --filter api test:int` 20 files, 143 passed, 3 todo.
 **Notes:** the parallel-numbering case runs 3 rounds of 20 concurrent POSTs; every round got 20 consecutive numbers. The audit case asserts the exact sequence of entries for one patient.
+
+## Phase 7: Privacy — 2026-10-16
+
+**Steps completed:** 7.1, 7.2, 7.3, 7.4
+**Files changed:** `apps/api/src/legal/privacy-notice.service.ts`, `apps/api/src/legal/legal.controller.ts`, `apps/api/src/legal/legal.module.ts`, `apps/api/src/clinic/clinic.controller.ts`, `apps/api/src/clinic/clinic.module.ts`, `apps/api/src/app.module.ts`, `apps/api/src/patients/patient-writes.service.ts`, `apps/api/src/patients/patients.controller.ts`, `apps/api/src/patients/family.ts`, `apps/api/src/patients/family.test.ts`, `apps/api/src/patients/family.service.ts`, `apps/api/src/auth/identity.service.ts`, `apps/api/src/auth/auth.service.ts`, `apps/api/test/privacy-routes.test.ts`, `apps/api/test/patients-routes.test.ts`, `apps/api/test/int/privacy.int.test.ts`
+**Deviations from plan:** `privacy-routes.test.ts` also excludes 404 for the public route (Nest's 404 means no controller, which is what the case guards against). The parent's acknowledgement case first has the parent acknowledge version 1 explicitly: the seed has no notice acknowledgement for that parent, so "the version-1 row is still there" would otherwise prove nothing. The merge case runs as the dentist (`consents.manage`) rather than front desk, to cover a second role.
+**Gate:** `pnpm run check` green (api 195); `pnpm --filter api test:int` 21 files, 151 passed, 5 todo.
+**Notes:** a parent's pending notice acknowledgement doesn't hold their other routes, on the API as in the mock (the portal's own step, access.ts:373). The two B9 cases (no reminders sent / queued ones withdrawn) are `it.todo`.

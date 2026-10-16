@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Put, Query, Req } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Param, Patch, Post, Put, Query, Req } from "@nestjs/common";
 import { PatientListQuery, RegisterPatientInput } from "@pedia/shared";
 import type { Request } from "express";
 import { identityOf } from "../auth/access.guard";
@@ -64,5 +64,16 @@ export class PatientsController {
   @Post("patients/:id/consents")
   addConsent(@Req() req: Request, @Param("id") id: string, @Body() body: unknown) {
     return this.writes.addConsent(viewer(req), id, body); // 201, as the mock
+  }
+
+  @Post("patients/:id/privacy-consent")
+  recordConsent(@Req() req: Request, @Param("id") id: string, @Body() body: unknown) {
+    return this.writes.recordConsent(viewer(req), id, body); // 201, as the mock
+  }
+
+  @Post("patients/:id/privacy-choices")
+  @HttpCode(200)
+  changeChoices(@Req() req: Request, @Param("id") id: string, @Body() body: unknown) {
+    return this.writes.changeChoices(viewer(req), id, body);
   }
 }

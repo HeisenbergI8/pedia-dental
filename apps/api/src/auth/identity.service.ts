@@ -242,7 +242,7 @@ export class IdentityService {
   }
 
   /** GET /auth/acknowledgement: port of acknowledgementPrompt (apps/web/src/mocks/privacy.ts), same wording. */
-  async acknowledgementPrompt(clinicId: string, kind: AcknowledgementKind): Promise<AcknowledgementPrompt> {
+  async acknowledgementPrompt(clinicId: string, kind: AcknowledgementKind, guardianId?: string): Promise<AcknowledgementPrompt> {
     const { name: clinicName } = await this.prisma.clinicAccount.findUniqueOrThrow({ where: { id: clinicId }, select: { name: true } });
     if (kind === "terms") {
       const { terms, dpa } = LEGAL_DOCUMENTS;
@@ -262,7 +262,7 @@ export class IdentityService {
       kind, version: notice.version, clinicName, title: `${clinicName}'s privacy notice`,
       paragraphs: notice.body.split(/\n{2,}/).filter((p) => p.trim()),
       contact: { name: notice.contactName, email: notice.contactEmail },
-      children: [], // a parent's children and their consents arrive with patients (B4)
+      children: guardianId ? await this.family.promptChildren(guardianId) : [],
     };
   }
 

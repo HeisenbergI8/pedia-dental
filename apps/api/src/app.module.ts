@@ -14,6 +14,7 @@ import { BACKGROUND } from "./jobs/job-runner";
 import { JobsModule } from "./jobs/jobs.module";
 import { loggerParams } from "./logging/logger";
 import { MessagesModule } from "./messages/messages.module";
+import { LegalModule } from "./legal/legal.module";
 import { PatientsModule } from "./patients/patients.module";
 import { NotesModule } from "./notes/notes.module";
 import { OutboxModule } from "./outbox/outbox.module";
@@ -41,6 +42,7 @@ export class AppModule implements NestModule {
         NotesModule,
         MessagesModule,
         PatientsModule,
+        LegalModule,
       ],
       controllers: [HealthController],
       providers: [

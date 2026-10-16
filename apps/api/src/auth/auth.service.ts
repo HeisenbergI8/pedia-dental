@@ -160,7 +160,7 @@ export class AuthService {
   async acknowledgementPrompt(who: ClinicIdentity | undefined): Promise<AcknowledgementPrompt> {
     if (!who) throw new UnauthorizedException("Sign in to continue");
     if (!who.mustAcknowledge) throw new ConflictException("Nothing is waiting for you to read");
-    return this.identity.acknowledgementPrompt(who.clinicId, who.mustAcknowledge);
+    return this.identity.acknowledgementPrompt(who.clinicId, who.mustAcknowledge, who.guardianId);
   }
 
   /** POST /auth/acknowledgement: only the step waiting, at its current version, so a stale page can't accept an old text. */
