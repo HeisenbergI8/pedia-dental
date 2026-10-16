@@ -4,6 +4,7 @@ import { ScheduleModule } from "@nestjs/schedule";
 import { LoggerModule } from "nestjs-pino";
 import type { DestinationStream } from "pino";
 import { AuthModule } from "./auth/auth.module";
+import { ChartModule } from "./chart/chart.module";
 import { ClinicModule } from "./clinic/clinic.module";
 import { ENV, type Env } from "./config/env";
 import { Clock, SystemClock } from "./common/clock";
@@ -16,6 +17,7 @@ import { loggerParams } from "./logging/logger";
 import { MessagesModule } from "./messages/messages.module";
 import { LegalModule } from "./legal/legal.module";
 import { PatientsModule } from "./patients/patients.module";
+import { VisitsModule } from "./visits/visits.module";
 import { NotesModule } from "./notes/notes.module";
 import { OutboxModule } from "./outbox/outbox.module";
 import { PrismaModule } from "./prisma/prisma.module";
@@ -42,6 +44,8 @@ export class AppModule implements NestModule {
         NotesModule,
         MessagesModule,
         PatientsModule,
+        VisitsModule,
+        ChartModule,
         LegalModule,
       ],
       controllers: [HealthController],

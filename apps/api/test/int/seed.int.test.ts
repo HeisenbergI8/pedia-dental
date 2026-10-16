@@ -1,8 +1,10 @@
 import { patientSearchText } from "@pedia/shared";
-import { DEMO_PASSWORD, OPERATORS, accountsByEmail, demoLogins, seedPlatform } from "@pedia/seed";
+import { DEMO_CLINIC_ID, DEMO_PASSWORD, OPERATORS, accountsByEmail, demoLogins, seedPlatform } from "@pedia/seed";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Hasher } from "../../src/auth/hashing";
+import { CHART_COLUMNS, toChartEntry } from "../../src/chart/chart.rows";
 import { seedDatabase } from "../../src/seed/seed-database";
+import { VISIT_COLUMNS, toVisit } from "../../src/visits/visit.rows";
 import { inClinic, resetDatabase, testPrisma } from "./support/database";
 
 const prisma = testPrisma();
@@ -50,6 +52,20 @@ describe("prisma db seed (seedDatabase) on MySQL", () => {
         }
       });
     }
+  });
+
+  it("writes each clinic's visits and chart entries with the mock's ids, as the mock serves them (B5)", async () => {
+    const byId = <T extends { id: string }>(xs: T[]) => new Map(xs.map((x) => [x.id, x]));
+    for (const { id } of platform.accounts) {
+      const db = platform.tenants[id]!;
+      await inClinic(id, async () => {
+        const visits = (await prisma.visit.findMany({ select: VISIT_COLUMNS })).map(toVisit);
+        const entries = (await prisma.chartEntry.findMany({ select: CHART_COLUMNS })).map(toChartEntry);
+        expect(byId(visits)).toEqual(byId(db.visits.map((v) => ({ ...v, clinicId: id }))));
+        expect(byId(entries)).toEqual(byId(db.chartEntries.map((e) => ({ ...e, clinicId: id }))));
+      });
+    }
+    expect(platform.tenants[DEMO_CLINIC_ID]!.chartEntries.length).toBeGreaterThan(0); // not vacuous
   });
 
   it("gives every mock login the same email in the same clinics, opened by the demo password", async () => {

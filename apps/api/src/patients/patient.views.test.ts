@@ -1,6 +1,6 @@
 import { PatientView, type Role } from "@pedia/shared";
 import { describe, expect, it } from "vitest";
-import { toPatient, visibleTo, type PatientRecord, type Viewer } from "./patient.views";
+import { toPatient, toSummary, visibleTo, type PatientRecord, type Viewer } from "./patient.views";
 
 const at = new Date("2026-10-01T02:00:00.000Z");
 const record: PatientRecord = {
@@ -41,5 +41,15 @@ describe("visibleTo (CONVENTIONS → Contact data)", () => {
     expect(p.birthDate).toBe("2019-04-12");
     expect(toPatient({ ...record, choices: [] }).privacyChoices).toBeUndefined();
     expect(toPatient({ ...record, row: { ...record.row, tags: null } }).tags).toBeUndefined();
+  });
+});
+
+describe("toSummary", () => {
+  const p = toPatient(record);
+  const desk: Viewer = { userId: "u", name: "U", roles: ["front_desk"], children: new Set() };
+
+  it("carries the last visit's day when there is one, and leaves it absent when there isn't (B5)", () => {
+    expect(toSummary(desk, p, [], false, "2026-06-02").lastVisitOn).toBe("2026-06-02");
+    expect(toSummary(desk, p, [], false)).not.toHaveProperty("lastVisitOn");
   });
 });

@@ -3,7 +3,9 @@ import { requestContext } from "../common/request-context";
 import type { Env } from "../config/env";
 import type { PrismaService } from "../prisma/prisma.service";
 import type { Hasher } from "../auth/hashing";
+import { chartEntryRow } from "../chart/chart.rows";
 import { patientRows } from "../patients/patient.rows";
+import { visitRow } from "../visits/visit.rows";
 
 export class SeedRefused extends Error {
   override name = "SeedRefused";
@@ -24,7 +26,7 @@ const dateOnly = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
  * (argon2id), notices, acknowledgements, agreements, the operator, the login page's DemoLogin rows, and (B3) chairs,
  * procedures, note templates and message templates. Clinic rows are written inside that clinic's request context, so
  * the tenant extension stamps and checks them (awaited inside, CONVENTIONS → Traps). `position` keeps the mock's array
- * order. Visits and the rest arrive with their chunks.
+ * order. B4 adds patients, B5 their visits and chart entries; the rest arrive with their chunks.
  */
 export async function seedDatabase(prisma: PrismaService, hasher: Hasher, env: Pick<Env, "DEMO_LOGINS">, platform: Platform): Promise<void> {
   assertSeedAllowed(env, await prisma.clinicAccount.count());
@@ -92,6 +94,10 @@ export async function seedDatabase(prisma: PrismaService, hasher: Hasher, env: P
       await prisma.patientConsent.createMany({ data: rows.flatMap((r) => r.consents.map((c) => ({ ...c, clinicId }))) });
       await prisma.patientPrivacyConsent.createMany({ data: rows.flatMap((r) => (r.privacyConsent ? [{ ...r.privacyConsent, clinicId }] : [])) });
       await prisma.privacyChoice.createMany({ data: rows.flatMap((r) => r.choices.map((c) => ({ ...c, clinicId }))) });
+      // B5: every visit and chart entry, with the seed's ids: MSW's notes, growth records and plan items in `hybrid` name
+      // these visit and entry ids. All completed: the seed leaves no visit in progress.
+      await prisma.visit.createMany({ data: db.visits.map((v) => ({ ...visitRow(v), clinicId })) });
+      await prisma.chartEntry.createMany({ data: db.chartEntries.map((e) => ({ ...chartEntryRow(e), clinicId })) });
     });
   }
 }

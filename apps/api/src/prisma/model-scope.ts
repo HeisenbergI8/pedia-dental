@@ -27,6 +27,9 @@ export const MODEL_SCOPE = {
   PatientConsent: "clinic",
   PatientPrivacyConsent: "clinic",
   PrivacyChoice: "clinic",
+  // B5: the clinical core. Visits aren't branch-level in the contract (ClinicScoped): every branch sees the same child.
+  Visit: "clinic",
+  ChartEntry: "clinic",
   // Platform: Primolar's own records
   ClinicAccount: "platform",
   Agreement: "platform",
@@ -46,10 +49,12 @@ export const MODEL_SCOPE = {
 
 /**
  * Insert-only tables: no update, upsert or delete reaches them (CONVENTIONS → Domain rules → Append-only).
- * A correction is a new row. Chart entries, payments and agreements join this list in their chunks.
+ * A correction is a new row. Payments join this list in B8.
  */
 export const APPEND_ONLY: ReadonlySet<string> = new Set<Prisma.ModelName>([
   "AuditEvent", "Agreement", "Acknowledgement", "PrivacyNotice",
   // B4: consents are never edited (privacy #12–#17). A change of mind is a new PrivacyChoice row.
   "PatientConsent", "PatientPrivacyConsent", "PrivacyChoice",
+  // B5: chart entries (CHUNKS B5). A correction is a new row with `supersedes`.
+  "ChartEntry",
 ]);

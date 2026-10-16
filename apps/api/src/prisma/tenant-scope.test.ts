@@ -1,8 +1,8 @@
-import { AccountStatus, Acknowledgement, AgreementRecord, AuditAction, ConsentScope, HeadingFont, MessageKind, PrivacyChoice, Role, Sex, StaffRole, Tier } from "@pedia/shared";
+import { AccountStatus, Acknowledgement, AgreementRecord, AuditAction, ConsentScope, HeadingFont, MessageKind, PrivacyChoice, Role, Sex, StaffRole, Tier, ToothCondition, VisitStatus } from "@pedia/shared";
 import { describe, expect, it } from "vitest";
 import type { RequestContext } from "../common/request-context";
 import { $Enums, Prisma } from "../generated/prisma/client.ts";
-import { MODEL_SCOPE, type ModelScope } from "./model-scope";
+import { APPEND_ONLY, MODEL_SCOPE, type ModelScope } from "./model-scope";
 import { TenantScopeError, scopeArgs } from "./tenant-scope";
 
 const clinicA: RequestContext = { requestId: "r1", clinicId: "clinic_a", branchId: "branch_a1", operator: false };
@@ -38,6 +38,8 @@ describe("model registry", () => {
     expect(Object.values($Enums.Sex)).toEqual(Sex.options);
     expect(Object.values($Enums.ConsentScope)).toEqual(ConsentScope.options);
     expect(Object.values($Enums.PrivacyChoiceBy)).toEqual(PrivacyChoice.shape.by.options);
+    expect(Object.values($Enums.VisitStatus)).toEqual(VisitStatus.options);
+    expect(Object.values($Enums.ToothCondition)).toEqual(ToothCondition.options);
   });
 });
 
@@ -108,5 +110,12 @@ describe("append-only", () => {
   it("still allows inserts and reads", () => {
     expect(() => scoped("Entry", "create", { data: {} }, clinicA)).not.toThrow();
     expect(() => scoped("Entry", "findMany", {}, clinicA)).not.toThrow();
+  });
+
+  it("lists the chart, and only the chart of B5's tables (a visit is completed in place)", () => {
+    expect(APPEND_ONLY.has("ChartEntry")).toBe(true);
+    expect(APPEND_ONLY.has("Visit")).toBe(false);
+    expect(() => scopeArgs("ChartEntry", "update", { where: { id: "e1" }, data: { condition: "sound" } }, clinicA)).toThrow(/append-only/);
+    expect(() => scopeArgs("ChartEntry", "deleteMany", { where: {} }, clinicA)).toThrow(/append-only/);
   });
 });

@@ -175,7 +175,17 @@ a dentist doesn't; a patient can't be registered without consent; every record v
 
 ---
 
-## Chunk B5: Visits and the dental chart (~24 h) · Large — features 2 and part of 3
+## ✅ Chunk B5: Visits and the dental chart (done, 2026-10-16) · Large — features 2 and part of 3
+
+**Status (2026-10-16): done**, in three parts. **B5a**: `Visit` and `ChartEntry` (append-only, unique `supersedes`), the
+row mappers, the mock's chart refusals as a pure function, the seeded visits and entries with the mock's ids. **B5b**:
+start, complete and list visits; single and batch findings, corrections as new rows; every write locks the patient
+before its first read. **B5c**: `lastVisitOn` in the list and header, the six routes in `API_ROUTES`, and
+`e2e/api-chart.spec.ts`. Done-when proofs: `test:int` `chart.int.test.ts` (74-O caries then restored, both in history;
+update and delete refused at the repository level; the chart matches the seed's for every patient) and
+`visits.int.test.ts` (one visit in progress and one completion under parallel requests). **Deferred by design to B7:**
+checking and seating the appointment a visit starts from, done appointments in `lastVisitOn`, the `recent_visit`
+filter and the `last_visit` sort.
 
 **Goal:** the clinical core, with append-only history guaranteed by the database layer.
 
@@ -220,6 +230,9 @@ a habit stopped in a later visit shows correctly.
 - Follow-up and recall due items from `DEFAULT_FOLLOW_UP_RULES` (data, not `if` statements); booking one clears it.
 - `/reports/today` and branch filtering through `reportBranchFilter`.
 - Fill `recallDueOn`, the recall flag and the `recall_due`/`needs_attention` filters in `/patient-summaries` (B4's decision 3).
+- From B5: done appointments in `lastVisitOn` (through `VisitDaysService`), the `recent_visit` filter and the
+  `last_visit` sort (B5 decisions 2, 3); check and seat the appointment in `VisitsService.start`, and move it to done in
+  `complete` (B5 decision 1).
 
 **Done when:** two simultaneous bookings of the same chair and slot leave exactly one; an extraction signed today is
 due in 7 days and booking it removes it; Today matches the mock for both demo clinics.
@@ -366,7 +379,7 @@ B0 Skeleton ✅
      └─ B2 Identity, sessions & access ✅
          └─ B3 Clinic setup & Owner settings ✅
              └─ B4 Patients & privacy consent ✅
-                 └─ B5 Visits & dental chart
+                 └─ B5 Visits & dental chart ✅
                      └─ B6 Notes, growth, behavior & plan
                          └─ B7 Scheduling, follow-ups & Today
                              └─ B8 Billing, payments & dashboard

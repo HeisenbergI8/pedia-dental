@@ -6,13 +6,15 @@ The Primolar backend. It replaces the browser mocks (MSW) in `apps/web` **endpoi
 feature code in the web app**. The product, the users and the domain are the ones in the root `CONVENTIONS.md`
 and `ROADMAP.md`; read those first. This file covers only how the API is built.
 
-**Current phase: B1–B4 done** (2026-10-16). The runtime core (request context, `Clock`, logs, tenant scoping,
+**Current phase: B1–B5 done** (2026-10-16). The runtime core (request context, `Clock`, logs, tenant scoping,
 transactions, audit), `@pedia/seed`, the `test:int` suite on MySQL and CI, identity, sessions and the access guard,
 `/auth/*`, `/operator/auth/*` and the clinic reads, with the web signing in against them in `hybrid` mode. B1-c added
 the outbox, scheduled jobs and file storage. B3: the Owner's settings
 (profile, look, logo, branches, staff logins, tier limits) and the clinic's reference data (chairs, procedures, note
 and message templates), served in `hybrid`. B4: patients, guardians, consents, search and the list, the patient photo
-and the clinic's privacy notice (Owner's and public), served in `hybrid`. B5 (visits and the dental chart) is next. The
+and the clinic's privacy notice (Owner's and public), served in `hybrid`. B5: visits, the dental chart (append-only
+entries, corrections as new rows) and the last visit in the patient list and header, served in `hybrid`. B6 (notes,
+growth, behaviour and the treatment plan) is next. The
 build order is [CHUNKS.md](CHUNKS.md).
 
 **Stack:** NestJS 12 (ESM, Express) · Prisma 7 + MySQL 8.4 (MariaDB driver adapter) · Zod 4 schemas from
@@ -61,7 +63,9 @@ Run from the repo root.
 | Audit trail | `src/audit/` | `AuditService.record` (import `AuditModule`) |
 | Identity and access | `src/auth/` | `auth.controller.ts` / `operator-auth.controller.ts` and `auth.service.ts` (sign-in, sign-out, switch, password, acknowledgement), `rate-limit.ts` (`RATE_LIMITS`), `access-rules.ts` (the route → permission map, held to the mock's `RULES` by a test), `access.guard.ts` (the global guard), `session.service.ts` (sessions), `identity.service.ts` (who a session is, PINs), `hashing.ts` (argon2id), `cookies.ts` |
 | Clinic | `src/clinic/` | The account and its setup: `ClinicService` (context, profile, branding, logo, usage, chairs, procedures), `BranchesService`, `StaffService`; `limits.ts` (tier limits, from `TIER_LIMITS`), `account-lock.ts` (`ownClinicId`, `lockAccount`), `logo.ts` (`cleanLogo`: type sniffing and the SVG sanitiser), row shaping in `clinic.views.ts` |
-| Patients | `src/patients/` | `PatientsService` (reads: `records`/`one` for other features, search, the list, the header summary, duplicates, the photo), `PatientWritesService` (register, edit, quick update, consents, privacy consent and choices, the photo swap), `patient.views.ts` (`visibleTo`: **the only producer of `PatientView`**; `toPatient`, `toSummary`, `viewerOf`), `patient.rows.ts` (contract → rows, the edit rules), `patient-search.ts` (the search as SQL), `patient-photo.ts`. `FamilyService` (a parent's children) sits in its own `FamilyModule`, imported by `AuthModule` and `PatientsModule` |
+| Patients | `src/patients/` | `PatientsService` (reads: `records`/`one` for other features, search, the list, the header summary, duplicates, the photo), `PatientWritesService` (register, edit, quick update, consents, privacy consent and choices, the photo swap), `patient.views.ts` (`visibleTo`: **the only producer of `PatientView`**; `toPatient`, `toSummary`, `viewerOf`), `patient.rows.ts` (contract → rows, the edit rules), `patient-search.ts` (the search as SQL), `patient-photo.ts`, `patient-lock.ts` (`lockPatient`, `lockPatientIfExists`). `FamilyService` (a parent's children) sits in its own `FamilyModule`, imported by `AuthModule` and `PatientsModule` |
+| Visits | `src/visits/` | B5: `VisitsService` (list, start, complete, `forPatient` for the chart), `visit.rows.ts` (rows ↔ `Visit`), `VisitDaysService` (the last visit's day) in its own `VisitDaysModule`, imported by `PatientsModule` |
+| Chart | `src/chart/` | B5: `ChartService` (reads and appends only), `chart.rules.ts` (the mock's refusals as a pure function), `chart.rows.ts` (rows ↔ `ChartEntry`, `CHART_ORDER`) |
 | Legal | `src/legal/` | `PrivacyNoticeService` (owns `PrivacyNotice`: the version in force, the Owner's save, the public read) and the public `LegalController` (`GET /legal/notices/:clinicId`) |
 | Notes, messages | `src/notes/`, `src/messages/` | B3: `GET /note-templates`, `GET`/`PUT /message-templates`. B6 and B9 add the notes and the queue |
 | Outbox | `src/outbox/` | `OutboxService.enqueue(tx, …)` (the write side, inside the caller's transaction), `OutboxWorker` (claim, run, settle), `OutboxHandlers` (features register a handler per kind), `NoopHandler` |
@@ -69,7 +73,7 @@ Run from the repo root.
 | File storage | `src/storage/` | `StorageService` (clinic-scoped keys), `FileStorage` (the driver), `LocalDiskStorage`, and the `storage.delete` outbox handler (`delete-file.handler.ts`). Import `StorageModule` where files are kept |
 | Demo seed | `src/seed/seed-database.ts`, `prisma/seed.ts` | Maps `@pedia/seed`'s `seedPlatform()` to rows |
 | Features | `src/<name>/` | `<name>.module.ts`, `<name>.controller.ts`, `<name>.service.ts`. Same `<name>` as `apps/web/src/features/<name>` |
-| Tests | `src/**/*.test.ts` (unit), `test/*.test.ts` (HTTP) | Run without a database, in `pnpm run check`. HTTP tests build the app with `test/support/test-app.ts`. `test/clinic-routes.test.ts` (B3) and `test/patients-routes.test.ts` (B4) hold every route to "reaches a controller and the guard" (401 without a session); add a route there with its controller |
+| Tests | `src/**/*.test.ts` (unit), `test/*.test.ts` (HTTP) | Run without a database, in `pnpm run check`. HTTP tests build the app with `test/support/test-app.ts`. `test/clinic-routes.test.ts` (B3), `test/patients-routes.test.ts` (B4) and `test/clinical-routes.test.ts` (B5) hold every route to "reaches a controller and the guard" (401 without a session); add a route there with its controller |
 | Integration tests | `test/int/*.int.test.ts`, helpers in `test/int/support/` (`testPrisma`, `resetDatabase`, `inClinic`, `createIntApp`) | Real MySQL test database, `test:int`, run in CI (`.github/workflows/api.yml`, MySQL 8.4) |
 
 ### Porting a feature from MSW (fails silently if missed)
@@ -273,7 +277,19 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **A reminders "no" doesn't withdraw queued messages yet** (privacy #14): messages arrive with B9, which adds the
   withdrawal to `PatientWritesService.changeChoices`, in its transaction.
 - **A database seeded before B4 has no patients**, and `db:seed` refuses a database with accounts: use a fresh volume or
-  a new database, as for B3.
+  a new database, as for B3. The same for B5's visits and chart entries.
+- **Lock before the first plain read.** MySQL's REPEATABLE READ takes the transaction's snapshot at its first plain
+  (non-locking) read. A read before `lockPatient`/`lockAccount` would leave every later read blind to what the request
+  that held the lock just committed: B5's plan read the visit first, and parallel corrections answered 500 and parallel
+  completes all 200. Take the lock first (`lockPatientIfExists` when the 404 must come from something else), or make
+  the first read a locking one (`SELECT … FOR UPDATE`, as `VisitsService.complete`). Race tests catch it.
+- **Every visit and chart write locks the patient's row first** (`src/patients/patient-lock.ts`). `complete` locks the
+  visit, then the patient; no path locks them the other way round.
+- **In `hybrid`, notes, growth and photos on a visit the API started answer 404 from MSW** until B6/B10 (B5 decision 7).
+  Seeded visits have the same ids on both sides and keep working.
+- **A visit started from an appointment stores `appointmentId` unchecked** until B7, which checks and seats it in
+  `VisitsService.start` and marks it done in `complete` (B5 decision 1). MSW's appointment stays "arrived" in `hybrid`.
+- **A batch's chart entries share `recordedAt`**; `GET /patients/:id/chart` breaks the tie by id, not insertion order.
 - `test/app.test.ts` logs a stack trace on purpose (the "unexpected error" case). It isn't a failure.
 
 ---
@@ -338,6 +354,17 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
     served from the API's origin.
   - **Paging** stays the contract's `page`/`pageSize`, and `GET /patients` is unpaged, both as the mock. A cursor needs
     the shared schema and the mock changed first.
+- **Visits and the chart** (B5, decisions in the B5 plan):
+  - `ChartEntry` is in `APPEND_ONLY`: no update or delete path; a correction is a new row with `supersedes`, unique per
+    `(clinicId, supersedes)` as the backstop. The chart, "as of a visit" and per-tooth history are `deriveChart()` in the
+    web over `GET /patients/:id/chart` (all entries, oldest first): no server endpoint for them.
+  - The mock's chart refusals live in `chart.rules.ts`, a pure function with a unit test per branch.
+  - Every visit and chart write locks the patient first: one visit in progress per patient and one correction per entry
+    hold under parallel requests (tested).
+  - `lastVisitOn` is the shared rule over completed visits; B7 adds done appointments, the `recent_visit` filter and
+    the `last_visit` sort.
+  - Audit: the mock's names (`view` "Visits"/"Dental chart", `create` "Visit", `update` "Visit (completed)", `update`
+    "Dental chart" once per request), written in the write's transaction.
 - **Seed** (B1): `packages/seed` (`@pedia/seed`), so MSW and `prisma db seed` run the same `seedPlatform()`. Not
   `@pedia/shared`: the seed needs faker and is built from `new Date()`, which don't belong in the contract package.
 

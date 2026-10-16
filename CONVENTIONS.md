@@ -4,7 +4,7 @@
 
 Primolar: pediatric dental clinic management sold as a service to many clinics. Each paying clinic is a
 **clinic account** with its own branches, staff, patients and branding (ROADMAP feature 16). **Current phase: frontend prototype.** In the demo every API call is
-answered in the browser by MSW using fake, seeded data; in `hybrid` mode the routes apps/api already serves (B2: sign-in; B3: the Owner's settings and reference data; B4: patients, consents and the privacy notice) go to it. A NestJS + MySQL API
+answered in the browser by MSW using fake, seeded data; in `hybrid` mode the routes apps/api already serves (B2: sign-in; B3: the Owner's settings and reference data; B4: patients, consents and the privacy notice; B5: visits and the chart) go to it. A NestJS + MySQL API
 (`apps/api`, scaffolded; its own rules are in `apps/api/CONVENTIONS.md`) will replace the mocks later, endpoint by endpoint, without changing feature code. A clinic joins through
 the public **Get started** form, and Primolar approves it in the operator console (ROADMAP feature 17). Each clinic
 then pays Primolar monthly; the operator records payments by hand, and a clinic 7 days overdue pauses itself.
@@ -26,7 +26,7 @@ TanStack Query · React Hook Form + Zod 4 · Zustand (UI state, plus the demo se
 | Tests, one file | `pnpm --filter <web|@pedia/shared|@pedia/seed> exec vitest run <path>` |
 | Design guards (contrast, tokens, shell, screens) | `pnpm run check -- design` (typecheck + every `src/design/design-*.test.ts`) |
 | Run the app locally | `pnpm dev` → http://localhost:3000 |
-| Run against the real API | `NEXT_PUBLIC_API_MOCKING=hybrid API_PROXY_TARGET=http://localhost:4100 pnpm dev` with `pnpm dev:api` running (`DEMO_LOGINS=true COOKIE_SECURE=false`, seeded with `pnpm --filter api db:seed`). `enabled` = MSW answers everything (the demo); `hybrid` = MSW answers all but `API_ROUTES` (`mocks/passthrough.ts`: since B2, sign-in, `/operator/auth/*` and the clinic reads; since B3, the Owner's settings, `/clinic/usage`, the logo and the reference data; since B4, patients, consents, the patient photo and the privacy notice), which go through Next's `/api` proxy to the API; `disabled`/unset = no MSW |
+| Run against the real API | `NEXT_PUBLIC_API_MOCKING=hybrid API_PROXY_TARGET=http://localhost:4100 pnpm dev` with `pnpm dev:api` running (`DEMO_LOGINS=true COOKIE_SECURE=false`, seeded with `pnpm --filter api db:seed`). `enabled` = MSW answers everything (the demo); `hybrid` = MSW answers all but `API_ROUTES` (`mocks/passthrough.ts`: since B2, sign-in, `/operator/auth/*` and the clinic reads; since B3, the Owner's settings, `/clinic/usage`, the logo and the reference data; since B4, patients, consents, the patient photo and the privacy notice; since B5, visits and the dental chart), which go through Next's `/api` proxy to the API; `disabled`/unset = no MSW |
 | Sign-in against the API, end to end | Both servers on free ports (the web on its own `NEXT_DIST_DIR=.next-hybrid`), then in `apps/web`: `E2E_API=1 E2E_BASE_URL=… npx playwright test e2e/api-sign-in.spec.ts --project=desktop`. Start-up commands: the B2d plan, Step 4.1. It signs in 10 times; the API allows 20 sign-ins per 5 minutes per address |
 | Owner settings against the API, end to end | As sign-in, against a fresh database that has B3's rows: `E2E_API=1 E2E_BASE_URL=… npx playwright test e2e/api-owner-settings.spec.ts --project=desktop` (9 sign-ins a run). Start-up commands: the B3 plan, Step 11.1 |
 | Reset demo data | account menu → Reset demo data (keeps you signed in). `localStorage.clear()` then reload also works, but signs you out |
@@ -164,7 +164,10 @@ MSW handler (now) or NestJS (later).
   consents and photo, and the privacy notice are the API's: a child registered in `hybrid` exists only on the API, so
   MSW's visits, chart, billing and appointments answer `Patient not found` for them; MSW's parent gate still uses MSW's
   families; the patient list and header show no flags, visits or balances (B4's decision 3) although MSW holds them;
-  and a reminders "no" doesn't cancel MSW's queued messages.
+  and a reminders "no" doesn't cancel MSW's queued messages. Since B5, visits and the chart are the API's: notes,
+  growth and photos on a visit the API started answer 404 from MSW until B6/B10, starting a visit from Today leaves
+  MSW's appointment "arrived" until B7, and the list's last visit counts completed visits only (MSW also counts done
+  appointments) until B7.
   Resetting one store doesn't reset the other. MSW passes a request through by fetching it from its worker, so in
   Playwright `fromServiceWorker()` is true either way: tell an API answer by its `x-request-id` header.
 - `next dev` with a custom `NEXT_DIST_DIR` rewrites `apps/web/tsconfig.json` (adds that dir's types). Revert it
