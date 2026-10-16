@@ -111,3 +111,13 @@ Asked before building (grill): any clinical staff may sign a draft (decision 5);
 - Lock and the status guard removed from `setStatus`: the re-plan race is red in 2 of 3 rounds.
 - `lockPatientIfExists` removed from `create`: the note-during-complete race is red in all 3 rounds.
 **Gate:** `pnpm run check` green (api 249); `test:int` 27 files, 229 passed + 5 todo. B6c closes here.
+
+## Phase 7: Cut-over — 2026-10-16
+
+**Steps completed:** 7.1, 7.2, 7.3
+**Files changed:** `apps/web/src/mocks/passthrough.ts`, `passthrough.test.ts`, `apps/web/e2e/api-notes-plan.spec.ts` (new), `apps/api/CONVENTIONS.md`, `apps/api/CHUNKS.md`, `CONVENTIONS.md`
+**Deviations from plan:**
+- The e2e signs a **follow-up** note (plan item "Follow-up", template "Follow-up visit", Healing select) rather than a pulpotomy: the pulpotomy form's tooth picker has no selector used by any existing spec, and the follow-up flow proves the same three things through the UI (POST/PUT/sign answered by the API, "Signed" with no "Edit or sign", the plan going 0 → 1 of 1 done) plus the 409s via `page.request`. The pulpotomy done-when is `notes.int.test.ts` case 1.
+- CONVENTIONS also records the seed-tie trap (Phase 4).
+**Gate:** `pnpm run check` green; `test:int` green (Phase 6); `e2e/api-notes-plan.spec.ts` 4/4 twice in a row on `pedia_dental_e2e_b6`.
+**Notes:** B6d closes here. API :4110 and hybrid web :3160 left running for the tester.

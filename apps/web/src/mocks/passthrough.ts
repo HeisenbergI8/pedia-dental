@@ -65,14 +65,24 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "GET", path: "/clinic/privacy-notice" },
   { method: "PUT", path: "/clinic/privacy-notice" },
   { method: "GET", path: "/legal/notices/:clinicId" },
-  // B5: visits and the dental chart (VisitsController, ChartController). Notes, growth and photos stay mocked until
-  // B6/B10: in hybrid they find the seeded visits (same ids) but not one the API started (CONVENTIONS → Traps).
+  // B5: visits and the dental chart (VisitsController, ChartController).
   { method: "GET", path: "/patients/:id/visits" },
   { method: "POST", path: "/patients/:id/visits" },
   { method: "POST", path: "/visits/:id/complete" },
   { method: "GET", path: "/patients/:id/chart" },
   { method: "POST", path: "/patients/:id/chart" },
   { method: "POST", path: "/patients/:id/chart/batch" },
+  // B6: notes, growth and the treatment plan (NotesController, GrowthController, PlanController). MSW's recall list,
+  // billing and documents still read their own notes and plan items until B7/B8/B10 (B6 decision 2).
+  { method: "GET", path: "/patients/:id/notes" },
+  { method: "POST", path: "/patients/:id/notes" },
+  { method: "PUT", path: "/notes/:id" },
+  { method: "POST", path: "/notes/:id/sign" },
+  { method: "GET", path: "/patients/:id/growth" },
+  { method: "PUT", path: "/visits/:id/growth" },
+  { method: "GET", path: "/patients/:id/plan" },
+  { method: "POST", path: "/patients/:id/plan" },
+  { method: "PATCH", path: "/plan-items/:id" },
 ];
 
 export const servedBy = (routes: readonly ApiRoute[], method: string, path: string) =>
