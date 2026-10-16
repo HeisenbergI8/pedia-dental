@@ -74,6 +74,10 @@ rows never mix; a job runs once with two API instances up; logs show a request i
 
 **Goal:** real sign-in for staff and the operator, and the access gate, before any clinic data is served.
 
+**Status (2026-10-16):** split in four. **B2a done** (B1-b's pieces). **B2b done**: identity tables, `prisma db seed`,
+argon2id, sessions, the access guard. B2c (endpoints) and B2d (web cut-over) next. "Decide first" answered: the demo
+login exists only with `DEMO_LOGINS=true`; sessions end after 30 idle minutes or 8 hours.
+
 - Models: clinic account (tier, status, pause), branch, staff (roles, assigned branches, deactivated), credentials,
   sessions, operator users.
 - Passwords and PINs hashed with argon2id. PIN lockout from `pinLockout` / `PIN_POLICY`.

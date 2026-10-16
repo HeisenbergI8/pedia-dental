@@ -12,6 +12,8 @@ export type RequestContext = {
   user?: { id: string; name: string; role: Role; roles: Role[] };
   /** A Primolar operator. Never selects a tenant (decision #25). */
   operator: boolean;
+  /** The signed-in operator (pd_operator), for /operator/auth/me and the operator's audit (B12). */
+  operatorId?: string;
 };
 
 const storage = new AsyncLocalStorage<RequestContext>();

@@ -6,7 +6,9 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { AppModule } from "../src/app.module";
+import { AccessGuard } from "../src/auth/access.guard";
 import { ZodValidationPipe } from "../src/common/zod-validation.pipe";
+import { loadEnv } from "../src/config/env";
 import { PrismaService } from "../src/prisma/prisma.service";
 
 z.config({ customError: plainLanguageError });
@@ -34,11 +36,13 @@ describe("api skeleton (no database)", () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [AppModule.forRoot({ DATABASE_URL: "mysql://unused", PORT: 0, CORS_ORIGIN: "", LOG_LEVEL: "silent" })],
+      imports: [AppModule.forRoot(loadEnv({ DATABASE_URL: "mysql://unused", PORT: "1", CORS_ORIGIN: "", LOG_LEVEL: "silent" }))],
       controllers: [EchoController],
     })
       .overrideProvider(PrismaService)
       .useValue(prisma)
+      .overrideProvider(AccessGuard)
+      .useValue({ canActivate: () => true }) // /echo tests validation and errors, not access
       .compile();
     app = moduleRef.createNestApplication();
     app.setGlobalPrefix("api");

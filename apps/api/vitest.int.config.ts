@@ -1,5 +1,5 @@
 import { defineConfig } from "vitest/config";
-import { TEST_DATABASE_URL } from "./test/int/support/database-url";
+import { TEST_DATABASE_URL } from "./test/int/support/database-url.ts";
 
 /** `pnpm --filter api test:int`: the integration suite against a real MySQL test database (CONVENTIONS → Tests). */
 export default defineConfig({

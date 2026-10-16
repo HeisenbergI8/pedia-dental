@@ -15,7 +15,7 @@ class ProbeController {
 describe("request context over HTTP", () => {
   let app: INestApplication;
   beforeAll(async () => {
-    app = await createTestApp({ controllers: [ProbeController] });
+    app = await createTestApp({ controllers: [ProbeController], openGuard: true });
   });
   afterAll(() => app.close());
 
