@@ -25,6 +25,10 @@ const B6_ROUTES: [Method, string][] = [
   ["get", "/patients/p1/plan"],
   ["post", "/patients/p1/plan"],
   ["patch", "/plan-items/i1"],
+  ["get", "/patients/p1/notes"],
+  ["post", "/patients/p1/notes"],
+  ["put", "/notes/n1"],
+  ["post", "/notes/n1/sign"],
 ];
 
 describe("B5's and B6's routes are served and guarded (no database)", () => {

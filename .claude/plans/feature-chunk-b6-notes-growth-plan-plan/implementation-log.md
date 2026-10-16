@@ -100,3 +100,14 @@ Asked before building (grill): any clinical staff may sign a draft (decision 5);
 **Files changed:** `apps/api/src/clinic/clinic.service.ts` (`procedure`), `apps/api/src/plan/plan.{service,controller,module}.ts` (new), `apps/api/src/app.module.ts`, `apps/api/test/clinical-routes.test.ts`, `apps/api/test/int/plan.int.test.ts` (new)
 **Deviations from plan:** case 1 checks that each sourced item names a seeded chart entry on its own tooth; the seed sources three items (51, 74, 84), not the two the plan named. The parent case uses the example patient's own guardian (B4's `guardian.<id>` login) and `childrenOf`.
 **Gate:** `pnpm run check` green (api 245); `test:int` 26 files, 202 passed + 5 todo. B6b closes here.
+
+## Phase 6: Clinical notes — 2026-10-16
+
+**Steps completed:** 6.1, 6.2, 6.3
+**Files changed:** `apps/api/src/notes/notes.{service,controller,module}.ts`, `apps/api/test/clinical-routes.test.ts`, `apps/api/test/int/notes.int.test.ts` (new)
+**Deviations from plan:** the race cases run as `it.each` over three rounds (each a fresh child), so a round that fails is named.
+**Mutation checks (plan asked):** each was undone byte-for-byte afterwards, compared with `cmp`.
+- Lock and the `signedAt: null` guard removed from update and sign: the sign-once and edit-during-sign cases are red.
+- Lock and the status guard removed from `setStatus`: the re-plan race is red in 2 of 3 rounds.
+- `lockPatientIfExists` removed from `create`: the note-during-complete race is red in all 3 rounds.
+**Gate:** `pnpm run check` green (api 249); `test:int` 27 files, 229 passed + 5 todo. B6c closes here.
