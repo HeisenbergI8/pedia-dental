@@ -20,6 +20,13 @@ describe("cleanLogo (decision #28, B3 Decision 5)", () => {
     expect(svgOut('<svg xmlns="http://www.w3.org/2000/svg"/>')).toMatch(/^<svg/); // owner-settings.test.ts's file
   });
 
+  it("writes the SVG back as XML, so a non-breaking space doesn't become HTML's &nbsp; (which <img> can't render)", () => {
+    const out = svgOut('<svg xmlns="http://www.w3.org/2000/svg"><text>Ngiti\u00a0Kids &amp; Co</text><circle r="4"/></svg>');
+    expect(out).not.toContain("&nbsp;");
+    expect(out).toContain("Ngiti\u00a0Kids &amp; Co");
+    expect(out).toContain("<circle r=\"4\"/>");
+  });
+
   it("strips script, event handlers, foreignObject and javascript: links, and keeps the drawing", () => {
     const out = svgOut(
       '<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><script>alert(2)</script>' +

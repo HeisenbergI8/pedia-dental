@@ -24,14 +24,26 @@ const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const JPEG = Buffer.from([0xff, 0xd8, 0xff]);
 const startsWith = (body: Buffer, magic: Buffer) => body.length >= magic.length && body.subarray(0, magic.length).equals(magic);
 
-/** One DOMPurify on one jsdom window for the process: it holds no request's data, only the parser (made on first use). */
-let purify: ReturnType<typeof createDOMPurify> | undefined;
-const sanitizer = () => (purify ??= createDOMPurify(new JSDOM("").window as unknown as Window & typeof globalThis));
+const SVG_NS = "http://www.w3.org/2000/svg";
 
-/** The SVG with only drawing left (DOMPurify's SVG profile), or undefined when no `<svg>` root survives. */
+/** One DOMPurify on one jsdom window for the process: it holds no request's data, only the parser (made on first use). */
+let tools: { purify: ReturnType<typeof createDOMPurify>; xml: XMLSerializer } | undefined;
+const sanitizer = () => {
+  if (!tools) {
+    const { window } = new JSDOM("");
+    tools = { purify: createDOMPurify(window as unknown as Window & typeof globalThis), xml: new window.XMLSerializer() };
+  }
+  return tools;
+};
+
+/**
+ * The SVG with only drawing left (DOMPurify's SVG profile), or undefined when no `<svg>` root survives. Written back
+ * as XML, not DOMPurify's HTML string: HTML would write `&nbsp;`, which isn't XML, and `<img>` then shows nothing.
+ */
 export function sanitizeSvg(text: string): string | undefined {
-  const clean = String(sanitizer().sanitize(text, { USE_PROFILES: { svg: true, svgFilters: true } })).trim();
-  return /^<svg[\s>]/i.test(clean) ? clean : undefined;
+  const { purify, xml } = sanitizer();
+  const root = purify.sanitize(text, { USE_PROFILES: { svg: true, svgFilters: true }, RETURN_DOM_FRAGMENT: true }).firstElementChild;
+  return root?.localName === "svg" && root.namespaceURI === SVG_NS ? xml.serializeToString(root) : undefined;
 }
 
 export type CleanLogo = { ext: FileExtension; body: Buffer } | { problem: string; status: 400 | 413 };
