@@ -170,23 +170,24 @@ function seedGrowth(patients: Patient[], visits: Visit[]): GrowthRecord[] {
     .filter((vs) => vs.length >= 2)
     .slice(0, 3)
     .map((vs) => [vs[0]!, vs[1]!] as const);
-  const record = (v: Visit, habits: GrowthRecord["habits"], speech?: string): GrowthRecord => ({
+  const record = (v: Visit, habits: GrowthRecord["habits"], speech?: string, later = false): GrowthRecord => ({
     id: `growth_${v.id}`,
     clinicId: CLINIC_ID,
     patientId: v.patientId,
     visitId: v.id,
     habits,
     speech,
-    // Noon on the visit's own day: seeded visit dates are UTC days, so completedAt can fall on the next local day.
-    recordedAt: `${v.date}T04:00:00.000Z`,
+    // Noon on the visit's own day: seeded visit dates are UTC days, so completedAt can fall on the next local day. The
+    // second visit's record is a minute later: two visits can share a day, and habitTimeline reads records in time order.
+    recordedAt: `${v.date}T04:0${later ? 1 : 0}:00.000Z`,
   });
   const examples: ((a: Visit, b: Visit) => GrowthRecord[])[] = [
     (a, b) => [
       record(a, [{ habit: "thumb_sucking", startedOn: a.date }], "Lisps on /s/"),
-      record(b, [{ habit: "thumb_sucking", startedOn: a.date, stoppedOn: b.date }]),
+      record(b, [{ habit: "thumb_sucking", startedOn: a.date, stoppedOn: b.date }], undefined, true),
     ],
-    (a, b) => [record(a, [{ habit: "pacifier" }]), record(b, [{ habit: "pacifier" }])],
-    (a, b) => [record(a, [{ habit: "mouth_breathing" }]), record(b, [])],
+    (a, b) => [record(a, [{ habit: "pacifier" }]), record(b, [{ habit: "pacifier" }], undefined, true)],
+    (a, b) => [record(a, [{ habit: "mouth_breathing" }]), record(b, [], undefined, true)],
   ];
   return pairs.flatMap(([a, b], i) => examples[i]!(a, b));
 }

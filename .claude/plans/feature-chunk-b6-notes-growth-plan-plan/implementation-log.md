@@ -83,3 +83,20 @@ Asked before building (grill): any clinical staff may sign a draft (decision 5);
 **Files changed:** `apps/api/src/seed/seed-database.ts`, `apps/api/test/int/seed.int.test.ts`
 **Deviations from plan:** none.
 **Gate:** `pnpm run check` green; `test:int` 24 files, 184 passed + 5 todo. B6a closes here.
+
+## Phase 4: Growth — 2026-10-16
+
+**Steps completed:** 4.1, 4.2, 4.3
+**Files changed:** `apps/api/src/visits/visits.service.ts` (`patientOf`, `one`), `apps/api/src/growth/growth.{service,controller,module}.ts` (new), `apps/api/src/app.module.ts`, `apps/api/test/clinical-routes.test.ts` (B6 table), `apps/api/test/int/clinical-support.ts` (new), `apps/api/test/int/growth.int.test.ts` (new), `packages/seed/src/seed.ts`
+**Deviations from plan:**
+- **Seed defect, fixed.** The seed stamped both growth records of an example pair at `<visit day>T04:00`. When the pair's two visits fall on one day (they did for the inferred-stop example on today's run), the records tie. MSW keeps insertion order on the tie; the API's id tie-break reversed them, so `habitTimeline` lost the inferred stop. The second visit's record is now a minute later (`later` flag in `seedGrowth`). Seed tests are still green.
+- The B6 int files share `test/int/clinical-support.ts` (sign-in, register, start, complete, audit lookup) instead of copying B5's header three times.
+- Mutation check done (plan asked): with `lockPatient` removed from `GrowthService.save`, both race cases go red.
+**Gate:** `pnpm run check` green; `growth.int.test.ts` 10/10.
+
+## Phase 5: Treatment plan — 2026-10-16
+
+**Steps completed:** 5.1, 5.2, 5.3
+**Files changed:** `apps/api/src/clinic/clinic.service.ts` (`procedure`), `apps/api/src/plan/plan.{service,controller,module}.ts` (new), `apps/api/src/app.module.ts`, `apps/api/test/clinical-routes.test.ts`, `apps/api/test/int/plan.int.test.ts` (new)
+**Deviations from plan:** case 1 checks that each sourced item names a seeded chart entry on its own tooth; the seed sources three items (51, 74, 84), not the two the plan named. The parent case uses the example patient's own guardian (B4's `guardian.<id>` login) and `childrenOf`.
+**Gate:** `pnpm run check` green (api 245); `test:int` 26 files, 202 passed + 5 todo. B6b closes here.
