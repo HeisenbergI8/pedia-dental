@@ -1,9 +1,10 @@
 import "reflect-metadata";
-import { Controller, Get, type INestApplication } from "@nestjs/common";
+import { Controller, Get, Post, Put, type INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AppModule } from "../src/app.module";
+import { RecordOwners } from "../src/auth/record-owners";
 import { IdentityService, type ClinicIdentity } from "../src/auth/identity.service";
 import { SessionService } from "../src/auth/session.service";
 import { requestContext } from "../src/common/request-context";
@@ -17,7 +18,13 @@ class Routes {
   @Get("reports/finance") finance() { return "reached"; }
   @Get("operator/accounts") accounts() { return "reached"; }
   @Get("patients/:id/plan") plan() { return "reached"; }
+  @Post("appointments/:id/status") status() { return "reached"; }
+  @Put("notes/:id") note() { return "reached"; }
 }
+
+/** A fake RecordOwners with only the appointment route registered; `lookups` counts the guard's calls. */
+const appointmentOwner: Record<string, string> = { appt1: "kid1", appt2: "kid2" };
+let lookups = 0;
 
 const branch = { id: "b1", clinicId: "c1", name: "Imus", address: "a", phone: "(046) 471 2580", openingHours: { opensAt: 480, closesAt: 1080, closedWeekdays: [0] }, archived: false };
 let who: ClinicIdentity | undefined;
@@ -41,13 +48,17 @@ describe("AccessGuard over HTTP", () => {
         branchFor: (w: ClinicIdentity, id?: string) => w.branches.find((b) => b.id === id) ?? w.branches[0],
         operator: async (id: string) => ({ id, name: "Op", email: "op@x" }),
       })
+      .overrideProvider(RecordOwners).useValue({
+        register: () => {},
+        of: async (path: string, id?: string) => { lookups++; return path === "/appointments/:id/status" && id ? appointmentOwner[id] : undefined; },
+      })
       .compile();
     app = moduleRef.createNestApplication({ logger: false });
     app.setGlobalPrefix("api");
     await app.init();
   });
   afterAll(() => app.close());
-  beforeEach(() => { who = as(["dentist"]); });
+  beforeEach(() => { who = as(["dentist"]); lookups = 0; });
 
   const get = (path: string, cookie = "pd_session=good") => request(app.getHttpServer()).get(path).set("Cookie", cookie);
 
@@ -85,6 +96,28 @@ describe("AccessGuard over HTTP", () => {
   it("still refuses a parent with no children on record", async () => {
     who = as(["parent"], { guardianId: "g1" });
     expect((await get("/api/patients/kid1/plan")).status).toBe(403);
+  });
+
+  it("asks a record route's registered owner for a parent (B7 decision 2)", async () => {
+    who = as(["parent"], { guardianId: "g1", children: new Set(["kid1"]) });
+    const post = (path: string) => request(app.getHttpServer()).post(path).set("Cookie", "pd_session=good");
+    expect((await post("/api/appointments/appt1/status")).status).toBe(201); // reached the handler
+    for (const id of ["appt2", "unknown"]) { // another child's, and an id with no record
+      const res = await post(`/api/appointments/${id}/status`);
+      expect([res.status, res.text]).toEqual([403, "This isn't one of your children's records"]);
+    }
+    expect(lookups).toBe(3);
+  });
+
+  it("still refuses a parent on a record route with no registered owner", async () => {
+    who = as(["parent"], { guardianId: "g1", children: new Set(["kid1"]) });
+    expect((await request(app.getHttpServer()).put("/api/notes/n1").set("Cookie", "pd_session=good")).status).toBe(403);
+  });
+
+  it("never looks the record up for staff who hold the permission at all", async () => {
+    who = as(["front_desk"]);
+    expect((await request(app.getHttpServer()).post("/api/appointments/appt2/status").set("Cookie", "pd_session=good")).status).toBe(201);
+    expect(lookups).toBe(0);
   });
 
   it("keeps the operator and clinic cookies apart", async () => {

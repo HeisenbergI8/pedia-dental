@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException, type OnModuleInit } from "@nestjs/common";
 import { ChangeAppointmentStatusInput, RescheduleAppointmentInput, rolesCan, type Appointment, type BookAppointmentInput, type Role } from "@pedia/shared";
 import { AuditService } from "../audit/audit.service";
+import { RecordOwners } from "../auth/record-owners";
 import { lockAccount } from "../clinic/account-lock";
 import { ClinicService } from "../clinic/clinic.service";
 import { refuse } from "../common/refusal";
@@ -22,13 +23,19 @@ const at = (v: string | undefined, fallback: number) => new Date(v ?? fallback);
  * live appointments near the slot and run findConflict, then write, all in one transaction.
  */
 @Injectable()
-export class AppointmentsService {
+export class AppointmentsService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly records: AppointmentRecordsService,
     private readonly clinic: ClinicService,
     private readonly audit: AuditService,
+    private readonly owners: RecordOwners,
   ) {}
+
+  onModuleInit() {
+    // Decision 2: a parent may confirm their own child's appointment (appointments/mocks.ts:120–124; access.ts:198–205).
+    this.owners.register("/appointments/:id/status", (id) => this.records.patientOf(id));
+  }
 
   /** GET /appointments: the device's branch, [from, to), by start then chair (decision 5). Not audited (decision 6). */
   async calendar(from?: string, to?: string): Promise<Appointment[]> {

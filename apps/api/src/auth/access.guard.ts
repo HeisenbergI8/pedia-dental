@@ -1,9 +1,11 @@
 import { type CanActivate, type ExecutionContext, ForbiddenException, Injectable, UnauthorizedException } from "@nestjs/common";
+import { rolesCan } from "@pedia/shared";
 import type { Request } from "express";
 import { requestContext } from "../common/request-context";
 import { clinicRefusal, matchRoute } from "./access-rules";
 import { BRANCH_COOKIE, OPERATOR_COOKIE, SESSION_COOKIE, readCookie } from "./cookies";
 import { type ClinicIdentity, IdentityService } from "./identity.service";
+import { RecordOwners } from "./record-owners";
 import { SessionService } from "./session.service";
 
 /** The path the rules are written in: no `/api` prefix, no query. */
@@ -26,6 +28,7 @@ export class AccessGuard implements CanActivate {
   constructor(
     private readonly sessions: SessionService,
     private readonly identity: IdentityService,
+    private readonly owners: RecordOwners,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -57,7 +60,10 @@ export class AccessGuard implements CanActivate {
     if (who.readOnly && req.method !== "GET" && !hit.rule.exportRead) {
       throw new ForbiddenException("Your clinic's account is paused, so you can view records but not make changes. Contact your clinic.");
     }
-    const refused = clinicRefusal(who.user.roles, hit.rule, hit.params, new URL(req.originalUrl, "http://api").searchParams, who.children ?? NO_CHILDREN);
+    // Only an own-scope caller on a record route needs the record's patient (decision 2); staff never pay the lookup.
+    const ownRecord = hit.rule.owner === "record" && ![hit.rule.permission].flat().some((p) => rolesCan(who.user.roles, p, "all"));
+    const recordPatient = ownRecord ? await this.owners.of(hit.rule.path, hit.params.id) : undefined;
+    const refused = clinicRefusal(who.user.roles, hit.rule, hit.params, new URL(req.originalUrl, "http://api").searchParams, who.children ?? NO_CHILDREN, recordPatient);
     if (refused) throw new ForbiddenException(refused);
     return true;
   }

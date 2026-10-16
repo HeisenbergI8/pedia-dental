@@ -55,6 +55,12 @@ export class PatientsService {
   }
 
   /** GET /patients: the directory (⌘K, pickers). Unpaged, as the mock (see Follow Ups). Not audited (decision 4). */
+  /** Who a request is from when staff ask on a family's behalf: the primary guardian, else the first (mock's `find(isPrimary) ?? guardians[0]`). */
+  async primaryGuardianId(tx: Tx, patientId: string): Promise<string> {
+    const g = await tx.patientGuardian.findFirst({ where: { patientId }, select: { guardianId: true }, orderBy: [{ isPrimary: "desc" }, { position: "asc" }] });
+    return g!.guardianId; // every patient has a guardian (CreatePatientInput)
+  }
+
   async directory(viewer: Viewer, q: string): Promise<PatientView[]> {
     const ids = await this.matching(viewer, q);
     return (await this.records(ids)).map((p) => visibleTo(viewer, p));

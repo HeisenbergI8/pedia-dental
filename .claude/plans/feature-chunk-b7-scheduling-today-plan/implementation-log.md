@@ -51,3 +51,14 @@ plan recommends. Engineering decisions E1–E8 as the plan records them.
 - Int test: Dasmariñas cases sign in as the Owner (the admin works at Imus only, so its `pd_branch=branch_dasma` falls back to Imus). The archived-branch refusal isn't reachable over HTTP (`branchFor` never yields an archived branch), so it stays a unit case. "Can't move" uses an arrived appointment: `done` is only reachable through a visit (Phase 6).
 - Mutation check: with `lockAccount` removed from book and move, 17 of the 18 race cases go red.
 **Gate:** `pnpm run check` green; `appointments.int.test.ts` 29/29.
+
+## Phase 5: Requests and parent confirm — 2026-10-16
+
+**Steps completed:** 5.1, 5.2, 5.3
+**Files changed:** `apps/api/src/auth/{record-owners,access-rules,access.guard,auth.module}.ts`, `apps/api/src/appointments/{appointment-requests.service,appointments.service,appointments.controller,appointments.module}.ts`, `apps/api/src/patients/patients.service.ts` (`primaryGuardianId`), `apps/api/test/{access-guard,clinical-routes}.test.ts`, `apps/api/test/int/appointment-requests.int.test.ts` (new)
+**Deviations from plan:**
+- The guard test overrides `RecordOwners` with a fake: the real app already registers the appointment route, and a second `register` throws.
+- The `guardianId` QUESTION: `Credential.guardianId` holds the bare guardian id (schema.prisma:160), so the session's value is used as is.
+- Case 2's 404 and case 3's "staff ask on a parent's behalf" aren't reachable over HTTP: only parents hold `appointments.request` (PARENT_ONLY), and the guard refuses them a child that isn't theirs. The int test asserts those 403s and checks `primaryGuardianId` directly. `RegisterPatientInput` needs exactly one primary, so "else the first" covers only legacy data.
+- Mutation check: with `lockPatient` removed from `create`, the 10-request race goes red.
+**Gate:** `pnpm run check` green (api 285); `test:int` 29 files, 267 passed + 5 todo.
