@@ -1,6 +1,8 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { Branch, BranchInput, archiveProblem } from "@pedia/shared";
 import { z } from "zod";
+import { AppointmentRecordsService } from "../appointments/appointment-records.service";
+import { Clock } from "../common/clock";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { PrismaService } from "../prisma/prisma.service";
 import { clinicData } from "../prisma/tenant-scope";
@@ -18,7 +20,7 @@ const Ids = z.array(z.string());
  */
 @Injectable()
 export class BranchesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly appointments: AppointmentRecordsService, private readonly clock: Clock) {}
 
   /** POST /branches: the limit first, so a full account says so whatever was typed; new branches go last. */
   create(body: unknown): Promise<Branch> {
@@ -78,9 +80,9 @@ export class BranchesService {
 
   /**
    * Bookings still to happen at the branch (the mock's UPCOMING: booked, confirmed, arrived, in chair, from now on).
-   * Appointments arrive in B7, which replaces this body; until then nothing is booked (B3, Decision 6).
+   * Counted in the archive's transaction, after its clinic lock: a booking can't land between the count and the archive (E1).
    */
-  private async upcomingAt(_tx: Tx, _branchId: string): Promise<number> {
-    return 0;
+  private async upcomingAt(tx: Tx, branchId: string): Promise<number> {
+    return this.appointments.upcomingAt(tx, branchId, this.clock.now());
   }
 }

@@ -207,7 +207,18 @@ describe("archiving frees a branch slot (Mid, decisions #10, #22)", () => {
     expect(res.text).toMatch(/only at Imus\. Deactivate/);
   });
 
-  it.todo("won't archive a branch with upcoming bookings (B7: appointments; BranchesService.upcomingAt)");
+  it("won't archive a branch with upcoming bookings, and will once they're cancelled (B7)", async () => {
+    const owner = await as(DEMO_OWNER);
+    const upcoming = await inClinic("clinic_demo", () => prisma.appointment.findMany({
+      where: { branchId: "branch_dasma", status: { in: ["booked", "confirmed", "arrived", "in_chair"] }, startsAt: { gte: new Date() } }, select: { id: true },
+    }));
+    expect(upcoming.length).toBeGreaterThan(1); // the seed's week at Dasmariñas
+    const refused = await call("post", "/branches/branch_dasma/archive", owner);
+    expect([refused.status, refused.text]).toEqual([409, `Dasmariñas has ${upcoming.length} upcoming appointments. Move or cancel them first.`]);
+    for (const { id } of upcoming) await ok(call("post", `/appointments/${id}/status`, owner, { status: "cancelled", cancelReason: "Branch closing" }), z.unknown());
+    expect((await ok(call("post", "/branches/branch_dasma/archive", owner), Branch)).archived).toBe(true);
+    expect((await ok(call("post", "/branches/branch_dasma/reopen", owner), Branch)).archived).toBe(false); // the later cases count it open
+  });
 
   it("keeps an over-limit account working after a downgrade, but adds nothing (decision #9)", async () => {
     await prisma.clinicAccount.update({ where: { id: "clinic_demo" }, data: { tier: "small" } }); // the operator's change (B12), made directly

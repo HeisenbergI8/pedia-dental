@@ -74,3 +74,16 @@ plan recommends. Engineering decisions E1–E8 as the plan records them.
 - Case 16 (start vs cancel) runs 20 rounds: with `setStatus`'s `lockPatient` removed it fails (round 3 of 30), and 6 rounds passed by chance.
 - Smoke: `db:backfill-due-items` on a freshly seeded scratch database with every DueItem deleted: clinic_demo 54 opened (the seed's 54), then 0 on a second run.
 **Gate:** `pnpm run check` exit 0; `test:int` 30 files, 283 passed + 5 todo.
+
+## Phase 7: Patient list, header, branch archiving — 2026-10-16
+
+**Steps completed:** 7.1, 7.2, 7.3, 7.4
+**Files changed:** `apps/api/src/visits/{visit-days.service,visit-days.module}.ts`, `apps/api/src/patients/{patient-standing,patient-standing.test}.ts` (new), `apps/api/src/patients/{patients.service,patient.views,patient.views.test,patients.module,patient-lock}.ts`, `apps/api/src/clinic/{branches.service,clinic.module}.ts`, `apps/api/test/int/{patients-read,owner-settings,visits}.int.test.ts`
+**Deviations from plan:**
+- `Map.groupBy` replaced by a loop: the API's TS lib is ES2023 (the plan's QUESTION).
+- `PATIENT_NOT_FOUND` moved from `patients.service.ts` to `patient-lock.ts`. With `PatientsService → DueItemsService → VisitsService → patient-lock`, the old import made a file cycle, and Nest couldn't resolve `DueItemsService`'s `VisitsService`.
+- `matching` lost its paging option and `count()` was deleted: `summaries` no longer uses them (lean-code). `records` keeps the ids' order (the plan's QUESTION: it does).
+- `archive` already takes `lockAccount` before `upcomingAt` (the plan's QUESTION), so archiving and booking serialise.
+- Int test: the B4 "nothing under the filters" case became parity with the mock's `patientStanding` over the seed, row by row, plus each chip's total. `sort=balance` without `billing.view` stays a unit case: every staff role and the parent hold `billing.view`. The archive case reopens Dasmariñas after archiving it, so the downgrade case still counts 3 open branches.
+- The visits case "seats … marks it done" now expects the header's `lastVisitOn` to be the done appointment's day (2030), the mock's rule, not the fixed clock's.
+**Gate:** `pnpm run check` exit 0; `test:int` 30 files, 286 passed + 3 todo (B8, B9).

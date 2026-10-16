@@ -1,6 +1,7 @@
 import type { INestApplication } from "@nestjs/common";
 import { DEMO_CLINIC_ID, seedPlatform } from "@pedia/seed";
 import { Appointment, Patient, PatientHeaderSummary, PatientPage, Visit, type RegisterPatientInput } from "@pedia/shared";
+import { format } from "date-fns";
 import request from "supertest";
 import { z } from "zod";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -110,7 +111,7 @@ describe("visits (apps/web handlers.test.ts → visits)", () => {
       await ok(call("post", `/visits/${visit.id}/complete`, admin), Visit);
       expect(await statusOf(a.id)).toBe("done");
       const header = await ok(call("get", `/patients/${id}/summary`, admin), PatientHeaderSummary);
-      expect(header.lastVisitOn).toBe(clock.today());
+      expect(header.lastVisitOn).toBe(format(new Date(a.startsAt), "yyyy-MM-dd")); // the done appointment's day, later than the visit's
     });
 
     it("refuses a booked appointment not yet checked in, another child's, and an unknown one", async () => {

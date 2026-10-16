@@ -48,8 +48,18 @@ describe("toSummary", () => {
   const p = toPatient(record);
   const desk: Viewer = { userId: "u", name: "U", roles: ["front_desk"], children: new Set() };
 
-  it("carries the last visit's day when there is one, and leaves it absent when there isn't (B5)", () => {
-    expect(toSummary(desk, p, [], false, "2026-06-02").lastVisitOn).toBe("2026-06-02");
-    expect(toSummary(desk, p, [], false)).not.toHaveProperty("lastVisitOn");
+  const none = { balance: 0, flags: { recallDue: false, balanceDue: false, noContact: false } };
+
+  it("carries the last visit and recall days when there are some, and leaves them absent when there aren't", () => {
+    const due = { ...none, lastVisitOn: "2026-06-02", recallDueOn: "2026-06-05", flags: { ...none.flags, recallDue: true } };
+    expect(toSummary(desk, p, [], false, due)).toMatchObject({ lastVisitOn: "2026-06-02", recallDueOn: "2026-06-05", flags: { recallDue: true } });
+    const bare = toSummary(desk, p, [], false, none);
+    expect(bare).not.toHaveProperty("lastVisitOn");
+    expect(bare).not.toHaveProperty("recallDueOn");
+  });
+
+  it("shows the balance only with billing.view", () => {
+    expect(toSummary(desk, p, [], true, none).balance).toBe(0);
+    expect(toSummary(desk, p, [], false, none)).not.toHaveProperty("balance");
   });
 });
