@@ -113,6 +113,10 @@ describe("treatment plan (apps/web handlers.test.ts → treatment plan)", () => 
     await list(id, admin);
     expect((await patch(item.id, { status: "done" }, admin)).status).toBe(400);
     expect((await add(id, { procedureCode: "teleportation", fee: 1 }, admin)).status).toBe(400);
+    const done = demo().planItems.find((i) => i.status === "done")!;
+    expect((await patch(done.id, { status: "planned" }, admin)).status).toBe(409);
+    expect((await patch("no_such_item", { status: "planned" }, admin)).status).toBe(404);
     expect((await t.auditOf(id, "Treatment plan")).map((e) => e.action)).toEqual(["update", "update", "view"]);
+    expect((await t.auditOf(done.patientId, "Treatment plan")).filter((e) => e.action === "update")).toEqual([]);
   });
 });

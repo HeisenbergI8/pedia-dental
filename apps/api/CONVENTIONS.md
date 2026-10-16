@@ -388,6 +388,10 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   - `sourceChartEntryId` is stored as given, unchecked, as the mock.
   - Audit: the mock's names, in the write's transaction; the items a sign completes add no "Treatment plan" entry.
   - Progress, the habit timeline and the behaviour trend stay the web's (`planProgress`, `habitTimeline`).
+  - Accepted until later chunks: `hybrid` gaps in MSW's recalls, billing and documents (decision 2); a child row's
+    patient read outside the transaction, then locked (decision 3); growth's future check on the process clock until
+    B13 (decision 8); an over-long `speech`, free-text note value or `sourceChartEntryId` answers 500 and writes nothing
+    until `@pedia/shared` caps their lengths, together with B5's `note` and `appointmentId` (decision 9).
 - **Seed** (B1): `packages/seed` (`@pedia/seed`), so MSW and `prisma db seed` run the same `seedPlatform()`. Not
   `@pedia/shared`: the seed needs faker and is built from `new Date()`, which don't belong in the contract package.
 

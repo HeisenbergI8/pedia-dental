@@ -33,14 +33,6 @@ async function signInAs(page: Page, email: string) {
   await expect(page.getByRole("button", { name: /Account menu/ }).first()).toBeVisible({ timeout: 45_000 });
 }
 
-const tooth = (page: Page, n: number) => page.getByRole("button", { name: new RegExp(`^Tooth ${n}:`) });
-async function openTooth(page: Page, n: number): Promise<Locator> {
-  await tooth(page, n).focus();
-  await page.keyboard.press("Enter");
-  const panel = page.getByRole("dialog", { name: new RegExp(`^Tooth ${n} ·`) });
-  await expect(panel).toBeVisible();
-  return panel;
-}
 async function choose(page: Page, combobox: string | RegExp, option: string | RegExp, scope: Locator = page.locator("body")) {
   await scope.getByRole("combobox", { name: combobox }).click();
   await page.getByRole("option", { name: option }).click();
@@ -142,6 +134,7 @@ test("a habit recorded at one visit and stopped at a later one shows as stopped 
   await expect(habits.getByText("Thumb sucking")).toBeVisible();
   await expect(habits).toContainText(/Jan 15, 2025/);
   await expect(habits).toContainText(/Jun 1, 2025/);
+  await expect(page.getByRole("list", { name: "Growth timeline" }).getByRole("listitem")).toHaveCount(2); // both visits
   await page.reload();
   await expect(page.getByRole("list", { name: "Oral habits" })).toContainText(/Jun 1, 2025/);
   await page.goto(`/patients/${childId}?tab=chart`);

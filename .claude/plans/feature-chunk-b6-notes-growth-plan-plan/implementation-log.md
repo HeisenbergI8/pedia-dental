@@ -3,61 +3,6 @@
 Plan: `feature-chunk-b6-notes-growth-plan-plan.md`. One entry per phase, in B5's shape. Record deviations from the plan
 as they happen, with the reason; "none" when there are none.
 
-## Phase 1: Tables — YYYY-MM-DD
-
-**Steps completed:**
-**Files changed:**
-**Deviations from plan:**
-**Gate:** `pnpm run check`; `pnpm --filter api test:int`
-**Notes:** (was the dev database at B5's head before `migrate diff`? what the SQL held)
-
-## Phase 2: Shapes and rules — YYYY-MM-DD
-
-**Steps completed:**
-**Files changed:**
-**Deviations from plan:**
-**Gate:** `pnpm run check`
-**Notes:** (did the `Refusal` move leave chart's tests green?)
-
-## Phase 3: Seed — YYYY-MM-DD
-
-**Steps completed:**
-**Files changed:**
-**Deviations from plan:**
-**Gate:** `pnpm run check`; `pnpm --filter api test:int test/int/seed.int.test.ts`
-**Notes:** (did the example plan exist on the run date? B6a closes here)
-
-## Phase 4: Growth — YYYY-MM-DD
-
-**Steps completed:**
-**Files changed:**
-**Deviations from plan:**
-**Gate:** `pnpm run check`; `pnpm --filter api test:int test/int/growth.int.test.ts`
-**Notes:** (race cases 9–10: answers per round; red with `lockPatient` removed?)
-
-## Phase 5: Treatment plan — YYYY-MM-DD
-
-**Steps completed:**
-**Files changed:**
-**Deviations from plan:**
-**Gate:** `pnpm run check`; `pnpm --filter api test:int test/int/plan.int.test.ts`
-**Notes:** (which parent login and child the parent case used; B6b closes here)
-
-## Phase 6: Clinical notes — YYYY-MM-DD
-
-**Steps completed:**
-**Files changed:**
-**Deviations from plan:**
-**Gate:** `pnpm run check`; `pnpm --filter api test:int`
-**Notes:** (race cases 13–17: answers per round; which mutation turned each red; B6c closes here)
-
-## Phase 7: Cut-over — YYYY-MM-DD
-
-**Steps completed:**
-**Files changed:**
-**Deviations from plan:**
-**Gate:** `pnpm run check`; `pnpm --filter api test:int`; `E2E_API=1 E2E_BASE_URL=http://localhost:3160 npx playwright test e2e/api-notes-plan.spec.ts --project=desktop` (twice in a row)
-**Notes:** (database name, ports, whether `apps/web/tsconfig.json` had to be reverted; B6d closes here)
 
 ## Decisions confirmed by the user — 2026-10-16
 
@@ -121,3 +66,7 @@ Asked before building (grill): any clinical staff may sign a draft (decision 5);
 - CONVENTIONS also records the seed-tie trap (Phase 4).
 **Gate:** `pnpm run check` green; `test:int` green (Phase 6); `e2e/api-notes-plan.spec.ts` 4/4 twice in a row on `pedia_dental_e2e_b6`.
 **Notes:** B6d closes here. API :4110 and hybrid web :3160 left running for the tester.
+
+## Review fixes (auditor, 80/100) — 2026-10-16
+
+F1: the unused `openTooth` helper is gone and the spec asserts two visits in the "Growth timeline" (to be run again after the tester). F2: the plan audit case now refuses a 409 and a 404 too, and they leave nothing. F3: `apps/api/CONVENTIONS.md` records decisions 2, 3, 8 and 9 in the B6 entry. F5: the empty template stubs at the top of this log are removed. F4 (tsconfig and temp config): cleaned when the servers stop.
