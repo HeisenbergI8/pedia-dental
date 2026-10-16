@@ -604,3 +604,75 @@ model ChartEntry {
   /// A patient's whole history, oldest first: GET /patients/:id/chart and every write's deriveChart (CHUNKS B5).
   @@index([clinicId, patientId, recordedAt])
 }
+
+/// The plan item's state. `done` only by signing a matching note (itemsCompletedBy); progress is never stored.
+enum PlanItemStatus {
+  planned
+  in_progress
+  done
+  declined
+}
+
+/// B6: a clinical note from a template (features/notes/mocks.ts). A draft is edited in place; a signed note is
+/// read-only, enforced in NotesService (every change is an update guarded by `signedAt IS NULL`, decision 6).
+model ClinicalNote {
+  id           String    @id @default(cuid(2))
+  clinicId     String
+  patientId    String
+  visitId      String
+  /// A NoteTemplate.id of this clinic.
+  templateId   String    @db.VarChar(64)
+  /// The values noteValuesSchema(template) returned: checked, unknown keys dropped. Read whole, never filtered on.
+  values       Json
+  /// BehaviorRating[] in the order given (behaviour tracking, feature 9).
+  behavior     Json
+  /// Absent is null; "" is kept as given, as the mock. BEHAVIOR_NOTE_MAX (300) characters on input.
+  behaviorNote String?   @db.VarChar(300)
+  /// The visit's dentist (the mock's rule), not the caller.
+  authorId     String
+  createdAt    DateTime
+  signedAt     DateTime?
+
+  /// GET /patients/:id/notes, newest first.
+  @@index([clinicId, patientId, createdAt])
+}
+
+/// B6: growth and development as observed at one visit (features/growth/mocks.ts). Re-saving replaces it.
+model GrowthRecord {
+  id         String   @id @default(cuid(2))
+  clinicId   String
+  patientId  String
+  visitId    String
+  /// HabitObservation[]: the ticked habits, in the order given.
+  habits     Json
+  speech     String?  @db.Text
+  /// When it was last saved: a re-save moves it, as the mock's.
+  recordedAt DateTime
+
+  /// One record per visit. GrowthService replaces it under the patient's lock; this is the backstop.
+  @@unique([clinicId, visitId])
+  /// GET /patients/:id/growth, oldest first.
+  @@index([clinicId, patientId, recordedAt])
+}
+
+/// B6: one planned treatment (features/plan/mocks.ts). Status changes in place; `done` only through a signed note.
+model PlanItem {
+  id                 String         @id @default(cuid(2))
+  clinicId           String
+  patientId          String
+  /// A Procedure.code of this clinic.
+  procedureCode      String         @db.VarChar(64)
+  /// FDI number, checked by the shared schema. Null: the item isn't per tooth.
+  tooth              Int?
+  /// Centavos (CONVENTIONS → Data: money is Int).
+  fee                Int
+  status             PlanItemStatus
+  /// Stored as given, as the mock (decision 4).
+  sourceChartEntryId String?
+  completedVisitId   String?
+  completedNoteId    String?
+  createdAt          DateTime
+
+  /// GET /patients/:id/plan, oldest first, and sign's lookup of a patient's open items.
+  @@index([clinicId, patientId, createdAt])
+}

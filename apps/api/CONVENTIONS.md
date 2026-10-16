@@ -6,15 +6,16 @@ The Primolar backend. It replaces the browser mocks (MSW) in `apps/web` **endpoi
 feature code in the web app**. The product, the users and the domain are the ones in the root `CONVENTIONS.md`
 and `ROADMAP.md`; read those first. This file covers only how the API is built.
 
-**Current phase: B1–B5 done** (2026-10-16). The runtime core (request context, `Clock`, logs, tenant scoping,
+**Current phase: B1–B6 done** (2026-10-16). The runtime core (request context, `Clock`, logs, tenant scoping,
 transactions, audit), `@pedia/seed`, the `test:int` suite on MySQL and CI, identity, sessions and the access guard,
 `/auth/*`, `/operator/auth/*` and the clinic reads, with the web signing in against them in `hybrid` mode. B1-c added
 the outbox, scheduled jobs and file storage. B3: the Owner's settings
 (profile, look, logo, branches, staff logins, tier limits) and the clinic's reference data (chairs, procedures, note
 and message templates), served in `hybrid`. B4: patients, guardians, consents, search and the list, the patient photo
 and the clinic's privacy notice (Owner's and public), served in `hybrid`. B5: visits, the dental chart (append-only
-entries, corrections as new rows) and the last visit in the patient list and header, served in `hybrid`. B6 (notes,
-growth, behaviour and the treatment plan) is next. The
+entries, corrections as new rows) and the last visit in the patient list and header, served in `hybrid`. B6: clinical notes
+(read-only once signed; signing completes plan items), growth and habits, and the treatment plan, served in `hybrid`.
+B7 (scheduling, follow-ups and Today) is next. The
 build order is [CHUNKS.md](CHUNKS.md).
 
 **Stack:** NestJS 12 (ESM, Express) · Prisma 7 + MySQL 8.4 (MariaDB driver adapter) · Zod 4 schemas from
@@ -58,7 +59,7 @@ Run from the repo root.
 | Transactions | `src/prisma/transaction.ts` | `runInTransaction(prisma, fn)` and the `Tx` type |
 | Schema and migrations | `prisma/schema.prisma`, `prisma/migrations/` | Tables. Migrations are committed |
 | Generated client | `src/generated/prisma/` | Git-ignored. Import from `../generated/prisma/client.ts` |
-| Cross-cutting | `src/common/` | `ZodValidationPipe`, `HttpErrorFilter`, the request context (`request-context*.ts`: context + request id), `Clock` (`clock.ts`) |
+| Cross-cutting | `src/common/` | `ZodValidationPipe`, `HttpErrorFilter`, the request context (`request-context*.ts`: context + request id), `Clock` (`clock.ts`), `refusal.ts` (`Refusal`, `refuse()`: the mock's plain-text refusals that rules modules return) |
 | Logging | `src/logging/logger.ts` | pino options and the redaction list (`PERSONAL_FIELDS`) |
 | Audit trail | `src/audit/` | `AuditService.record` (import `AuditModule`) |
 | Identity and access | `src/auth/` | `auth.controller.ts` / `operator-auth.controller.ts` and `auth.service.ts` (sign-in, sign-out, switch, password, acknowledgement), `rate-limit.ts` (`RATE_LIMITS`), `access-rules.ts` (the route → permission map, held to the mock's `RULES` by a test), `access.guard.ts` (the global guard), `session.service.ts` (sessions), `identity.service.ts` (who a session is, PINs), `hashing.ts` (argon2id), `cookies.ts` |
@@ -67,13 +68,16 @@ Run from the repo root.
 | Visits | `src/visits/` | B5: `VisitsService` (list, start, complete, `forPatient` for the chart), `visit.rows.ts` (rows ↔ `Visit`), `VisitDaysService` (the last visit's day) in its own `VisitDaysModule`, imported by `PatientsModule` |
 | Chart | `src/chart/` | B5: `ChartService` (reads and appends only), `chart.rules.ts` (the mock's refusals as a pure function), `chart.rows.ts` (rows ↔ `ChartEntry`, `CHART_ORDER`) |
 | Legal | `src/legal/` | `PrivacyNoticeService` (owns `PrivacyNotice`: the version in force, the Owner's save, the public read) and the public `LegalController` (`GET /legal/notices/:clinicId`) |
-| Notes, messages | `src/notes/`, `src/messages/` | B3: `GET /note-templates`, `GET`/`PUT /message-templates`. B6 and B9 add the notes and the queue |
+| Notes | `src/notes/` | `NotesService`: templates (B3), notes and signing (B6); `note.rows.ts`, `note.rules.ts` (the mock's refusals, `checkValues`) |
+| Growth | `src/growth/` | B6: `GrowthService` (one record per visit, replaced), `growth.rows.ts` |
+| Plan | `src/plan/` | B6: `PlanService` (list, add, status; `completeBy` for signing), `plan.rows.ts`, `plan.rules.ts` |
+| Messages | `src/messages/` | B3: `GET`/`PUT /message-templates`. B9 adds the queue |
 | Outbox | `src/outbox/` | `OutboxService.enqueue(tx, …)` (the write side, inside the caller's transaction), `OutboxWorker` (claim, run, settle), `OutboxHandlers` (features register a handler per kind), `NoopHandler` |
 | Scheduled jobs | `src/jobs/`, `src/<feature>/<feature>.jobs.ts` | `JobRunner.run(job, fn)` (the `JobLock` lease). Each `@Cron` lives in the module that owns its tables: `auth.jobs.ts` (session and rate-limit sweeps), `outbox.jobs.ts` (prune) |
 | File storage | `src/storage/` | `StorageService` (clinic-scoped keys), `FileStorage` (the driver), `LocalDiskStorage`, and the `storage.delete` outbox handler (`delete-file.handler.ts`). Import `StorageModule` where files are kept |
 | Demo seed | `src/seed/seed-database.ts`, `prisma/seed.ts` | Maps `@pedia/seed`'s `seedPlatform()` to rows |
 | Features | `src/<name>/` | `<name>.module.ts`, `<name>.controller.ts`, `<name>.service.ts`. Same `<name>` as `apps/web/src/features/<name>` |
-| Tests | `src/**/*.test.ts` (unit), `test/*.test.ts` (HTTP) | Run without a database, in `pnpm run check`. HTTP tests build the app with `test/support/test-app.ts`. `test/clinic-routes.test.ts` (B3), `test/patients-routes.test.ts` (B4) and `test/clinical-routes.test.ts` (B5) hold every route to "reaches a controller and the guard" (401 without a session); add a route there with its controller |
+| Tests | `src/**/*.test.ts` (unit), `test/*.test.ts` (HTTP) | Run without a database, in `pnpm run check`. HTTP tests build the app with `test/support/test-app.ts`. `test/clinic-routes.test.ts` (B3), `test/patients-routes.test.ts` (B4) and `test/clinical-routes.test.ts` (B5, B6) hold every route to "reaches a controller and the guard" (401 without a session); add a route there with its controller |
 | Integration tests | `test/int/*.int.test.ts`, helpers in `test/int/support/` (`testPrisma`, `resetDatabase`, `inClinic`, `createIntApp`) | Real MySQL test database, `test:int`, run in CI (`.github/workflows/api.yml`, MySQL 8.4) |
 
 ### Porting a feature from MSW (fails silently if missed)
@@ -285,8 +289,19 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   the first read a locking one (`SELECT … FOR UPDATE`, as `VisitsService.complete`). Race tests catch it.
 - **Every visit and chart write locks the patient's row first** (`src/patients/patient-lock.ts`). `complete` locks the
   visit, then the patient; no path locks them the other way round.
-- **In `hybrid`, notes, growth and photos on a visit the API started answer 404 from MSW** until B6/B10 (B5 decision 7).
-  Seeded visits have the same ids on both sides and keep working.
+- **In `hybrid`, photos on a visit the API started answer 404 from MSW** until B10 (B5 decision 7). Seeded visits
+  have the same ids on both sides and keep working.
+- **A child row's patient is read outside the transaction, then `lockPatient`, then the row** (B6 decision 3: notes,
+  growth, plan items). Safe because `patientId` never changes and nothing is deleted. No B6 path locks a child row
+  first: sign holds the patient, then updates plan items, so a path that locked an item first would deadlock with it.
+- **A signed note is read-only twice over:** the check under the lock, and every change is an `updateMany … signedAt:
+  null` that must touch one row. A race test only fails when both are removed.
+- **Growth's "can't be in the future" uses the process clock** (`SaveGrowthInput`): on a UTC server a habit dated today
+  in Manila is refused between 00:00 and 08:00 Manila time until B13 (B6 decision 8).
+- **In `hybrid`, MSW's recall list, billing and documents don't see API-created notes or plan items** until B7/B8/B10
+  (B6 decision 2), and signing on the API makes nothing due and queues no care message until B7/B9 (decision 1).
+- **Records that share a time sort by id**, not insertion order: give seeded records that must read in order distinct
+  times (B6 fixed the growth examples' tie).
 - **A visit started from an appointment stores `appointmentId` unchecked** until B7, which checks and seats it in
   `VisitsService.start` and marks it done in `complete` (B5 decision 1). MSW's appointment stays "arrived" in `hybrid`.
 - **A batch's chart entries share `recordedAt`**; `GET /patients/:id/chart` breaks the tie by id, not insertion order.
@@ -365,6 +380,19 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
     the `last_visit` sort.
   - Audit: the mock's names (`view` "Visits"/"Dental chart", `create` "Visit", `update` "Visit (completed)", `update`
     "Dental chart" once per request), written in the write's transaction.
+- **Notes, growth and the plan** (B6, decisions in the B6 plan; the user confirmed 1, 4, 5 and 8):
+  - Signing completes the plan items it covers (`itemsCompletedBy`) in its transaction; due items (B7) and care
+    messages (B9) are left as markers in `NotesService.sign`.
+  - Any staff with `clinical.write` may edit and sign a draft, even after the visit; the author is the visit's dentist.
+  - A signed note is read-only in `NotesService` (lock + guarded update); `ClinicalNote` isn't append-only (drafts edit).
+  - `sourceChartEntryId` is stored as given, unchecked, as the mock.
+  - Audit: the mock's names, in the write's transaction; the items a sign completes add no "Treatment plan" entry.
+  - Progress, the habit timeline and the behaviour trend stay the web's (`planProgress`, `habitTimeline`).
+  - Accepted until later chunks: `hybrid` gaps in MSW's recalls, billing and documents (decision 2); a child row's
+    patient read outside the transaction, then locked (decision 3); growth's future check on the process clock until
+    B13 (decision 8); an over-long `speech`, free-text note value or `sourceChartEntryId` answers 500 and writes nothing
+    until `@pedia/shared` caps their lengths, together with B5's `note` and `appointmentId` (decision 9). The same for a
+    plan item `fee` above MySQL's `Int` (2,147,483,647 centavos) and a path id of 192+ characters on the audited reads.
 - **Seed** (B1): `packages/seed` (`@pedia/seed`), so MSW and `prisma db seed` run the same `seedPlatform()`. Not
   `@pedia/shared`: the seed needs faker and is built from `new Date()`, which don't belong in the contract package.
 

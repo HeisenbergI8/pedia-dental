@@ -4,7 +4,10 @@ import type { Env } from "../config/env";
 import type { PrismaService } from "../prisma/prisma.service";
 import type { Hasher } from "../auth/hashing";
 import { chartEntryRow } from "../chart/chart.rows";
+import { growthRow } from "../growth/growth.rows";
+import { noteRow } from "../notes/note.rows";
 import { patientRows } from "../patients/patient.rows";
+import { planItemRow } from "../plan/plan.rows";
 import { visitRow } from "../visits/visit.rows";
 
 export class SeedRefused extends Error {
@@ -26,7 +29,8 @@ const dateOnly = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
  * (argon2id), notices, acknowledgements, agreements, the operator, the login page's DemoLogin rows, and (B3) chairs,
  * procedures, note templates and message templates. Clinic rows are written inside that clinic's request context, so
  * the tenant extension stamps and checks them (awaited inside, CONVENTIONS → Traps). `position` keeps the mock's array
- * order. B4 adds patients, B5 their visits and chart entries; the rest arrive with their chunks.
+ * order. B4 adds patients, B5 their visits and chart entries, B6 notes, growth records and plan items; the rest arrive
+ * with their chunks.
  */
 export async function seedDatabase(prisma: PrismaService, hasher: Hasher, env: Pick<Env, "DEMO_LOGINS">, platform: Platform): Promise<void> {
   assertSeedAllowed(env, await prisma.clinicAccount.count());
@@ -98,6 +102,11 @@ export async function seedDatabase(prisma: PrismaService, hasher: Hasher, env: P
       // these visit and entry ids. All completed: the seed leaves no visit in progress.
       await prisma.visit.createMany({ data: db.visits.map((v) => ({ ...visitRow(v), clinicId })) });
       await prisma.chartEntry.createMany({ data: db.chartEntries.map((e) => ({ ...chartEntryRow(e), clinicId })) });
+      // B6: with the seed's ids. MSW's due items (sourceNoteId), invoices (planItemId) and documents (sourceId) name
+      // them in `hybrid` until B7/B8/B10. Every seeded note is signed; the example plan is 3 of 6 done.
+      await prisma.clinicalNote.createMany({ data: db.notes.map((n) => ({ ...noteRow(n), clinicId })) });
+      await prisma.growthRecord.createMany({ data: db.growth.map((g) => ({ ...growthRow(g), clinicId })) });
+      await prisma.planItem.createMany({ data: db.planItems.map((i) => ({ ...planItemRow(i), clinicId })) });
     });
   }
 }

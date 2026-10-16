@@ -3,7 +3,7 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApp } from "./support/test-app";
 
-type Method = "get" | "post";
+type Method = "get" | "post" | "put" | "patch";
 
 /**
  * B5's routes. Each must reach a controller and the real guard: 401 without a session. A route with no controller would
@@ -18,14 +18,27 @@ const B5_ROUTES: [Method, string][] = [
   ["post", "/patients/p1/chart/batch"],
 ];
 
-describe("B5's routes are served and guarded (no database)", () => {
+/** B6's routes, the same promise. */
+const B6_ROUTES: [Method, string][] = [
+  ["get", "/patients/p1/growth"],
+  ["put", "/visits/v1/growth"],
+  ["get", "/patients/p1/plan"],
+  ["post", "/patients/p1/plan"],
+  ["patch", "/plan-items/i1"],
+  ["get", "/patients/p1/notes"],
+  ["post", "/patients/p1/notes"],
+  ["put", "/notes/n1"],
+  ["post", "/notes/n1/sign"],
+];
+
+describe("B5's and B6's routes are served and guarded (no database)", () => {
   let app: INestApplication;
   beforeAll(async () => {
     app = await createTestApp();
   });
   afterAll(() => app.close());
 
-  it.each(B5_ROUTES)("%s %s answers 401 without a session", async (method, path) => {
+  it.each([...B5_ROUTES, ...B6_ROUTES])("%s %s answers 401 without a session", async (method, path) => {
     expect((await request(app.getHttpServer())[method](`/api${path}`)).status).toBe(401);
   });
 });

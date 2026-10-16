@@ -73,4 +73,21 @@ export class VisitsService {
     const row = await tx.visit.findFirst({ where: { id: visitId, patientId }, select: VISIT_COLUMNS });
     return row ? toVisit(row) : undefined;
   }
+
+  /**
+   * The patient a visit belongs to, read outside any transaction (B6 decision 3). `patientId` never changes and visits
+   * are never deleted, so the caller opens its transaction with lockPatient and re-reads the visit under it: the lock is
+   * the transaction's first statement, so its snapshot sees what the previous lock holder committed. undefined for an
+   * unknown visit or another clinic's (tenant extension).
+   */
+  async patientOf(id: string): Promise<string | undefined> {
+    const row = await this.prisma.visit.findUnique({ where: { id }, select: { patientId: true } });
+    return row?.patientId;
+  }
+
+  /** One visit by id, read in the caller's transaction after its lock. */
+  async one(tx: Tx, id: string): Promise<Visit | undefined> {
+    const row = await tx.visit.findUnique({ where: { id }, select: VISIT_COLUMNS });
+    return row ? toVisit(row) : undefined;
+  }
 }

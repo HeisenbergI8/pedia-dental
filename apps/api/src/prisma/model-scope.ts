@@ -30,6 +30,11 @@ export const MODEL_SCOPE = {
   // B5: the clinical core. Visits aren't branch-level in the contract (ClinicScoped): every branch sees the same child.
   Visit: "clinic",
   ChartEntry: "clinic",
+  // B6: the rest of the clinical record. Not append-only: a draft note is edited, a growth record replaced and a plan
+  // item's status changed in place. A signed note is read-only by NotesService (decision 6), not by the extension.
+  ClinicalNote: "clinic",
+  GrowthRecord: "clinic",
+  PlanItem: "clinic",
   // Platform: Primolar's own records
   ClinicAccount: "platform",
   Agreement: "platform",

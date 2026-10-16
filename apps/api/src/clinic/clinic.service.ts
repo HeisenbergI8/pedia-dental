@@ -45,6 +45,12 @@ export class ClinicService {
     const alsoRoles = StaffRole.array().parse(s.alsoRoles);
     return holdsRole({ role: s.role, alsoRoles }, "dentist") && isActiveStaff({ deactivatedAt: s.deactivatedAt?.toISOString() });
   }
+  /** One procedure by code (plan/mocks.ts), in the caller's transaction. undefined when this clinic has none. */
+  async procedure(code: string, tx: Tx = this.prisma): Promise<Pick<Procedure, "code" | "name" | "perTooth"> | undefined> {
+    const row = await tx.procedure.findFirst({ where: { code }, select: { code: true, name: true, perTooth: true } });
+    return row ?? undefined;
+  }
+
 
   /** GET /chairs: every branch's, archived branches' too, so a chair in a child's history still resolves (useChairs). */
   async chairs(): Promise<Chair[]> {

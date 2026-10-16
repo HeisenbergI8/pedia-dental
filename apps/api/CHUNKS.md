@@ -204,7 +204,15 @@ supersedes rather than edits (tested at the repository level); the chart matches
 
 ---
 
-## Chunk B6: Notes, growth, behavior and the treatment plan (~20 h) · Large — features 3, 9, 10, 11
+## ✅ Chunk B6: Notes, growth, behavior and the treatment plan (done, 2026-10-16) · Large — features 3, 9, 10, 11
+
+**Status (2026-10-16): done**, in four parts. **B6a**: `ClinicalNote`, `GrowthRecord`, `PlanItem`, their mappers, the
+mock's note and plan refusals as pure functions, the seeded rows with the mock's ids. **B6b**: growth (one record per
+visit) and the plan (add, status; a done item never changes). **B6c**: notes, read-only once signed (lock plus guarded
+update); signing completes plan items in its transaction. **B6d**: the nine routes in `API_ROUTES` and
+`e2e/api-notes-plan.spec.ts`. Done-when proofs: `notes.int.test.ts` (pulpotomy signed, then read-only, also under
+parallel requests), `plan.int.test.ts` (the example plan at 3 of 6), `growth.int.test.ts` (a habit stopped at a later
+visit, explicit and inferred), and the e2e. **Deferred by design:** signing's due item (B7) and care message (B9).
 
 **Goal:** the rest of the clinical record.
 
@@ -233,6 +241,9 @@ a habit stopped in a later visit shows correctly.
 - From B5: done appointments in `lastVisitOn` (through `VisitDaysService`), the `recent_visit` filter and the
   `last_visit` sort (B5 decisions 2, 3); check and seat the appointment in `VisitsService.start`, and move it to done in
   `complete` (B5 decision 1).
+
+- From B6: add `dueItemFor` to `NotesService.sign` in its transaction (B6 left a marker), and backfill open due items
+  from notes signed on the API between B6 and B7.
 
 **Done when:** two simultaneous bookings of the same chair and slot leave exactly one; an extraction signed today is
 due in 7 days and booking it removes it; Today matches the mock for both demo clinics.
@@ -270,6 +281,7 @@ recorded once; the dashboard totals equal the sum of payments in SQL.
 - Consent enforced at queue time (`choiceDeclined`), templates from B3, birthday greetings and due-item messages as
   scheduled jobs.
 - A reminders "no" (`POST /patients/:id/privacy-choices`) withdraws the child's queued messages in its transaction (privacy #14; B4 left it out).
+- From B6: enqueue `NOTE_MESSAGES[procedure]` in `NotesService.sign`'s transaction (B6 left a marker).
 
 **Decide first:** the email provider; sending hours (no SMS at night); the per-clinic SMS sender name and who pays for
 SMS credits.
@@ -380,7 +392,7 @@ B0 Skeleton ✅
          └─ B3 Clinic setup & Owner settings ✅
              └─ B4 Patients & privacy consent ✅
                  └─ B5 Visits & dental chart ✅
-                     └─ B6 Notes, growth, behavior & plan
+                     └─ B6 Notes, growth, behavior & plan ✅
                          └─ B7 Scheduling, follow-ups & Today
                              └─ B8 Billing, payments & dashboard
                                  └─ B9 Parent messages & real sending

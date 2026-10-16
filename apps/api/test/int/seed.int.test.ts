@@ -1,8 +1,11 @@
-import { patientSearchText } from "@pedia/shared";
+import { patientSearchText, planProgress } from "@pedia/shared";
 import { DEMO_CLINIC_ID, DEMO_PASSWORD, OPERATORS, accountsByEmail, demoLogins, seedPlatform } from "@pedia/seed";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Hasher } from "../../src/auth/hashing";
 import { CHART_COLUMNS, toChartEntry } from "../../src/chart/chart.rows";
+import { GROWTH_COLUMNS, toGrowth } from "../../src/growth/growth.rows";
+import { NOTE_COLUMNS, toNote } from "../../src/notes/note.rows";
+import { PLAN_COLUMNS, toPlanItem } from "../../src/plan/plan.rows";
 import { seedDatabase } from "../../src/seed/seed-database";
 import { VISIT_COLUMNS, toVisit } from "../../src/visits/visit.rows";
 import { inClinic, resetDatabase, testPrisma } from "./support/database";
@@ -66,6 +69,24 @@ describe("prisma db seed (seedDatabase) on MySQL", () => {
       });
     }
     expect(platform.tenants[DEMO_CLINIC_ID]!.chartEntries.length).toBeGreaterThan(0); // not vacuous
+  });
+
+  it("writes each clinic's notes, growth records and plan items with the mock's ids, as the mock serves them (B6)", async () => {
+    const byId = <T extends { id: string }>(xs: T[]) => new Map(xs.map((x) => [x.id, x]));
+    for (const { id } of platform.accounts) {
+      const db = platform.tenants[id]!;
+      await inClinic(id, async () => {
+        const notes = (await prisma.clinicalNote.findMany({ select: NOTE_COLUMNS })).map(toNote);
+        const growth = (await prisma.growthRecord.findMany({ select: GROWTH_COLUMNS })).map(toGrowth);
+        const plan = (await prisma.planItem.findMany({ select: PLAN_COLUMNS })).map(toPlanItem);
+        expect(byId(notes)).toEqual(byId(db.notes.map((n) => ({ ...n, clinicId: id }))));
+        expect(byId(growth)).toEqual(byId(db.growth.map((g) => ({ ...g, clinicId: id }))));
+        expect(byId(plan)).toEqual(byId(db.planItems.map((i) => ({ ...i, clinicId: id }))));
+      });
+    }
+    const demo = platform.tenants[DEMO_CLINIC_ID]!; // not vacuous: the spec's example plan and the growth examples
+    expect(planProgress(demo.planItems)).toEqual({ done: 3, total: 6 });
+    expect(demo.growth.length).toBe(6);
   });
 
   it("gives every mock login the same email in the same clinics, opened by the demo password", async () => {
