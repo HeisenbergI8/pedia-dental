@@ -19,6 +19,8 @@ export const REDACT_PATHS = [
   "req.headers.authorization",
   "req.headers.cookie",
   'res.headers["set-cookie"]',
+  // A download's file name is the child's (`mendoza-bea-photo.jpg`, B4).
+  'res.headers["content-disposition"]',
   ...PERSONAL_FIELDS,
   ...PERSONAL_FIELDS.map((field) => `*.${field}`),
 ];

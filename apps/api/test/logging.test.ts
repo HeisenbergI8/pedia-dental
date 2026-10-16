@@ -1,5 +1,6 @@
 import { Writable } from "node:stream";
-import { Controller, Get, type INestApplication, Logger } from "@nestjs/common";
+import { Controller, Get, type INestApplication, Logger, Res } from "@nestjs/common";
+import type { Response } from "express";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Prisma } from "../src/generated/prisma/client.ts";
@@ -23,6 +24,12 @@ class ProbeController {
     return { ok: true };
   }
 
+  @Get("download")
+  download(@Res({ passthrough: true }) res: Response) {
+    res.set("Content-Disposition", 'inline; filename="santos-ana-photo.jpg"');
+    return { ok: true };
+  }
+
   @Get("prisma-error")
   prismaError() {
     throw new Prisma.PrismaClientValidationError('Invalid value for argument `firstName`: "Ana Santos"', {
@@ -39,6 +46,13 @@ describe("logs over HTTP", () => {
   afterAll(() => app.close());
 
   const linesFor = (requestId: string) => lines.filter((line) => line.includes(requestId));
+
+  it("never logs a download's file name (B4: a photo is named after the child)", async () => {
+    const res = await request(app.getHttpServer()).get("/api/probe/download");
+    const mine = linesFor(res.headers["x-request-id"]!).join("\n");
+    expect(mine).toContain("/api/probe/download");
+    expect(mine).not.toMatch(/santos|ana-photo/i);
+  });
 
   it("logs a request's path, never its query (B4: searches and duplicate checks carry names)", async () => {
     const res = await request(app.getHttpServer()).get("/api/probe/log?q=rosa%20mendoza&birthDate=2019-03-02");

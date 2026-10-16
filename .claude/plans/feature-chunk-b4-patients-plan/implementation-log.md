@@ -71,3 +71,10 @@
 **Deviations from plan:** the e2e's `signInAs` picks Bulilit at "Which clinic?" for the dentist (that login works at two clinics); the tests run serially because test 4 reads test 2's child id. Its search step types the run's 7 phone digits, not "the last seven" of a longer number (the same thing).
 **Gate:** `pnpm run check` green (shared 189, seed 19, api 202, web 342); `pnpm --filter api test:int` 22 files, 157 passed, 5 todo; e2e `E2E_API=1 E2E_BASE_URL=http://localhost:3160 npx playwright test e2e/api-patients.spec.ts --project=desktop`: 5 passed (25 s).
 **Notes:** the e2e ran against a separate `pedia_dental_e2e` database (migrated, `DEMO_LOGINS=true db:seed`), the API on 4110 (`COOKIE_SECURE=false`) and the web in `hybrid` on 3160 (`NEXT_DIST_DIR=.next-hybrid`), via two entries added to the untracked `.claude/launch.json`. `apps/web/tsconfig.json`, rewritten by `next dev`, was reverted.
+
+## Fix after the tester — 2026-10-16
+
+**Finding:** the tester saw `res.headers.content-disposition` (`inline; filename="ni-o-probe-photo.jpg"`) in the API's request log for `GET /patients/:id/photo`: the child's name in a log line.
+**Files changed:** `apps/api/src/logging/logger.ts` (`res.headers["content-disposition"]` added to `REDACT_PATHS`), `apps/api/test/logging.test.ts` (a probe route that sets a named `Content-Disposition`; the case failed before the fix and passes after).
+**Gate:** `pnpm run check` green (api 203, web 342).
+**Notes:** the first full check after the fix had one web failure, `handlers.test.ts` "sends a dentist no guardian phone …", which passed on three reruns of the file and on the next full check. It predates B4 (no web handler changed here): its `not.toMatch(/0917|0918|…/)` scans whole responses that include random UUIDs. Left as a follow-up.
