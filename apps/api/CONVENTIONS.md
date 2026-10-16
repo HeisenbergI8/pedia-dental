@@ -6,8 +6,10 @@ The Primolar backend. It replaces the browser mocks (MSW) in `apps/web` **endpoi
 feature code in the web app**. The product, the users and the domain are the ones in the root `CONVENTIONS.md`
 and `ROADMAP.md`; read those first. This file covers only how the API is built.
 
-**Current phase: skeleton** (2026-10-16). Config, Prisma connected to MySQL, `GET /api/health`, Zod validation and the
-error filter. No feature endpoints and no models yet. The build order is [CHUNKS.md](CHUNKS.md).
+**Current phase: B1-a done (runtime core)** (2026-10-16). Request context, `Clock`, pino logs, tenant scoping,
+transactions and the audit writer, on top of the skeleton (config, Prisma, `GET /api/health`, Zod validation, the error
+filter). No feature endpoints yet; the only model is `AuditEvent`. B1-b (seed, `test:int`, web cut-over) and B1-c
+(outbox, scheduler, storage) are next. The build order is [CHUNKS.md](CHUNKS.md).
 
 **Stack:** NestJS 12 (ESM, Express) · Prisma 7 + MySQL 8.4 (MariaDB driver adapter) · Zod 4 schemas from
 `@pedia/shared` · SWC at runtime (`@swc-node/register`) · Vitest + Supertest · Docker Compose for local MySQL.
@@ -40,20 +42,26 @@ Run from the repo root.
 | Domain logic | `packages/shared/src/domain/` | Pure rules (permissions, chart derivation, money, tenancy, subscription dates). Call them, never re-implement them |
 | The spec for each endpoint | `apps/web/src/features/<name>/mocks.ts`, `apps/web/src/mocks/` | Paths, shapes, status codes and rules the API must reproduce |
 | Bootstrap | `src/main.ts` | Env, `/api` prefix, CORS, shutdown hooks. Nothing feature-specific |
-| Root module | `src/app.module.ts` | `AppModule.forRoot(env)`: provides `ENV`, the global error filter, imports feature modules |
+| Root module | `src/app.module.ts` | `AppModule.forRoot(env)`: provides `ENV`, `Clock`, the logger, the global error filter and the request-context middleware; imports feature modules |
 | Config | `src/config/env.ts` | Zod-validated environment, injected with `@Inject(ENV)`. The only reader of `process.env` |
-| Database | `src/prisma/` | `PrismaService`, the only database client (global module) |
+| Database | `src/prisma/` | `PrismaService`, the only database client (global module), always tenant-scoped |
+| Model scopes | `src/prisma/model-scope.ts` | `MODEL_SCOPE` (every model: clinic, branch or platform) and `APPEND_ONLY`. **Add every new model here** |
+| Tenant extension | `src/prisma/tenant-scope.ts` | `scopeArgs`, `clinicData()`, the Prisma extension `PrismaService` applies |
+| Transactions | `src/prisma/transaction.ts` | `runInTransaction(prisma, fn)` and the `Tx` type |
 | Schema and migrations | `prisma/schema.prisma`, `prisma/migrations/` | Tables. Migrations are committed |
 | Generated client | `src/generated/prisma/` | Git-ignored. Import from `../generated/prisma/client.ts` |
-| Cross-cutting | `src/common/` | `ZodValidationPipe`, `HttpErrorFilter` |
+| Cross-cutting | `src/common/` | `ZodValidationPipe`, `HttpErrorFilter`, the request context (`request-context*.ts`: context + request id), `Clock` (`clock.ts`) |
+| Logging | `src/logging/logger.ts` | pino options and the redaction list (`PERSONAL_FIELDS`) |
+| Audit trail | `src/audit/` | `AuditService.record` (import `AuditModule`) |
 | Features | `src/<name>/` | `<name>.module.ts`, `<name>.controller.ts`, `<name>.service.ts`. Same `<name>` as `apps/web/src/features/<name>` |
-| Tests | `src/**/*.test.ts` (unit), `test/*.test.ts` (HTTP) | Run without a database, in `pnpm run check` |
+| Tests | `src/**/*.test.ts` (unit), `test/*.test.ts` (HTTP) | Run without a database, in `pnpm run check`. HTTP tests build the app with `test/support/test-app.ts` |
 | Integration tests | `test/int/*.int.test.ts` (from chunk B1) | Real MySQL test database, `test:int`, run in CI |
 
 ### Porting a feature from MSW (fails silently if missed)
 
 1. Read the feature's `mocks.ts` and its rule in `apps/web/src/mocks/access.ts`. That is the spec.
-2. Add models to `prisma/schema.prisma` and run `db:migrate --name <feature>`. Commit the migration.
+2. Add models to `prisma/schema.prisma` and run `db:migrate --name <feature>`. Commit the migration. List each new
+   model in `MODEL_SCOPE` (and `APPEND_ONLY` if it is one), and create tenant rows with `data: { ...clinicData(), … }`.
 3. Create `src/<name>/` with module, controller and service, and import the module in `AppModule.forRoot`.
 4. Validate every body, query and param with the **same shared schema** the web uses:
    `@Body(new ZodValidationPipe(PatientInput))`. Build responses so they parse with the shared response schema.
@@ -185,7 +193,26 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   variable goes in `Env` (`src/config/env.ts`), `.env.example` and `.env`.
 - **`pnpm run check` never needs MySQL.** HTTP tests build `AppModule.forRoot(...)` and
   `overrideProvider(PrismaService)`. Tests that need a real database go in `test:int`, never in `check`.
+- **The tenant extension doesn't see raw SQL or nested writes.** A raw query on a tenant table adds `clinicId`
+  itself; create tenant children with their own top-level `create`.
+- **Log redaction covers the top level and one level down only** (pino's `*`). Log ids, never whole records.
+- **Prisma errors quote the query's arguments** (patient data) in their message. `HttpErrorFilter` withholds it; don't
+  log a Prisma error anywhere else without the same treatment.
+- **Prisma queries are lazy: await them inside `requestContext.run`.** `run(ctx, () => prisma.x.findMany())` returns
+  the query unstarted; it runs when awaited, outside the context, and is refused as "needs a clinic". Write
+  `run(ctx, async () => await prisma.x.findMany())` in workers, the seed and tests.
+- **`runInTransaction` reruns its callback on a deadlock** (P2034): nothing that leaves the database inside it.
 - `test/app.test.ts` logs a stack trace on purpose (the "unexpected error" case). It isn't a failure.
+
+---
+
+## Decisions recorded
+
+- **Ids** (B1): cuid2, generated by Prisma with `@default(cuid(2))`. The seed's readable ids (`staff_reyes`,
+  `branch_imus`) are kept as given.
+- **Outbox** (B1): polled from MySQL with `SELECT … FOR UPDATE SKIP LOCKED`; no Redis or BullMQ until volume says so.
+- **Seed** (B1): the web's demo seed moves to a shared workspace package, so MSW and `prisma db seed` run the same
+  `seed()`. B1-b picks the package.
 
 ---
 

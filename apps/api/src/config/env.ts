@@ -4,6 +4,7 @@ const Env = z.object({
   DATABASE_URL: z.string().startsWith("mysql://", "DATABASE_URL must be a mysql:// URL"),
   PORT: z.coerce.number().int().positive().default(4100),
   CORS_ORIGIN: z.string().default("http://localhost:3000"),
+  LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
 });
 
 export type Env = z.infer<typeof Env>;

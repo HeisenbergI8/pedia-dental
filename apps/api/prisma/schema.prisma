@@ -10,3 +10,44 @@ generator client {
 datasource db {
   provider = "mysql"
 }
+
+/// Mirrors Role in packages/shared/src/schemas/common.ts (tenant-scope.test.ts checks they match).
+enum Role {
+  owner
+  admin
+  dentist
+  front_desk
+  parent
+}
+
+/// Mirrors AuditAction in packages/shared/src/schemas/audit.ts (tenant-scope.test.ts checks they match).
+enum AuditAction {
+  sign_in
+  sign_in_failed
+  sign_out
+  timed_out
+  view
+  create
+  update
+  export
+  denied
+}
+
+/// Who touched which personal data, and when (RA 10173). Append-only: APPEND_ONLY in src/prisma/model-scope.ts.
+/// The actor's name and role are copied in so the entry still says who it was after the account changes.
+model AuditEvent {
+  id        String      @id @default(cuid(2))
+  clinicId  String
+  at        DateTime
+  actorId   String
+  actorName String
+  actorRole Role
+  action    AuditAction
+  /// What was touched, in clinic words: "Dental chart", "Patient list".
+  record    String
+  patientId String?
+
+  @@index([clinicId, at])
+  @@index([clinicId, actorId, at])
+  @@index([clinicId, patientId, at])
+}

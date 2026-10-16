@@ -34,7 +34,7 @@ describe("api skeleton (no database)", () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [AppModule.forRoot({ DATABASE_URL: "mysql://unused", PORT: 0, CORS_ORIGIN: "" })],
+      imports: [AppModule.forRoot({ DATABASE_URL: "mysql://unused", PORT: 0, CORS_ORIGIN: "", LOG_LEVEL: "silent" })],
       controllers: [EchoController],
     })
       .overrideProvider(PrismaService)

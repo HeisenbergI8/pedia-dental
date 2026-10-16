@@ -1,0 +1,58 @@
+import { Writable } from "node:stream";
+import { Controller, Get, type INestApplication, Logger } from "@nestjs/common";
+import request from "supertest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { Prisma } from "../src/generated/prisma/client.ts";
+import { createTestApp } from "./support/test-app";
+
+const lines: string[] = [];
+const logStream = new Writable({
+  write(chunk, _encoding, done) {
+    lines.push(String(chunk));
+    done();
+  },
+});
+
+@Controller("probe")
+class ProbeController {
+  private readonly logger = new Logger("Probe");
+
+  @Get("log")
+  log() {
+    this.logger.log({ patient: { id: "pat_1", firstName: "Ana", lastName: "Santos" } }, "opened chart");
+    return { ok: true };
+  }
+
+  @Get("prisma-error")
+  prismaError() {
+    throw new Prisma.PrismaClientValidationError('Invalid value for argument `firstName`: "Ana Santos"', {
+      clientVersion: "7.10.0",
+    });
+  }
+}
+
+describe("logs over HTTP", () => {
+  let app: INestApplication;
+  beforeAll(async () => {
+    app = await createTestApp({ controllers: [ProbeController], logStream });
+  });
+  afterAll(() => app.close());
+
+  const linesFor = (requestId: string) => lines.filter((line) => line.includes(requestId));
+
+  it("stamps a handler's log line with the request id and no patient name", async () => {
+    const res = await request(app.getHttpServer()).get("/api/probe/log");
+    const mine = linesFor(res.headers["x-request-id"]!);
+    expect(mine.some((line) => JSON.parse(line).msg === "opened chart")).toBe(true);
+    expect(mine.join("")).toContain("pat_1");
+    expect(mine.join("")).not.toMatch(/Ana|Santos/);
+  });
+
+  it("logs a database error without the patient data in its message", async () => {
+    const res = await request(app.getHttpServer()).get("/api/probe/prisma-error");
+    expect(res.status).toBe(500);
+    const mine = linesFor(res.headers["x-request-id"]!).join("");
+    expect(mine).toContain("PrismaClientValidationError");
+    expect(mine).not.toContain("Ana Santos");
+  });
+});
