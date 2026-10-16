@@ -12,6 +12,13 @@ const Env = z.object({
   DEMO_LOGINS: flag().default(false),
   // `Secure` on pd_session / pd_operator / pd_branch. Off only for local http (`.env`), never in a deployment.
   COOKIE_SECURE: flag().default(true),
+  // This process runs the scheduled jobs and the outbox worker (main.ts → AppModule.forRoot's `background`).
+  // false for an instance that only serves requests. Tests never start background work, whatever this says.
+  BACKGROUND_WORK: flag().default(true),
+  // How long the outbox worker waits after finding nothing to send.
+  OUTBOX_POLL_MS: z.coerce.number().int().min(100).default(2000),
+  // The local-disk storage driver's root, relative to the API's working directory (B10 adds S3/R2).
+  STORAGE_DIR: z.string().min(1).default("var/storage"),
 });
 
 export type Env = z.infer<typeof Env>;

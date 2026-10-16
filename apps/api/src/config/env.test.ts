@@ -10,6 +10,9 @@ describe("loadEnv", () => {
       LOG_LEVEL: "info",
       DEMO_LOGINS: false,
       COOKIE_SECURE: true,
+      BACKGROUND_WORK: true,
+      OUTBOX_POLL_MS: 2000,
+      STORAGE_DIR: "var/storage",
     });
   });
 

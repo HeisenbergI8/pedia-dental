@@ -6,10 +6,10 @@ The Primolar backend. It replaces the browser mocks (MSW) in `apps/web` **endpoi
 feature code in the web app**. The product, the users and the domain are the ones in the root `CONVENTIONS.md`
 and `ROADMAP.md`; read those first. This file covers only how the API is built.
 
-**Current phase: B2c done** (2026-10-16). On top of B1-a's runtime core and B2a/B2b (`@pedia/seed`, `test:int`, CI, the
-identity tables, seed, sessions and the access guard), the API serves `/auth/*`, `/operator/auth/*` and `GET /clinic`,
-`/branches` and `/staff`, rate-limited and audited. B2d cuts the web's sign-in over; B1-c (outbox, scheduler, storage)
-after. The build order is [CHUNKS.md](CHUNKS.md).
+**Current phase: B1 and B2 done** (2026-10-16). The runtime core (request context, `Clock`, logs, tenant scoping,
+transactions, audit), `@pedia/seed`, the `test:int` suite on MySQL and CI, identity, sessions and the access guard,
+`/auth/*`, `/operator/auth/*` and the clinic reads, with the web signing in against them in `hybrid` mode. B1-c added
+the outbox, scheduled jobs and file storage. B3 (clinic setup and Owner settings) is next. The build order is [CHUNKS.md](CHUNKS.md).
 
 **Stack:** NestJS 12 (ESM, Express) · Prisma 7 + MySQL 8.4 (MariaDB driver adapter) · Zod 4 schemas from
 `@pedia/shared` · SWC at runtime (`@swc-node/register`) · Vitest + Supertest · Docker Compose for local MySQL.
@@ -57,6 +57,9 @@ Run from the repo root.
 | Audit trail | `src/audit/` | `AuditService.record` (import `AuditModule`) |
 | Identity and access | `src/auth/` | `auth.controller.ts` / `operator-auth.controller.ts` and `auth.service.ts` (sign-in, sign-out, switch, password, acknowledgement), `rate-limit.ts` (`RATE_LIMITS`), `access-rules.ts` (the route → permission map, held to the mock's `RULES` by a test), `access.guard.ts` (the global guard), `session.service.ts` (sessions), `identity.service.ts` (who a session is, PINs), `hashing.ts` (argon2id), `cookies.ts` |
 | Clinic | `src/clinic/` | `GET /clinic`, `/branches`, `/staff`; row → contract shaping in `clinic.views.ts`. Reads only until B3 |
+| Outbox | `src/outbox/` | `OutboxService.enqueue(tx, …)` (the write side, inside the caller's transaction), `OutboxWorker` (claim, run, settle), `OutboxHandlers` (features register a handler per kind), `NoopHandler` |
+| Scheduled jobs | `src/jobs/`, `src/<feature>/<feature>.jobs.ts` | `JobRunner.run(job, fn)` (the `JobLock` lease). Each `@Cron` lives in the module that owns its tables: `auth.jobs.ts` (session and rate-limit sweeps), `outbox.jobs.ts` (prune) |
+| File storage | `src/storage/` | `StorageService` (clinic-scoped keys), `FileStorage` (the driver), `LocalDiskStorage`. Import `StorageModule` where files are kept |
 | Demo seed | `src/seed/seed-database.ts`, `prisma/seed.ts` | Maps `@pedia/seed`'s `seedPlatform()` to rows |
 | Features | `src/<name>/` | `<name>.module.ts`, `<name>.controller.ts`, `<name>.service.ts`. Same `<name>` as `apps/web/src/features/<name>` |
 | Tests | `src/**/*.test.ts` (unit), `test/*.test.ts` (HTTP) | Run without a database, in `pnpm run check`. HTTP tests build the app with `test/support/test-app.ts` |
@@ -225,6 +228,13 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **Behind a proxy, set `trust proxy`** in `main.ts` (B13), or every client shares one rate-limit bucket.
 - **Prisma 7's `migrate dev` doesn't regenerate the client.** Run `pnpm --filter api db:generate` after it.
 - **Lists keep the clinic's order:** `Branch.position` and `Staff.position` (the mock's array order). New rows go last.
+- **Background work starts only from `main.ts`** (`AppModule.forRoot(env, { background })`). Tests call
+  `worker.drain()` and job methods directly; `createIntApp({ background: true })` only to check scheduling.
+- **The outbox delivers at least once.** A handler must be idempotent and pass the row id to the provider as its
+  idempotency key. Never call `enqueue` outside
+  `runInTransaction`'s `tx`: TypeScript can't tell the root client from a transaction.
+- **A job's `leaseMs` must be longer than a run and shorter than its cron period**, or it runs twice or skips ticks.
+- **`LocalDiskStorage` is per instance.** A multi-instance deployment needs B10's driver before files are uploaded.
 - **`COOKIE_SECURE=false` only on local http.** It defaults to true; `DEMO_LOGINS` defaults to false.
 - `test/app.test.ts` logs a stack trace on purpose (the "unexpected error" case). It isn't a failure.
 
@@ -243,13 +253,22 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   sign-in reads them before a clinic is known. Only `IdentityService`, `SessionService` and the seed touch them.
   Queries about one login name `clinicId` + `accountId`. Sign-in's lookups are cross-clinic on purpose, before a clinic
   is chosen: `Credential` by `email`, `DemoLogin` by `featured`, `Session` by its unique `tokenHash`. Never add a
-  cross-clinic query on these tables outside sign-in.
+  cross-clinic query on these tables outside sign-in and `SessionService.sweepExpired` (B1-c's sweep).
 - **Body tokens** (B2): `Session.token` / `OperatorSession.token` carry placeholders (`"cookie"`, `"operator.cookie"`);
   the real tokens are only in the httpOnly cookies. A switch or password change rotates the session.
 - **Rate limits** (B2): fixed windows in `RateLimitCounter`, per client address: 20 sign-ins per 5 minutes and 120 auth
   calls per minute (`RATE_LIMITS`), bound to the two auth controllers.
 - **Demo login** (B2): `/auth/demo-accounts` and `DemoLogin` rows exist only when `DEMO_LOGINS=true` (demo deployments). There, the demo password can't be changed.
 - **Outbox** (B1): polled from MySQL with `SELECT … FOR UPDATE SKIP LOCKED`; no Redis or BullMQ until volume says so.
+  A claim leases rows by moving `availableAt` forward; a result is saved only while `attempts` still matches the claim.
+  Delivery is at least once: handlers are idempotent and pass the row id to the provider as its idempotency key.
+  Payloads hold ids only; `lastError` holds only an error's name and Prisma code. 5 attempts, backoff 30 s → 1 h, sent
+  rows pruned after 7 days (`OUTBOX_POLICY`, tuned in B9).
+- **Scheduled jobs** (B1): `@nestjs/schedule`, started only with `background` (`BACKGROUND_WORK`). Each run takes a
+  `JobLock` lease shorter than the job's period and keeps it after a successful run, so a second instance's tick
+  skips; a failed run releases it.
+- **Storage** (B1): keys are `clinics/<clinicId>/<area>/<uuid>.<ext>`, built and checked only by `StorageService`;
+  another clinic's key reads as missing. The content type comes from an extension allowlist. Local disk until B10.
 - **Seed** (B1): `packages/seed` (`@pedia/seed`), so MSW and `prisma db seed` run the same `seedPlatform()`. Not
   `@pedia/shared`: the seed needs faker and is built from `new Date()`, which don't belong in the contract package.
 

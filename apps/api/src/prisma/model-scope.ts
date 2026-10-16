@@ -27,6 +27,9 @@ export const MODEL_SCOPE = {
   DemoLogin: "platform",
   // Counted before sign-in, per client address, never per clinic.
   RateLimitCounter: "platform",
+  // The system's: the worker and the scheduler read across clinics. Handlers run inside the row's clinic.
+  OutboxMessage: "platform",
+  JobLock: "platform",
 } as const satisfies Record<Prisma.ModelName, ModelScope>;
 
 /**

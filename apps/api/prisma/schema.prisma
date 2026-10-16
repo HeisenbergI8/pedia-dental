@@ -186,6 +186,7 @@ model Session {
 
   @@index([clinicId, accountId])
   @@index([expiresAt])
+  @@index([lastSeenAt])
 }
 
 /// Primolar's own staff (decisions #3, #25). Never a clinic user: no clinicId, no role.
@@ -208,6 +209,7 @@ model OperatorSession {
 
   @@index([operatorId])
   @@index([expiresAt])
+  @@index([lastSeenAt])
 }
 
 /// A clinic's acceptance of Primolar's Terms and DPA (ClinicAgreement). Append-only; the newest per clinic is in
@@ -283,4 +285,46 @@ model RateLimitCounter {
 
   @@id([bucket, windowStart])
   @@index([windowStart])
+}
+
+/// Where a row stands. `pending` covers both "waiting" and "leased": a lease is `availableAt` moved forward (B1-c plan).
+enum OutboxStatus {
+  pending
+  done
+  failed
+}
+
+/// Side effects leaving the system (SMS, email, webhooks), written in the same transaction as the change that caused
+/// them and sent by OutboxWorker (CONVENTIONS → Side effects). Platform: the worker reads across clinics; each
+/// handler runs inside the row's clinic. Written only by OutboxService and OutboxWorker.
+model OutboxMessage {
+  id          String       @id @default(cuid(2))
+  /// The clinic the side effect belongs to; null for platform mail (sign-ups, B12).
+  clinicId    String?
+  /// Which OutboxHandler runs it ("noop"; B9 adds message kinds).
+  kind        String       @db.VarChar(64)
+  /// Ids and flags only, never patient data: the handler loads what it sends.
+  payload     Json
+  status      OutboxStatus @default(pending)
+  /// Not before this moment: a scheduled send (B9's reminders), a retry's backoff, or a running lease.
+  availableAt DateTime
+  /// Claims so far. A settle only counts if it still matches its claim's number.
+  attempts    Int          @default(0)
+  /// The error's name and Prisma code only. Messages can quote personal data.
+  lastError   String?      @db.VarChar(191)
+  createdAt   DateTime
+  processedAt DateTime?
+
+  @@index([status, availableAt])
+  @@index([status, processedAt])
+}
+
+/// One row per scheduled job: a lease that one API instance holds per run (JobRunner). Platform.
+model JobLock {
+  name           String    @id @db.VarChar(64)
+  lockedUntil    DateTime
+  /// `<host>:<pid>:<random>` of the holder, for diagnosis only.
+  lockedBy       String    @db.VarChar(191)
+  lastStartedAt  DateTime?
+  lastFinishedAt DateTime?
 }

@@ -11,7 +11,7 @@ if (existsSync(".env")) process.loadEnvFile(".env"); // real env vars win over t
 z.config({ customError: plainLanguageError });
 
 const env = loadEnv();
-const app = await NestFactory.create(AppModule.forRoot(env), { bufferLogs: true });
+const app = await NestFactory.create(AppModule.forRoot(env, { background: env.BACKGROUND_WORK }), { bufferLogs: true });
 app.useLogger(app.get(Logger)); // Nest's own Logger (HttpErrorFilter, bootstrap) now writes pino JSON
 app.setGlobalPrefix("api");
 app.enableCors({ origin: env.CORS_ORIGIN.split(","), credentials: true });
