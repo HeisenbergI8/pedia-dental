@@ -112,3 +112,13 @@ plan recommends. Engineering decisions E1–E8 as the plan records them.
 - A double-booking's words appear in a toast, and the form stays open (the web's `onError`), not inside the form.
 - The calendar's `view` URL value isn't `list`, so the spec clicks the List button, as `frontdesk.spec.ts` does.
 **Gate:** `pnpm run check` exit 0; `test:int` 31 files, 295 passed + 3 todo; `api-scheduling.spec.ts` 5/5 on fresh `pedia_dental_e2e_b7`, then 5/5 again on the same database (`RateLimitCounter` cleared between runs); `api-patients.spec.ts` (B4) 5/5 after Phase 7's name-order change.
+
+## Review: tester and auditor — 2026-10-17
+
+**Auditor (65/100, every step delivered; DB-backed claims unverified by it):** fixed the root `CONVENTIONS.md` (B7 served routes, closed and new `hybrid` gaps, the e2e command), stale B7 comments (`passthrough.ts`, `seed-database.ts`), B7's own route list in `clinical-routes.test.ts`, the CHUNKS goal's lock wording and date, and "lets front desk book but not a parent" now asserts the parent's 403. Not changed: Today with no usable branch (unreachable: archiving refuses a branch someone works only at; the mock fails the same way); the e2e doesn't assert `in_chair` mid-visit (covered by `visits.int.test.ts`).
+**Tester (independent: `check`, `test:int` 295 + 3 todo, the e2e twice, live curl races, backfill diff, Today parity 40/40):**
+- F1 fixed: `GET /appointments` without `to` (or `from`) answered `[]`: the mock's 8.64e15 default is outside MySQL's DATETIME range. Bounds are now clamped into it. The B7 test "a seeded schedule with no double-bookings" had passed vacuously on that `[]`: it now reads the seed's appointments only and asserts they're there.
+- F2 fixed: `/reports/today?today=2026-02-30` (an impossible day) answered 500; now 400 "today must be YYYY-MM-DD".
+- F3 not changed: `/patient-summaries` ignores the mock's test-only `?today=` (the API's day is `Clock`'s); no web code sends it.
+- F4 not B7's: one run of web `handlers.test.ts` (dentist contact fields) failed once and passed on every re-run; B7 changed no web mock code.
+**Gate:** `pnpm run check` exit 0; `test:int` 31 files, 295 passed + 3 todo.

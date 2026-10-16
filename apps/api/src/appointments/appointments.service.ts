@@ -17,7 +17,13 @@ import { byStartThenChair } from "./appointment.rows";
 import { APPOINTMENT_NOT_FOUND, moveRefusal, slotRefusal, statusRefusal } from "./appointment.rules";
 
 const FAR_FUTURE = 8.64e15; // the mock's default `to` (mocks.ts:60)
-const at = (v: string | undefined, fallback: number) => new Date(v ?? fallback); // an unparsable bound is Invalid Date
+// MySQL's DATETIME range: a bound outside it matches nothing there, where the mock's comparison matches everything.
+const [EARLIEST, LATEST] = [Date.parse("1000-01-01T00:00:00Z"), Date.parse("9999-12-31T23:59:59Z")];
+/** A bound as given (an unparsable one is Invalid Date), clamped into what MySQL can compare. */
+const at = (v: string | undefined, fallback: number) => {
+  const t = new Date(v ?? fallback).getTime();
+  return new Date(Number.isNaN(t) ? t : Math.min(Math.max(t, EARLIEST), LATEST));
+};
 
 /**
  * features/appointments/mocks.ts. No double-booking (E1): book and move take the clinic's lock first, then read the

@@ -104,6 +104,10 @@ describe("appointments (apps/web handlers.test.ts → appointments)", () => {
     expect((await calendar(admin, window)).map((a) => a.id)).toEqual([imus.id]);
     expect((await calendar(dasma(owner), window)).map((a) => a.id)).toEqual([]); // 11:00 is outside [from, to)
     expect(await calendar(admin, "?from=nonsense")).toEqual([]);
+    // No bounds, or one only: open-ended, as the mock (MySQL can't compare the mock's 8.64e15 default, so it's clamped).
+    for (const query of ["", `?from=${encodeURIComponent(at("2030-01-14", "00:00"))}`, `?to=${encodeURIComponent("+275000-01-01T00:00:00Z")}`]) {
+      expect((await calendar(admin, query)).map((a) => a.id), query).toContain(imus.id);
+    }
   });
 
   it("lists a child's appointments at every branch, by start, and audits the read", async () => {
@@ -151,9 +155,11 @@ describe("appointments (apps/web handlers.test.ts → appointments)", () => {
   });
 
   it("has a seeded schedule with no double-bookings", async () => {
+    const seeded = new Set(t.platform.tenants[DEMO_CLINIC_ID]!.appointments.map((a) => a.id)); // not the cases' own
     for (const cookie of [admin, dasma(owner)]) {
-      const list = await calendar(cookie);
-      list.forEach((a, i) => expect(findConflict(a, list.slice(0, i))).toBeUndefined());
+      const list = (await calendar(cookie)).filter((a) => seeded.has(a.id));
+      expect(list.length).toBeGreaterThan(0); // not vacuous (an open-ended calendar once answered [])
+      list.forEach((a, i) => expect(findConflict(a, list.slice(0, i)), a.id).toBeUndefined());
     }
   });
 

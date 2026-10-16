@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { TodaySummary, todaySummary } from "@pedia/shared";
-import { addDays, format, parseISO, startOfWeek } from "date-fns";
+import { addDays, format, isValid, parseISO, startOfWeek } from "date-fns";
 import { AppointmentRecordsService } from "../appointments/appointment-records.service";
 import { AppointmentRequestsService } from "../appointments/appointment-requests.service";
 import { byStartThenChair } from "../appointments/appointment.rows";
@@ -36,7 +36,10 @@ export class ReportsService {
   /** GET /reports/today: 400 day → 403 branches → the summary. */
   async today(who: ClinicIdentity, day: string | undefined, branch: string | undefined): Promise<TodaySummary> {
     const today = day ?? this.clock.today();
-    if (!DAY.test(today)) throw new BadRequestException("today must be YYYY-MM-DD");
+    // The shape, and a real calendar day: 2026-02-30 would throw in date-fns (a 500) where a 400 is meant.
+    if (!DAY.test(today) || !isValid(parseISO(today)) || format(parseISO(today), "yyyy-MM-dd") !== today) {
+      throw new BadRequestException("today must be YYYY-MM-DD");
+    }
     const branchIds = await this.branchesFor(who, branch);
     const monday = format(startOfWeek(parseISO(today), { weekStartsOn: 1 }), "yyyy-MM-dd");
     const [from, to] = [manilaMidnight(today), addDays(manilaMidnight(today), 1)];
