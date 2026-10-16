@@ -100,3 +100,15 @@ plan recommends. Engineering decisions E1–E8 as the plan records them.
 - Expected values use `messages: []` (decision 4: no greetings until B9).
 - Mutation: without the dedupe by id, "every day of this week" and the live booking case go red.
 **Gate:** `pnpm run check` exit 0; `test:int` 31 files, 295 passed + 3 todo.
+
+## Phase 9: Cut-over — 2026-10-17
+
+**Steps completed:** 9.1, 9.2, 9.3
+**Files changed:** `apps/web/src/mocks/{passthrough,passthrough.test}.ts`, `apps/web/e2e/api-scheduling.spec.ts` (new), `apps/api/CONVENTIONS.md`, `apps/api/CHUNKS.md`
+**Deviations from plan:**
+- The e2e signs the extraction note through `page.request` (as the dentist), not the notes UI: B6's spec already drives that UI, and here it's only setup for the due-list booking.
+- The e2e's day is spread by milliseconds (`40 + Date.now() % 1400` days ahead): a per-minute day collided when two runs started in the same minute.
+- Today's case reads the clinic's day from the report itself: the Playwright runner's zone is UTC, and between 00:00 and 08:00 Manila it was a day behind.
+- A double-booking's words appear in a toast, and the form stays open (the web's `onError`), not inside the form.
+- The calendar's `view` URL value isn't `list`, so the spec clicks the List button, as `frontdesk.spec.ts` does.
+**Gate:** `pnpm run check` exit 0; `test:int` 31 files, 295 passed + 3 todo; `api-scheduling.spec.ts` 5/5 on fresh `pedia_dental_e2e_b7`, then 5/5 again on the same database (`RateLimitCounter` cleared between runs); `api-patients.spec.ts` (B4) 5/5 after Phase 7's name-order change.

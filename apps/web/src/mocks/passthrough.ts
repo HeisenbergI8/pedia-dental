@@ -83,6 +83,19 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "GET", path: "/patients/:id/plan" },
   { method: "POST", path: "/patients/:id/plan" },
   { method: "PATCH", path: "/plan-items/:id" },
+  // B7: the schedule, parents' requests, follow-ups and Today (AppointmentsController, RecallsController,
+  // ReportsController). Texts, greetings and money views stay on MSW until B8/B9 (B7 decisions 3, 4).
+  { method: "GET", path: "/appointments" },
+  { method: "GET", path: "/patients/:id/appointments" },
+  { method: "POST", path: "/appointments" },
+  { method: "PUT", path: "/appointments/:id" },
+  { method: "POST", path: "/appointments/:id/status" },
+  { method: "GET", path: "/appointment-requests" },
+  { method: "GET", path: "/patients/:id/appointment-requests" },
+  { method: "POST", path: "/patients/:id/appointment-requests" },
+  { method: "POST", path: "/appointment-requests/:id/handled" },
+  { method: "GET", path: "/due-items" },
+  { method: "GET", path: "/reports/today" },
 ];
 
 export const servedBy = (routes: readonly ApiRoute[], method: string, path: string) =>

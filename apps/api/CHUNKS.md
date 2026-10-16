@@ -227,7 +227,21 @@ a habit stopped in a later visit shows correctly.
 
 ---
 
-## Chunk B7: Scheduling, follow-ups and Today (~24 h) · Large — features 4, 14, 15
+## ✅ Chunk B7: Scheduling, follow-ups and Today (done, 2026-10-16) · Large — features 4, 14, 15
+
+**Status (2026-10-16): done**, in five parts. **B7a**: the process pinned to Asia/Manila, `Appointment`,
+`AppointmentRequest` and `DueItem`, their mappers and the mock's refusals as pure functions, the seeded rows with the
+mock's ids. **B7b**: book, move and status under the clinic's lock (no double-booking), requests (one pending per child),
+and parents confirming their own child's appointment (`RecordOwners`). **B7c**: due items from signing, taken by
+booking, given back on a cancel or no-show; visits seat and finish their appointment; `db:backfill-due-items`.
+**B7d**: the patient list's recall and visit filters with the mock's rules, branch archiving counting bookings, and
+`/reports/today`. **B7e**: the 11 routes in `API_ROUTES` and `e2e/api-scheduling.spec.ts`. Done-when proofs:
+`appointments.int.test.ts` (18 parallel booking and move races leave one booking each), `recalls.int.test.ts` (an
+extraction signed today is due in 7 days; booking takes it, a cancel gives it back), `today.int.test.ts` (Today equals
+the shared `todaySummary` over the same seed for both demo clinics, every branch choice and every day of the week),
+and the e2e. **Deferred by design:** booking, move and no-show texts and Today's greeting ticks (B9), billing views of
+API appointments (B8), ownership checks beyond a parent confirming an appointment (B11).
+
 
 **Goal:** the clinic's day, safe under concurrent booking.
 
@@ -393,7 +407,7 @@ B0 Skeleton ✅
              └─ B4 Patients & privacy consent ✅
                  └─ B5 Visits & dental chart ✅
                      └─ B6 Notes, growth, behavior & plan ✅
-                         └─ B7 Scheduling, follow-ups & Today
+                         └─ B7 Scheduling, follow-ups & Today ✅
                              └─ B8 Billing, payments & dashboard
                                  └─ B9 Parent messages & real sending
                                      └─ B10 Photos & documents
