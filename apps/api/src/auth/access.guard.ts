@@ -12,15 +12,15 @@ export const rulePath = (url: string) => new URL(url, "http://api").pathname.rep
 /** A parent's children, by patient id. Empty until patients exist (B4); B11 fills it, so own-scope routes fail closed. */
 const NO_CHILDREN: ReadonlySet<string> = new Set();
 
+/** The identity the guard loaded for each request, for the handlers that serve it (/auth/me, /clinic, /staff). */
+const identities = new WeakMap<Request, ClinicIdentity>();
+export const identityOf = (req: Request): ClinicIdentity | undefined => identities.get(req);
+
 /**
  * Every request's access decision (port of `accessGate`, apps/web/src/mocks/access.ts): reads the session, fills the
  * request context (clinic, branch, user, or the operator) and applies the route map, deny by default. Registered as
  * APP_GUARD with useExisting (AuthModule), so a test can replace this class and the global guard follows.
  */
-/** The identity the guard loaded for each request, for the handlers that serve it (/auth/me, /clinic, /staff). */
-const identities = new WeakMap<Request, ClinicIdentity>();
-export const identityOf = (req: Request): ClinicIdentity | undefined => identities.get(req);
-
 @Injectable()
 export class AccessGuard implements CanActivate {
   constructor(

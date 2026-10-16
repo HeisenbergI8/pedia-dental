@@ -241,8 +241,9 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   argon2id (`@node-rs/argon2`).
 - **Identity tables** (B2): `Credential`, `Session` and `DemoLogin` are platform tables that hold a `clinicId`, because
   sign-in reads them before a clinic is known. Only `IdentityService`, `SessionService` and the seed touch them.
-  `Credential` and `DemoLogin` queries name `clinicId` themselves; `Session` is found and closed by its unique
-  `tokenHash` alone (the cookie is all there is), and by `clinicId` + `accountId` to close one login's sessions.
+  Queries about one login name `clinicId` + `accountId`. Sign-in's lookups are cross-clinic on purpose, before a clinic
+  is chosen: `Credential` by `email`, `DemoLogin` by `featured`, `Session` by its unique `tokenHash`. Never add a
+  cross-clinic query on these tables outside sign-in.
 - **Body tokens** (B2): `Session.token` / `OperatorSession.token` carry placeholders (`"cookie"`, `"operator.cookie"`);
   the real tokens are only in the httpOnly cookies. A switch or password change rotates the session.
 - **Rate limits** (B2): fixed windows in `RateLimitCounter`, per client address: 20 sign-ins per 5 minutes and 120 auth

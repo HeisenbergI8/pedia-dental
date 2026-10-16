@@ -60,7 +60,10 @@ export const toSessionUser = (who: ClinicIdentity): SessionUser => ({
   guardianId: who.guardianId,
 });
 
-/** Owns Credential: who a session is, PIN tries, and (B2c) password checks. Every Credential query names clinicId. */
+/**
+ * Owns Credential and DemoLogin: who a session is, PIN tries, password checks and sign-in lookups. Queries about one
+ * login name clinicId; sign-in's lookups (by email, the featured demo logins) are cross-clinic by design.
+ */
 @Injectable()
 export class IdentityService {
   constructor(
