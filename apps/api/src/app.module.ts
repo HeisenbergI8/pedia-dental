@@ -4,6 +4,7 @@ import { ScheduleModule } from "@nestjs/schedule";
 import { LoggerModule } from "nestjs-pino";
 import type { DestinationStream } from "pino";
 import { AuthModule } from "./auth/auth.module";
+import { AppointmentsModule } from "./appointments/appointments.module";
 import { ChartModule } from "./chart/chart.module";
 import { GrowthModule } from "./growth/growth.module";
 import { PlanModule } from "./plan/plan.module";
@@ -50,6 +51,7 @@ export class AppModule implements NestModule {
         ChartModule,
         GrowthModule,
         PlanModule,
+        AppointmentsModule,
         LegalModule,
       ],
       controllers: [HealthController],

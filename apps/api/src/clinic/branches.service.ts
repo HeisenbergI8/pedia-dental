@@ -9,7 +9,7 @@ import { lockAccount } from "./account-lock";
 import { assertRoomFor } from "./limits";
 
 /** The contract's columns: never `position`. */
-const BRANCH = { id: true, clinicId: true, name: true, address: true, phone: true, openingHours: true, archived: true } as const;
+export const BRANCH_COLUMNS = { id: true, clinicId: true, name: true, address: true, phone: true, openingHours: true, archived: true } as const;
 const Ids = z.array(z.string());
 
 /**
@@ -27,7 +27,7 @@ export class BranchesService {
       await assertRoomFor(tx, clinicId, "branches");
       const input = new ZodValidationPipe(BranchInput).transform(body);
       const last = await tx.branch.findFirst({ orderBy: { position: "desc" }, select: { position: true } });
-      const row = await tx.branch.create({ data: { ...clinicData(), ...input, archived: false, position: (last?.position ?? -1) + 1 }, select: BRANCH });
+      const row = await tx.branch.create({ data: { ...clinicData(), ...input, archived: false, position: (last?.position ?? -1) + 1 }, select: BRANCH_COLUMNS });
       return Branch.parse(row);
     });
   }
@@ -71,7 +71,7 @@ export class BranchesService {
 
   /** This clinic's branch (the extension scopes it), or 404 in the mock's words. Another clinic's id reads as missing. */
   private async find(db: Pick<Tx, "branch">, id: string): Promise<Branch> {
-    const row = await db.branch.findFirst({ where: { id }, select: BRANCH });
+    const row = await db.branch.findFirst({ where: { id }, select: BRANCH_COLUMNS });
     if (!row) throw new NotFoundException("Branch not found");
     return Branch.parse(row);
   }

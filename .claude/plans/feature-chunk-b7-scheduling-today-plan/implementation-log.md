@@ -41,3 +41,13 @@ plan recommends. Engineering decisions E1–E8 as the plan records them.
 **Files changed:** `packages/seed/src/seed.ts` (requests a minute apart), `packages/seed/src/seed.test.ts` (3 ordering cases), `apps/api/src/seed/seed-database.ts`, `apps/api/test/int/seed.int.test.ts`
 **Deviations from plan:** none. The chair-order case holds for the seed, so decision 5 changes nothing for the demo clinics.
 **Gate:** `pnpm run check` green (seed 22, api 273); `test:int` 27 files, 230 passed + 5 todo. B7a closes here.
+
+## Phase 4: Appointments — 2026-10-16
+
+**Steps completed:** 4.1, 4.2, 4.3
+**Files changed:** `apps/api/src/appointments/{appointment-records.service,appointment-records.module,appointments.service,appointments.controller,appointments.module}.ts` (new), `apps/api/src/clinic/{clinic.service,branches.service}.ts` (`scheduleRefs`; `BRANCH_COLUMNS` exported), `apps/api/src/app.module.ts`, `apps/api/test/clinical-routes.test.ts`, `apps/api/test/int/appointments.int.test.ts` (new)
+**Deviations from plan:**
+- `scheduleRefs` reads its three tables one after another (one connection anyway) and parses `alsoRoles`/`branchIds` as `toStaffMember` does (the plan's QUESTION).
+- Int test: Dasmariñas cases sign in as the Owner (the admin works at Imus only, so its `pd_branch=branch_dasma` falls back to Imus). The archived-branch refusal isn't reachable over HTTP (`branchFor` never yields an archived branch), so it stays a unit case. "Can't move" uses an arrived appointment: `done` is only reachable through a visit (Phase 6).
+- Mutation check: with `lockAccount` removed from book and move, 17 of the 18 race cases go red.
+**Gate:** `pnpm run check` green; `appointments.int.test.ts` 29/29.
