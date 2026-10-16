@@ -30,7 +30,7 @@ import {
   type StaffMember,
   type Visit,
 } from "@pedia/shared";
-import type { Db } from "./db";
+import type { Db } from "./platform";
 import { composeMessage, defaultMessageTemplates, type MessageEvent, type MessageRefs } from "./message-templates";
 import { NOTE_TEMPLATES } from "./note-templates";
 import { firstNotice, staffAcknowledged, withConsent } from "./seed-privacy";
@@ -169,7 +169,7 @@ function seedGrowth(patients: Patient[], visits: Visit[]): GrowthRecord[] {
     .map((p) => visits.filter((v) => v.patientId === p.id && v.completedAt))
     .filter((vs) => vs.length >= 2)
     .slice(0, 3)
-    .map((vs) => [vs[0], vs[1]] as const);
+    .map((vs) => [vs[0]!, vs[1]!] as const);
   const record = (v: Visit, habits: GrowthRecord["habits"], speech?: string): GrowthRecord => ({
     id: `growth_${v.id}`,
     clinicId: CLINIC_ID,
@@ -188,7 +188,7 @@ function seedGrowth(patients: Patient[], visits: Visit[]): GrowthRecord[] {
     (a, b) => [record(a, [{ habit: "pacifier" }]), record(b, [{ habit: "pacifier" }])],
     (a, b) => [record(a, [{ habit: "mouth_breathing" }]), record(b, [])],
   ];
-  return pairs.flatMap(([a, b], i) => examples[i](a, b));
+  return pairs.flatMap(([a, b], i) => examples[i]!(a, b));
 }
 
 export function seed(): Db {
@@ -274,7 +274,7 @@ export function seed(): Db {
     documents: [],
     appointmentRequests: roster.requests,
     auditEvents: seedAudit(patients, example.planItems[0]?.patientId),
-    staffPins: STAFF.map((s) => ({ clinicId: CLINIC_ID, staffId: s.id, pin: STAFF_PINS[s.id], failedAt: [] })),
+    staffPins: STAFF.map((s) => ({ clinicId: CLINIC_ID, staffId: s.id, pin: STAFF_PINS[s.id]!, failedAt: [] })),
     staffCredentials: [], // every seeded login uses the demo password
     privacyNotices: [firstNotice(CLINIC_ID, DEMO_ACCOUNT.name, STAFF.find((s) => s.isOwner)!.fullName, DEMO_ACCOUNT.contactEmail)],
     acknowledgements: staffAcknowledged(CLINIC_ID, STAFF),
@@ -316,7 +316,7 @@ function seedRoster(paymentsSoFar: number, refs: Pick<MessageRefs, "templates" |
     if (i === 1 || i === 7) p.birthDate = format(subYears(today, i === 1 ? 6 : 9), "yyyy-MM-dd");
 
     if (i >= 33) {
-      const [dow, h, m] = NEW_PATIENT_TIMES[i - 33];
+      const [dow, h, m] = NEW_PATIENT_TIMES[i - 33]!;
       const start = at(min([addDays(startOfWeek(today, { weekStartsOn: 1 }), dow), today]), h, m);
       p.createdAt = subMinutes(start, 20).toISOString();
       p.consents = p.consents.map((c) => ({ ...c, date: format(start, "yyyy-MM-dd") }));
@@ -328,7 +328,7 @@ function seedRoster(paymentsSoFar: number, refs: Pick<MessageRefs, "templates" |
       return;
     }
 
-    const day = subDays(today, LAST_EXAM_DAYS_AGO[i % 6]);
+    const day = subDays(today, LAST_EXAM_DAYS_AGO[i % 6]!);
     if (parseISO(p.createdAt) > day) p.createdAt = subDays(day, 30).toISOString();
     const visit: Visit = {
       id: `visit_roster_${n}`, clinicId: CLINIC_ID, patientId: p.id, dentistId: i % 2 ? "staff_santos" : "staff_reyes",
@@ -368,9 +368,9 @@ function seedRoster(paymentsSoFar: number, refs: Pick<MessageRefs, "templates" |
   });
 
   for (const [i, days, status] of [[2, 3, "pending"], [8, 5, "pending"], [14, 4, "handled"]] as const) {
-    const p = patients[i];
+    const p = patients[i]!;
     out.requests.push({
-      id: `request_roster_${i + 1}`, clinicId: CLINIC_ID, patientId: p.id, guardianId: p.guardians[0].id,
+      id: `request_roster_${i + 1}`, clinicId: CLINIC_ID, patientId: p.id, guardianId: p.guardians[0]!.id,
       preferredDate: format(addDays(today, days), "yyyy-MM-dd"), timeOfDay: i === 8 ? "afternoon" : "morning",
       reason: "Check-up and cleaning", status, createdAt: at(subDays(today, 1), 19).toISOString(),
     });
@@ -387,7 +387,7 @@ function teethForAge(age: number) {
 /** Findings at the first visit; some caries are restored at a later one, so history has depth. */
 function seedChart(patient: Patient, visits: Visit[]): ChartEntry[] {
   if (visits.length === 0) return [];
-  const [first, ...later] = visits;
+  const [first, ...later] = visits as [Visit, ...Visit[]];
   const entry = (v: Visit, e: Pick<ChartEntry, "tooth" | "surfaces" | "condition">, minutes: number): ChartEntry => ({
     ...e,
     id: faker.string.uuid(),
@@ -424,13 +424,13 @@ function seedChart(patient: Patient, visits: Visit[]): ChartEntry[] {
 function seedExamplePlan(patients: Patient[], visits: Visit[]) {
   const patient = patients.find((p) => {
     const vs = visits.filter((v) => v.patientId === p.id);
-    const age = vs.length && differenceInYears(parseISO(vs[vs.length - 1].date), parseISO(p.birthDate));
+    const age = vs.length && differenceInYears(parseISO(vs[vs.length - 1]!.date), parseISO(p.birthDate));
     return vs.length >= 2 && age >= 4 && age <= 8;
   });
   if (!patient) return { chartEntries: [], notes: [], planItems: [] };
 
   const vs = visits.filter((v) => v.patientId === patient.id);
-  const [found, done] = [vs[vs.length - 2], vs[vs.length - 1]];
+  const [found, done] = [vs[vs.length - 2]!, vs[vs.length - 1]!];
   const at = (v: Visit, minutes: number) => new Date(parseISO(v.startedAt).getTime() + minutes * 60_000).toISOString();
   const base = { clinicId: CLINIC_ID, patientId: patient.id };
 
@@ -447,7 +447,7 @@ function seedExamplePlan(patients: Patient[], visits: Visit[]) {
     }),
   );
   const restored51: ChartEntry = {
-    ...caries[0],
+    ...caries[0]!,
     id: "example_restored_51",
     visitId: done.id,
     condition: "restored",
@@ -532,7 +532,7 @@ function seedAppointments(patients: Patient[]): Appointment[] {
     const day = addDays(startOfDay(now), offset);
     if (day.getDay() === 0) continue; // closed on Sundays
     for (const hour of [9, 10, 11, 13, 14, 15, 16]) {
-      for (const [chairId, dentistId] of [["chair_1", "staff_reyes"], ["chair_2", "staff_santos"]]) {
+      for (const [chairId, dentistId] of [["chair_1", "staff_reyes"], ["chair_2", "staff_santos"]] as const) {
         if (!faker.datatype.boolean({ probability: 0.55 })) continue;
         const procedure = faker.helpers.arrayElement(fitsInAnHour);
         const start = setHours(day, hour);
@@ -618,7 +618,7 @@ function seedBilling(appointments: Appointment[], skipPatientId?: string) {
       issuedAt: end.toISOString(),
     };
     invoices.push(invoice);
-    const method = MONEY_METHODS[i % MONEY_METHODS.length]; // real money only, so seeded payments are unchanged
+    const method = MONEY_METHODS[i % MONEY_METHODS.length]!; // real money only, so seeded payments are unchanged
     const n = payments.length + 1;
     payments.push({
       id: `pay_seed_${n}`,
@@ -642,9 +642,9 @@ function seedBilling(appointments: Appointment[], skipPatientId?: string) {
  * "Confirm" has something to confirm without double-booking anyone. No faker calls.
  */
 function seedSibling(patients: Patient[], olderId: string | undefined) {
-  const older = patients.find((p) => p.id === olderId);
+  const older = patients.find((p) => p.id === olderId)!;
   if (!older) return { patients: [], appointments: [] };
-  const guardian = older.guardians[0];
+  const guardian = older.guardians[0]!;
   const sibling: Patient = {
     id: "patient_sibling",
     patientNo: "", // numbered by seedProfiles
@@ -716,9 +716,9 @@ function seedDasmarinas(patients: Patient[]): Appointment[] {
  * plan. Times are relative to today. No faker calls.
  */
 function seedAudit(patients: Patient[], exampleId: string | undefined): AuditEvent[] {
-  const child = patients.find((p) => p.id === exampleId) ?? patients[0];
-  const other = patients[3];
-  const guardian = child.guardians[0];
+  const child = patients.find((p) => p.id === exampleId) ?? patients[0]!;
+  const other = patients[3]!;
+  const guardian = child.guardians[0]!;
   const actors = {
     admin: { actorId: "staff_delacruz", actorName: "Carmen Dela Cruz", actorRole: "admin" },
     desk: { actorId: "staff_cruz", actorName: "Liza Cruz", actorRole: "front_desk" },
@@ -752,7 +752,7 @@ function seedAudit(patients: Patient[], exampleId: string | undefined): AuditEve
     [0, "06:45", "parent", "sign_out", "Session"],
   ];
   return rows.map(([daysAgo, time, actor, action, record, patientId], i) => {
-    const [h, m] = time.split(":").map(Number);
+    const [h, m] = time.split(":").map(Number) as [number, number];
     const at = addMinutes(setHours(startOfDay(subDays(new Date(), daysAgo)), h), m);
     return { id: `audit_seed_${i}`, clinicId: CLINIC_ID, at: at.toISOString(), ...actors[actor], action, record, patientId };
   });

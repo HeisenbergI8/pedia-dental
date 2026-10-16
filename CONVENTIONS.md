@@ -3,8 +3,8 @@
 ## What this project is
 
 Primolar: pediatric dental clinic management sold as a service to many clinics. Each paying clinic is a
-**clinic account** with its own branches, staff, patients and branding (ROADMAP feature 16). **Current phase: frontend prototype.** Every API call is
-answered in the browser by MSW using fake, seeded data; there is no backend yet. A NestJS + MySQL API
+**clinic account** with its own branches, staff, patients and branding (ROADMAP feature 16). **Current phase: frontend prototype.** In the demo every API call is
+answered in the browser by MSW using fake, seeded data; in `hybrid` mode the routes apps/api already serves (B2: sign-in) go to it. A NestJS + MySQL API
 (`apps/api`, scaffolded; its own rules are in `apps/api/CONVENTIONS.md`) will replace the mocks later, endpoint by endpoint, without changing feature code. A clinic joins through
 the public **Get started** form, and Primolar approves it in the operator console (ROADMAP feature 17). Each clinic
 then pays Primolar monthly; the operator records payments by hand, and a clinic 7 days overdue pauses itself.
@@ -23,9 +23,11 @@ TanStack Query · React Hook Form + Zod 4 · Zustand (UI state, plus the demo se
 | --- | --- |
 | Full check (the closing gate) | `pnpm run check` |
 | Fast check (runs every turn) | `pnpm run typecheck` |
-| Tests, one file | `pnpm --filter <web|@pedia/shared> exec vitest run <path>` |
+| Tests, one file | `pnpm --filter <web|@pedia/shared|@pedia/seed> exec vitest run <path>` |
 | Design guards (contrast, tokens, shell, screens) | `pnpm run check -- design` (typecheck + every `src/design/design-*.test.ts`) |
 | Run the app locally | `pnpm dev` → http://localhost:3000 |
+| Run against the real API | `NEXT_PUBLIC_API_MOCKING=hybrid API_PROXY_TARGET=http://localhost:4100 pnpm dev` with `pnpm dev:api` running (`DEMO_LOGINS=true COOKIE_SECURE=false`, seeded with `pnpm --filter api db:seed`). `enabled` = MSW answers everything (the demo); `hybrid` = MSW answers all but `API_ROUTES` (`mocks/passthrough.ts`: since B2, sign-in, `/operator/auth/*` and `GET /clinic|/branches|/staff`), which go through Next's `/api` proxy to the API; `disabled`/unset = no MSW |
+| Sign-in against the API, end to end | Both servers on free ports (the web on its own `NEXT_DIST_DIR=.next-hybrid`), then in `apps/web`: `E2E_API=1 E2E_BASE_URL=… npx playwright test e2e/api-sign-in.spec.ts --project=desktop`. Start-up commands: the B2d plan, Step 4.1. It signs in 10 times; the API allows 20 sign-ins per 5 minutes per address |
 | Reset demo data | account menu → Reset demo data (keeps you signed in). `localStorage.clear()` then reload also works, but signs you out |
 
 ---
@@ -38,7 +40,8 @@ TanStack Query · React Hook Form + Zod 4 · Zustand (UI state, plus the demo se
 | Domain logic | `packages/shared/src/domain/` | Pure functions: FDI teeth, chart derivation, money, follow-up rules. Unit-tested |
 | Routes | `apps/web/src/app/` | Thin pages only. `(clinic)` = staff app, `(portal)` = parent portal |
 | Features | `apps/web/src/features/<name>/` | `api.ts` (Query hooks), `mocks.ts` (MSW handlers), `components/` |
-| Fake backend | `apps/web/src/mocks/` | MSW setup, localStorage-backed `db`, deterministic `seed` |
+| Fake backend | `apps/web/src/mocks/` | MSW setup, localStorage-backed `db`, the access gate, the passthrough list (`passthrough.ts`) |
+| Demo seed | `packages/seed/` (`@pedia/seed`) | The deterministic demo data (`seedPlatform`, `Db`, `Platform`) and who signs in with which email (`logins.ts`). Shared by MSW and the API's `prisma db seed`; demo data only |
 | HTTP | `apps/web/src/lib/api-client.ts` | The only `fetch` in the app |
 | Access rules | `packages/shared/src/domain/permissions.ts` | `ROLE_PERMISSIONS`: who may do what. The only place access is decided. `branches.all` = works at every branch (Owner). `today.view` = Today at a glance (all staff); `dashboard.view` = finance (admin); `patients.contact` = guardian phones and emails, emergency contact and address, **left out of every patient response** without it (admin and front desk: all; a parent: their own family). Responses parse with `PatientView`; the stored record is `Patient` |
 | Access gate | `apps/web/src/mocks/access.ts` | Route → permission (`RULES`), 401 / 403, parent ownership. `/operator/*` branches off before `sessionOf` (`operatorRefusal`); `/signups/*` and `/legal/*` too (`publicRefusal`, deny-by-default `PUBLIC_RULES`) |
@@ -78,8 +81,8 @@ MSW handler (now) or NestJS (later).
 - Palette, type and radius changes go in `apps/web/src/app/globals.css` tokens, never as raw values in
   components.
 - `apps/web/src/design/` holds guards that read source and render primitives: token contrast in both themes, no raw
-  hex outside `globals.css` / `manifest.ts` / `document-pdf.tsx` and the two seed files (their stored brand colours
-  are data), no dashed outlines, crayon strip and Fredoka only on login and portal, Primolar's logo only on the sign-in pages, the operator console and the public sign-up frame
+  hex outside `globals.css` / `manifest.ts` / `document-pdf.tsx` (the seed's stored brand colours live in
+  `packages/seed`, outside the guard), no dashed outlines, crayon strip and Fredoka only on login and portal, Primolar's logo only on the sign-in pages, the operator console and the public sign-up frame
   (`design-branding.test.ts`). A failing guard means the system was bypassed. Fix the component, not the guard.
 - Tailwind v4's bare `border` is `currentColor`. `globals.css` restores `line` as the default, so a darker edge is
   always named (`border-input`, `border-alert-line`).
@@ -147,6 +150,16 @@ MSW handler (now) or NestJS (later).
   `currentClinicId()`. Branch-level lists filter by `activeBranch(request)` (from the `pd_branch` cookie, validated).
 - A test that signs in with a login created in the test (staff the Owner adds, a new clinic's Owner) must `POST
   /auth/acknowledgement` for confidentiality after the password step. Seeded staff have acknowledged already.
+- Session cookies by mode, decided only in `lib/session-cookies.ts`. `enabled`: the stores write `pd_session` /
+  `pd_operator` with the mock's token. `hybrid`: those are the API's httpOnly cookies (script can neither read nor
+  write them), so the stores write the non-secret bridge `pd_mock_session` / `pd_mock_operator` (the mock token for
+  the same login) and MSW reads only that. `disabled`: no session cookie from script. `pd_branch` is script-written in
+  every mode and validated by both sides. The body's `token` is `"cookie"` from the API and is never read in `hybrid`.
+- In `hybrid`, the clinic reads come from MySQL but `PUT /clinic`, branch and staff writes still go to MSW's
+  localStorage (until B3). An Owner's settings edit there succeeds and never shows. MSW's and the API's data are
+  seeded from the same `@pedia/seed`; resetting one doesn't reset the other.
+- `next dev` with a custom `NEXT_DIST_DIR` rewrites `apps/web/tsconfig.json` (adds that dir's types). Revert it
+  (`git checkout -- apps/web/tsconfig.json`); never commit it.
 - Demo tokens are `demo.<clinicId>.<accountId>`. Handler tests sign in with `pd_session=demo.clinic_demo.<id>`, and
   add `; pd_branch=<branch id>` to pick a branch. Cross-account tests live in `mocks/tenancy.test.ts`, not `handlers.test.ts`.
 - Opening hours are the branch's (`useActiveBranch().openingHours`, `Branch.openingHours` in mocks). The clinic name
@@ -175,7 +188,7 @@ MSW handler (now) or NestJS (later).
 - A sign-up's files travel as multipart parts beside a `data` JSON part, built only by `signupFormData`
   (`features/signup/form-data.ts`) and read only by `readSignupForm` (`mocks/signups.ts`). New clinics are made only
   by `createClinic` (approve and direct creation share it).
-- Seed shape is asserted by `mocks/seed.test.ts`. New seed patients come from `seedPatient()` after the last faker
+- Seed shape is asserted by `packages/seed/src/seed.test.ts`. New seed patients come from `seedPatient()` after the last faker
   consumer (`seedRoster`). Adding a faker call inside `seedPatient()` re-rolls every later record, so update that
   test's first-patient names deliberately, never to make it pass.
 - `describe` order in `mocks/handlers.test.ts` matters: the tests share one seeded db.

@@ -2,16 +2,17 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Session } from "@pedia/shared";
+import { env } from "@/lib/env";
 import { clearAllDrafts } from "@/lib/form-draft";
+import { BRANCH_COOKIE, clinicSessionWrites, writeCookie } from "@/lib/session-cookies";
 
-/** Read by the mock API (mocks/access.ts). NestJS will set its own httpOnly cookie instead (Q4). */
-const COOKIE = "pd_session";
-/** The branch this device works at. Read by the mock API (`branchOf`), which ignores one the user may not use. */
-const BRANCH_COOKIE = "pd_branch";
-const write = (name: string, value: string | null) => {
-  document.cookie = value ? `${name}=${value}; path=/; SameSite=Lax` : `${name}=; path=/; max-age=0`;
+/**
+ * The session's script-written cookie: pd_session in `enabled`, the pd_mock_session bridge in `hybrid` (the API sets
+ * pd_session itself, httpOnly), nothing in `disabled` (lib/session-cookies.ts).
+ */
+const writeSession = (session: Session | null) => {
+  for (const [name, value] of clinicSessionWrites(env.apiMockingMode, session)) writeCookie(name, value);
 };
-const writeCookie = (token: string | null) => write(COOKIE, token);
 
 type SessionState = {
   session: Session | null;
@@ -37,19 +38,19 @@ export const useSessionStore = create<SessionState>()(
       // Leaves the branch alone: a PIN switch reuses this, and the device stays where it is (decision #24).
       signIn: (session) => {
         clearAllDrafts(); // Switch user reuses signIn: the next person never sees the last one's typing
-        writeCookie(session.token);
+        writeSession(session);
         set({ session, activeChildId: null });
       },
       refreshUser: (user) => set((s) => (s.session && s.session.user.id === user.id ? { session: { ...s.session, user } } : {})),
       signOut: () => {
         clearAllDrafts();
-        writeCookie(null);
-        write(BRANCH_COOKIE, null);
+        writeSession(null); // the API's pd_session is cleared by POST /auth/logout (useSignOut)
+        writeCookie(BRANCH_COOKIE, null);
         set({ session: null, activeChildId: null, branchId: null });
       },
       setActiveChild: (activeChildId) => set({ activeChildId }),
       setBranch: (branchId) => {
-        write(BRANCH_COOKIE, branchId);
+        writeCookie(BRANCH_COOKIE, branchId);
         set({ branchId });
       },
     }),
@@ -59,8 +60,8 @@ export const useSessionStore = create<SessionState>()(
       partialize: ({ session, activeChildId, branchId }) => ({ session, activeChildId, branchId }),
       // The cookie has no expiry, so the browser drops it on quit; storage brings it back.
       onRehydrateStorage: () => (state) => {
-        if (state?.session) writeCookie(state.session.token);
-        if (state?.branchId) write(BRANCH_COOKIE, state.branchId);
+        if (state?.session) writeSession(state.session);
+        if (state?.branchId) writeCookie(BRANCH_COOKIE, state.branchId);
       },
     },
   ),

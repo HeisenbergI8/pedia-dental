@@ -5,8 +5,7 @@ import { branchOf, recordAudit, sessionOf } from "@/mocks/access";
 import { accountById, credentialOf, db, persist, platform, selectTenant } from "@/mocks/db";
 import { DEMO_PASSWORD, accountsByEmail, allAccounts, demoAccounts, demoLogins, passwordOpens, tokenFor, type AccountMatch, type DemoAccountRecord } from "@/mocks/demo-accounts";
 import { acknowledgementPrompt, expectedVersion, pendingAcknowledgement, recordAcknowledgement } from "@/mocks/privacy";
-import { DEMO_CLINIC_ID } from "@/mocks/seed";
-import { onlineAgreement } from "@/mocks/seed-privacy";
+import { DEMO_CLINIC_ID, onlineAgreement } from "@pedia/seed";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 

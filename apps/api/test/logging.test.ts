@@ -34,7 +34,7 @@ class ProbeController {
 describe("logs over HTTP", () => {
   let app: INestApplication;
   beforeAll(async () => {
-    app = await createTestApp({ controllers: [ProbeController], logStream });
+    app = await createTestApp({ controllers: [ProbeController], logStream, openGuard: true });
   });
   afterAll(() => app.close());
 

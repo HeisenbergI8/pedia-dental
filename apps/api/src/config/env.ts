@@ -1,10 +1,17 @@
 import { z } from "zod";
 
+/** "true"/"1" or "false"/"0" only: Zod's default also takes yes/on/enabled, and a typo should stop startup. */
+const flag = () => z.stringbool({ truthy: ["true", "1"], falsy: ["false", "0"] });
+
 const Env = z.object({
   DATABASE_URL: z.string().startsWith("mysql://", "DATABASE_URL must be a mysql:// URL"),
   PORT: z.coerce.number().int().positive().default(4100),
   CORS_ORIGIN: z.string().default("http://localhost:3000"),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
+  // A demo deployment: `prisma db seed` may run, and the sign-in page's one-click logins (DemoLogin) are served (B2c).
+  DEMO_LOGINS: flag().default(false),
+  // `Secure` on pd_session / pd_operator / pd_branch. Off only for local http (`.env`), never in a deployment.
+  COOKIE_SECURE: flag().default(true),
 });
 
 export type Env = z.infer<typeof Env>;

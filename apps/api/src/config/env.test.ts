@@ -8,7 +8,15 @@ describe("loadEnv", () => {
       PORT: 4100,
       CORS_ORIGIN: "http://localhost:3000",
       LOG_LEVEL: "info",
+      DEMO_LOGINS: false,
+      COOKIE_SECURE: true,
     });
+  });
+
+  it("reads the two switches as booleans and refuses anything else", () => {
+    const env = loadEnv({ DATABASE_URL: "mysql://u:p@h/db", DEMO_LOGINS: "true", COOKIE_SECURE: "false" });
+    expect([env.DEMO_LOGINS, env.COOKIE_SECURE]).toEqual([true, false]);
+    expect(() => loadEnv({ DATABASE_URL: "mysql://u:p@h/db", DEMO_LOGINS: "yes" })).toThrow(/DEMO_LOGINS/);
   });
 
   it("names every bad variable", () => {

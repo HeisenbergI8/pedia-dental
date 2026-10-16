@@ -1,16 +1,14 @@
 import { http, HttpResponse } from "msw";
 import { ALL_BRANCHES, TIER_LIMITS, permissionScopeFor, reportBranchFilter, usableBranches, type AcknowledgementKind, type AuditAction, type Branch, type OperatorUser, type Permission } from "@pedia/shared";
 import { env } from "@/lib/env";
+import { BRANCH_COOKIE, clinicTokenCookie, operatorTokenCookie } from "@/lib/session-cookies";
 import { accountById, credentialOf, currentAccount, currentClinicId, db, persist, platform, selectTenant } from "./db";
 import { accountForToken, childrenOf, type DemoAccountRecord } from "./demo-accounts";
-import { OPERATOR_COOKIE, operatorForToken } from "./operator";
+import { operatorForToken } from "./operator";
 import { pendingAcknowledgement } from "./privacy";
 import { settleSubscriptions } from "./subscriptions";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
-export const SESSION_COOKIE = "pd_session";
-/** The branch this device is working at, written by the session store like the session cookie. */
-export const BRANCH_COOKIE = "pd_branch";
 
 export type MockSession = DemoAccountRecord & {
   clinicId: string;
@@ -22,7 +20,10 @@ export type MockSession = DemoAccountRecord & {
 
 const deny = (status: 401 | 403, message: string) => new HttpResponse(message, { status });
 
-/** MSW runs handlers in the page, so the cookies the session store wrote are readable. Tests stub `document`. */
+/**
+ * MSW runs handlers in the page, so the cookies the stores wrote are readable. Tests stub `document`. In `hybrid` the
+ * session cookies are the API's (httpOnly, unreadable here), so the stores write a bridge and MSW reads that.
+ */
 function cookie(name: string): string | undefined {
   const cookies = typeof document === "undefined" ? "" : document.cookie;
   return cookies
@@ -31,13 +32,14 @@ function cookie(name: string): string | undefined {
     ?.slice(name.length + 1);
 }
 
-/** The bearer header (scripts) or the cookie (the browser, including <img> requests): the clinic's, or the operator's. */
-function tokenOf(request: Request, cookieName = SESSION_COOKIE): string | undefined {
+/** The bearer header (scripts) or the mode's cookie (the browser, including <img> requests): clinic or operator. */
+function tokenOf(request: Request, cookieName = clinicTokenCookie(env.apiMockingMode)): string | undefined {
   return request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1] ?? cookie(cookieName);
 }
 
 /** The Primolar operator calling, if any. Never selects a tenant: the operator isn't in one (decision #25). */
-export const operatorOf = (request: Request): OperatorUser | undefined => operatorForToken(tokenOf(request, OPERATOR_COOKIE));
+export const operatorOf = (request: Request): OperatorUser | undefined =>
+  operatorForToken(tokenOf(request, operatorTokenCookie(env.apiMockingMode)));
 
 /**
  * Who is calling, and in which clinic account. Also points `db` at that account's data (`selectTenant`), so every
@@ -271,18 +273,18 @@ const PUBLIC_RULES: Pick<Rule, "method" | "path">[] = [
 ];
 
 function publicRefusal(request: Request, path: string) {
-  return PUBLIC_RULES.some((r) => r.method === request.method && match(r.path, path)) ? undefined : deny(403, `No access rule for ${request.method} ${path}`);
+  return PUBLIC_RULES.some((r) => r.method === request.method && matchPath(r.path, path)) ? undefined : deny(403, `No access rule for ${request.method} ${path}`);
 }
 
 /** The gate for /operator/*: 401 without an operator token (a clinic token is not one), 403 for an unlisted route. */
 function operatorRefusal(request: Request, path: string) {
   if (path.startsWith("/operator/auth/")) return; // sign-in, me and sign-out check the operator themselves
   if (!operatorOf(request)) return deny(401, "Sign in to the Primolar console to continue");
-  return OPERATOR_RULES.some((r) => r.method === request.method && match(r.path, path)) ? undefined : deny(403, `No access rule for ${request.method} ${path}`);
+  return OPERATOR_RULES.some((r) => r.method === request.method && matchPath(r.path, path)) ? undefined : deny(403, `No access rule for ${request.method} ${path}`);
 }
 
 /** `/patients/:id/plan` against `/patients/abc/plan` → `{ id: "abc" }`. Segment for segment, no wildcards. */
-function match(pattern: string, path: string): Record<string, string> | undefined {
+export function matchPath(pattern: string, path: string): Record<string, string> | undefined {
   const want = pattern.split("/");
   const got = path.split("/");
   if (want.length !== got.length) return undefined;
@@ -374,7 +376,7 @@ export const accessGate = http.all(url("/*"), ({ request }) => {
   if (session.mustAcknowledge === "confidentiality") return deny(403, "Acknowledge patient confidentiality to continue");
 
   const hit = RULES.filter((r) => r.method === request.method)
-    .map((rule) => ({ rule, params: match(rule.path, path) }))
+    .map((rule) => ({ rule, params: matchPath(rule.path, path) }))
     .find((h) => h.params);
   if (!hit?.params) return deny(403, `No access rule for ${request.method} ${path}`);
 

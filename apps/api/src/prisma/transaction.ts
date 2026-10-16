@@ -8,7 +8,7 @@ type Options = {
   isolationLevel?: Prisma.TransactionIsolationLevel;
   maxWait?: number;
   timeout?: number;
-  /** Total tries when MySQL reports a deadlock or write conflict (P2034). Default 3. */
+  /** Total tries when MySQL reports a deadlock or write conflict (see `isWriteConflict`). Default 3. */
   attempts?: number;
 };
 
@@ -32,5 +32,14 @@ export async function runInTransaction<T>(
   }
 }
 
-const isWriteConflict = (error: unknown) =>
-  error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
+/**
+ * A deadlock or write conflict, which a rerun can resolve. A model query reports it as P2034. A raw query (`SELECT …
+ * FOR UPDATE`) reports P2010 with the driver adapter's `TransactionWriteConflict` inside (MySQL 1213), proven in
+ * test/int/transaction.int.test.ts.
+ */
+export function isWriteConflict(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
+  if (error.code === "P2034") return true;
+  const cause = (error.meta?.driverAdapterError as { cause?: { kind?: unknown } } | undefined)?.cause;
+  return error.code === "P2010" && cause?.kind === "TransactionWriteConflict";
+}

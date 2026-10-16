@@ -10,10 +10,27 @@ export type ModelScope = "clinic" | "branch" | "platform";
  */
 export const MODEL_SCOPE = {
   AuditEvent: "clinic",
+  // Tenant data
+  Branch: "clinic",
+  Staff: "clinic",
+  Acknowledgement: "clinic",
+  PrivacyNotice: "clinic",
+  // Platform: Primolar's own records
+  ClinicAccount: "platform",
+  Agreement: "platform",
+  OperatorUser: "platform",
+  OperatorSession: "platform",
+  // Platform but holding a clinicId: read before any clinic is known (sign-in by email, the cookie, the login page).
+  // Every query on these names clinicId itself (CONVENTIONS → Decisions: identity tables).
+  Credential: "platform",
+  Session: "platform",
+  DemoLogin: "platform",
+  // Counted before sign-in, per client address, never per clinic.
+  RateLimitCounter: "platform",
 } as const satisfies Record<Prisma.ModelName, ModelScope>;
 
 /**
  * Insert-only tables: no update, upsert or delete reaches them (CONVENTIONS → Domain rules → Append-only).
  * A correction is a new row. Chart entries, payments and agreements join this list in their chunks.
  */
-export const APPEND_ONLY: ReadonlySet<string> = new Set<Prisma.ModelName>(["AuditEvent"]);
+export const APPEND_ONLY: ReadonlySet<string> = new Set<Prisma.ModelName>(["AuditEvent", "Agreement", "Acknowledgement", "PrivacyNotice"]);

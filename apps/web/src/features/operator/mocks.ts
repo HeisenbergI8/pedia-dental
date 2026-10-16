@@ -25,7 +25,7 @@ import { accountById, persist, platform } from "@/mocks/db";
 import { staffEmail } from "@/mocks/demo-accounts";
 import { OPERATORS, operatorPasswordOpens, operatorToken } from "@/mocks/operator";
 import { agreementView, latestAgreement } from "@/mocks/privacy";
-import { onFileAgreement } from "@/mocks/seed-privacy";
+import { onFileAgreement } from "@pedia/seed";
 import { addSignup, brandingRefusal, createClinic, duplicateOf, readSignupForm, replaceFile, signupOfClinic } from "@/mocks/signups";
 import { cancelSubscription, changePlan, forgetPause, reactivateRefusal, recordSubscriptionPayment, subscriptionView } from "@/mocks/subscriptions";
 

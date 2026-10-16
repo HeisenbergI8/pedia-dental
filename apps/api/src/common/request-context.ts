@@ -12,6 +12,8 @@ export type RequestContext = {
   user?: { id: string; name: string; role: Role; roles: Role[] };
   /** A Primolar operator. Never selects a tenant (decision #25). */
   operator: boolean;
+  /** The signed-in operator (pd_operator), for /operator/auth/me and the operator's audit (B12). */
+  operatorId?: string;
 };
 
 const storage = new AsyncLocalStorage<RequestContext>();
@@ -33,5 +35,12 @@ export const requestContext = {
   /** Fills in what a later step learns (B2's session guard: clinic, branch, user). Only this request sees it. */
   assign(patch: Partial<Omit<RequestContext, "requestId">>): void {
     Object.assign(requireContext(), patch);
+  },
+  /**
+   * Runs `fn` as this request with `patch` applied, then returns to it: sign-in reading or auditing in a clinic it
+   * hasn't chosen yet. Awaited inside, because Prisma queries are lazy (CONVENTIONS → Traps).
+   */
+  within<T>(patch: Partial<Omit<RequestContext, "requestId">>, fn: () => Promise<T>): Promise<T> {
+    return storage.run({ ...requireContext(), ...patch }, async () => await fn());
   },
 };

@@ -1,4 +1,4 @@
-import { AuditAction, Role } from "@pedia/shared";
+import { AccountStatus, Acknowledgement, AgreementRecord, AuditAction, HeadingFont, Role, StaffRole, Tier } from "@pedia/shared";
 import { describe, expect, it } from "vitest";
 import type { RequestContext } from "../common/request-context";
 import { $Enums, Prisma } from "../generated/prisma/client.ts";
@@ -27,6 +27,12 @@ describe("model registry", () => {
 
   it("keeps the database enums in step with the shared contract", () => {
     expect(Object.values($Enums.Role)).toEqual(Role.options);
+    expect(Object.values($Enums.StaffRole)).toEqual(StaffRole.options);
+    expect(Object.values($Enums.Tier)).toEqual(Tier.options);
+    expect(Object.values($Enums.AccountStatus)).toEqual(AccountStatus.options);
+    expect(Object.values($Enums.HeadingFont)).toEqual(HeadingFont.options);
+    expect(Object.values($Enums.AgreementMethod)).toEqual(AgreementRecord.shape.method.options);
+    expect(Object.values($Enums.AcknowledgedKind)).toEqual(Acknowledgement.shape.kind.options);
     expect(Object.values($Enums.AuditAction)).toEqual(AuditAction.options);
   });
 });

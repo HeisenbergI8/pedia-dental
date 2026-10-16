@@ -32,6 +32,10 @@ NestJS 12, Prisma 7 + MySQL 8.4 in Docker, Zod-validated env, `GET /api/health`,
 
 ## Chunk B1: Platform foundation (~20 h) · Large
 
+**Status (2026-10-16):** split in three. **B1-a done** (runtime core: context, clock, logs, tenant scoping, transactions,
+audit). **B1-b done inside B2a** (`@pedia/seed`, `test:int` on MySQL with the two-clinics and deadlock proofs, CI,
+the web's `hybrid` switch and `/api` proxy); `prisma db seed` lands in B2b. **B1-c open** (outbox, scheduler, storage).
+
 **Goal:** the plumbing every feature relies on, built once, with no feature endpoints.
 
 - **Request context:** one per request (AsyncLocalStorage), carrying request id, clinic, branch, user, roles and the
@@ -66,9 +70,21 @@ rows never mix; a job runs once with two API instances up; logs show a request i
 
 ---
 
-## Chunk B2: Identity, sessions and access (~24 h) · Large — feature 16 (part)
+## ✅ Chunk B2: Identity, sessions and access (done, 2026-10-16) · Large — feature 16 (part)
 
 **Goal:** real sign-in for staff and the operator, and the access gate, before any clinic data is served.
+
+**Status (2026-10-16): done**, in four parts. **B2a** (B1-b's pieces). **B2b**: identity tables, `prisma db seed`,
+argon2id, sessions, the access guard. **B2c**: `/auth/*`, `/operator/auth/*`, `GET /clinic|/branches|/staff`, rate
+limits, list order (`position`). **B2d**: the web signs in against the API in `hybrid` (`API_ROUTES`), MSW serves the
+rest through the `pd_mock_session` / `pd_mock_operator` bridge, and `e2e/api-sign-in.spec.ts` signs in as every seeded
+role and the operator through the UI (10/10). "Decide first" answered: the demo login exists only with
+`DEMO_LOGINS=true`; sessions end after 30 idle minutes or 8 hours. Done-when proofs (`test:int`): every seeded role and
+the operator sign in (`auth-sign-in`, `operator-auth`); a route without a rule answers 403 naming it
+(`clinic-tenancy`); a suspended account is refused (`auth-sign-in`); a staff member at two branches switches branch
+(`clinic-tenancy`). **Deferred by design:** the mock's patient, appointment, money and audit tenancy cases and the
+operator's every-route sweep move with their routes (B4, B6–B8, B12). The Ipin owner's grace and pause wait for
+subscriptions (B12). Body tokens are the placeholder `"cookie"` until B3.
 
 - Models: clinic account (tier, status, pause), branch, staff (roles, assigned branches, deactivated), credentials,
   sessions, operator users.

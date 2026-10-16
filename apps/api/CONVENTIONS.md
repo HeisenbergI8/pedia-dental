@@ -6,10 +6,10 @@ The Primolar backend. It replaces the browser mocks (MSW) in `apps/web` **endpoi
 feature code in the web app**. The product, the users and the domain are the ones in the root `CONVENTIONS.md`
 and `ROADMAP.md`; read those first. This file covers only how the API is built.
 
-**Current phase: B1-a done (runtime core)** (2026-10-16). Request context, `Clock`, pino logs, tenant scoping,
-transactions and the audit writer, on top of the skeleton (config, Prisma, `GET /api/health`, Zod validation, the error
-filter). No feature endpoints yet; the only model is `AuditEvent`. B1-b (seed, `test:int`, web cut-over) and B1-c
-(outbox, scheduler, storage) are next. The build order is [CHUNKS.md](CHUNKS.md).
+**Current phase: B2c done** (2026-10-16). On top of B1-a's runtime core and B2a/B2b (`@pedia/seed`, `test:int`, CI, the
+identity tables, seed, sessions and the access guard), the API serves `/auth/*`, `/operator/auth/*` and `GET /clinic`,
+`/branches` and `/staff`, rate-limited and audited. B2d cuts the web's sign-in over; B1-c (outbox, scheduler, storage)
+after. The build order is [CHUNKS.md](CHUNKS.md).
 
 **Stack:** NestJS 12 (ESM, Express) · Prisma 7 + MySQL 8.4 (MariaDB driver adapter) · Zod 4 schemas from
 `@pedia/shared` · SWC at runtime (`@swc-node/register`) · Vitest + Supertest · Docker Compose for local MySQL.
@@ -25,10 +25,12 @@ Run from the repo root.
 | Full check (the closing gate; covers the API too) | `pnpm run check` |
 | Fast check | `pnpm --filter api typecheck` |
 | Tests, one file | `pnpm --filter api exec vitest run <path>` |
+| Integration tests (real MySQL, `TEST_DATABASE_URL`) | `pnpm --filter api test:int [path]` |
 | Start / stop local MySQL (port 3307) | `pnpm --filter api db:up` / `db:down` |
 | Run the API (restarts on change) | `pnpm dev:api` → http://localhost:4100/api |
 | New migration after editing the schema | `pnpm --filter api db:migrate --name <what>` |
 | Apply migrations (CI, prod) | `pnpm --filter api db:deploy` |
+| Load the demo clinics (demo deployments only) | `DEMO_LOGINS=true pnpm --filter api db:seed`. Refuses without the flag, and on a database that already has clinic accounts (`prisma migrate reset --force` first) |
 | Regenerate the Prisma client | `pnpm --filter api db:generate` (also runs on install) |
 | Browse the database | `pnpm --filter api db:studio` |
 
@@ -53,21 +55,26 @@ Run from the repo root.
 | Cross-cutting | `src/common/` | `ZodValidationPipe`, `HttpErrorFilter`, the request context (`request-context*.ts`: context + request id), `Clock` (`clock.ts`) |
 | Logging | `src/logging/logger.ts` | pino options and the redaction list (`PERSONAL_FIELDS`) |
 | Audit trail | `src/audit/` | `AuditService.record` (import `AuditModule`) |
+| Identity and access | `src/auth/` | `auth.controller.ts` / `operator-auth.controller.ts` and `auth.service.ts` (sign-in, sign-out, switch, password, acknowledgement), `rate-limit.ts` (`RATE_LIMITS`), `access-rules.ts` (the route → permission map, held to the mock's `RULES` by a test), `access.guard.ts` (the global guard), `session.service.ts` (sessions), `identity.service.ts` (who a session is, PINs), `hashing.ts` (argon2id), `cookies.ts` |
+| Clinic | `src/clinic/` | `GET /clinic`, `/branches`, `/staff`; row → contract shaping in `clinic.views.ts`. Reads only until B3 |
+| Demo seed | `src/seed/seed-database.ts`, `prisma/seed.ts` | Maps `@pedia/seed`'s `seedPlatform()` to rows |
 | Features | `src/<name>/` | `<name>.module.ts`, `<name>.controller.ts`, `<name>.service.ts`. Same `<name>` as `apps/web/src/features/<name>` |
 | Tests | `src/**/*.test.ts` (unit), `test/*.test.ts` (HTTP) | Run without a database, in `pnpm run check`. HTTP tests build the app with `test/support/test-app.ts` |
-| Integration tests | `test/int/*.int.test.ts` (from chunk B1) | Real MySQL test database, `test:int`, run in CI |
+| Integration tests | `test/int/*.int.test.ts`, helpers in `test/int/support/` (`testPrisma`, `resetDatabase`, `inClinic`, `createIntApp`) | Real MySQL test database, `test:int`, run in CI (`.github/workflows/api.yml`, MySQL 8.4) |
 
 ### Porting a feature from MSW (fails silently if missed)
 
 1. Read the feature's `mocks.ts` and its rule in `apps/web/src/mocks/access.ts`. That is the spec.
 2. Add models to `prisma/schema.prisma` and run `db:migrate --name <feature>`. Commit the migration. List each new
    model in `MODEL_SCOPE` (and `APPEND_ONLY` if it is one), and create tenant rows with `data: { ...clinicData(), … }`.
-3. Create `src/<name>/` with module, controller and service, and import the module in `AppModule.forRoot`.
+3. Create `src/<name>/` with module, controller and service, and import the module in `AppModule.forRoot`. Give every
+   controller route a rule in `src/auth/access-rules.ts`, the same as the mock's `RULES` (the drift test fails
+   otherwise). Without one it answers 403 naming the route.
 4. Validate every body, query and param with the **same shared schema** the web uses:
    `@Body(new ZodValidationPipe(PatientInput))`. Build responses so they parse with the shared response schema.
 5. Port the feature's handler tests to `test/<name>.test.ts`, so the API is held to the same behaviour.
-6. Turn the mock off only once every endpoint of the feature is served. The web switches over with
-   `NEXT_PUBLIC_API_MOCKING=disabled`.
+6. Turn the mock off only once every endpoint of the feature is served: add its routes to `API_ROUTES` in
+   `apps/web/src/mocks/passthrough.ts`. In `hybrid` mode those reach the API; everything else stays on MSW.
 
 ---
 
@@ -201,7 +208,24 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **Prisma queries are lazy: await them inside `requestContext.run`.** `run(ctx, () => prisma.x.findMany())` returns
   the query unstarted; it runs when awaited, outside the context, and is refused as "needs a clinic". Write
   `run(ctx, async () => await prisma.x.findMany())` in workers, the seed and tests.
-- **`runInTransaction` reruns its callback on a deadlock** (P2034): nothing that leaves the database inside it.
+- **`TEST_DATABASE_URL` must end in `_test`**: every integration test empties it. `test:int` refuses anything else.
+- **Raw SQL returns integers as `bigint`** through the mariadb driver (`COUNT(*)` → `3n`). Wrap them in `Number(...)`.
+- **A deadlock in a raw query is P2010, not P2034**: the adapter's `TransactionWriteConflict` (MySQL 1213) sits in
+  `meta.driverAdapterError.cause`. `isWriteConflict` (`src/prisma/transaction.ts`) accepts both; proven on MySQL.
+- **`runInTransaction` reruns its callback on a deadlock** (`isWriteConflict`): nothing that leaves the database inside it.
+- **HTTP tests that aren't about access** pass `openGuard: true` to `createTestApp` (or override `AccessGuard`). Tests of
+  access use the real guard with fake `SessionService`/`IdentityService` (`test/access-guard.test.ts`).
+- **A path with no controller is Nest's 404**, before any guard. "No access rule" (403) means a controller route
+  missing from `access-rules.ts`.
+- **A handler that must check the session before the body** (the mock's order: 401/403 before 400) takes
+  `@Body() body: unknown` and parses after its checks, with the same `ZodValidationPipe`.
+- **`identityOf(req)`** is set only where the guard loaded a clinic session (clinic routes, and `/auth/*` when a cookie
+  was presented).
+- **Integration tests that sign in repeatedly** clear `RateLimitCounter` in `beforeEach`: the limit counts per address.
+- **Behind a proxy, set `trust proxy`** in `main.ts` (B13), or every client shares one rate-limit bucket.
+- **Prisma 7's `migrate dev` doesn't regenerate the client.** Run `pnpm --filter api db:generate` after it.
+- **Lists keep the clinic's order:** `Branch.position` and `Staff.position` (the mock's array order). New rows go last.
+- **`COOKIE_SECURE=false` only on local http.** It defaults to true; `DEMO_LOGINS` defaults to false.
 - `test/app.test.ts` logs a stack trace on purpose (the "unexpected error" case). It isn't a failure.
 
 ---
@@ -210,9 +234,24 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 
 - **Ids** (B1): cuid2, generated by Prisma with `@default(cuid(2))`. The seed's readable ids (`staff_reyes`,
   `branch_imus`) are kept as given.
+- **Table names** (B2): Prisma's defaults (`ClinicAccount`, not `clinic_accounts`), as `AuditEvent` already was. Never run
+  the API against a non-Linux MySQL, which lowercases table names.
+- **Sessions** (B2): 30 minutes idle and 8 hours absolute (`SESSION_POLICY`), stored as the token's SHA-256 in MySQL;
+  `pd_session` and `pd_operator` are httpOnly, and operator sessions have their own table. Passwords and PINs are
+  argon2id (`@node-rs/argon2`).
+- **Identity tables** (B2): `Credential`, `Session` and `DemoLogin` are platform tables that hold a `clinicId`, because
+  sign-in reads them before a clinic is known. Only `IdentityService`, `SessionService` and the seed touch them.
+  Queries about one login name `clinicId` + `accountId`. Sign-in's lookups are cross-clinic on purpose, before a clinic
+  is chosen: `Credential` by `email`, `DemoLogin` by `featured`, `Session` by its unique `tokenHash`. Never add a
+  cross-clinic query on these tables outside sign-in.
+- **Body tokens** (B2): `Session.token` / `OperatorSession.token` carry placeholders (`"cookie"`, `"operator.cookie"`);
+  the real tokens are only in the httpOnly cookies. A switch or password change rotates the session.
+- **Rate limits** (B2): fixed windows in `RateLimitCounter`, per client address: 20 sign-ins per 5 minutes and 120 auth
+  calls per minute (`RATE_LIMITS`), bound to the two auth controllers.
+- **Demo login** (B2): `/auth/demo-accounts` and `DemoLogin` rows exist only when `DEMO_LOGINS=true` (demo deployments). There, the demo password can't be changed.
 - **Outbox** (B1): polled from MySQL with `SELECT … FOR UPDATE SKIP LOCKED`; no Redis or BullMQ until volume says so.
-- **Seed** (B1): the web's demo seed moves to a shared workspace package, so MSW and `prisma db seed` run the same
-  `seed()`. B1-b picks the package.
+- **Seed** (B1): `packages/seed` (`@pedia/seed`), so MSW and `prisma db seed` run the same `seedPlatform()`. Not
+  `@pedia/shared`: the seed needs faker and is built from `new Date()`, which don't belong in the contract package.
 
 ---
 

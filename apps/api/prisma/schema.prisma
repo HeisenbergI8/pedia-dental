@@ -51,3 +51,236 @@ model AuditEvent {
   @@index([clinicId, actorId, at])
   @@index([clinicId, patientId, at])
 }
+
+/// Mirrors StaffRole in packages/shared/src/schemas/common.ts (tenant-scope.test.ts checks they match).
+enum StaffRole {
+  admin
+  dentist
+  front_desk
+}
+
+/// Mirrors Tier in packages/shared/src/schemas/tenancy.ts.
+enum Tier {
+  small
+  mid
+  big
+}
+
+/// Mirrors AccountStatus in packages/shared/src/schemas/tenancy.ts.
+enum AccountStatus {
+  active
+  suspended
+}
+
+/// Mirrors HeadingFont in packages/shared/src/schemas/tenancy.ts.
+enum HeadingFont {
+  nunito
+  poppins
+  lexend
+  quicksand
+  outfit
+  fredoka
+}
+
+/// Mirrors AgreementRecord.method in packages/shared/src/schemas/legal.ts.
+enum AgreementMethod {
+  online
+  on_file
+}
+
+/// Mirrors Acknowledgement.kind in packages/shared/src/schemas/legal.ts (terms acceptances are Agreements).
+enum AcknowledgedKind {
+  confidentiality
+  notice
+}
+
+/// One paying clinic: the tenant itself. Platform: the operator lists them all, and its id is every tenant row's clinicId.
+model ClinicAccount {
+  id           String        @id @default(cuid(2))
+  name         String
+  logoRef      String?
+  contactEmail String
+  tin          String
+  tier         Tier
+  status       AccountStatus
+  /// #rrggbb. Tints and the dark version are derived (deriveBrandPalette), never stored.
+  brandColor   String        @db.Char(7)
+  headingFont  HeadingFont?
+}
+
+/// One location of a clinic account. Archived, never deleted (decision #22).
+model Branch {
+  id           String  @id @default(cuid(2))
+  clinicId     String
+  name         String
+  address      String
+  phone        String
+  /// OpeningHours (@pedia/shared), parsed with that schema on read. Json: never filtered on.
+  openingHours Json
+  archived     Boolean @default(false)
+  /// List order, as the clinic set them up (the mock's array order). New branches go last (B3).
+  position     Int     @default(0)
+
+  @@index([clinicId, archived])
+}
+
+/// A clinic's staff member (StaffMember in @pedia/shared). Deactivated, never deleted (decision #23).
+model Staff {
+  id            String    @id @default(cuid(2))
+  clinicId      String
+  fullName      String
+  role          StaffRole
+  /// StaffRole[]: a second staff role held too (decision #39). Json: read whole, never filtered on.
+  alsoRoles     Json
+  isOwner       Boolean   @default(false)
+  /// Branch ids where they work (decision #14). Json: matched in code by usableBranches.
+  branchIds     Json
+  licenseNo     String?
+  /// The sign-in email: typed by the Owner, or derived by the seed (staffEmail in @pedia/seed).
+  email         String
+  deactivatedAt DateTime?
+  /// List order, as the clinic added them (the mock's array order). New staff go last (B3).
+  position      Int       @default(0)
+
+  @@index([clinicId, email])
+}
+
+/// One login's secrets, staff or guardian, in one clinic account. Never served.
+/// Platform: sign-in finds it by email across clinic accounts before one is chosen (decision #27). Every query names
+/// clinicId itself. Only IdentityService, SessionService and the seed read it.
+model Credential {
+  id           String  @id @default(cuid(2))
+  clinicId     String
+  /// The login as sessions and the audit trail name it: the staff id, or `guardian.<guardianId>` (as the mock).
+  accountId    String
+  email        String
+  staffId      String?
+  guardianId   String?
+  /// A guardian's name until B4 brings guardians. A staff login's name is read from Staff.
+  name         String
+  passwordHash String
+  /// A login the Owner just made: must choose its own password first (decision #21).
+  mustChange   Boolean @default(false)
+  /// Staff only. The PIN for switching user on a shared device (decision #24).
+  pinHash      String?
+  /// ISO times of recent wrong PINs inside PIN_POLICY's window (pinAttempt keeps only those).
+  pinFailedAt  Json
+
+  @@unique([clinicId, accountId])
+  @@index([email])
+}
+
+/// A signed-in clinic login. Platform: the guard finds it by the cookie's token hash before it knows the clinic.
+/// Deleted on sign-out or expiry (not append-only: sign-ins are recorded in AuditEvent).
+model Session {
+  id         String   @id @default(cuid(2))
+  /// SHA-256 of the pd_session token, hex. The token itself is never stored.
+  tokenHash  String   @unique @db.Char(64)
+  clinicId   String
+  accountId  String
+  createdAt  DateTime
+  /// Moved forward at most once a minute (SessionService.TOUCH_EVERY_MS). Idle expiry reads it.
+  lastSeenAt DateTime
+  /// createdAt + 8 h: the absolute limit, however active the session is.
+  expiresAt  DateTime
+
+  @@index([clinicId, accountId])
+  @@index([expiresAt])
+}
+
+/// Primolar's own staff (decisions #3, #25). Never a clinic user: no clinicId, no role.
+model OperatorUser {
+  id           String @id @default(cuid(2))
+  name         String
+  email        String @unique
+  passwordHash String
+}
+
+/// A signed-in operator, on its own cookie (pd_operator) and its own table, so it can't be mistaken for a clinic
+/// session, or the reverse.
+model OperatorSession {
+  id         String   @id @default(cuid(2))
+  tokenHash  String   @unique @db.Char(64)
+  operatorId String
+  createdAt  DateTime
+  lastSeenAt DateTime
+  expiresAt  DateTime
+
+  @@index([operatorId])
+  @@index([expiresAt])
+}
+
+/// A clinic's acceptance of Primolar's Terms and DPA (ClinicAgreement). Append-only; the newest per clinic is in
+/// force. Platform: Primolar's record (root CONVENTIONS: agreements are never inside a tenant).
+model Agreement {
+  id           String          @id @default(cuid(2))
+  clinicId     String
+  termsVersion Int
+  dpaVersion   Int
+  acceptedBy   String
+  at           DateTime
+  method       AgreementMethod
+  /// The date a paper copy was signed (on_file only), Asia/Manila.
+  signedOn     DateTime?       @db.Date
+
+  @@index([clinicId, at])
+}
+
+/// One login's reading of a confidentiality or notice version (privacy #20, #21). Append-only.
+model Acknowledgement {
+  id        String           @id @default(cuid(2))
+  clinicId  String
+  kind      AcknowledgedKind
+  version   Int
+  accountId String
+  name      String
+  at        DateTime
+
+  @@index([clinicId, accountId, kind, version])
+}
+
+/// One saved version of a clinic's privacy notice (privacy #19). Append-only; the highest version is in force.
+model PrivacyNotice {
+  id           String   @id @default(cuid(2))
+  clinicId     String
+  version      Int
+  body         String   @db.Text
+  contactName  String
+  contactEmail String
+  savedByName  String
+  at           DateTime
+
+  @@unique([clinicId, version])
+}
+
+/// Demo deployments only (DEMO_LOGINS=true): the sign-in page's one-click accounts, with the PIN shown in the clear,
+/// because PINs are otherwise stored only as hashes. Written only by the seed. Platform: served before sign-in.
+model DemoLogin {
+  id        String  @id @default(cuid(2))
+  clinicId  String
+  accountId String
+  role      Role
+  name      String
+  email     String
+  summary   String
+  pin       String? @db.Char(4)
+  /// Order on the login screen (demoAccounts' order).
+  position  Int
+  /// One of the per-role logins listed on the sign-in page (demoLogins in @pedia/seed).
+  featured  Boolean @default(false)
+
+  @@index([clinicId, position])
+}
+
+/// Fixed-window request counters for the auth routes (CONVENTIONS → Stateless instances: rate-limit counters live in
+/// MySQL, so every instance shares them). Platform: counted before anyone is signed in. Written only by
+/// RateLimitService, with raw SQL (INSERT … ON DUPLICATE KEY UPDATE). Old windows are swept by B1-c's scheduler.
+model RateLimitCounter {
+  /// `<group>:<client ip>`, e.g. `login:203.0.113.7` (rate-limit.ts → bucketOf).
+  bucket      String   @db.VarChar(191)
+  windowStart DateTime
+  hits        Int
+
+  @@id([bucket, windowStart])
+  @@index([windowStart])
+}

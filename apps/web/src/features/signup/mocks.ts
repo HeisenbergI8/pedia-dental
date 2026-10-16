@@ -2,7 +2,7 @@ import { http, HttpResponse } from "msw";
 import { GetStartedInput } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { platform } from "@/mocks/db";
-import { onlineAgreement } from "@/mocks/seed-privacy";
+import { onlineAgreement } from "@pedia/seed";
 import { addSignup, brandingRefusal, duplicateOf, readSignupForm, statusView } from "@/mocks/signups";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
