@@ -21,6 +21,9 @@ const B4_ROUTES: [Method, string][] = [
   ["post", "/patients/p1/consents"],
   ["post", "/patients/p1/privacy-consent"],
   ["post", "/patients/p1/privacy-choices"],
+  ["put", "/patients/p1/photo"],
+  ["get", "/patients/p1/photo"],
+  ["delete", "/patients/p1/photo"],
 ];
 
 describe("B4's routes are served and guarded (no database)", () => {

@@ -7,7 +7,7 @@ export type ApiRoute = { method: string; path: string };
 /**
  * The routes apps/api serves (CHUNKS.md: cut over chunk by chunk). In `hybrid` mode MSW lets these reach the network,
  * through the dev proxy to the API; every other route stays mocked. Same patterns as RULES in access.ts. Exact method
- * and path: `GET /clinic/subscription` (B12) and `/clinic/privacy-notice` (B4) stay mocked beside B3's `/clinic/*`.
+ * and path: `GET /clinic/subscription` (B12) stays mocked beside B3's and B4's `/clinic/*`.
  */
 export const API_ROUTES: readonly ApiRoute[] = [
   // B2: sign-in and sessions (AuthController). demo-accounts answers only with DEMO_LOGINS=true.
@@ -47,6 +47,24 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "GET", path: "/note-templates" },
   { method: "GET", path: "/message-templates" },
   { method: "PUT", path: "/message-templates/:kind" },
+  // B4: patients and privacy consent (PatientsController, LegalController, ClinicController's notice).
+  { method: "GET", path: "/patients" },
+  { method: "GET", path: "/patient-summaries" },
+  { method: "GET", path: "/patient-duplicates" },
+  { method: "POST", path: "/patients" },
+  { method: "GET", path: "/patients/:id" },
+  { method: "PUT", path: "/patients/:id" },
+  { method: "PATCH", path: "/patients/:id" },
+  { method: "GET", path: "/patients/:id/summary" },
+  { method: "POST", path: "/patients/:id/consents" },
+  { method: "POST", path: "/patients/:id/privacy-consent" },
+  { method: "POST", path: "/patients/:id/privacy-choices" },
+  { method: "PUT", path: "/patients/:id/photo" },
+  { method: "GET", path: "/patients/:id/photo" },
+  { method: "DELETE", path: "/patients/:id/photo" },
+  { method: "GET", path: "/clinic/privacy-notice" },
+  { method: "PUT", path: "/clinic/privacy-notice" },
+  { method: "GET", path: "/legal/notices/:clinicId" },
 ];
 
 export const servedBy = (routes: readonly ApiRoute[], method: string, path: string) =>

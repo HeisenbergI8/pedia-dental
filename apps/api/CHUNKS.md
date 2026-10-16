@@ -140,7 +140,18 @@ the privacy notice (B4) and the subscription (B12) on the Settings screen, `deni
 
 ---
 
-## Chunk B4: Patients and privacy consent (~24 h) · Large — features 1 and 18 (part)
+## ✅ Chunk B4: Patients and privacy consent (done, 2026-10-16) · Large — features 1 and 18 (part)
+
+**Status (2026-10-16): done**, in five parts. **B4a**: the patient tables, the `PatientView` serializer and the seeded
+patients. **B4b**: reads, search (the mock's rule, as SQL) and the list, parents linked to their children, no query
+strings in logs. **B4c**: register (refused without consent), edit, quick update, treatment consents. **B4d**: privacy
+consent and choices, the Owner's and the public privacy notice, a parent's children on their notice page. **B4e**: the
+patient photo, the 17 routes in `API_ROUTES`, and `e2e/api-patients.spec.ts`. "Decide first" answered in the plan's
+`decisions.md` (search keeps the mock's substring rule over stored columns; disk encryption only, B13). Done-when proofs:
+`test:int` `patients-write.int.test.ts` (create, edit, refused without consent), `patients-read.int.test.ts` (search,
+contacts for front desk not a dentist, one audit entry per record view), `privacy.int.test.ts`, `patient-photo.int.test.ts`.
+**Deferred by design:** list flags, last visits and balances (B5, B7, B8, decision 3), withdrawing queued messages on a
+reminders "no" (B9), the photo through presigned uploads (B10), `denied` audit entries.
 
 **Goal:** the child's record, with the Data Privacy Act rules built in from the first row.
 
@@ -174,6 +185,7 @@ a dentist doesn't; a patient can't be registered without consent; every record v
   current chart is `deriveChart()` from `@pedia/shared`, the same code the web runs.
 - "Chart as of visit X" and the per-tooth history.
 - Indexes on (clinic, patient, recorded-at) so a long chart history stays fast.
+- Fill `lastVisitOn` in `/patient-summaries` and the header summary (B4's decision 3: empty until now).
 
 **Done when:** caries on 74-O recorded in one visit and restored in a later one shows both in history; a correction
 supersedes rather than edits (tested at the repository level); the chart matches the mock's for the seeded patients.
@@ -207,6 +219,7 @@ a habit stopped in a later visit shows correctly.
 - Appointment requests and handling them.
 - Follow-up and recall due items from `DEFAULT_FOLLOW_UP_RULES` (data, not `if` statements); booking one clears it.
 - `/reports/today` and branch filtering through `reportBranchFilter`.
+- Fill `recallDueOn`, the recall flag and the `recall_due`/`needs_attention` filters in `/patient-summaries` (B4's decision 3).
 
 **Done when:** two simultaneous bookings of the same chair and slot leave exactly one; an extraction signed today is
 due in 7 days and booking it removes it; Today matches the mock for both demo clinics.
@@ -224,6 +237,7 @@ due in 7 days and booking it removes it; Today matches the mock for both demo cl
 - **Idempotency keys** on every money-moving `POST`, so a retried request never records a payment twice.
 - Every payment in a transaction that locks the invoice.
 - `/payments`, `/reports/finance` with branch filtering, built on aggregate queries rather than loading every row.
+- Fill `balance`, `credit`, the balance flag and the `balance_due` filter and sort in `/patient-summaries` and the header summary (B4's decision 3).
 
 **Done when:** the ₱8,500 / ₱5,000 / ₱3,500 example reproduces exactly; a payment POSTed twice with one key is
 recorded once; the dashboard totals equal the sum of payments in SQL.
@@ -242,6 +256,7 @@ recorded once; the dashboard totals equal the sum of payments in SQL.
 - Retries with backoff, a dead-letter state, and delivery status shown in `/messages`.
 - Consent enforced at queue time (`choiceDeclined`), templates from B3, birthday greetings and due-item messages as
   scheduled jobs.
+- A reminders "no" (`POST /patients/:id/privacy-choices`) withdraws the child's queued messages in its transaction (privacy #14; B4 left it out).
 
 **Decide first:** the email provider; sending hours (no SMS at night); the per-clinic SMS sender name and who pays for
 SMS credits.
@@ -262,6 +277,7 @@ restart; a declined consent sends nothing; a failed send retries, then shows as 
 - Clinical photos (intraoral and extraoral consent enforced), before-and-after per tooth, patient photo.
 - Document log (certificates, receipts), with the server checks (issuer, source, allergy) on the log request, before
   any PDF is built, like the mock.
+- Move the patient photo (`PUT /patients/:id/photo`, B4: 10 MB through the API's memory) to presigned uploads.
 
 **Decide first:** S3 vs R2, and the region (data residency for patient photos).
 
@@ -349,7 +365,7 @@ B0 Skeleton ✅
  └─ B1 Platform foundation (context, tenant scoping, outbox, jobs, logs, audit, storage, test harness, cut-over switch) ✅
      └─ B2 Identity, sessions & access ✅
          └─ B3 Clinic setup & Owner settings ✅
-             └─ B4 Patients & privacy consent
+             └─ B4 Patients & privacy consent ✅
                  └─ B5 Visits & dental chart
                      └─ B6 Notes, growth, behavior & plan
                          └─ B7 Scheduling, follow-ups & Today

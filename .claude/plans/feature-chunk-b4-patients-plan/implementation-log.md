@@ -55,3 +55,19 @@
 **Deviations from plan:** `privacy-routes.test.ts` also excludes 404 for the public route (Nest's 404 means no controller, which is what the case guards against). The parent's acknowledgement case first has the parent acknowledge version 1 explicitly: the seed has no notice acknowledgement for that parent, so "the version-1 row is still there" would otherwise prove nothing. The merge case runs as the dentist (`consents.manage`) rather than front desk, to cover a second role.
 **Gate:** `pnpm run check` green (api 195); `pnpm --filter api test:int` 21 files, 151 passed, 5 todo.
 **Notes:** a parent's pending notice acknowledgement doesn't hold their other routes, on the API as in the mock (the portal's own step, access.ts:373). The two B9 cases (no reminders sent / queued ones withdrawn) are `it.todo`.
+
+## Phase 8: Patient photo — 2026-10-16
+
+**Steps completed:** 8.1, 8.2, 8.3
+**Files changed:** `apps/api/src/storage/storage.ts`, `apps/api/src/patients/patient-photo.ts`, `apps/api/src/patients/patient-photo.test.ts`, `apps/api/src/patients/patient-writes.service.ts`, `apps/api/src/patients/patients.service.ts`, `apps/api/src/patients/patients.controller.ts`, `apps/api/src/patients/patients.module.ts`, `apps/api/test/patients-routes.test.ts`, `apps/api/test/int/patient-photo.int.test.ts`
+**Deviations from plan:** none in the code. The int test's tenancy case reads the key with `StorageService` inside Ngiti's context rather than pointing a Ngiti row at it (same proof, no extra fixture).
+**Gate:** `pnpm run check` green (api 202); `test:int` `patient-photo.int.test.ts` 6/6.
+**Notes:** the replace case drains the outbox and proves the first file is gone and the second still serves (`image/png`).
+
+## Phase 9: Cut-over — 2026-10-16
+
+**Steps completed:** 9.1, 9.2, 9.3
+**Files changed:** `apps/web/src/mocks/passthrough.ts`, `apps/web/src/mocks/passthrough.test.ts`, `apps/web/e2e/api-patients.spec.ts`, `apps/api/CONVENTIONS.md`, `apps/api/CHUNKS.md`, `CONVENTIONS.md`
+**Deviations from plan:** the e2e's `signInAs` picks Bulilit at "Which clinic?" for the dentist (that login works at two clinics); the tests run serially because test 4 reads test 2's child id. Its search step types the run's 7 phone digits, not "the last seven" of a longer number (the same thing).
+**Gate:** `pnpm run check` green (shared 189, seed 19, api 202, web 342); `pnpm --filter api test:int` 22 files, 157 passed, 5 todo; e2e `E2E_API=1 E2E_BASE_URL=http://localhost:3160 npx playwright test e2e/api-patients.spec.ts --project=desktop`: 5 passed (25 s).
+**Notes:** the e2e ran against a separate `pedia_dental_e2e` database (migrated, `DEMO_LOGINS=true db:seed`), the API on 4110 (`COOKIE_SECURE=false`) and the web in `hybrid` on 3160 (`NEXT_DIST_DIR=.next-hybrid`), via two entries added to the untracked `.claude/launch.json`. `apps/web/tsconfig.json`, rewritten by `next dev`, was reverted.

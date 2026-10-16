@@ -7,7 +7,9 @@ import { AuditService } from "../audit/audit.service";
 import { requireContext } from "../common/request-context";
 import { Prisma } from "../generated/prisma/client.ts";
 import { PrismaService } from "../prisma/prisma.service";
+import { StorageService, type StoredFile } from "../storage/storage.service";
 import type { Tx } from "../prisma/transaction";
+import { photoFileName } from "./patient-photo";
 import { scopeCondition, searchCondition } from "./patient-search";
 import { inScope, toDuplicate, toPatient, toSummary, visibleTo, type Viewer } from "./patient.views";
 
@@ -20,6 +22,7 @@ export class PatientsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly storage: StorageService,
   ) {}
 
   /** Full records for these ids, in this order. Five queries whatever the count (no N+1). Missing ids are skipped. */
@@ -100,6 +103,15 @@ export class PatientsService {
     });
     const shaped = rows.map((r) => ({ ...r, birthDate: r.birthDate.toISOString().slice(0, 10) }));
     return findDuplicates(candidate, shaped).map((r) => toDuplicate(r as Patient));
+  }
+
+  /** GET /patients/:id/photo. One audit entry per view (decision 4), only when there is a photo to see. */
+  async photo(id: string): Promise<{ file: StoredFile; name: string } | undefined> {
+    const row = await this.prisma.patient.findUnique({ where: { id }, select: { photoRef: true, firstName: true, lastName: true } });
+    const file = row?.photoRef ? await this.storage.get(row.photoRef) : undefined;
+    if (!row || !file) return undefined;
+    await this.audit.record("view", "Patient photo", id);
+    return { file, name: photoFileName(row) };
   }
 
   /**

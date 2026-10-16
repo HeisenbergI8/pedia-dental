@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, PayloadTooLargeException } from "@nestjs/common";
 import {
   AddConsentInput, ChangePrivacyChoicesInput, CreatePatientInput, EditPatientWithoutContactsInput, QuickUpdatePatientInput,
   RecordPrivacyConsentInput, currentChoices, nextPatientNo, patientSearchText, type PatientView, type RegisterPatientInput,
@@ -10,9 +10,13 @@ import { Clock } from "../common/clock";
 import { requireContext } from "../common/request-context";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { PrivacyNoticeService } from "../legal/privacy-notice.service";
+import { OutboxService } from "../outbox/outbox.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { clinicData } from "../prisma/tenant-scope";
 import { runInTransaction, type Tx } from "../prisma/transaction";
+import { DELETE_FILE } from "../storage/delete-file.handler";
+import { StorageService } from "../storage/storage.service";
+import { cleanPhoto, type PhotoUpload } from "./patient-photo";
 import { PATIENT_NOT_FOUND, PatientsService } from "./patients.service";
 import { consentFrom, dropsConsenter, guardianRows, mergeEdit, patientColumns, refusedTag, tidy, withStoredContacts } from "./patient.rows";
 import { inScope, visibleTo, type Viewer } from "./patient.views";
@@ -35,6 +39,8 @@ export class PatientWritesService {
     private readonly notices: PrivacyNoticeService,
     private readonly audit: AuditService,
     private readonly clock: Clock,
+    private readonly storage: StorageService,
+    private readonly outbox: OutboxService,
   ) {}
 
   /** POST /patients (privacy #12): the child, their guardians and the parent's consent, or nothing. */
@@ -166,6 +172,32 @@ export class PatientWritesService {
       // #14: a "no" to reminders also withdraws queued messages (mocks.ts:267). Messages arrive with B9, which adds
       // that withdrawal here, in this transaction. Until then there is nothing queued on the API to withdraw.
       await this.audit.record("update", "Privacy consent (changed)", id, tx);
+      return visibleTo(viewer, await this.patients.one(id, tx));
+    });
+  }
+
+  /** PUT /patients/:id/photo: checked (cleanPhoto), stored, then swapped in. 404 before the file is looked at. */
+  async uploadPhoto(viewer: Viewer, id: string, file: PhotoUpload | undefined): Promise<PatientView> {
+    await this.patients.one(id); // the mock's order: 404 first
+    const clean = cleanPhoto(file);
+    if ("problem" in clean) throw clean.status === 413 ? new PayloadTooLargeException(clean.problem) : new BadRequestException(clean.problem);
+    // Stored before the transaction: runInTransaction reruns its callback on a deadlock (CONVENTIONS → Traps).
+    return this.swapPhoto(viewer, id, await this.storage.put("patients", clean.ext, clean.body));
+  }
+
+  /** DELETE /patients/:id/photo. */
+  removePhoto(viewer: Viewer, id: string): Promise<PatientView> {
+    return this.swapPhoto(viewer, id, null);
+  }
+
+  /** Points the patient at `key`, and queues the replaced file's deletion in the same transaction (the logo's swap, B3). */
+  private swapPhoto(viewer: Viewer, id: string, key: string | null): Promise<PatientView> {
+    return runInTransaction(this.prisma, async (tx) => {
+      await lockPatient(tx, id);
+      const { photoRef: old } = await tx.patient.findUniqueOrThrow({ where: { id }, select: { photoRef: true } });
+      await tx.patient.update({ where: { id }, data: { photoRef: key, photoUpdatedAt: key ? this.clock.now() : null }, select: { id: true } });
+      if (old && old !== key) await this.outbox.enqueue(tx, { kind: DELETE_FILE, payload: { key: old } });
+      await this.audit.record("update", "Patient photo", id, tx); // AuditAction has no delete (access.ts:171)
       return visibleTo(viewer, await this.patients.one(id, tx));
     });
   }
