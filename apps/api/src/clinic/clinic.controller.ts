@@ -3,11 +3,12 @@ import {
   Param, PayloadTooLargeException, Post, Put, Req, Res, StreamableFile, UploadedFile, UseFilters, UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
-import { LOGO_RULES, UpdateBrandingInput, UpdateClinicProfileInput } from "@pedia/shared";
+import { LOGO_RULES, SavePrivacyNoticeInput, UpdateBrandingInput, UpdateClinicProfileInput } from "@pedia/shared";
 import type { Request, Response } from "express";
 import { identityOf } from "../auth/access.guard";
 import { requireContext } from "../common/request-context";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
+import { PrivacyNoticeService } from "../legal/privacy-notice.service";
 import { BranchesService } from "./branches.service";
 import { ClinicService } from "./clinic.service";
 import { StaffService } from "./staff.service";
@@ -31,7 +32,19 @@ export class ClinicController {
     private readonly clinic: ClinicService,
     private readonly branchWrites: BranchesService,
     private readonly staffWrites: StaffService,
+    private readonly notices: PrivacyNoticeService,
   ) {}
+
+  // Privacy #19, #22: everyone signed in may read the notice (it is public anyway); the Owner's edit is a new version.
+  @Get("clinic/privacy-notice")
+  privacyNotice() {
+    return this.notices.ownView();
+  }
+
+  @Put("clinic/privacy-notice")
+  savePrivacyNotice(@Body(new ZodValidationPipe(SavePrivacyNoticeInput)) input: SavePrivacyNoticeInput) {
+    return this.notices.save(input);
+  }
 
   @Get("clinic")
   context(@Req() req: Request) {

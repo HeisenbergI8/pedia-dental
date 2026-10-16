@@ -16,6 +16,7 @@ class Routes {
   @Get("unruled") unruled() { return "reached"; }
   @Get("reports/finance") finance() { return "reached"; }
   @Get("operator/accounts") accounts() { return "reached"; }
+  @Get("patients/:id/plan") plan() { return "reached"; }
 }
 
 const branch = { id: "b1", clinicId: "c1", name: "Imus", address: "a", phone: "(046) 471 2580", openingHours: { opensAt: 480, closesAt: 1080, closedWeekdays: [0] }, archived: false };
@@ -72,6 +73,18 @@ describe("AccessGuard over HTTP", () => {
     expect((await get("/api/clinic")).text).toBe("Acknowledge patient confidentiality to continue");
     who = as(["owner"], { mustChangePassword: true });
     expect((await get("/api/clinic")).text).toBe("Choose your own password to continue");
+  });
+
+  it("lets a parent reach their own child's record and refuses another's (decision 5)", async () => {
+    who = as(["parent"], { guardianId: "g1", children: new Set(["kid1"]) });
+    expect((await get("/api/patients/kid1/plan")).status).toBe(200);
+    const other = await get("/api/patients/kid2/plan");
+    expect([other.status, other.text]).toEqual([403, "This isn't one of your children's records"]);
+  });
+
+  it("still refuses a parent with no children on record", async () => {
+    who = as(["parent"], { guardianId: "g1" });
+    expect((await get("/api/patients/kid1/plan")).status).toBe(403);
   });
 
   it("keeps the operator and clinic cookies apart", async () => {

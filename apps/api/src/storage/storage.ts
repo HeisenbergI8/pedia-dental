@@ -1,5 +1,5 @@
-/** Where a clinic's files are grouped. B10 adds "photos" and "documents"; B12's sign-up files need a platform area. */
-export const STORAGE_AREAS = ["branding"] as const;
+/** Where a clinic's files are grouped. B4: a child's own photo. B10 adds "photos" and "documents"; B12's sign-up files need a platform area. */
+export const STORAGE_AREAS = ["branding", "patients"] as const;
 export type StorageArea = (typeof STORAGE_AREAS)[number];
 
 /** Extension → content type. A key's extension decides how its file is served; no other extension is stored. */

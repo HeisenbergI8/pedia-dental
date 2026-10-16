@@ -3,6 +3,7 @@ import { requestContext } from "../common/request-context";
 import type { Env } from "../config/env";
 import type { PrismaService } from "../prisma/prisma.service";
 import type { Hasher } from "../auth/hashing";
+import { patientRows } from "../patients/patient.rows";
 
 export class SeedRefused extends Error {
   override name = "SeedRefused";
@@ -23,7 +24,7 @@ const dateOnly = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
  * (argon2id), notices, acknowledgements, agreements, the operator, the login page's DemoLogin rows, and (B3) chairs,
  * procedures, note templates and message templates. Clinic rows are written inside that clinic's request context, so
  * the tenant extension stamps and checks them (awaited inside, CONVENTIONS → Traps). `position` keeps the mock's array
- * order. Patients, visits and the rest arrive with their chunks.
+ * order. Visits and the rest arrive with their chunks.
  */
 export async function seedDatabase(prisma: PrismaService, hasher: Hasher, env: Pick<Env, "DEMO_LOGINS">, platform: Platform): Promise<void> {
   assertSeedAllowed(env, await prisma.clinicAccount.count());
@@ -83,6 +84,14 @@ export async function seedDatabase(prisma: PrismaService, hasher: Hasher, env: P
       await prisma.messageTemplate.createMany({
         data: db.messageTemplates.map(({ kind, name, body, updatedAt }, position) => ({ clinicId, kind, name, body, updatedAt: new Date(updatedAt), position })),
       });
+      // B4: every child, their guardians, consents and privacy choices, with the seed's ids (hybrid needs them: MSW's
+      // visits, invoices and appointments name these patient ids).
+      const rows = db.patients.map(patientRows);
+      await prisma.patient.createMany({ data: rows.map((r) => ({ ...r.patient, clinicId })) });
+      await prisma.patientGuardian.createMany({ data: rows.flatMap((r) => r.guardians.map((g) => ({ ...g, clinicId }))) });
+      await prisma.patientConsent.createMany({ data: rows.flatMap((r) => r.consents.map((c) => ({ ...c, clinicId }))) });
+      await prisma.patientPrivacyConsent.createMany({ data: rows.flatMap((r) => (r.privacyConsent ? [{ ...r.privacyConsent, clinicId }] : [])) });
+      await prisma.privacyChoice.createMany({ data: rows.flatMap((r) => r.choices.map((c) => ({ ...c, clinicId }))) });
     });
   }
 }

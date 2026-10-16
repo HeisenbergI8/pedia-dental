@@ -21,6 +21,12 @@ export const MODEL_SCOPE = {
   Procedure: "clinic",
   NoteTemplate: "clinic",
   MessageTemplate: "clinic",
+  // B4: the child's record. Patients aren't branch-level: every branch of the account sees the same child.
+  Patient: "clinic",
+  PatientGuardian: "clinic",
+  PatientConsent: "clinic",
+  PatientPrivacyConsent: "clinic",
+  PrivacyChoice: "clinic",
   // Platform: Primolar's own records
   ClinicAccount: "platform",
   Agreement: "platform",
@@ -42,4 +48,8 @@ export const MODEL_SCOPE = {
  * Insert-only tables: no update, upsert or delete reaches them (CONVENTIONS → Domain rules → Append-only).
  * A correction is a new row. Chart entries, payments and agreements join this list in their chunks.
  */
-export const APPEND_ONLY: ReadonlySet<string> = new Set<Prisma.ModelName>(["AuditEvent", "Agreement", "Acknowledgement", "PrivacyNotice"]);
+export const APPEND_ONLY: ReadonlySet<string> = new Set<Prisma.ModelName>([
+  "AuditEvent", "Agreement", "Acknowledgement", "PrivacyNotice",
+  // B4: consents are never edited (privacy #12–#17). A change of mind is a new PrivacyChoice row.
+  "PatientConsent", "PatientPrivacyConsent", "PrivacyChoice",
+]);

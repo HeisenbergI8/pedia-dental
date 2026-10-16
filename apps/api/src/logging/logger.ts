@@ -19,6 +19,8 @@ export const REDACT_PATHS = [
   "req.headers.authorization",
   "req.headers.cookie",
   'res.headers["set-cookie"]',
+  // A download's file name is the child's (`mendoza-bea-photo.jpg`, B4).
+  'res.headers["content-disposition"]',
   ...PERSONAL_FIELDS,
   ...PERSONAL_FIELDS.map((field) => `*.${field}`),
 ];
@@ -35,8 +37,16 @@ export function pinoOptions(env: Pick<Env, "LOG_LEVEL">): LoggerOptions {
   };
 }
 
+/** The path only: a query string can carry a search or a child's name and birth date (B4). Never logged. */
+export const pathOnly = (url: string | undefined) => url?.split("?")[0];
+
 /** For `LoggerModule.forRoot`. `stream` lets tests read the lines; production writes JSON to stdout. */
 export function loggerParams(env: Pick<Env, "LOG_LEVEL">, stream?: DestinationStream): Params {
-  const options = { ...pinoOptions(env), genReqId: requestIdOf };
+  const options = {
+    ...pinoOptions(env),
+    genReqId: requestIdOf,
+    // pino-http hands this pino's standard request object; keep it, minus the query.
+    serializers: { req: (req: { url?: string; query?: unknown }) => ({ ...req, url: pathOnly(req.url), query: undefined }) },
+  };
   return { pinoHttp: stream ? [options, stream] : options };
 }

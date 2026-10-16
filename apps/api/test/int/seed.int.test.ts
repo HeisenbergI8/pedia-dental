@@ -1,3 +1,4 @@
+import { patientSearchText } from "@pedia/shared";
 import { DEMO_PASSWORD, OPERATORS, accountsByEmail, demoLogins, seedPlatform } from "@pedia/seed";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Hasher } from "../../src/auth/hashing";
@@ -32,6 +33,21 @@ describe("prisma db seed (seedDatabase) on MySQL", () => {
         expect((await prisma.procedure.findMany(byPosition)).map((p) => [p.code, p.fee])).toEqual(db.procedures.map((p) => [p.code, p.fee]));
         expect((await prisma.noteTemplate.findMany(byPosition)).map((t) => t.id)).toEqual(db.noteTemplates.map((t) => t.id));
         expect((await prisma.messageTemplate.findMany(byPosition)).map((t) => t.kind)).toEqual(db.messageTemplates.map((t) => t.kind));
+      });
+    }
+  });
+
+  it("writes each clinic's patients with their guardians, consents and privacy rows (B4)", async () => {
+    for (const { id } of platform.accounts) {
+      const db = platform.tenants[id]!;
+      await inClinic(id, async () => {
+        expect(await prisma.patient.count()).toBe(db.patients.length);
+        expect(await prisma.patientGuardian.count()).toBe(db.patients.reduce((n, p) => n + p.guardians.length, 0));
+        expect(await prisma.patientPrivacyConsent.count()).toBe(db.patients.filter((p) => p.privacyConsent).length);
+        for (const p of db.patients.slice(0, 1)) {
+          const row = await prisma.patient.findUniqueOrThrow({ where: { id: p.id } });
+          expect([row.patientNo, row.searchNames]).toEqual([p.patientNo, patientSearchText(p).names]);
+        }
       });
     }
   });

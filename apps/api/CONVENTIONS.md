@@ -6,12 +6,14 @@ The Primolar backend. It replaces the browser mocks (MSW) in `apps/web` **endpoi
 feature code in the web app**. The product, the users and the domain are the ones in the root `CONVENTIONS.md`
 and `ROADMAP.md`; read those first. This file covers only how the API is built.
 
-**Current phase: B1–B3 done** (2026-10-16). The runtime core (request context, `Clock`, logs, tenant scoping,
+**Current phase: B1–B4 done** (2026-10-16). The runtime core (request context, `Clock`, logs, tenant scoping,
 transactions, audit), `@pedia/seed`, the `test:int` suite on MySQL and CI, identity, sessions and the access guard,
 `/auth/*`, `/operator/auth/*` and the clinic reads, with the web signing in against them in `hybrid` mode. B1-c added
 the outbox, scheduled jobs and file storage. B3: the Owner's settings
 (profile, look, logo, branches, staff logins, tier limits) and the clinic's reference data (chairs, procedures, note
-and message templates), served in `hybrid`. B4 (patients and privacy consent) is next. The build order is [CHUNKS.md](CHUNKS.md).
+and message templates), served in `hybrid`. B4: patients, guardians, consents, search and the list, the patient photo
+and the clinic's privacy notice (Owner's and public), served in `hybrid`. B5 (visits and the dental chart) is next. The
+build order is [CHUNKS.md](CHUNKS.md).
 
 **Stack:** NestJS 12 (ESM, Express) · Prisma 7 + MySQL 8.4 (MariaDB driver adapter) · Zod 4 schemas from
 `@pedia/shared` · SWC at runtime (`@swc-node/register`) · Vitest + Supertest · Docker Compose for local MySQL.
@@ -59,13 +61,15 @@ Run from the repo root.
 | Audit trail | `src/audit/` | `AuditService.record` (import `AuditModule`) |
 | Identity and access | `src/auth/` | `auth.controller.ts` / `operator-auth.controller.ts` and `auth.service.ts` (sign-in, sign-out, switch, password, acknowledgement), `rate-limit.ts` (`RATE_LIMITS`), `access-rules.ts` (the route → permission map, held to the mock's `RULES` by a test), `access.guard.ts` (the global guard), `session.service.ts` (sessions), `identity.service.ts` (who a session is, PINs), `hashing.ts` (argon2id), `cookies.ts` |
 | Clinic | `src/clinic/` | The account and its setup: `ClinicService` (context, profile, branding, logo, usage, chairs, procedures), `BranchesService`, `StaffService`; `limits.ts` (tier limits, from `TIER_LIMITS`), `account-lock.ts` (`ownClinicId`, `lockAccount`), `logo.ts` (`cleanLogo`: type sniffing and the SVG sanitiser), row shaping in `clinic.views.ts` |
+| Patients | `src/patients/` | `PatientsService` (reads: `records`/`one` for other features, search, the list, the header summary, duplicates, the photo), `PatientWritesService` (register, edit, quick update, consents, privacy consent and choices, the photo swap), `patient.views.ts` (`visibleTo`: **the only producer of `PatientView`**; `toPatient`, `toSummary`, `viewerOf`), `patient.rows.ts` (contract → rows, the edit rules), `patient-search.ts` (the search as SQL), `patient-photo.ts`. `FamilyService` (a parent's children) sits in its own `FamilyModule`, imported by `AuthModule` and `PatientsModule` |
+| Legal | `src/legal/` | `PrivacyNoticeService` (owns `PrivacyNotice`: the version in force, the Owner's save, the public read) and the public `LegalController` (`GET /legal/notices/:clinicId`) |
 | Notes, messages | `src/notes/`, `src/messages/` | B3: `GET /note-templates`, `GET`/`PUT /message-templates`. B6 and B9 add the notes and the queue |
 | Outbox | `src/outbox/` | `OutboxService.enqueue(tx, …)` (the write side, inside the caller's transaction), `OutboxWorker` (claim, run, settle), `OutboxHandlers` (features register a handler per kind), `NoopHandler` |
 | Scheduled jobs | `src/jobs/`, `src/<feature>/<feature>.jobs.ts` | `JobRunner.run(job, fn)` (the `JobLock` lease). Each `@Cron` lives in the module that owns its tables: `auth.jobs.ts` (session and rate-limit sweeps), `outbox.jobs.ts` (prune) |
 | File storage | `src/storage/` | `StorageService` (clinic-scoped keys), `FileStorage` (the driver), `LocalDiskStorage`, and the `storage.delete` outbox handler (`delete-file.handler.ts`). Import `StorageModule` where files are kept |
 | Demo seed | `src/seed/seed-database.ts`, `prisma/seed.ts` | Maps `@pedia/seed`'s `seedPlatform()` to rows |
 | Features | `src/<name>/` | `<name>.module.ts`, `<name>.controller.ts`, `<name>.service.ts`. Same `<name>` as `apps/web/src/features/<name>` |
-| Tests | `src/**/*.test.ts` (unit), `test/*.test.ts` (HTTP) | Run without a database, in `pnpm run check`. HTTP tests build the app with `test/support/test-app.ts`. `test/clinic-routes.test.ts` holds every B3 route to "reaches a controller and the guard" (401 without a session); add a route there with its controller |
+| Tests | `src/**/*.test.ts` (unit), `test/*.test.ts` (HTTP) | Run without a database, in `pnpm run check`. HTTP tests build the app with `test/support/test-app.ts`. `test/clinic-routes.test.ts` (B3) and `test/patients-routes.test.ts` (B4) hold every route to "reaches a controller and the guard" (401 without a session); add a route there with its controller |
 | Integration tests | `test/int/*.int.test.ts`, helpers in `test/int/support/` (`testPrisma`, `resetDatabase`, `inClinic`, `createIntApp`) | Real MySQL test database, `test:int`, run in CI (`.github/workflows/api.yml`, MySQL 8.4) |
 
 ### Porting a feature from MSW (fails silently if missed)
@@ -256,6 +260,20 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   is `"clinic"` in `MODEL_SCOPE`, with `branchId` as a plain column.
 - **A unit test that builds `StorageModule`** must override `OutboxModule` (it registers `storage.delete` there), as
   `storage.test.ts` does; the real one needs `PrismaService`.
+- **A request's query string is never logged** (B4): `loggerParams` keeps the path only, because `?q=` and the
+  duplicate check carry names and birth dates. Don't log `req.url` or `req.query` anywhere else either.
+- **Patient search is raw SQL** (`patient-search.ts`): the tenant extension doesn't see it, so `PatientsService` writes
+  `clinicId = …` first in every `WHERE`. The words are matched `COLLATE utf8mb4_bin` against the stored, lowercased
+  `searchNames`/`searchPhones`; a write that changes a name or a guardian phone must rewrite them (`patientColumns`, or
+  `refreshSearch` for PATCH's phone, which follows the guardian to siblings).
+- **Every patient write locks the patient's row first** (`lockPatient`, which is also the 404); registration takes the
+  clinic's lock (`lockAccount`) for the next number. Account before patient, never the other way round.
+- **The patient photo passes through the API's memory** (multer, at most 10 MB, JPEG/PNG/WebP only) until B10 moves it
+  to presigned uploads.
+- **A reminders "no" doesn't withdraw queued messages yet** (privacy #14): messages arrive with B9, which adds the
+  withdrawal to `PatientWritesService.changeChoices`, in its transaction.
+- **A database seeded before B4 has no patients**, and `db:seed` refuses a database with accounts: use a fresh volume or
+  a new database, as for B3.
 - `test/app.test.ts` logs a stack trace on purpose (the "unexpected error" case). It isn't a failure.
 
 ---
@@ -302,6 +320,24 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **Archiving and bookings** (B3): `BranchesService.upcomingAt` is 0 until B7 brings appointments; B7 replaces it.
 - **Audit** (B3): the mock's entries for staff writes (`Staff login`, `… (deactivated)`, `… (reactivated)`), in the
   write's transaction. Profile, branding and branch changes aren't audited, as in the mock.
+- **Patients** (B4, decisions in `.claude/plans/feature-chunk-b4-patients-plan/decisions.md`):
+  - **Search** is the mock's `matchesSearch` exactly (substring, every word, child and guardian names, phone digits only
+    for `patients.contact`), as `LIKE '%word%'` over two stored columns built by the shared `patientSearchText`. A
+    leading wildcard can't use an index, so a search scans one clinic's rows; full-text when a clinic passes ~10k.
+  - **No column encryption** of medical fields: the disk is encrypted (B13).
+  - **`/patient-summaries` and the header summary** are the API's now; last visit, recall date, balance and flags are
+    empty or zero until B5, B7 and B8 fill them.
+  - **Audit**: one `view` "Patient profile" per single-record read (`GET /patients/:id`, its summary) and `view`
+    "Patient photo", except that the same user viewing the same record again within five minutes isn't logged twice
+    (`REPEAT_WINDOW_MS`, B1, as the mock); **lists, searches and duplicate checks aren't audited**, unlike the mock's "Patient list" entries.
+    Writes keep the mock's entries, in their transaction, so a refused write leaves none.
+  - **Parents** are linked to their children from B4: `IdentityService` fills `ClinicIdentity.children` per request.
+  - **Guardians** are one row per (child, guardian): siblings share the guardian id, a PUT replaces one child's rows, and
+    PATCH's phone follows the guardian id to every child.
+  - **Photos** are JPEG, PNG or WebP by their bytes (the mock takes any `image/*`): nothing that can carry script is
+    served from the API's origin.
+  - **Paging** stays the contract's `page`/`pageSize`, and `GET /patients` is unpaged, both as the mock. A cursor needs
+    the shared schema and the mock changed first.
 - **Seed** (B1): `packages/seed` (`@pedia/seed`), so MSW and `prisma db seed` run the same `seedPlatform()`. Not
   `@pedia/shared`: the seed needs faker and is built from `new Date()`, which don't belong in the contract package.
 

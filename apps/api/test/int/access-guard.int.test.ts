@@ -1,5 +1,5 @@
 import { Controller, Get, type INestApplication } from "@nestjs/common";
-import { DEMO_CLINIC_ID, demoLogins, seedPlatform } from "@pedia/seed";
+import { DEMO_CLINIC_ID, childrenOf, demoLogins, seedPlatform } from "@pedia/seed";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Hasher } from "../../src/auth/hashing";
@@ -97,9 +97,14 @@ describe("the access guard on MySQL", () => {
     expect(Number(row!.n)).toBe(1);
   });
 
-  it("refuses a parent another family's record (and, until B11, any child's record)", async () => {
+  it("lets a parent reach their own child and refuses another family's (decision 5)", async () => {
+    const db = platform.tenants[DEMO_CLINIC_ID]!;
+    const guardianId = db.patients.find((p) => p.id === "patient_sibling")!.guardians.find((g) => g.isPrimary)!.id;
+    const mine = new Set(childrenOf(db, guardianId).map((p) => p.id));
+    const other = db.patients.find((p) => !mine.has(p.id))!;
     const { token } = await signIn("parent@gmail.com");
-    const res = await get("/api/patients/patient_sibling/plan", `pd_session=${token}`);
+    for (const id of mine) expect((await get(`/api/patients/${id}/plan`, `pd_session=${token}`)).status).toBe(200);
+    const res = await get(`/api/patients/${other.id}/plan`, `pd_session=${token}`);
     expect([res.status, res.text]).toEqual([403, "This isn't one of your children's records"]);
   });
 });

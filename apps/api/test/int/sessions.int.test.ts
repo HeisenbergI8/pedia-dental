@@ -5,6 +5,7 @@ import { requestContext } from "../../src/common/request-context";
 import { Hasher } from "../../src/auth/hashing";
 import { IdentityService } from "../../src/auth/identity.service";
 import { SessionService } from "../../src/auth/session.service";
+import { FamilyService } from "../../src/patients/family.service";
 import { seedDatabase } from "../../src/seed/seed-database";
 import { resetDatabase, testPrisma } from "./support/database";
 
@@ -12,7 +13,7 @@ const prisma = testPrisma();
 const clock = new FixedClock(new Date("2026-10-16T00:00:00Z"));
 const hasher = new Hasher();
 const sessions = new SessionService(prisma, clock);
-const identity = new IdentityService(prisma, clock, hasher);
+const identity = new IdentityService(prisma, clock, hasher, new FamilyService(prisma));
 const minutes = (n: number) => clock.set(new Date(clock.now().getTime() + n * 60_000));
 const asClinic = <T>(clinicId: string, fn: () => Promise<T>) =>
   requestContext.run({ requestId: "int", clinicId, operator: false }, async () => await fn());

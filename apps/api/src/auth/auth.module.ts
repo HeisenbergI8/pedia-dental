@@ -1,6 +1,7 @@
 import { type MiddlewareConsumer, Module, type NestModule } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 import { AuditModule } from "../audit/audit.module";
+import { FamilyModule } from "../patients/family.module";
 import { AccessGuard } from "./access.guard";
 import { AuthController } from "./auth.controller";
 import { AuthJobs } from "./auth.jobs";
@@ -17,7 +18,7 @@ import { SessionService } from "./session.service";
  * B2c adds the /auth and /operator/auth controllers here.
  */
 @Module({
-  imports: [AuditModule],
+  imports: [AuditModule, FamilyModule],
   controllers: [AuthController, OperatorAuthController],
   providers: [Hasher, SessionService, IdentityService, AuthService, RateLimitService, AuthJobs, AccessGuard, { provide: APP_GUARD, useExisting: AccessGuard }],
   exports: [Hasher, SessionService, IdentityService],
