@@ -15,6 +15,10 @@ const B4_ROUTES: [Method, string][] = [
   ["get", "/patient-duplicates"],
   ["get", "/patients/p1"],
   ["get", "/patients/p1/summary"],
+  ["post", "/patients"],
+  ["put", "/patients/p1"],
+  ["patch", "/patients/p1"],
+  ["post", "/patients/p1/consents"],
 ];
 
 describe("B4's routes are served and guarded (no database)", () => {

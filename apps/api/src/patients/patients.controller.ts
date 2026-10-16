@@ -1,8 +1,9 @@
-import { Controller, Get, Param, Query, Req } from "@nestjs/common";
-import { PatientListQuery } from "@pedia/shared";
+import { Body, Controller, Get, Param, Patch, Post, Put, Query, Req } from "@nestjs/common";
+import { PatientListQuery, RegisterPatientInput } from "@pedia/shared";
 import type { Request } from "express";
 import { identityOf } from "../auth/access.guard";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
+import { PatientWritesService } from "./patient-writes.service";
 import { PatientsService } from "./patients.service";
 import { viewerOf } from "./patient.views";
 
@@ -12,7 +13,10 @@ const viewer = (req: Request) => viewerOf(identityOf(req)!);
 /** features/patients/mocks.ts. Reads here (B4b); writes in B4c, privacy in B4d, the photo in B4e. */
 @Controller()
 export class PatientsController {
-  constructor(private readonly patients: PatientsService) {}
+  constructor(
+    private readonly patients: PatientsService,
+    private readonly writes: PatientWritesService,
+  ) {}
 
   @Get("patients")
   directory(@Req() req: Request, @Query("q") q?: unknown) {
@@ -39,5 +43,26 @@ export class PatientsController {
   @Get("patients/:id/summary")
   summary(@Req() req: Request, @Param("id") id: string) {
     return this.patients.headerSummary(viewer(req), id);
+  }
+
+  @Post("patients")
+  register(@Req() req: Request, @Body(new ZodValidationPipe(RegisterPatientInput)) input: RegisterPatientInput) {
+    return this.writes.register(viewer(req), input); // 201, as the mock
+  }
+
+  // 404 before 400 (the mock's order): bodies are parsed in the service.
+  @Put("patients/:id")
+  update(@Req() req: Request, @Param("id") id: string, @Body() body: unknown) {
+    return this.writes.update(viewer(req), id, body);
+  }
+
+  @Patch("patients/:id")
+  quickUpdate(@Req() req: Request, @Param("id") id: string, @Body() body: unknown) {
+    return this.writes.quickUpdate(viewer(req), id, body);
+  }
+
+  @Post("patients/:id/consents")
+  addConsent(@Req() req: Request, @Param("id") id: string, @Body() body: unknown) {
+    return this.writes.addConsent(viewer(req), id, body); // 201, as the mock
   }
 }

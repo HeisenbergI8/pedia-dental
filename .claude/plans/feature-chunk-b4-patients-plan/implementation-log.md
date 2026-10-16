@@ -39,3 +39,11 @@
 **Deviations from plan:** the log test drives `/api/probe/log?…` (the file's existing probe) instead of `/api/health?…`, which waits ~30 s for MySQL in a DB-free test. In the header-summary case, the dentist gets `balance`/`credit` too: dentists hold `billing.view` (permissions.ts), exactly as in the mock, so the test asserts siblings only for them.
 **Gate:** `pnpm run check` green (api 179, web 342); `pnpm --filter api test:int` 19 files, 125 passed, 3 todo.
 **Notes:** search parity proven on MySQL, including `_`/`%` literal and `jose` ≠ `josé`. `LIMIT/OFFSET` as bound parameters work with the mariadb adapter.
+
+## Phase 6: Writes — 2026-10-16
+
+**Steps completed:** 6.1, 6.2, 6.3
+**Files changed:** `apps/api/src/patients/patient.rows.ts`, `apps/api/src/patients/patient.rows.test.ts`, `apps/api/src/patients/patient-writes.service.ts`, `apps/api/src/legal/privacy-notice.service.ts`, `apps/api/src/legal/legal.module.ts`, `apps/api/src/patients/patients.controller.ts`, `apps/api/src/patients/patients.module.ts`, `apps/api/test/patients-routes.test.ts`, `apps/api/test/int/patients-write.int.test.ts`
+**Deviations from plan:** `lockPatient` is exported (Phases 7 and 8 lock the same row). Added one case beyond the plan's list: PUT/PATCH/consents answer 404 before reading the body (the mock's order).
+**Gate:** `pnpm run check` green (api 189, web 342); `pnpm --filter api test:int` 20 files, 143 passed, 3 todo.
+**Notes:** the parallel-numbering case runs 3 rounds of 20 concurrent POSTs; every round got 20 consecutive numbers. The audit case asserts the exact sequence of entries for one patient.
