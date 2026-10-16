@@ -1,7 +1,7 @@
 import { format } from "date-fns";
 import { birthdayGreeting, choiceDeclined, isBirthdayOn, preVisitMessageFor, reminderSendAt, type Appointment, type Message } from "@pedia/shared";
 import { currentAccount, currentClinicId, db } from "./db";
-import { composeMessage, type MessageEvent } from "./message-templates";
+import { composeMessage, type MessageEvent } from "@pedia/seed";
 
 /** Feature 5's outbox. Events queue messages here and nothing is ever sent. The calling handler persists. */
 export function queueMessage(e: MessageEvent): Message | undefined {

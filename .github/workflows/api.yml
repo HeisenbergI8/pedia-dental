@@ -1,0 +1,36 @@
+# The closing gate and the integration suite, on the MySQL version production runs (8.4).
+name: check
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: pedia_dental_test
+          MYSQL_USER: pedia
+          MYSQL_PASSWORD: pedia
+        ports: ["3307:3306"]
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      # `prisma generate` (postinstall) reads DATABASE_URL through prisma.config.ts.
+      DATABASE_URL: mysql://pedia:pedia@127.0.0.1:3307/pedia_dental_test
+      TEST_DATABASE_URL: mysql://pedia:pedia@127.0.0.1:3307/pedia_dental_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4 # version from package.json's packageManager
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+      - run: pnpm --filter api test:int

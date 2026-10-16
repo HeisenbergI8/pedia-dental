@@ -1,7 +1,7 @@
 import { faker } from "@faker-js/faker";
 import { addDays, setHours, startOfDay } from "date-fns";
 import { DEFAULT_OPENING_HOURS, formatPatientNo, type Appointment, type Branch, type ClinicAccount, type StaffMember } from "@pedia/shared";
-import type { Db } from "./db";
+import type { Db } from "./platform";
 import { defaultMessageTemplates } from "./message-templates";
 import { NOTE_TEMPLATES } from "./note-templates";
 import { PROCEDURES, seedPatient } from "./seed";

@@ -23,10 +23,7 @@ import {
 import { deleteBlob, getBlob, putBlob } from "./blob-store";
 import { emptyDb, persist, platform } from "./db";
 import { newPin, temporaryPassword } from "./demo-accounts";
-import { defaultMessageTemplates } from "./message-templates";
-import { NOTE_TEMPLATES } from "./note-templates";
-import { PROCEDURES } from "./seed";
-import { firstNotice } from "./seed-privacy";
+import { NOTE_TEMPLATES, PROCEDURES, defaultMessageTemplates, firstNotice } from "@pedia/seed";
 import { startSubscription } from "./subscriptions";
 
 /*

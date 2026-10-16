@@ -1,12 +1,9 @@
 import type { OperatorUser } from "@pedia/shared";
+import { OPERATORS as SEED_OPERATORS } from "@pedia/seed";
 import { DEMO_PASSWORD } from "./demo-accounts";
 
-/**
- * Primolar's own staff (decisions #3, #25). Deliberately not in `Platform`: they aren't a clinic's data, so they are
- * never inside a tenant, never listed by `allAccounts`, and can't sign in on the clinic sign-in page. Prototype: one
- * operator, the demo password (a demo control, like every demo login; CONVENTIONS "Reporting rules").
- */
-export const OPERATORS: OperatorUser[] = [{ id: "operator_primolar", name: "Primolar Support", email: "operator@primolar.demo" }];
+/** Primolar's own staff (decisions #3, #25), from packages/seed so the API seeds the same operator. */
+export const OPERATORS: OperatorUser[] = SEED_OPERATORS;
 
 /** The operator console's cookie, written by stores/operator-session-store.ts. Never `pd_session`. */
 export const OPERATOR_COOKIE = "pd_operator";

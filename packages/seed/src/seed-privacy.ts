@@ -10,7 +10,7 @@ import {
   type StaffMember,
   type Subscription,
 } from "@pedia/shared";
-import type { Db } from "./db";
+import type { Db } from "./platform";
 
 /** Privacy #19, P20: version 1 of a clinic's notice, from Primolar's template. The Owner is the first privacy contact. */
 export function firstNotice(clinicId: string, clinicName: string, contactName: string, contactEmail: string): PrivacyNotice {

@@ -18,7 +18,7 @@ import {
   sameClinicName,
   subscriptionStatus,
 } from "@pedia/shared";
-import { seedPlatform } from "./db";
+import { seedPlatform } from "./platform";
 import { seed } from "./seed";
 
 const today = format(new Date(), "yyyy-MM-dd");

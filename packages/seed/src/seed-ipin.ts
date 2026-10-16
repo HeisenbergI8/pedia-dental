@@ -1,5 +1,5 @@
 import { DEFAULT_BRAND_COLOR, DEFAULT_OPENING_HOURS, type Branch, type ClinicAccount, type StaffMember } from "@pedia/shared";
-import type { Db } from "./db";
+import type { Db } from "./platform";
 import { defaultMessageTemplates } from "./message-templates";
 import { NOTE_TEMPLATES } from "./note-templates";
 import { PROCEDURES } from "./seed";

@@ -26,7 +26,7 @@ import { today } from "./clock";
 import { currentClinicId, platform } from "./db";
 import { DEMO_PASSWORD } from "./demo-accounts";
 import { handlers } from "./handlers";
-import { staffAcknowledged } from "./seed-privacy";
+import { staffAcknowledged } from "@pedia/seed";
 
 const server = setupServer(...handlers);
 const OPERATOR = "operator.operator_primolar";

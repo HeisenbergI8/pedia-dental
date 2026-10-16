@@ -15,7 +15,8 @@
     "postinstall": "prisma generate",
     "lint": "echo 'no lint in api'",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "test:int": "vitest run --config vitest.int.config.ts"
   },
   "devDependencies": {
     "@nestjs/testing": "^12",

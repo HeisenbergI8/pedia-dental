@@ -5,7 +5,7 @@ import { z } from "zod";
 import { FinanceSummary, Payment, TodaySummary } from "@pedia/shared";
 import { ApiError, api } from "@/lib/api-client";
 import { handlers } from "./handlers";
-import { DASMA, IMUS } from "./seed";
+import { DASMA, IMUS } from "@pedia/seed";
 
 const server = setupServer(...handlers);
 const signIn = (token: string, branch?: string) =>

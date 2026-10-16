@@ -271,18 +271,18 @@ const PUBLIC_RULES: Pick<Rule, "method" | "path">[] = [
 ];
 
 function publicRefusal(request: Request, path: string) {
-  return PUBLIC_RULES.some((r) => r.method === request.method && match(r.path, path)) ? undefined : deny(403, `No access rule for ${request.method} ${path}`);
+  return PUBLIC_RULES.some((r) => r.method === request.method && matchPath(r.path, path)) ? undefined : deny(403, `No access rule for ${request.method} ${path}`);
 }
 
 /** The gate for /operator/*: 401 without an operator token (a clinic token is not one), 403 for an unlisted route. */
 function operatorRefusal(request: Request, path: string) {
   if (path.startsWith("/operator/auth/")) return; // sign-in, me and sign-out check the operator themselves
   if (!operatorOf(request)) return deny(401, "Sign in to the Primolar console to continue");
-  return OPERATOR_RULES.some((r) => r.method === request.method && match(r.path, path)) ? undefined : deny(403, `No access rule for ${request.method} ${path}`);
+  return OPERATOR_RULES.some((r) => r.method === request.method && matchPath(r.path, path)) ? undefined : deny(403, `No access rule for ${request.method} ${path}`);
 }
 
 /** `/patients/:id/plan` against `/patients/abc/plan` → `{ id: "abc" }`. Segment for segment, no wildcards. */
-function match(pattern: string, path: string): Record<string, string> | undefined {
+export function matchPath(pattern: string, path: string): Record<string, string> | undefined {
   const want = pattern.split("/");
   const got = path.split("/");
   if (want.length !== got.length) return undefined;
@@ -374,7 +374,7 @@ export const accessGate = http.all(url("/*"), ({ request }) => {
   if (session.mustAcknowledge === "confidentiality") return deny(403, "Acknowledge patient confidentiality to continue");
 
   const hit = RULES.filter((r) => r.method === request.method)
-    .map((rule) => ({ rule, params: match(rule.path, path) }))
+    .map((rule) => ({ rule, params: matchPath(rule.path, path) }))
     .find((h) => h.params);
   if (!hit?.params) return deny(403, `No access rule for ${request.method} ${path}`);
 

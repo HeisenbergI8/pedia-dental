@@ -79,8 +79,6 @@ describe("token hygiene", () => {
       "app/globals.css",
       "app/manifest.ts",
       "features/documents/components/document-pdf.tsx",
-      "mocks/seed-ngiti.ts",
-      "mocks/seed.ts",
     ]);
   });
 });
