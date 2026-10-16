@@ -7,7 +7,7 @@ the contract: same paths, same shapes, same rules.
 
 ## Run it
 
-Requires Docker (for MySQL) plus the workspace's Node 20+ and pnpm 9.
+Requires Docker (for MySQL) plus the workspace's Node 22+ and pnpm 9.
 
 ```bash
 cp apps/api/.env.example apps/api/.env   # if not present

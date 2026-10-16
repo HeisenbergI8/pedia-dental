@@ -6,7 +6,7 @@ All data is fake and lives in your browser.
 
 ## Run it
 
-Requires Node 20+ and pnpm 9 (`npm i -g pnpm@9`).
+Requires Node 22+ and pnpm 9 (`npm i -g pnpm@9`).
 
 ```bash
 pnpm install
