@@ -142,7 +142,9 @@ model Staff {
   /// List order, as the clinic added them (the mock's array order). New staff go last (B3).
   position      Int       @default(0)
 
-  @@index([clinicId, email])
+  /// One login per email per account, deactivated logins included (decision #27). StaffService also checks it, with
+  /// parents' emails, under the clinic's lock (B3, Decision 4); this is the backstop.
+  @@unique([clinicId, email])
 }
 
 /// One login's secrets, staff or guardian, in one clinic account. Never served.
@@ -253,6 +255,76 @@ model PrivacyNotice {
   at           DateTime
 
   @@unique([clinicId, version])
+}
+
+/// A treatment chair (Chair in @pedia/shared). Belongs to one branch, but MODEL_SCOPE is "clinic": GET /chairs is
+/// account-wide, so a chair in a child's history resolves whichever branch the device is on (B3, Decision 8).
+model Chair {
+  id       String @id @default(cuid(2))
+  clinicId String
+  branchId String
+  name     String
+  /// List order (the mock's array order). New chairs go last.
+  position Int    @default(0)
+
+  @@index([clinicId, branchId])
+}
+
+/// One billable procedure (Procedure in @pedia/shared). `code` is the contract's key: note templates, plan items and
+/// follow-up rules name it, so it is the primary key with the clinic (B3, Decision 7).
+model Procedure {
+  clinicId           String
+  code               String  @db.VarChar(64)
+  name               String
+  defaultDurationMin Int
+  /// Centavos (CONVENTIONS → Data: money is Int).
+  fee                Int
+  /// The fee is charged per tooth treated.
+  perTooth           Boolean
+  position           Int     @default(0)
+
+  @@id([clinicId, code])
+}
+
+/// A clinical note's form (NoteTemplate in @pedia/shared). Ids (`tpl_oral_exam`) repeat in every clinic, so the
+/// primary key is (clinicId, id). `fields` is TemplateField[], parsed with that schema on read; never filtered on.
+model NoteTemplate {
+  clinicId  String
+  id        String  @db.VarChar(64)
+  name      String
+  /// A Procedure.code.
+  procedure String  @db.VarChar(64)
+  fields    Json
+  position  Int     @default(0)
+
+  @@id([clinicId, id])
+}
+
+/// Mirrors MessageKind in packages/shared/src/schemas/message.ts (tenant-scope.test.ts checks they match).
+enum MessageKind {
+  appointment_confirmation
+  appointment_reminder
+  post_extraction
+  post_pulpotomy
+  fluoride_instructions
+  pre_treatment
+  missed_appointment
+  follow_up_reminder
+  recall
+  birthday
+}
+
+/// A parent message's wording (MessageTemplate in @pedia/shared): one per kind per clinic, edited on the Messages page.
+model MessageTemplate {
+  clinicId  String
+  kind      MessageKind
+  name      String
+  /// At most 480 characters (TemplateBody), placeholders checked by the shared schema.
+  body      String      @db.VarChar(480)
+  updatedAt DateTime
+  position  Int         @default(0)
+
+  @@id([clinicId, kind])
 }
 
 /// Demo deployments only (DEMO_LOGINS=true): the sign-in page's one-click accounts, with the PIN shown in the clear,

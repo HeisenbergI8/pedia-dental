@@ -23,6 +23,19 @@ describe("prisma db seed (seedDatabase) on MySQL", () => {
     }
   });
 
+  it("writes each clinic's chairs, procedures, note templates and message templates in the mock's order (B3)", async () => {
+    const byPosition = { orderBy: { position: "asc" } } as const;
+    for (const { id } of platform.accounts) {
+      const db = platform.tenants[id]!;
+      await inClinic(id, async () => {
+        expect((await prisma.chair.findMany(byPosition)).map((c) => c.id)).toEqual(db.chairs.map((c) => c.id));
+        expect((await prisma.procedure.findMany(byPosition)).map((p) => [p.code, p.fee])).toEqual(db.procedures.map((p) => [p.code, p.fee]));
+        expect((await prisma.noteTemplate.findMany(byPosition)).map((t) => t.id)).toEqual(db.noteTemplates.map((t) => t.id));
+        expect((await prisma.messageTemplate.findMany(byPosition)).map((t) => t.kind)).toEqual(db.messageTemplates.map((t) => t.kind));
+      });
+    }
+  });
+
   it("gives every mock login the same email in the same clinics, opened by the demo password", async () => {
     for (const { email } of demoLogins(platform)) {
       const rows = await prisma.credential.findMany({ where: { email }, select: { clinicId: true, passwordHash: true } });

@@ -4,7 +4,10 @@ import { identityOf } from "../auth/access.guard";
 import { requireContext } from "../common/request-context";
 import { ClinicService } from "./clinic.service";
 
-/** GET /clinic, /branches, /staff: clinic.view (access-rules.ts), so the guard has loaded a live identity by now. */
+/**
+ * The clinic account and its setup (features/clinic/mocks.ts). Reads are clinic.view, writes clinic.manage
+ * (access-rules.ts), so the guard has loaded a live identity by the time a handler runs.
+ */
 @Controller()
 export class ClinicController {
   constructor(private readonly clinic: ClinicService) {}
@@ -25,5 +28,15 @@ export class ClinicController {
   @Get("staff")
   staff() {
     return this.clinic.staff(requireContext().user!.roles);
+  }
+
+  @Get("chairs")
+  chairs() {
+    return this.clinic.chairs();
+  }
+
+  @Get("procedures")
+  procedures() {
+    return this.clinic.procedures();
   }
 }

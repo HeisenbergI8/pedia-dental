@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { Branch, ClinicContext, type Role, type StaffMember } from "@pedia/shared";
+import { Branch, Chair, ClinicContext, Procedure, type Role, type StaffMember } from "@pedia/shared";
 import type { ClinicIdentity } from "../auth/identity.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { logoUrlOf, toClinicAccount, toStaffMember } from "./clinic.views";
@@ -23,5 +23,20 @@ export class ClinicService {
   /** GET /staff: deactivated ones too, so their names stay on what they recorded (decision #23). */
   async staff(viewer: readonly Role[]): Promise<StaffMember[]> {
     return (await this.prisma.staff.findMany({ orderBy: [{ position: "asc" }, { id: "asc" }] })).map((s) => toStaffMember(s, viewer));
+  }
+
+  /** GET /chairs: every branch's, archived branches' too, so a chair in a child's history still resolves (useChairs). */
+  async chairs(): Promise<Chair[]> {
+    const rows = await this.prisma.chair.findMany({ select: { id: true, clinicId: true, branchId: true, name: true }, orderBy: [{ position: "asc" }, { id: "asc" }] });
+    return rows.map((c) => Chair.parse(c));
+  }
+
+  /** GET /procedures: the catalog in the clinic's order. Fees are centavos. */
+  async procedures(): Promise<Procedure[]> {
+    const rows = await this.prisma.procedure.findMany({
+      select: { clinicId: true, code: true, name: true, defaultDurationMin: true, fee: true, perTooth: true },
+      orderBy: [{ position: "asc" }, { code: "asc" }],
+    });
+    return rows.map((p) => Procedure.parse(p));
   }
 }

@@ -15,6 +15,12 @@ export const MODEL_SCOPE = {
   Staff: "clinic",
   Acknowledgement: "clinic",
   PrivacyNotice: "clinic",
+  // B3: what a clinic configures. Chair is branch-level data read account-wide (GET /chairs), so "clinic": the
+  // "branch" scope would narrow every read to the device's branch.
+  Chair: "clinic",
+  Procedure: "clinic",
+  NoteTemplate: "clinic",
+  MessageTemplate: "clinic",
   // Platform: Primolar's own records
   ClinicAccount: "platform",
   Agreement: "platform",
