@@ -328,7 +328,8 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   - **`/patient-summaries` and the header summary** are the API's now; last visit, recall date, balance and flags are
     empty or zero until B5, B7 and B8 fill them.
   - **Audit**: one `view` "Patient profile" per single-record read (`GET /patients/:id`, its summary) and `view`
-    "Patient photo"; **lists, searches and duplicate checks aren't audited**, unlike the mock's "Patient list" entries.
+    "Patient photo", except that the same user viewing the same record again within five minutes isn't logged twice
+    (`REPEAT_WINDOW_MS`, B1, as the mock); **lists, searches and duplicate checks aren't audited**, unlike the mock's "Patient list" entries.
     Writes keep the mock's entries, in their transaction, so a refused write leaves none.
   - **Parents** are linked to their children from B4: `IdentityService` fills `ClinicIdentity.children` per request.
   - **Guardians** are one row per (child, guardian): siblings share the guardian id, a PUT replaces one child's rows, and

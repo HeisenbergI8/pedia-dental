@@ -78,3 +78,9 @@
 **Files changed:** `apps/api/src/logging/logger.ts` (`res.headers["content-disposition"]` added to `REDACT_PATHS`), `apps/api/test/logging.test.ts` (a probe route that sets a named `Content-Disposition`; the case failed before the fix and passes after).
 **Gate:** `pnpm run check` green (api 203, web 342).
 **Notes:** the first full check after the fix had one web failure, `handlers.test.ts` "sends a dentist no guardian phone …", which passed on three reruns of the file and on the next full check. It predates B4 (no web handler changed here): its `not.toMatch(/0917|0918|…/)` scans whole responses that include random UUIDs. Left as a follow-up.
+
+## After the audit — 2026-10-16
+
+**Auditor score:** 81/100; every step delivered, every done-when item proved by a passing test.
+**Acted on:** Finding 3: the B4 audit decision in `apps/api/CONVENTIONS.md` now names the five-minute repeat window. Finding 1 is recorded here as a deviation: Step 5.1's `**Verify:** pnpm run check -- logger` selects only `src/logging/logger.test.ts`; B4's log cases live in `test/logging.test.ts` (filter `logging`), which the full `pnpm run check` runs. Finding 4: the content-disposition case was seen failing before the fix in this session (1 failed | 3 passed), then passing.
+**Left for the user:** the plan's four Follow-Up questions (two search columns, unindexed, vs decision 1's "one indexed column"; `denied` audit entries; the agreements trail needing no new endpoint; refused writes leaving no audit entry).
