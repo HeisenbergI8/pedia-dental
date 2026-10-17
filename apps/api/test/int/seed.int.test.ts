@@ -2,7 +2,7 @@ import { findConflict, patientSearchText, planProgress } from "@pedia/shared";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DEMO_CLINIC_ID, DEMO_PASSWORD, OPERATORS, SEED_FILES, accountsByEmail, demoLogins, seedPlatform, type SeedFileType } from "@pedia/seed";
+import { DEMO_CLINIC_ID, DEMO_PASSWORD, OPERATORS, SEED_FILES, accountsByLogin, demoLogins, seedPlatform, type SeedFileType } from "@pedia/seed";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Hasher } from "../../src/auth/hashing";
 import { APPOINTMENT_COLUMNS, toAppointment } from "../../src/appointments/appointment.rows";
@@ -177,7 +177,7 @@ describe("prisma db seed (seedDatabase) on MySQL", () => {
   it("gives every mock login the same email in the same clinics, opened by the demo password", async () => {
     for (const { email } of demoLogins(platform)) {
       const rows = await prisma.credential.findMany({ where: { email }, select: { clinicId: true, passwordHash: true } });
-      expect(rows.map((r) => r.clinicId).sort()).toEqual(accountsByEmail(platform, email).map((m) => m.clinicId).sort());
+      expect(rows.map((r) => r.clinicId).sort()).toEqual(accountsByLogin(platform, email).map((m) => m.clinicId).sort());
       expect(await hasher.matches(rows[0]!.passwordHash, DEMO_PASSWORD)).toBe(true);
     }
   });

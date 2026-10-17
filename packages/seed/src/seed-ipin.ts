@@ -68,5 +68,6 @@ export function seedIpin(): Db {
     staffCredentials: [], // a seeded login: the demo password
     privacyNotices: [firstNotice(IPIN_ID, IPIN_ACCOUNT.name, OWNER.fullName, IPIN_ACCOUNT.contactEmail)],
     acknowledgements: staffAcknowledged(IPIN_ID, [OWNER]),
+    portalAccounts: [], // filled by seedPlatform (B11)
   };
 }

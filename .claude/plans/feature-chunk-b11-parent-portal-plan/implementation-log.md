@@ -10,3 +10,10 @@
 - `CARE_KINDS` is typed `LoggedMessageKind[]` (the portal filters log rows with it).
 - `messageData` casts `kind` to Prisma's enum until Phase 5 widens the column.
 **Gate:** `pnpm run check`: green.
+
+## Phase 2: Seeded portal accounts — 2026-10-17
+
+**Steps completed:** 2.1
+**Files changed:** `packages/seed/src/{logins,platform,seed,seed-ngiti,seed-ipin,seed.test}.ts`, `apps/web/src/mocks/{db,demo-accounts}.ts`, `apps/web/src/features/auth/mocks.ts` (rename only), `apps/api/test/int/seed.int.test.ts` (rename only), `apps/web/src/mocks/{privacy,tenancy}.test.ts`
+**Deviations from plan:** two existing mock tests signed in as the guardian of a child they had just registered; since B11 that guardian is no login until invited, so each test now opens that guardian's portal account first (as an accepted invite would).
+**Gate:** `pnpm run check`: green.

@@ -3,7 +3,7 @@ import { AcknowledgeInput, ChangePasswordInput, LoginInput, LogoutInput, SwitchU
 import { env } from "@/lib/env";
 import { branchOf, recordAudit, sessionOf } from "@/mocks/access";
 import { accountById, credentialOf, db, persist, platform, selectTenant } from "@/mocks/db";
-import { DEMO_PASSWORD, accountsByEmail, allAccounts, demoAccounts, demoLogins, passwordOpens, tokenFor, type AccountMatch, type DemoAccountRecord } from "@/mocks/demo-accounts";
+import { DEMO_PASSWORD, accountsByLogin, allAccounts, demoAccounts, demoLogins, passwordOpens, tokenFor, type AccountMatch, type DemoAccountRecord } from "@/mocks/demo-accounts";
 import { acknowledgementPrompt, expectedVersion, pendingAcknowledgement, recordAcknowledgement } from "@/mocks/privacy";
 import { DEMO_CLINIC_ID, onlineAgreement } from "@pedia/seed";
 
@@ -48,7 +48,7 @@ export const authHandlers = [
     const parsed = LoginInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
     const { email, password, clinicId } = parsed.data;
-    const matches = accountsByEmail(platform, email);
+    const matches = accountsByLogin(platform, email); // `email` holds a mobile or an email (LoginId, B11 decision 4)
     // Each failure is logged in the account it names (an unknown email has no one to log against).
     const logEach = (rows: AccountMatch[], action: AuditAction, record = "Session") =>
       rows.forEach((m) => {

@@ -1,9 +1,9 @@
-import { DEMO_PASSWORD, allAccounts, staffEmail, type AccountMatch, type DemoAccountRecord } from "@pedia/seed";
+import { DEMO_PASSWORD, allAccounts, portalAccountOf, staffEmail, type AccountMatch, type DemoAccountRecord } from "@pedia/seed";
 import { credentialOf, type Db, type Platform } from "./db";
 
 /** Who signs in with which email lives in packages/seed (shared with the API). Re-exported for the mocks. */
 export {
-  DEMO_PASSWORD, accountsByEmail, allAccounts, childrenOf, demoAccounts, demoLogins, handle, staffEmail,
+  DEMO_PASSWORD, accountsByLogin, allAccounts, childrenOf, demoAccounts, demoLogins, handle, portalAccountOf, staffEmail,
   type AccountMatch, type DemoAccountRecord,
 } from "@pedia/seed";
 
@@ -19,9 +19,12 @@ export function accountForToken(platform: Platform, token: string | undefined): 
   return account && { clinicId: clinicId!, account };
 }
 
-/** Does this password open this login? Its own password once it has one (an added or changed login), else the demo one. */
-export const passwordOpens = (db: Db, account: Pick<DemoAccountRecord, "staffId">, password: string) =>
-  (credentialOf(db, account.staffId)?.password ?? DEMO_PASSWORD) === password;
+/**
+ * Does this password open this login? Its own once it has one (a staff login the Owner added or that changed it; a
+ * parent who set one from a link, B11), else the demo password.
+ */
+export const passwordOpens = (db: Db, account: Pick<DemoAccountRecord, "staffId" | "guardianId">, password: string) =>
+  ((account.staffId ? credentialOf(db, account.staffId)?.password : portalAccountOf(db, account.guardianId)?.password) ?? DEMO_PASSWORD) === password;
 
 /**
  * Is this email already a login in the account? Deactivated staff count: they can be reactivated, and two logins with

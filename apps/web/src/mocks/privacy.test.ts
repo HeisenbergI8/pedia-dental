@@ -144,6 +144,8 @@ describe("parent consent (privacy #12–#18)", () => {
     asStaff("staff_reyes");
     expect((await upload(id, "intraoral")).type).toBe("intraoral"); // photos are back on
 
+    // A new family's guardian signs in once invited (B11): open her portal account as an accepted invite would.
+    db.portalAccounts.push({ clinicId: "clinic_demo", guardianId: "g_privacy_mother", state: "active", links: [] });
     cookies("pd_session=demo.clinic_demo.guardian.g_privacy_mother");
     const byParent = await api(`/patients/${id}/privacy-choices`, PatientView, send("POST", { photos: true, reminders: true }));
     expect(byParent.privacyChoices![2]).toMatchObject({ by: "parent", byName: "Joy Domingo", reminders: true });

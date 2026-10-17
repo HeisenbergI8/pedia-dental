@@ -29,6 +29,7 @@ import type {
   StaffPin,
   Subscription,
   Visit,
+  PortalAccount,
 } from "@pedia/shared";
 import { DEMO_ACCOUNT, seed } from "./seed";
 import { IPIN_ACCOUNT, seedIpin } from "./seed-ipin";
@@ -36,6 +37,7 @@ import { NGITI_ACCOUNT, seedNgiti } from "./seed-ngiti";
 import { SEED_PRICES, seedSignups } from "./seed-signups";
 import { seedAgreements } from "./seed-privacy";
 import { seedSubscriptions } from "./seed-subscriptions";
+import { seedPortalAccounts } from "./logins";
 
 /**
  * One clinic account's data (one tenant). The web persists it inside `Platform`; the API maps it to rows.
@@ -67,6 +69,7 @@ export type Db = {
   staffCredentials: StaffCredential[]; // passwords of logins the Owner added or that changed theirs; never served
   privacyNotices: PrivacyNotice[]; // privacy #19: append-only versions, newest in force (P20)
   acknowledgements: Acknowledgement[]; // privacy #20, #21: who read which notice or confidentiality version, when
+  portalAccounts: PortalAccount[]; // B11: each guardian's portal access; never served (a parent is a login only while active)
 };
 
 /**
@@ -77,7 +80,7 @@ export const emptyDb = (): Db => ({
   branches: [], patients: [], staff: [], chairs: [], procedures: [], visits: [], chartEntries: [], noteTemplates: [],
   notes: [], growth: [], planItems: [], appointments: [], photos: [], dueItems: [], invoices: [], payments: [],
   messageTemplates: [], messages: [], documents: [], appointmentRequests: [], auditEvents: [], staffPins: [],
-  staffCredentials: [], privacyNotices: [], acknowledgements: [],
+  staffCredentials: [], privacyNotices: [], acknowledgements: [], portalAccounts: [],
 });
 
 
@@ -97,6 +100,8 @@ export type Platform = {
 
 export const seedPlatform = (): Platform => {
   const tenants = { [DEMO_ACCOUNT.id]: seed(), [NGITI_ACCOUNT.id]: seedNgiti(), [IPIN_ACCOUNT.id]: seedIpin() };
+  // B11 decision 13: every seeded guardian already uses the portal, on the demo password. No faker: nothing re-rolls.
+  for (const db of Object.values(tenants)) db.portalAccounts = seedPortalAccounts(db);
   const subscriptions = seedSubscriptions();
   return {
     accounts: [DEMO_ACCOUNT, NGITI_ACCOUNT, IPIN_ACCOUNT],

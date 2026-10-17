@@ -1,5 +1,5 @@
 import { startOfDay } from "date-fns";
-import { Role, accountSummary, isActiveStaff, rolesOf, type Appointment, type DemoAccount, type Guardian, type OperatorUser, type Patient, type StaffMember, type StaffRole } from "@pedia/shared";
+import { Role, accountSummary, isActiveStaff, rolesOf, smsNumber, type Appointment, type DemoAccount, type Guardian, type OperatorUser, type Patient, type PortalAccount, type StaffMember, type StaffRole } from "@pedia/shared";
 import type { Db, Platform } from "./platform";
 
 /** Every demo account signs in with this. It is shown on the login screen and protects nothing. */
@@ -28,7 +28,8 @@ const LOGINS = new Set([...Object.values(STAFF_LOGIN), PARENT_LOGIN.email]);
 /** Matches the portal's "Coming up" list (portal-appointments.tsx). */
 const UPCOMING: Appointment["status"][] = ["booked", "confirmed", "arrived", "in_chair"];
 
-export type DemoAccountRecord = DemoAccount & { staffId?: string; guardianId?: string; roles: Role[] };
+/** `phone`: a parent's mobile sign-in (smsNumber form), when no other parent of the account signs in with it (B11 decision 14). */
+export type DemoAccountRecord = DemoAccount & { staffId?: string; guardianId?: string; phone?: string; roles: Role[] };
 
 const STAFF_SUMMARY: Record<StaffRole, string> = {
   admin: "Everything, including the financial dashboard",
@@ -69,20 +70,38 @@ const staffAccount = (s: StaffMember, pin?: string): DemoAccountRecord => ({
   pin,
 });
 
-const parentAccount = (db: Db, g: Guardian, summary: string): DemoAccountRecord => ({
+/** The address a seeded parent signs in with: parent@gmail.com for the sibling family, else a generated one. */
+const demoEmail = (db: Db, g: Guardian) => (g.id === loginFamily(db)?.id ? PARENT_LOGIN.email : `${handle(g.fullName)}@parent.demo`);
+export const portalAccountOf = (db: Db, guardianId: string | undefined) =>
+  guardianId ? db.portalAccounts.find((a) => a.guardianId === guardianId) : undefined;
+
+const parentAccount = (db: Db, g: Guardian, summary: string, phone?: string): DemoAccountRecord => ({
   id: `guardian.${g.id}`,
   role: "parent",
   name: g.fullName,
-  email: g.id === loginFamily(db)?.id ? PARENT_LOGIN.email : `${handle(g.fullName)}@parent.demo`,
+  email: portalAccountOf(db, g.id)?.email ?? "", // "": signs in with their number only (B11 decision 14)
+  phone,
   summary,
   guardianId: g.id,
   roles: ["parent"],
 });
 
-/** Everyone who can sign in: active staff (decision #23) and every guardian on any patient. */
+/**
+ * Everyone who can sign in: active staff (decision #23) and, since B11, every guardian on a patient whose portal
+ * account is active. A guardian on no child any more isn't listed (decision 10). Their mobile is read live from the
+ * guardian (decision 15); a number another parent already signs in with goes to the first only (decision 14).
+ */
 export function allAccounts(db: Db): DemoAccountRecord[] {
   const guardians = new Map(db.patients.flatMap((p) => p.guardians).map((g) => [g.id, g]));
-  return [...db.staff.filter(isActiveStaff).map((s) => staffAccount(s)), ...[...guardians.values()].map((g) => parentAccount(db, g, ""))];
+  const taken = new Set<string>();
+  const parents = [...guardians.values()]
+    .filter((g) => portalAccountOf(db, g.id)?.state === "active")
+    .map((g) => {
+      const n = smsNumber(g.phone);
+      const phone = n && !taken.has(n) ? (taken.add(n), n) : undefined;
+      return parentAccount(db, g, "", phone);
+    });
+  return [...db.staff.filter(isActiveStaff).map((s) => staffAccount(s)), ...parents];
 }
 
 const clinicName = (platform: Platform, id: string) => platform.accounts.find((a) => a.id === id)!.name;
@@ -92,7 +111,7 @@ const clinicName = (platform: Platform, id: string) => platform.accounts.find((a
  * each with every clinic account its email signs in to (dentist@gmail.com names both, which is the chooser demo).
  */
 export function demoLogins(platform: Platform) {
-  const names = (email: string) => accountsByEmail(platform, email).map((m) => clinicName(platform, m.clinicId));
+  const names = (email: string) => accountsByLogin(platform, email).map((m) => clinicName(platform, m.clinicId));
   const seen = new Set<string>();
   return platform.accounts
     .flatMap(({ id }) => allAccounts(platform.tenants[id]!).sort((a, b) => Role.options.indexOf(a.role) - Role.options.indexOf(b.role)))
@@ -102,11 +121,21 @@ export function demoLogins(platform: Platform) {
 
 export type AccountMatch = { clinicId: string; account: DemoAccountRecord };
 
-/** Every login with this email, in every clinic account. Each account keeps its own logins (decision #27). */
-export const accountsByEmail = (platform: Platform, email: string): AccountMatch[] =>
+/** Every login with this email or mobile (LoginId's form), in every clinic account (decision #27; B11 decision 4). */
+export const accountsByLogin = (platform: Platform, login: string): AccountMatch[] =>
   platform.accounts.flatMap(({ id }) =>
-    allAccounts(platform.tenants[id]!).filter((a) => a.email === email).map((account) => ({ clinicId: id, account })),
+    allAccounts(platform.tenants[id]!).filter((a) => a.email === login || a.phone === login).map((account) => ({ clinicId: id, account })),
   );
+
+/**
+ * B11 decision 13: one active account per guardian, on the demo password, with the generated demo address. Dated by
+ * the guardian's first child's registration, so it is the same on every load.
+ */
+export function seedPortalAccounts(db: Db): PortalAccount[] {
+  const firsts = new Map<string, { g: Guardian; at: string; clinicId: string }>();
+  for (const p of db.patients) for (const g of p.guardians) if (!firsts.has(g.id)) firsts.set(g.id, { g, at: p.createdAt, clinicId: p.clinicId });
+  return [...firsts.values()].map(({ g, at, clinicId }) => ({ clinicId, guardianId: g.id, state: "active", activatedAt: at, email: demoEmail(db, g), links: [] }));
+}
 
 /**
  * The accounts on the login screen: all staff, then three parents picked by what they demonstrate.
