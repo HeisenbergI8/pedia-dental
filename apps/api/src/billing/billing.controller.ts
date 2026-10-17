@@ -11,7 +11,7 @@ export class BillingController {
   constructor(private readonly invoices: InvoicesService, private readonly payments: PaymentsService) {}
 
   @Get("patients/:id/invoices")
-  invoicesOf(@Param("id") id: string) { return this.invoices.list(id); }
+  invoicesOf(@Req() req: Request, @Param("id") id: string) { return this.invoices.list(id, identityOf(req)!); }
 
   @Post("patients/:id/invoices")
   async bill(@Req() req: Request, @Res({ passthrough: true }) res: Response, @Param("id") id: string, @Body() body: unknown) {

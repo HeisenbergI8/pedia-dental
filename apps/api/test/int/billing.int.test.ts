@@ -205,13 +205,23 @@ describe("billing (apps/web handlers.test.ts → billing)", () => {
     expect(await words(post(`/patients/${theirs.patientId}/deposits`, ngiti, { amount: 1, method: "cash", receivedBy: "ngiti_staff_lim" }))).toEqual([404, "Patient not found"]);
   });
 
-  it("shows a parent their child's bills and payments, and lets them write none", async () => {
+  it("shows a parent their child's bills and payments without the voided ones, and lets them write none", async () => {
     const db = t.platform.tenants[DEMO_CLINIC_ID]!;
     const guardianId = db.patients.find((p) => p.id === "patient_sibling")!.guardians[0]!.id;
     const parent = await t.as([DEMO_CLINIC_ID, `guardian.${guardianId}`] as Login);
-    const child = db.patients.find((p) => p.guardians.some((g) => g.id === guardianId) && db.invoices.some((i) => i.patientId === p.id)) ?? db.patients.find((p) => p.id === "patient_sibling")!;
-    expect((await get(`/patients/${child.id}/invoices`, parent)).status).toBe(200);
-    expect((await get(`/patients/${child.id}/payments`, parent)).status).toBe(200);
-    expect((await post(`/patients/${child.id}/deposits`, parent, { amount: 1, method: "cash", receivedBy: "staff_cruz" })).status).toBe(403);
+    // A bill for the family's child, voided by mistake: staff still see it, the parent doesn't (B8 question 3).
+    const plan = await t.ok(t.call("post", "/patients/patient_sibling/plan", admin, { procedureCode: "fluoride", fee: pesos(800) }), PlanItem, 201);
+    const visit = await t.start("patient_sibling", admin);
+    const note = await t.ok(t.call("post", "/patients/patient_sibling/notes", admin, { visitId: visit.id, templateId: "tpl_fluoride", values: { agent: "5% NaF varnish", teeth: [] }, behavior: [] }), ClinicalNote, 201);
+    await t.ok(t.call("post", `/notes/${note.id}/sign`, admin), ClinicalNote);
+    await t.complete(visit.id, admin);
+    const voided = await bill("patient_sibling", [plan.id]);
+    await t.ok(post(`/invoices/${voided.id}/void`, admin, { reason: "Wrong child" }, null), Invoice);
+    expect((await invoicesOf("patient_sibling")).map((i) => i.id)).toContain(voided.id);
+    const theirs = await t.ok(get("/patients/patient_sibling/invoices", parent), z.array(Invoice));
+    expect(theirs.map((i) => i.id)).not.toContain(voided.id);
+    expect((await get("/patients/patient_sibling/payments", parent)).status).toBe(200);
+    expect((await post("/patients/patient_sibling/deposits", parent, { amount: 1, method: "cash", receivedBy: "staff_cruz" })).status).toBe(403);
   });
+
 });

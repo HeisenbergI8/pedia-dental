@@ -14,6 +14,7 @@ import {
   invoiceTotal,
   isActiveStaff,
   isVoided,
+  liveInvoices,
   receiptNo,
   rolesCan,
   unbilledItems,
@@ -46,10 +47,11 @@ const fingerprint = (request: Request, route: string, id: string, body: unknown)
 
 /** API contract for apps/api's BillingController. Balances are computed from payments, never stored. */
 export const billingHandlers = [
-  http.get(url("/patients/:id/invoices"), async ({ params }) => {
+  http.get(url("/patients/:id/invoices"), async ({ params, request }) => {
     await delay(100);
     const rows = db.invoices.filter((i) => i.patientId === params.id).sort((a, b) => a.issuedAt.localeCompare(b.issuedAt));
-    return HttpResponse.json(rows);
+    // Staff see voided bills; a parent (billing.view only for their own children) doesn't (B8 question 3).
+    return HttpResponse.json(rolesCan(sessionOf(request)!.roles, "billing.view", "all") ? rows : liveInvoices(rows));
   }),
 
   http.post(url("/patients/:id/invoices"), async ({ params, request }) => {

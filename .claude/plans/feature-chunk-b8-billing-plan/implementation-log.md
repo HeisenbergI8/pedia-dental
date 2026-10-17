@@ -128,3 +128,9 @@ Engineering decisions E1–E13 as the plan records them.
 - The e2e makes its children through the API as the admin (Admin and dentist), not the dentist login: one sign-in fewer.
 - The parent case checks the portal's bills come from the API. Hiding a voided bill from parents is covered by `portal-records.tsx`'s `liveInvoices` and the mock tests. A seeded family child would need a voided bill made first.
 **Gate:** `pnpm run check` exit 0; `api-billing.spec.ts` 8/8 on a fresh `pedia_dental_e2e_b8`, then 8/8 again on the same database (`RateLimitCounter` cleared); `api-patients.spec.ts` + `api-scheduling.spec.ts` 10/10 on it.
+
+## Review: tester — 2026-10-17
+
+**Tester (independent):** `check` and `test:int` pass. Live curl matches the mock's words, statuses and order for every money route: Idempotency-Key edge cases, roles, voids, invoice refusals, races (no overpay or overdraw; AR/CR receipts gapless, counter = rows), balances = SQL, and finance today/month = SQL.
+- **F1 fixed: a parent calling `GET /patients/:id/invoices` directly saw a voided bill and its reason.** Only the portal screen hid it (Question 3). The API and the mock now return live bills to anyone without `billing.view` at `all`, so staff still see voided ones. New cases: `billing.int.test.ts` (with the filter removed, it goes red) and `handlers.test.ts`.
+- F2 not B8's: staff of a suspended clinic get no identity, so every request is 401 and their sessions close (B2's rule, `identity.service.ts`); reactivating doesn't revive closed sessions. That is the designed behaviour.

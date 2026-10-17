@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { CreateInvoiceInput, VoidInvoiceInput, unbilledItems, type Invoice } from "@pedia/shared";
+import { CreateInvoiceInput, VoidInvoiceInput, liveInvoices, rolesCan, unbilledItems, type Invoice } from "@pedia/shared";
 import { AppointmentRecordsService } from "../appointments/appointment-records.service";
 import { AuditService } from "../audit/audit.service";
 import type { ClinicIdentity } from "../auth/identity.service";
@@ -34,11 +34,14 @@ export class InvoicesService {
     private readonly clock: Clock,
   ) {}
 
-  /** GET /patients/:id/invoices: oldest first, voided ones too. Audited per child, as the mock. */
-  async list(patientId: string): Promise<Invoice[]> {
+  /**
+   * GET /patients/:id/invoices: oldest first. Staff see voided ones too; a parent (billing.view only for their own
+   * children) doesn't (B8 question 3). Audited per child, as the mock.
+   */
+  async list(patientId: string, who: ClinicIdentity): Promise<Invoice[]> {
     const rows = await this.records.invoicesOf(patientId);
     await this.audit.record("view", "Invoices", patientId);
-    return rows;
+    return rolesCan(who.user.roles, "billing.view", "all") ? rows : liveInvoices(rows);
   }
 
   /** POST /patients/:id/invoices: key (controller) → 404 → 400 → 400 twice → replay → 409 → 400 discount → 201. */

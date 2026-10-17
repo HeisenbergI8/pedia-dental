@@ -1165,6 +1165,25 @@ describe("billing", () => {
     expect((await fetch(path, send("POST", body, other))).status).toBe(201);
   });
 
+  it("hides a voided bill from the family, not from staff (B8 question 3)", async () => {
+    const guardianId = db.patients.find((p) => p.id === "patient_sibling")!.guardians[0]!.id;
+    await api("/patients/patient_sibling/plan", PlanItem, send("POST", { procedureCode: "fluoride", fee: pesos(800) }));
+    const visit = await api("/patients/patient_sibling/visits", Visit, send("POST", { dentistId: "staff_reyes" }));
+    const note = await api("/patients/patient_sibling/notes", ClinicalNote, send("POST", { visitId: visit.id, templateId: "tpl_fluoride", values: { agent: "5% NaF varnish", teeth: [] }, behavior: [] }));
+    await api(`/notes/${note.id}/sign`, ClinicalNote, { method: "POST" });
+    await api(`/visits/${visit.id}/complete`, Visit, { method: "POST" });
+    const item = (await api("/patients/patient_sibling/plan", z.array(PlanItem))).find((i) => i.completedNoteId === note.id)!;
+    const bill = await api("/patients/patient_sibling/invoices", Invoice, send("POST", { planItemIds: [item.id] }));
+    await api(`/invoices/${bill.id}/void`, Invoice, send("POST", { reason: "Wrong child" }));
+    expect((await api("/patients/patient_sibling/invoices", z.array(Invoice))).map((i) => i.id)).toContain(bill.id);
+    signIn(`demo.clinic_demo.guardian.${guardianId}`);
+    try {
+      expect((await api("/patients/patient_sibling/invoices", z.array(Invoice))).map((i) => i.id)).not.toContain(bill.id);
+    } finally {
+      signIn(ADMIN);
+    }
+  });
+
   it("numbers deposit credit receipts without a gap, one number per application", async () => {
     const { patient, invoice } = await fluorideBill();
     await api(`/patients/${patient.id}/deposits`, Payment, send("POST", { receivedBy: "staff_cruz", method: "cash", amount: pesos(500) }));
