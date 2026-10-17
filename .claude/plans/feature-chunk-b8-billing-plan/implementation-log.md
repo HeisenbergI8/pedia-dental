@@ -45,7 +45,7 @@ Engineering decisions E1–E13 as the plan records them.
 **Steps completed:** 2.1–2.4
 **Files changed:** `apps/web/src/mocks/{idempotency,idempotency.test}.ts` (new), `apps/web/src/features/billing/mocks.ts`, `apps/web/src/mocks/access.ts` + `apps/api/src/auth/access-rules.ts` (the void rule), `apps/web/src/mocks/{handlers,tenancy,cross-branch}.test.ts`
 **Deviations from plan:**
-- A voided bill's 409 on payment and credit is checked before the key's `once()`, not inside it: same answer, and a refusal is never kept anyway.
+- (Corrected in review: the voided bill's 409 on payment and credit is checked inside the key's `once()`, as the plan wrote it; an earlier note here said otherwise.)
 - The tenancy case uses Ngiti's Owner (`ngiti_staff_lim`): the void route needs `billing.adjust`, which Ngiti's front desk lacks, so a 404 needs the Owner.
 **Gate:** mock tests 204 passed.
 
@@ -134,3 +134,21 @@ Engineering decisions E1–E13 as the plan records them.
 **Tester (independent):** `check` and `test:int` pass. Live curl matches the mock's words, statuses and order for every money route: Idempotency-Key edge cases, roles, voids, invoice refusals, races (no overpay or overdraw; AR/CR receipts gapless, counter = rows), balances = SQL, and finance today/month = SQL.
 - **F1 fixed: a parent calling `GET /patients/:id/invoices` directly saw a voided bill and its reason.** Only the portal screen hid it (Question 3). The API and the mock now return live bills to anyone without `billing.view` at `all`, so staff still see voided ones. New cases: `billing.int.test.ts` (with the filter removed, it goes red) and `handlers.test.ts`.
 - F2 not B8's: staff of a suspended clinic get no identity, so every request is 401 and their sessions close (B2's rule, `identity.service.ts`); reactivating doesn't revive closed sessions. That is the designed behaviour.
+
+## Review: auditor (63/100) — 2026-10-17
+
+**Every step delivered; gaps were in planned tests and docs. Fixed:**
+- **F1:** the header's balance (₱3,500) and credit (0) are now asserted on the API (`billing.int`'s ₱8,500 case).
+- **F2:** a new audit case covers every write and each child's read under the mock's names (`Invoice`, `Deposit`, `Deposit applied`, `Payment`, `Invoices`, `Payments`), and nothing for `/payments`, `/reports/finance` or a refusal.
+- **F4:** the wrong Phase 2 deviation note is corrected.
+- **F5:** `billing-records.test.ts` added (`nextReceipt` formats a bigint, `paidOn` maps null sums to 0).
+- **F6, partly:** a deactivated `receivedBy` gets 400; the parent is refused all five money POSTs and the void.
+- **F7:** stale "until B8" comments in `patient.views.ts`, `patients-read.int`, `patient-standing.test`, `passthrough.ts` and `seed-database.ts`.
+- **F9:** E9, E11, E12 and E13 recorded in `apps/api/CONVENTIONS.md`'s B8 decisions.
+- **F10:** the dead `addDays` assertion removed.
+
+**Left, with reasons:**
+- A bill from a Dasmariñas *appointment* and the list-vs-Imus-report difference: covered in effect by `finance.int` case 4 (bills at both branches, a cross-branch credit) and `billing.int`'s branch case.
+- Race 4's credit half asserts one CR pair, not each status.
+- `verification.md` stays as the plan's checklist: the tester's and auditor's results are here.
+**Gate:** `pnpm run check` exit 0; `test:int` 35 files, 381 passed + 2 todo (B9).

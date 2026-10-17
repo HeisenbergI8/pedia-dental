@@ -74,6 +74,8 @@ describe("billing (apps/web handlers.test.ts → billing)", () => {
     const payments = await paymentsOf(id);
     expect(invoiceBalance(invoice, payments)).toBe(pesos(3500));
     expect(accountSummary([invoice], payments)).toEqual({ total: pesos(8500), paid: pesos(5000), balance: pesos(3500) });
+    // The pinned header: the same balance, and no credit (payments are capped at the balance).
+    expect(await t.ok(get(`/patients/${id}/summary`), z.object({ balance: z.number(), credit: z.number() }).passthrough())).toMatchObject({ balance: pesos(3500), credit: 0 });
   });
 
   it("applies a discount, takes a refund with a reason, and lists the day's collections", async () => {
@@ -171,6 +173,32 @@ describe("billing (apps/web handlers.test.ts → billing)", () => {
     const invoice = await bill(id, [items[0]!.id]);
     expect((await pay(invoice.id, { amount: -pesos(1), note: "x", receivedBy: "nobody" }, desk)).status).toBe(403);
     expect(await words(pay(invoice.id, { amount: pesos(1), receivedBy: "nobody" }))).toEqual([400, "Choose someone who works here now"]);
+    // Someone who worked here, deactivated since: new money needs someone who works here now (decision #23).
+    const owner = await t.as(OWNER);
+    const added = await t.ok(t.call("post", "/staff", owner, { fullName: "Nora Ramos", email: `nora.${Date.now()}@bulilit.demo`, role: "front_desk", branchIds: ["branch_imus"] }), z.object({ staff: z.object({ id: z.string() }) }).passthrough(), 201);
+    await t.ok(t.call("post", `/staff/${added.staff.id}/deactivate`, owner), z.unknown());
+    expect(await words(pay(invoice.id, { amount: pesos(1), receivedBy: added.staff.id }))).toEqual([400, "Choose someone who works here now"]);
+  });
+
+  it("audits each write and each child's read under the mock's names, and nothing for whole-day reads or refusals", async () => {
+    const { id, items } = await fluoride();
+    const invoice = await bill(id, [items[0]!.id]);
+    await t.ok(post(`/patients/${id}/deposits`, desk, { amount: pesos(300), method: "cash", receivedBy: "staff_cruz" }), Payment, 201);
+    await t.ok(post(`/invoices/${invoice.id}/apply-credit`, desk, { amount: pesos(300), receivedBy: "staff_cruz" }), Payment, 201);
+    await t.ok(pay(invoice.id, { amount: pesos(100) }, desk), Payment, 201);
+    await invoicesOf(id);
+    await paymentsOf(id);
+    const all = () => t.prisma.$queryRaw<{ n: bigint }[]>`SELECT COUNT(*) AS n FROM AuditEvent`.then((r) => Number(r[0]!.n));
+    const before = await all();
+    await get(`/payments?date=${format(new Date(), "yyyy-MM-dd")}`, desk);
+    await get("/reports/finance", admin);
+    expect((await pay(invoice.id, { amount: pesos(99999) }, desk)).status).toBe(409); // a refusal
+    expect(await all()).toBe(before);
+    const entries = await t.auditOf(id, "Invoice").then((r) => r.map((e) => e.action));
+    expect(entries).toEqual(["create"]);
+    for (const [record, action] of [["Deposit", "create"], ["Deposit applied", "create"], ["Payment", "create"], ["Invoices", "view"], ["Payments", "view"]] as const) {
+      expect((await t.auditOf(id, record)).map((e) => e.action), record).toEqual([action]);
+    }
   });
 
   it("keeps money with its branch: the bill's, or the device's for a deposit (E11)", async () => {
@@ -221,7 +249,13 @@ describe("billing (apps/web handlers.test.ts → billing)", () => {
     const theirs = await t.ok(get("/patients/patient_sibling/invoices", parent), z.array(Invoice));
     expect(theirs.map((i) => i.id)).not.toContain(voided.id);
     expect((await get("/patients/patient_sibling/payments", parent)).status).toBe(200);
-    expect((await post("/patients/patient_sibling/deposits", parent, { amount: 1, method: "cash", receivedBy: "staff_cruz" })).status).toBe(403);
+    for (const [path, body] of [
+      ["/patients/patient_sibling/deposits", { amount: 1, method: "cash", receivedBy: "staff_cruz" }],
+      ["/patients/patient_sibling/invoices", { planItemIds: [plan.id] }],
+      [`/invoices/${voided.id}/payments`, { amount: 1, method: "cash", receivedBy: "staff_cruz" }],
+      [`/invoices/${voided.id}/apply-credit`, { amount: 1, receivedBy: "staff_cruz" }],
+    ] as const) expect((await post(path, parent, body)).status, path).toBe(403);
+    expect((await post(`/invoices/${voided.id}/void`, parent, { reason: "x" }, null)).status).toBe(403);
   });
 
 });

@@ -1,6 +1,6 @@
 import { DEMO_CLINIC_ID } from "@pedia/seed";
 import { FinanceSummary, Invoice, Payment, financeFacts, financeSummary, pesos, type Appointment } from "@pedia/shared";
-import { addDays, format, parseISO, startOfMonth, subDays, subMonths } from "date-fns";
+import { format, parseISO, startOfMonth, subDays, subMonths } from "date-fns";
 import request from "supertest";
 import { z } from "zod";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -156,6 +156,5 @@ describe("the financial dashboard matches the mock's financeSummary (done-when)"
     expect(await words(admin, "?branch=all")).toEqual([403, "Reports across branches need two open branches you work at"]);
     expect(await words(await t.as(NGITI_OWNER), "?branch=all")).toEqual([403, "Reports across branches come with the Mid and Big plans. Contact Primolar to upgrade."]);
     expect((await t.call("get", "/reports/finance", await t.as(FRONT_DESK))).status).toBe(403);
-    expect(addDays).toBeDefined();
   });
 });

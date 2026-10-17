@@ -106,8 +106,7 @@ export async function seedDatabase(prisma: PrismaService, hasher: Hasher, env: P
       // these visit and entry ids. All completed: the seed leaves no visit in progress.
       await prisma.visit.createMany({ data: db.visits.map((v) => ({ ...visitRow(v), clinicId })) });
       await prisma.chartEntry.createMany({ data: db.chartEntries.map((e) => ({ ...chartEntryRow(e), clinicId })) });
-      // B6: with the seed's ids. MSW's invoices (planItemId) and documents (sourceId) name them in `hybrid`
-      // until B8/B10. Every seeded note is signed; the example plan is 3 of 6 done.
+      // B6: with the seed's ids. MSW's documents (sourceId) name them in `hybrid` until B10. Every seeded note is signed; the example plan is 3 of 6 done.
       await prisma.clinicalNote.createMany({ data: db.notes.map((n) => ({ ...noteRow(n), clinicId })) });
       await prisma.growthRecord.createMany({ data: db.growth.map((g) => ({ ...growthRow(g), clinicId })) });
       await prisma.planItem.createMany({ data: db.planItems.map((i) => ({ ...planItemRow(i), clinicId })) });

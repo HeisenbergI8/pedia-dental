@@ -442,6 +442,11 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
     dashboard from six bounded SQL sums fed to the shared `summarizeFinance` (no rule re-derived; parity tested).
   - An appointment billed twice is judged by its first bill, as the demo (changed later everywhere at once). The
     daily list and the dashboard aren't audited (B7 decision 6); each child's bills and payments are.
+  - Voiding takes no Idempotency-Key: a repeat answers 409 "already voided", which is safe to retry (E9).
+  - Money belongs to a branch: a payment to its bill's branch wherever it's paid, a deposit to the device's branch, and
+    a credit draws the bill's branch's deposits first (E11, `depositLegs`). The day's list and the dashboard filter by it.
+  - The demo keeps Idempotency-Keys in memory per clinic for 24 hours (E12); the API in `IdempotencyKey` rows.
+  - A payment's reference number is capped at 100 characters and a refund's or void's reason at 500 (E13).
 - **Scheduling, follow-ups and Today** (B7, decisions in the B7 plan; the user confirmed 1–4 and 6):
   - Double-booking is the demo's rule: the same chair or the same dentist at an overlapping time, at any branch; the
     same child twice is allowed (1). Bookings and moves serialise on the clinic's row (E1), tested with parallel requests.

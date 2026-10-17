@@ -130,7 +130,7 @@ describe("the list (decision 3)", () => {
     expect([past.page, past.rows.length > 0]).toEqual([Math.ceil(first.total / 10), true]);
   });
 
-  // The mock's standing over the seed (patients/mocks.ts:126): money and messages are B8/B9, so none yet.
+  // The mock's standing over the seed (patients/mocks.ts:126), bills and payments included; messages are B9's.
   const today = () => format(new Date(), "yyyy-MM-dd"); // Manila: the process is pinned (E3)
   const facts = { visits: db.visits, appointments: db.appointments, dueItems: db.dueItems, invoices: db.invoices, payments: db.payments, messages: [] };
   const standingOf = (id: string) => patientStanding(id, facts, today());

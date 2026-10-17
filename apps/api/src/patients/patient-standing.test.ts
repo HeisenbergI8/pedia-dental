@@ -49,7 +49,7 @@ describe("standingPage (patients/mocks.ts:114–151)", () => {
   it("falls back to name order for a balance sort without billing.view, and ties on name with it", () => {
     const matched = [kid("p1", "Cruz"), kid("p2", "Abad")];
     expect(page(matched, {}, [], { sort: "balance" }).rows.map((r) => r.id)).toEqual(["p2", "p1"]);
-    expect(page(matched, {}, [], { sort: "balance" }, true).rows.map((r) => r.id)).toEqual(["p2", "p1"]); // all 0 until B8
+    expect(page(matched, {}, [], { sort: "balance" }, true).rows.map((r) => r.id)).toEqual(["p2", "p1"]); // no bills here: every balance is 0, so name order
   });
 
   it("counts each chip as its filter's rows, and totals the filtered rows", () => {
