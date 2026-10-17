@@ -64,3 +64,16 @@ Deferral case moves `until` each round. Mutations: dropping `attempts: { decreme
 **Gate:** `pnpm run check` exit 0 (api 329) · `pnpm --filter api test:int test/int/outbox.int.test.ts` 12 passed.
 
 User answers after planning: Q13–Q17 as recommended; Q18 (sender name) open — see `decisions.md`.
+
+## Phase 4: `MessageQueueModule` — 2026-10-17
+
+**Steps completed:** 4.1, 4.2, 4.3.
+**Files changed:** `apps/api/src/message-queue/{message-queue.service,message-queue.module}.ts` (new),
+`src/messages/messages.module.ts`, `src/patients/patients.module.ts`, `test/int/message-queue.int.test.ts` (new).
+Also restored `test/int/outbox.int.test.ts` to the repo's long-line style (Phase 3's commit had run Prettier on it; the
+repo has no Prettier config): same cases, no behaviour change.
+**Deviations from plan:** `queueBooking` takes a `Pick<Appointment, …>` (callers in Phase 6 hold rows, not full contracts).
+The int file uses the seeded child objects as the `Patient` argument and orders rows by kind (one fixed clock gives every
+row the same `createdAt`). Mutations: withdrawal without `dispatchedAt: null` → withdraw case red; consent check removed →
+declined case red.
+**Gate:** `pnpm run check` exit 0 · `pnpm --filter api test:int test/int/message-queue.int.test.ts test/int/outbox.int.test.ts` 8 + 12 passed.
