@@ -111,3 +111,8 @@ None skipped. Still open by decision: Semaphore account, credits and PRIMOLAR's 
 6. **Low: the mock calls `selectTenant` in a feature handler.** Kept: the plan prescribed it for the signed-out link routes, which have no session to select a tenant from; recorded here.
 7. **Low: doc drift.** Sign-in count in the spec header and CONVENTIONS (6 sign-ins and 2 link sign-ins), the "by email" comments (`model-scope.ts`, `identity.service.ts`), `access-rules.ts`'s owner comment, apps/api CONVENTIONS for the rolling limit and link cancelling. The untracked `playwright.tmp.config.ts` is deleted before the merge.
 - Smell (shared words in `@pedia/shared`): not done; the mock and the API keep their own copies, as earlier chunks do.
+
+## Tester review — 2026-10-17
+
+No blocking defects. ~40 probes against MySQL plus the browser spec (4/4) passed; its one defect (a link surviving a number change) was the audit's finding 1, already fixed. Left as known, low: a guardian removed and re-added with the same id revives an unexpired invite; an active parent moved to a landline with no email can't sign in while staff see "active"; the mock answers malformed JSON with a 500 (the API 400). Pre-existing, not B11: a 5 MB JSON body to /auth gives 500, duplicate guardian ids in a PUT give 500.
+**Final gate:** `pnpm --filter api test:int`: 45 files, 504 tests passed.
