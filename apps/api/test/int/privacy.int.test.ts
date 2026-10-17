@@ -1,6 +1,6 @@
 import type { INestApplication } from "@nestjs/common";
 import { DEMO_CLINIC_ID, childrenOf, seedPlatform } from "@pedia/seed";
-import { AcknowledgementPrompt, Patient, PatientView, PrivacyNoticeView, SessionUser, type RegisterPatientInput } from "@pedia/shared";
+import { AcknowledgementPrompt, Appointment, ClinicalNote, Patient, PatientView, PrivacyNoticeView, SessionUser, Visit, type RegisterPatientInput } from "@pedia/shared";
 import request from "supertest";
 import { z } from "zod";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -48,6 +48,27 @@ const ok = async <T extends z.ZodType>(res: Promise<request.Response>, schema: T
 const audits = (patientId: string | null, record: string) => inClinic(DEMO_CLINIC_ID, () => prisma.auditEvent.count({ where: { patientId, record } }));
 const choices = (cookie: string, id: string, body: object) => call("post", `/patients/${id}/privacy-choices`, cookie, body);
 
+/** B9: a fresh child who said yes to reminders, and the events that text their parent. */
+const ADMIN: Login = [DEMO_CLINIC_ID, "staff_delacruz"];
+let registered = 0;
+const registerChild = async () => {
+  const body = {
+    firstName: "Bea", lastName: `Texts${++registered}`, birthDate: "2020-07-02", sex: "female", address: "",
+    guardians: [{ id: "g_mother", fullName: "Rosa Mendoza", relationship: "Mother", phone: "09171234567", isPrimary: true }],
+    emergencyContact: { name: "", phone: "" }, allergies: [], noKnownAllergies: true, medicalConditions: [], medications: [], alerts: [],
+    dentalHistory: { previousClinic: "", notes: "" },
+    privacyConsent: { guardianId: "g_mother", photos: true, reminders: true, confirmed: true },
+  } as RegisterPatientInput;
+  return (await ok(call("post", "/patients", await as(FRONT_DESK), body), Patient, 201)).id;
+};
+let slots = 0;
+const bookFor = async (patientId: string) => {
+  const startsAt = new Date(Date.parse("2030-03-04T09:00:00+08:00") + slots++ * 24 * 60 * 60_000).toISOString(); // a weekday each, far from the seed
+  const body = { patientId, dentistId: "staff_reyes", chairId: "chair_1", startsAt, durationMin: 30, reason: "Check-up" };
+  return ok(call("post", "/appointments", await as(ADMIN), body), Appointment, 201);
+};
+const textsOf = (patientId: string) => inClinic(DEMO_CLINIC_ID, () => prisma.message.findMany({ where: { patientId }, orderBy: [{ kind: "asc" }, { sendAt: "asc" }] }));
+
 describe("consent and choices", () => {
   it("records consent once for a child registered before chunk 24 (#18)", async () => {
     const cookie = await as(FRONT_DESK);
@@ -81,7 +102,17 @@ describe("consent and choices", () => {
     expect(await audits(own.id, "Privacy consent (changed)")).toBe(2);
   });
 
-  it.todo("sends nothing once reminders are off (B9: messages)");
+  it("sends nothing once reminders are off (B9: messages)", async () => {
+    const id = await registerChild();
+    await ok(choices(await as(FRONT_DESK), id, { reminders: false }), PatientView);
+    const appt = await bookFor(id);
+    await ok(call("post", `/appointments/${appt.id}/status`, await as(ADMIN), { status: "no_show" }), Appointment);
+    const admin = await as(ADMIN);
+    const visit = await ok(call("post", `/patients/${id}/visits`, admin, { dentistId: "staff_reyes" }), Visit, 201);
+    const note = await ok(call("post", `/patients/${id}/notes`, admin, { visitId: visit.id, templateId: "tpl_pulpotomy", values: { teeth: [84], medicament: "MTA", hemostasis: true }, behavior: [] }), ClinicalNote, 201);
+    await ok(call("post", `/notes/${note.id}/sign`, admin), ClinicalNote);
+    expect(await textsOf(id)).toEqual([]);
+  });
 
   it("merges a one-key change onto the record, so a stale screen can't re-grant a declined consent", async () => {
     const cookie = await as(DENTIST); // consents.manage
@@ -90,7 +121,23 @@ describe("consent and choices", () => {
     expect(after.privacyChoices!.at(-1)).toMatchObject({ photos: false, reminders: true });
   });
 
-  it.todo("withdraws reminders already queued when the family says no (B9: queued messages)");
+  it("withdraws reminders already queued when the family says no (B9: queued messages)", async () => {
+    const [id, other] = [await registerChild(), await registerChild()];
+    for (const child of [id, other]) await bookFor(child);
+    const [confirmation, reminder] = await textsOf(id);
+    // One already went out, one is in the provider's hands: neither can be withdrawn (E7).
+    await inClinic(DEMO_CLINIC_ID, async () => {
+      await prisma.message.update({ where: { id: confirmation!.id }, data: { status: "sent", sentAt: new Date() } });
+      await prisma.message.update({ where: { id: reminder!.id }, data: { dispatchedAt: new Date() } });
+    });
+    await bookFor(id); // two more, still waiting
+    await ok(choices(await as(FRONT_DESK), id, { reminders: false }), PatientView);
+    const after = await textsOf(id);
+    expect(after.find((m) => m.id === confirmation!.id)!.status).toBe("sent");
+    expect(after.find((m) => m.id === reminder!.id)!.status).toBe("queued");
+    expect(after.filter((m) => m.id !== confirmation!.id && m.id !== reminder!.id).map((m) => m.status)).toEqual(["cancelled", "cancelled"]);
+    expect((await textsOf(other)).map((m) => m.status)).toEqual(["queued", "queued"]);
+  });
 });
 
 describe("the clinic's privacy notice", () => {

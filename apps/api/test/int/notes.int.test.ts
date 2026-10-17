@@ -255,4 +255,26 @@ describe("notes (apps/web handlers.test.ts → notes, treatment plan)", () => {
       for (const n of await t.ok(t.call("get", notesOf(id), admin), z.array(ClinicalNote))) expect(n.createdAt <= completedAt).toBe(true);
     });
   });
+
+  describe("parent messages (B9)", () => {
+    const texts = (patientId: string) => inClinic(DEMO_CLINIC_ID, () => t.prisma.message.findMany({ where: { patientId } }));
+
+    it("queues the procedure's care instructions when the note is signed, once", async () => {
+      const id = await t.register();
+      const visit = await t.start(id, admin);
+      const note = await draft(id, visit.id, "tpl_pulpotomy", pulpotomy);
+      expect(await texts(id)).toEqual([]);
+      await t.ok(sign(note.id), ClinicalNote);
+      expect((await sign(note.id)).status).toBe(409);
+      expect((await texts(id)).map((m) => [m.kind, m.noteId, m.status])).toEqual([["post_pulpotomy", note.id, "queued"]]);
+    });
+
+    it("queues nothing for a procedure with no instructions", async () => {
+      const id = await t.register();
+      const visit = await t.start(id, admin);
+      const note = await draft(id, visit.id, "tpl_prophylaxis", { method: "Rubber cup and paste" });
+      await t.ok(sign(note.id), ClinicalNote);
+      expect(await texts(id)).toEqual([]);
+    });
+  });
 });

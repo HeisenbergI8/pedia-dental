@@ -92,3 +92,16 @@ withdraw-vs-claim case holds the row with the claim's own statements in a test t
 **Gate:** `pnpm run check` exit 0 · `pnpm --filter api test:int test/int/message-sending.int.test.ts test/int/message-queue.int.test.ts` 11 + 8 passed.
 **Correction:** Phase 5's commit (f65e525) went in with `pnpm run check` red: `env.test.ts`'s defaults case didn't know
 `SEMAPHORE_URL`. Fixed in the next commit; check exit 0 after it (api 341).
+
+## Phase 6: Book, move, status, sign and the reminders "no" — 2026-10-17
+
+**Steps completed:** 6.1, 6.2, 6.3, 6.4.
+**Files changed:** `apps/api/src/appointments/{appointments.service,appointments.module}.ts`, `src/notes/{notes.service,notes.module}.ts`,
+`src/patients/patient-writes.service.ts`, `test/int/{appointments,notes,privacy}.int.test.ts`, `test/int/messages-races.int.test.ts` (new).
+**Deviations from plan:** move takes the patient lock as planned (account → patient → appointment). The brute-force races
+(3 rounds, and 20 rounds tried) never reached the window with that lock removed, so the races file gained a deterministic
+case: hold the child's row as a reminders "no" does, and the move must wait (removed lock → red). The appointments messages
+cases use 1–5 April 2030 (the race cases own 4–8 Feb). The two `it.todo`s in privacy.int are tests now.
+Mutations: move without `lockPatient` → the deterministic case red; `changeChoices` without `withdrawPatient` → privacy
+withdraw case and the bookings race red.
+**Gate:** `pnpm run check` exit 0 · `pnpm --filter api test:int` 38 files, 420 passed.

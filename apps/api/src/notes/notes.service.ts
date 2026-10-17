@@ -1,11 +1,13 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import { NoteTemplate, UpdateNoteInput, type ClinicalNote, type CreateNoteInput } from "@pedia/shared";
+import { NOTE_MESSAGES, NoteTemplate, UpdateNoteInput, type ClinicalNote, type CreateNoteInput } from "@pedia/shared";
 import { AuditService } from "../audit/audit.service";
 import { Clock } from "../common/clock";
 import { refuse } from "../common/refusal";
 import { ZodIssuesException, ZodValidationPipe } from "../common/zod-validation.pipe";
 import type { Prisma } from "../generated/prisma/client.ts";
+import { MessageQueueService } from "../message-queue/message-queue.service";
 import { lockPatient, lockPatientIfExists } from "../patients/patient-lock";
+import { PatientsService } from "../patients/patients.service";
 import { PlanService } from "../plan/plan.service";
 import { DueItemsService } from "../recalls/due-items.service";
 import type { SignedNote } from "../recalls/due-item.rules";
@@ -36,6 +38,8 @@ export class NotesService {
     private readonly plan: PlanService,
     private readonly clock: Clock,
     private readonly dueItems: DueItemsService,
+    private readonly patients: PatientsService,
+    private readonly messages: MessageQueueService,
   ) {}
 
   /** GET /note-templates: the clinic's forms in the mock's order (one per catalog procedure). */
@@ -101,7 +105,9 @@ export class NotesService {
       // Signing makes a follow-up or recall due (DEFAULT_FOLLOW_UP_RULES), from the visit's day (notes/mocks.ts:83–97).
       const visit = await this.visits.one(tx, note.visitId);
       if (visit) await this.dueItems.afterSign(tx, { ...note, patientId }, procedure, visit.date, signedAt);
-      // B9: NOTE_MESSAGES[procedure] → OutboxService.enqueue(tx, …), the parent's care instructions (notes/mocks.ts:98–100).
+      // The parent's care instructions for that procedure, in this transaction (notes/mocks.ts:101–103).
+      const instructions = NOTE_MESSAGES[procedure];
+      if (instructions) await this.messages.queue(tx, { kind: instructions, patientId, noteId: id, sendAt: signedAt.toISOString() }, await this.patients.one(patientId, tx));
       await this.audit.record("update", "Clinical note (signed)", patientId, tx);
       return this.read(tx, id);
     });

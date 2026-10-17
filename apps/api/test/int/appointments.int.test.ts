@@ -1,5 +1,5 @@
 import { DEMO_CLINIC_ID } from "@pedia/seed";
-import { Appointment, findConflict } from "@pedia/shared";
+import { Appointment, findConflict, reminderSendAt } from "@pedia/shared";
 import { z } from "zod";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { inClinic } from "./support/database";
@@ -161,6 +161,56 @@ describe("appointments (apps/web handlers.test.ts → appointments)", () => {
       expect(list.length).toBeGreaterThan(0); // not vacuous (an open-ended calendar once answered [])
       list.forEach((a, i) => expect(findConflict(a, list.slice(0, i)), a.id).toBeUndefined());
     }
+  });
+
+  describe("parent messages (B9, handlers.test.ts → parent messages)", () => {
+    const texts = (where: object) => inClinic(DEMO_CLINIC_ID, () => t.prisma.message.findMany({ where, orderBy: [{ kind: "asc" }, { sendAt: "asc" }] }));
+    const outboxFor = async (ids: string[]) => (await t.prisma.outboxMessage.findMany({ where: { kind: "message.send" } })).filter((o) => ids.includes((o.payload as { messageId: string }).messageId));
+
+    it("queues a confirmation and a reminder with the child's name when an appointment is booked", async () => {
+      const id = await t.register();
+      const appt = await t.ok(book(slot(id, { startsAt: at("2030-04-01", "09:00") })), Appointment, 201);
+      const rows = await texts({ appointmentId: appt.id });
+      expect(rows.map((m) => [m.kind, m.status, m.to, m.recipientName])).toEqual([
+        ["appointment_confirmation", "queued", "09171234567", "Rosa Mendoza"],
+        ["appointment_reminder", "queued", "09171234567", "Rosa Mendoza"],
+      ]);
+      for (const m of rows) expect(m.body).toContain("Bea");
+      expect(rows[1]!.sendAt.toISOString()).toBe(reminderSendAt(appt.startsAt));
+      expect(await outboxFor(rows.map((m) => m.id))).toHaveLength(2);
+    });
+
+    it("queues pre-treatment instructions for an extraction, and withdraws them on cancel", async () => {
+      const id = await t.register();
+      const appt = await t.ok(book(slot(id, { procedureCode: "extraction", startsAt: at("2030-04-02", "09:00") })), Appointment, 201);
+      expect((await texts({ appointmentId: appt.id })).map((m) => m.kind)).toEqual(["appointment_confirmation", "appointment_reminder", "pre_treatment"]);
+      await t.ok(status(appt.id, { status: "cancelled", cancelReason: "Moved abroad" }), Appointment);
+      expect((await texts({ appointmentId: appt.id })).map((m) => m.status)).toEqual(["cancelled", "cancelled", "cancelled"]);
+    });
+
+    it("withdraws the old reminder on a move and queues the new time's, then a no-show queues the missed text", async () => {
+      const id = await t.register();
+      const appt = await t.ok(book(slot(id, { startsAt: at("2030-04-03", "09:00") })), Appointment, 201);
+      const moved = await t.ok(move(appt.id, { dentistId: "staff_reyes", chairId: "chair_1", startsAt: at("2030-04-04", "10:00"), durationMin: 30 }), Appointment);
+      const reminders = await texts({ appointmentId: appt.id, kind: "appointment_reminder" });
+      expect(reminders.map((m) => [m.status, m.sendAt.toISOString()])).toEqual([
+        ["cancelled", reminderSendAt(appt.startsAt)],
+        ["queued", reminderSendAt(moved.startsAt)],
+      ]);
+      expect((await texts({ appointmentId: appt.id, kind: "appointment_confirmation" })).map((m) => m.status)).toEqual(["cancelled", "queued"]); // decision 17
+      await t.ok(status(appt.id, { status: "no_show" }), Appointment);
+      const after = await texts({ appointmentId: appt.id });
+      expect(after.filter((m) => m.status === "queued").map((m) => m.kind)).toEqual(["missed_appointment"]);
+    });
+
+    it("queues nothing when a booking is refused", async () => {
+      const [a, b] = [await t.register(), await t.register()];
+      await t.ok(book(slot(a, { startsAt: at("2030-04-05", "09:00") })), Appointment, 201);
+      const outboxBefore = await t.prisma.outboxMessage.count();
+      expect((await book(slot(b, { startsAt: at("2030-04-05", "09:00") }))).status).toBe(409);
+      expect(await texts({ patientId: b })).toEqual([]);
+      expect(await t.prisma.outboxMessage.count()).toBe(outboxBefore);
+    });
   });
 
   describe("under parallel requests (E1)", () => {
