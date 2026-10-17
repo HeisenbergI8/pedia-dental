@@ -16,6 +16,8 @@ import { DOCUMENT_SELECT, documentData, toDocument } from "./document.rows";
 import { documentRefusal, documentTitle } from "./documents.rules";
 
 const NEWEST_FIRST = [{ createdAt: "desc" as const }, { id: "desc" as const }];
+/** The id columns are VARCHAR(191): a longer id can't name a record. */
+const ID_MAX = 191;
 
 /**
  * The issued-documents log (features/documents/mocks.ts; decision 6). The only reader and writer of PatientDocument.
@@ -42,6 +44,7 @@ export class DocumentsService {
 
   /** GET /patients/:id/documents, newest first. [] for an unknown child, as the mock. Audited "Documents". */
   async forPatient(patientId: string): Promise<PatientDocument[]> {
+    if (patientId.length > ID_MAX) return []; // no such child, as an unknown id (tester D3)
     const rows = await this.prisma.patientDocument.findMany({ where: { patientId }, orderBy: NEWEST_FIRST, select: DOCUMENT_SELECT });
     await this.audit.record("view", "Documents", patientId);
     return rows.map(toDocument);

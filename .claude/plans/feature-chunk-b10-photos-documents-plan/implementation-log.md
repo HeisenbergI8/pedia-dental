@@ -150,3 +150,17 @@ container restarted (my process-stop command matched the session's own parent; n
 fresh API process the photo uploaded before it (`hpypy39…`) answered 302 then 200 `image/jpeg` (762 bytes), and run 3
 passed 6. Servers then stopped by their own process trees; `tsconfig.json` reverted; the temporary config deleted.
 **Gate:** `pnpm run check` exit 0.
+
+## Review fixes (tester) - 2026-10-17
+
+- **D1 (low-medium):** a multipart type with no usable boundary threw inside `busboy(...)` outside the try, giving a
+  500. Now 400 "The upload didn't arrive whole. Try again." (`multipart.ts`, unit and int cases).
+- **D2 (medium):** `takenOn: "2026-13-45"` reached Prisma (500) after the file was stored, leaving an orphan file and a
+  ledger overcount; `2026-02-30` was stored as March 2. The shared `isoDate` now refuses a day that doesn't exist (one
+  rule for the demo and the API; `common.test.ts`). Any failure after `putFile` now removes the stored file (photos and
+  the patient photo). Mutation: without the removal, the "row can't be written" int case is red.
+- **D3 (low):** a 255-character patient id on the photo and document lists answered 500 (P2000); an id longer than any
+  stored one now lists `[]`, as an unknown id. The same pattern on older routes (visits, notes, growth, plan, chart) is
+  pre-existing and out of B10's scope.
+- The 14 stale files the tester saw under `primolar-uploads` came from my Phase 5 mutation run (the `dispose()` removal);
+  removed. **Gate:** `pnpm run check` exit 0; `test:int test/int/photos.int.test.ts` 14 passed.

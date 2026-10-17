@@ -9,6 +9,7 @@ import { z } from "zod";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Hasher } from "../../src/auth/hashing";
 import { SessionService } from "../../src/auth/session.service";
+import { AuditService } from "../../src/audit/audit.service";
 import { OutboxWorker } from "../../src/outbox/outbox.worker";
 import { PrismaService } from "../../src/prisma/prisma.service";
 import { seedDatabase } from "../../src/seed/seed-database";
@@ -230,6 +231,27 @@ describe("B10's guarantees", () => {
     await openFile(app, dentist, `/api/photos/${photo.id}/file`);
     await openFile(app, dentist, `/api/photos/${photo.id}/file`);
     expect(await count("view", "Photo")).toBe(1); // within five minutes, once
+  });
+
+  it("refuses an impossible date, a bodiless multipart and an over-long id without a 500 or a stray file (tester D1–D3)", async () => {
+    const dentist = await as(DENTIST);
+    const before = await used(DEMO_CLINIC_ID);
+    for (const takenOn of ["2026-13-45", "2026-02-30", "0000-00-00"]) expect((await upload(dentist, another.id, { takenOn }, JPEG)).status).toBe(400);
+    for (const type of ["multipart/form-data", "multipart/form-data; boundary="]) {
+      const res = await http().post(`/api/patients/${another.id}/photos`).set("Cookie", dentist).set("Content-Type", type).send("x");
+      expect([res.status, res.text]).toEqual([400, "The upload didn't arrive whole. Try again."]);
+    }
+    expect(await used(DEMO_CLINIC_ID)).toBe(before);
+    const long = "x".repeat(255);
+    expect([(await http().get(`/api/patients/${long}/photos`).set("Cookie", dentist)).body, (await http().get(`/api/patients/${long}/documents`).set("Cookie", dentist)).body]).toEqual([[], []]);
+  });
+
+  it("removes the stored file when the photo's row can't be written", async () => {
+    const dentist = await as(DENTIST);
+    const before = await used(DEMO_CLINIC_ID);
+    vi.spyOn(app.get(AuditService), "record").mockRejectedValueOnce(new Error("audit down"));
+    expect((await upload(dentist, another.id, {}, JPEG)).status).toBe(500);
+    expect(await used(DEMO_CLINIC_ID)).toBe(before);
   });
 
   it("has no way to change or delete a photo (decision 5)", async () => {

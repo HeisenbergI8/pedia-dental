@@ -65,6 +65,13 @@ describe("readUpload (B10 E1)", () => {
     await expect(readUpload(req, { maxBytes: 10_000 })).rejects.toThrow("The upload didn't arrive whole. Try again.");
   });
 
+  it("refuses a multipart type with no boundary as a bad upload, not a crash (tester D1)", async () => {
+    for (const type of ["multipart/form-data", "multipart/form-data; boundary="]) {
+      const req = Object.assign(Readable.from([Buffer.from("x")]), { headers: { "content-type": type } });
+      await expect(readUpload(req, { maxBytes: 10 })).rejects.toThrow("The upload didn't arrive whole. Try again.");
+    }
+  });
+
   it("refuses a body over twice the limit before reading it (E13)", () => {
     expect(tooLargeToRead({ "content-length": "20000" }, 10_000)).toBe(false);
     expect(tooLargeToRead({ "content-length": "20001" }, 10_000)).toBe(true);

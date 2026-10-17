@@ -36,9 +36,23 @@ export async function readUpload(req: Readable & { headers: IncomingHttpHeaders 
   await mkdir(DIR, { recursive: true });
   let file: SpooledFile | undefined;
   const writes: Promise<void>[] = [];
+  const dispose = async () => {
+    if (file) await rm(file.path, { force: true });
+  };
+  const refused = async () => {
+    req.resume(); // drain what's left, so the connection can answer
+    await Promise.allSettled(writes);
+    await dispose();
+    return new BadRequestException("The upload didn't arrive whole. Try again.");
+  };
   // busboy flags a part that *reaches* fileSize, so it reads one byte past the limit and `tooLarge` is decided by the count.
   // A few file parts are allowed so a stray one (another name) can't crowd out `file`; only `file` is kept.
-  const parser = busboy({ headers: req.headers, limits: { files: 3, fields: 8, parts: 10, fieldSize: FIELD_BYTES, fileSize: maxBytes + 1 } });
+  let parser: busboy.Busboy;
+  try {
+    parser = busboy({ headers: req.headers, limits: { files: 3, fields: 8, parts: 10, fieldSize: FIELD_BYTES, fileSize: maxBytes + 1 } });
+  } catch {
+    throw await refused(); // a multipart type with no usable boundary (B10 tester D1)
+  }
   parser.on("field", (name, value, info) => {
     if (!info.valueTruncated) fields.set(name, value);
   });
@@ -56,16 +70,11 @@ export async function readUpload(req: Readable & { headers: IncomingHttpHeaders 
     });
     writes.push(pipeline(stream, count, createWriteStream(spooled.path)));
   });
-  const dispose = async () => {
-    if (file) await rm(file.path, { force: true });
-  };
   try {
     await pipeline(req, parser);
     await Promise.all(writes);
   } catch {
-    await Promise.allSettled(writes);
-    await dispose();
-    throw new BadRequestException("The upload didn't arrive whole. Try again.");
+    throw await refused();
   }
   return { fields, file, dispose };
 }
