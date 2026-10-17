@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useSession } from "@/features/auth/access";
 import { useBranchStaff, useStaff } from "@/features/clinic/api";
+import { useIdempotencyKey } from "@/lib/idempotency";
 import { METHOD_LABEL, useRecordDeposit, useRecordPayment } from "../api";
 
 /** Money against an invoice, or held on the account as a deposit (refunds are negative in both). */
@@ -43,6 +44,7 @@ export function PaymentDialog({ target, payments, onClose }: { target: PaymentTa
   // isPending only re-renders after the first click, so a double-click would take the money twice. Held from the first
   // valid submit until it fails (on success the dialog closes).
   const sending = useRef(false);
+  const idem = useIdempotencyKey(); // one per attempt; kept for a retry whose outcome is unknown (B8 E2)
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -62,16 +64,18 @@ export function PaymentDialog({ target, payments, onClose }: { target: PaymentTa
     sending.current = true;
     const handlers = {
       onSuccess: (p: Payment) => {
+        idem.settle();
         toast.success(`${what} recorded · receipt ${p.receiptNo}`);
         onClose();
       },
       onError: (err: Error) => {
+        idem.settle(err);
         sending.current = false;
         toast.error(err.message); // e.g. more than the balance; the dialog stays open
       },
     };
-    if (invoice) recordPayment.mutate({ invoiceId: invoice.id, ...parsed.data }, handlers);
-    else recordDeposit.mutate(parsed.data, handlers);
+    if (invoice) recordPayment.mutate({ invoiceId: invoice.id, key: idem.current, ...parsed.data }, handlers);
+    else recordDeposit.mutate({ key: idem.current, ...parsed.data }, handlers);
   }
 
   const fieldError = (key: string) => errors[key] && <p id={`pay-${key}-error`} className="text-sm text-danger">{errors[key]}</p>;

@@ -37,6 +37,9 @@ import {
   habitTimeline,
   invoiceBalance,
   invoiceTotal,
+  IDEMPOTENCY_HEADER,
+  IDEMPOTENCY_KEY_MISSING,
+  IDEMPOTENCY_KEY_REUSED,
   depositBalance,
   isClosedWeekday,
   isMoneyIn,
@@ -89,7 +92,9 @@ const newPatient: RegisterPatientInput = {
   dentalHistory: { previousClinic: "", notes: "" },
   privacyConsent: { guardianId: "g_mother", photos: true, reminders: true, confirmed: true },
 };
-const send = (method: string, body: unknown) => ({ method, body: JSON.stringify(body) });
+/** Every POST carries a fresh Idempotency-Key (B8 E2); routes without one ignore it. `key` to send a chosen one. */
+const send = (method: string, body: unknown, key: string = crypto.randomUUID()) =>
+  ({ method, body: JSON.stringify(body), headers: { [IDEMPOTENCY_HEADER]: key } });
 
 describe("patients", () => {
   it("finds a patient by child name, guardian name or guardian phone", async () => {
@@ -954,7 +959,16 @@ describe("financial dashboard", () => {
     expect(invoice.appointmentId).toBe(appt.id); // derived from the visit, not sent by the client
     expect(await unpaid()).toMatchObject({ invoiceId: invoice.id, balance: pesos(800) });
 
-    await api(`/invoices/${invoice.id}/payments`, Payment, send("POST", { amount: pesos(800), method: "cash", receivedBy: "staff_cruz" }));
+    // Voided, it no longer bills the appointment or counts in revenue (B8 decision 2); billed again, it does.
+    const fluoride = async () => (await report()).revenueByProcedure.find((r) => r.procedureCode === "fluoride")?.count ?? 0;
+    const before = await fluoride();
+    await api(`/invoices/${invoice.id}/void`, Invoice, send("POST", { reason: "Billed the wrong discount" }));
+    expect((await unpaid())?.invoiceId).toBeUndefined();
+    expect(await fluoride()).toBe(before - 1);
+    const rebilled = await api(`/patients/${patient.id}/invoices`, Invoice, send("POST", { planItemIds: [item.id] }));
+    expect(await unpaid()).toMatchObject({ invoiceId: rebilled.id, balance: pesos(800) });
+
+    await api(`/invoices/${rebilled.id}/payments`, Payment, send("POST", { amount: pesos(800), method: "cash", receivedBy: "staff_cruz" }));
     expect(await unpaid()).toBeUndefined();
   });
 });
@@ -1066,6 +1080,100 @@ describe("billing", () => {
     await deposit({ amount: pesos(500) });
     await expect(apply(pesos(900))).rejects.toMatchObject({ status: 409 });
     expect(await balance()).toBe(pesos(800));
+  });
+
+  /** A ₱800 bill from a signed fluoride note, for a new patient. */
+  async function fluorideBill() {
+    const { patient, items } = await patientWithDoneItems([["fluoride"]], [["tpl_fluoride", { agent: "5% NaF varnish", teeth: [] }]]);
+    const invoice = await api(`/patients/${patient.id}/invoices`, Invoice, send("POST", { planItemIds: [items[0].id] }));
+    return { patient, items, invoice };
+  }
+  /** Runs `fn` as the front desk, then signs the admin back in. */
+  async function asFrontDesk<T>(fn: () => Promise<T>): Promise<T> {
+    signIn("demo.clinic_demo.staff_cruz");
+    try { return await fn(); } finally { signIn(ADMIN); }
+  }
+  const words = (res: Promise<unknown>) => res.then(() => undefined, (e: ApiError) => [e.status, e.message]);
+
+  it("lets only the Owner or an admin refund; front desk still takes payments, deposits and moves credit (B8 decision 3)", async () => {
+    const { patient, invoice } = await fluorideBill();
+    const pay = (body: object) => api(`/invoices/${invoice.id}/payments`, Payment, send("POST", { receivedBy: "staff_cruz", method: "cash", ...body }));
+    const deposit = (body: object) => api(`/patients/${patient.id}/deposits`, Payment, send("POST", { receivedBy: "staff_cruz", method: "cash", ...body }));
+    const refused = [403, "Only the Owner or an admin can record a refund"];
+    await asFrontDesk(async () => {
+      await pay({ amount: pesos(700) });
+      expect(await words(pay({ amount: -pesos(200), note: "Overpaid" }))).toEqual(refused);
+      await deposit({ amount: pesos(500) });
+      expect(await words(deposit({ amount: -pesos(100), note: "Changed plans" }))).toEqual(refused);
+    });
+    await pay({ amount: -pesos(200), note: "Overpaid" });
+    await deposit({ amount: -pesos(100), note: "Changed plans" });
+    // Moving deposit credit isn't a refund: front desk applies and returns it.
+    const apply = (amount: number) => api(`/invoices/${invoice.id}/apply-credit`, Payment, send("POST", { amount, receivedBy: "staff_cruz" }));
+    await asFrontDesk(async () => {
+      await apply(pesos(200));
+      await apply(-pesos(200));
+    });
+  });
+
+  it("voids a bill made by mistake, with a reason, and bills its treatments again (B8 decision 2)", async () => {
+    const { patient, items, invoice } = await fluorideBill();
+    const voidIt = (body: object, id = invoice.id) => api(`/invoices/${id}/void`, Invoice, send("POST", body));
+    expect(await asFrontDesk(() => words(voidIt({ reason: "Wrong child" })))).toEqual([403, "You don't have access to this"]);
+    expect((await words(voidIt({ reason: " " })))?.[0]).toBe(400);
+    expect(await words(voidIt({ reason: "Wrong child" }, "nope"))).toEqual([404, "Invoice not found"]);
+    const voided = await voidIt({ reason: "Wrong child" });
+    expect(voided.voided).toMatchObject({ by: "staff_delacruz", reason: "Wrong child" });
+    expect(await words(voidIt({ reason: "Again" }))).toEqual([409, "This bill is already voided"]);
+    const pay = api(`/invoices/${invoice.id}/payments`, Payment, send("POST", { receivedBy: "staff_cruz", method: "cash", amount: pesos(100) }));
+    expect(await words(pay)).toEqual([409, "This bill was voided"]);
+    expect(await words(api(`/invoices/${invoice.id}/apply-credit`, Payment, send("POST", { amount: pesos(100), receivedBy: "staff_cruz" })))).toEqual([409, "This bill was voided"]);
+    expect((await api(`/patients/${patient.id}/invoices`, z.array(Invoice))).map((i) => i.id)).toContain(invoice.id); // still on record
+    const again = await api(`/patients/${patient.id}/invoices`, Invoice, send("POST", { planItemIds: [items[0].id] }));
+    const payments = await api(`/patients/${patient.id}/payments`, z.array(Payment));
+    expect(accountSummary(await api(`/patients/${patient.id}/invoices`, z.array(Invoice)), payments).balance).toBe(invoiceTotal(again));
+  });
+
+  it("voids only a bill nothing was ever paid or applied on, refunded or not", async () => {
+    const { invoice } = await fluorideBill();
+    const pay = (amount: number, note?: string) => api(`/invoices/${invoice.id}/payments`, Payment, send("POST", { receivedBy: "staff_cruz", method: "cash", amount, note }));
+    await pay(pesos(100));
+    const voidIt = () => words(api(`/invoices/${invoice.id}/void`, Invoice, send("POST", { reason: "Wrong" })));
+    const refused = [409, "Only a bill with nothing paid or applied on it can be voided"];
+    expect(await voidIt()).toEqual(refused);
+    await pay(-pesos(100), "Back to the parent");
+    expect(await voidIt()).toEqual(refused);
+  });
+
+  it("records a request once per Idempotency-Key, and refuses the key for a different request (B8 E2)", async () => {
+    const { patient, invoice } = await fluorideBill();
+    const path = `${process.env.NEXT_PUBLIC_API_URL}/invoices/${invoice.id}/payments`;
+    const body = { receivedBy: "staff_cruz", method: "cash", amount: pesos(100) };
+    const noKey = await fetch(path, { method: "POST", body: JSON.stringify(body) });
+    expect([noKey.status, await noKey.text()]).toEqual([400, IDEMPOTENCY_KEY_MISSING]);
+    const key = crypto.randomUUID();
+    const first = await fetch(path, send("POST", body, key));
+    const second = await fetch(path, send("POST", body, key));
+    expect([first.status, second.status, second.headers.get("Idempotent-Replayed")]).toEqual([201, 201, "true"]);
+    expect((await second.json()).receiptNo).toBe((await first.json()).receiptNo);
+    expect((await api(`/patients/${patient.id}/payments`, z.array(Payment))).filter((p) => p.invoiceId === invoice.id)).toHaveLength(1);
+    const reused = await fetch(path, send("POST", { ...body, amount: pesos(200) }, key));
+    expect([reused.status, await reused.text()]).toEqual([422, IDEMPOTENCY_KEY_REUSED]);
+    // A refusal isn't kept: the key is still free for a valid request.
+    const other = crypto.randomUUID();
+    expect((await fetch(path, send("POST", { ...body, amount: pesos(9000) }, other))).status).toBe(409);
+    expect((await fetch(path, send("POST", body, other))).status).toBe(201);
+  });
+
+  it("numbers deposit credit receipts without a gap, one number per application", async () => {
+    const { patient, invoice } = await fluorideBill();
+    await api(`/patients/${patient.id}/deposits`, Payment, send("POST", { receivedBy: "staff_cruz", method: "cash", amount: pesos(500) }));
+    const apply = (amount: number) => api(`/invoices/${invoice.id}/apply-credit`, Payment, send("POST", { amount, receivedBy: "staff_cruz" }));
+    const [a, b] = [await apply(pesos(100)), await apply(pesos(100))];
+    const n = (no: string) => Number(no.slice(3));
+    expect(n(b.receiptNo)).toBe(n(a.receiptNo) + 1);
+    const rows = (await api(`/patients/${patient.id}/payments`, z.array(Payment))).filter((p) => p.receiptNo === a.receiptNo);
+    expect(rows.length).toBeGreaterThan(1); // the bill side and the deposit side share it
   });
 });
 

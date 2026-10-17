@@ -223,6 +223,7 @@ const RULES: Rule[] = [
   { method: "POST", path: "/invoices/:id/payments", permission: "billing.collect", owner: via(() => db.invoices), audit: "Payment" },
   { method: "POST", path: "/patients/:id/deposits", permission: "billing.collect", audit: "Deposit" },
   { method: "POST", path: "/invoices/:id/apply-credit", permission: "billing.collect", owner: via(() => db.invoices), audit: "Deposit applied" },
+  { method: "POST", path: "/invoices/:id/void", permission: "billing.adjust", owner: via(() => db.invoices), audit: "Invoice (voided)", action: "update" },
   // Documents and reports
   { method: "GET", path: "/documents", permission: "documents.issue", audit: "Documents log" },
   { method: "GET", path: "/patients/:id/documents", permission: "documents.issue", audit: "Documents" },

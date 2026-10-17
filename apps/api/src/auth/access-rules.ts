@@ -88,6 +88,7 @@ export const CLINIC_RULES: readonly ClinicRule[] = [
   { method: "POST", path: "/invoices/:id/payments", permission: "billing.collect", owner: "record" },
   { method: "POST", path: "/patients/:id/deposits", permission: "billing.collect" },
   { method: "POST", path: "/invoices/:id/apply-credit", permission: "billing.collect", owner: "record" },
+  { method: "POST", path: "/invoices/:id/void", permission: "billing.adjust", owner: "record" },
   { method: "GET", path: "/documents", permission: "documents.issue" },
   { method: "GET", path: "/patients/:id/documents", permission: "documents.issue" },
   { method: "POST", path: "/patients/:id/documents", permission: "documents.issue", exportRead: true },

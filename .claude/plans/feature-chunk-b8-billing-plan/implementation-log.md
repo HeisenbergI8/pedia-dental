@@ -39,3 +39,22 @@ Engineering decisions E1–E13 as the plan records them.
 **Files changed:** `packages/shared/src/schemas/{auth,billing}.ts`, `packages/shared/src/domain/{money,notes,finance,patient-list}.ts`, tests `permissions.test.ts`, `money.test.ts`, `notes.test.ts`, `finance.test.ts`
 **Deviations from plan:** `InvoiceLine` gained its exported type (`money.ts`'s `BillTotals` reads it). Otherwise none.
 **Gate:** `pnpm run check` exit 0 (shared 201, seed 22, web 342, api 298).
+
+## Phase 2: The mock and its tests — 2026-10-17
+
+**Steps completed:** 2.1–2.4
+**Files changed:** `apps/web/src/mocks/{idempotency,idempotency.test}.ts` (new), `apps/web/src/features/billing/mocks.ts`, `apps/web/src/mocks/access.ts` + `apps/api/src/auth/access-rules.ts` (the void rule), `apps/web/src/mocks/{handlers,tenancy,cross-branch}.test.ts`
+**Deviations from plan:**
+- A voided bill's 409 on payment and credit is checked before the key's `once()`, not inside it: same answer, and a refusal is never kept anyway.
+- The tenancy case uses Ngiti's Owner (`ngiti_staff_lim`): the void route needs `billing.adjust`, which Ngiti's front desk lacks, so a 404 needs the Owner.
+**Gate:** mock tests 204 passed.
+
+## Phase 3: The web — 2026-10-17
+
+**Steps completed:** 3.1–3.4
+**Files changed:** `apps/web/src/lib/{idempotency,idempotency.test}.ts` (new), `apps/web/src/features/billing/api.ts`, `components/{void-invoice-dialog (new),payment-dialog,apply-credit-dialog,create-invoice,billing-tab}.tsx`, `apps/web/src/features/portal/components/portal-records.tsx`, `apps/web/e2e/{admin,frontdesk}.spec.ts`
+**Deviations from plan:**
+- `portal-home.tsx` unchanged: it reads only `accountSummary`, which already skips voided bills.
+- The void dialog's field reads "Why is it voided?", as the cancel dialog's "Why is it cancelled?".
+- The admin e2e case makes its own unpaid bill (a fluoride signed through the demo's API in the page): every seeded bill has a payment, so none can be voided.
+**Gate:** `pnpm run check` exit 0 (web 355); `check -- design` exit 0; demo-mode Playwright, desktop: the two new cases and 12 existing billing cases, 14/14.

@@ -650,6 +650,39 @@ test.describe("edge cases", () => {
     await expect(statement.getByText(peso(balance - 50)).first()).toBeVisible();
   });
 
+  test("admin voids a bill made by mistake with a reason, and its treatment can be billed again (B8)", async ({ page }) => {
+    await signInAsAdmin(page);
+    await openPatient(page);
+    const patientId = page.url().match(/\/patients\/([^/?]+)/)![1]!;
+    // A fluoride done by a signed note: through the demo's API in the page (MSW answers it), so it has no payment yet.
+    const ok = await page.evaluate(async (id) => {
+      const post = (path: string, body: unknown = {}) =>
+        fetch(`/api${path}`, { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify(body) })
+          .then(async (r) => (r.ok ? r.json() : Promise.reject(new Error(`${path} ${r.status} ${await r.text()}`))));
+      await post(`/patients/${id}/plan`, { procedureCode: "fluoride", fee: 80000 });
+      const visit = await post(`/patients/${id}/visits`, { dentistId: "staff_delacruz" });
+      const note = await post(`/patients/${id}/notes`, { visitId: visit.id, templateId: "tpl_fluoride", values: { agent: "5% NaF varnish", teeth: [] }, behavior: [] });
+      await post(`/notes/${note.id}/sign`);
+      await post(`/visits/${visit.id}/complete`);
+      return true;
+    }, patientId);
+    expect(ok).toBe(true);
+    await page.goto(`/patients/${patientId}?tab=billing`);
+    const tab = page.getByRole("tabpanel");
+    await tab.getByRole("button", { name: "Create invoice" }).click();
+    await expect(page.getByText("Invoice created")).toBeVisible();
+    await tab.getByRole("button", { name: "Void", exact: true }).first().click();
+    const dialog = page.getByRole("dialog", { name: "Void this bill?" });
+    await dialog.getByRole("button", { name: "Void bill" }).click();
+    await expect(dialog.getByText("Give a reason for voiding this bill")).toBeVisible();
+    await dialog.getByLabel("Why is it voided?").fill("Billed the wrong child");
+    await dialog.getByRole("button", { name: "Void bill" }).click();
+    await expect(page.getByText("Bill voided. Its treatments can be billed again.")).toBeVisible();
+    await expect(tab.getByRole("heading", { name: /· Voided$/ }).first()).toBeVisible();
+    await expect(tab.getByText(/Voided by Carmen Dela Cruz on .+: Billed the wrong child/)).toBeVisible();
+    await expect(tab.getByText("Ready to bill")).toBeVisible(); // its treatment is offered again
+  });
+
   test("paying the exact balance brings it to zero", async ({ page }) => {
     await signInAsAdmin(page);
     const { dialog, balance } = await openPaymentDialog(page);

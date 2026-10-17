@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { format } from "date-fns";
 import { setupServer } from "msw/node";
 import { z } from "zod";
-import { FinanceSummary, Payment, TodaySummary } from "@pedia/shared";
+import { FinanceSummary, Payment, TodaySummary, IDEMPOTENCY_HEADER } from "@pedia/shared";
 import { ApiError, api } from "@/lib/api-client";
 import { handlers } from "./handlers";
 import { DASMA, IMUS } from "@pedia/seed";
@@ -14,7 +14,9 @@ const OWNER = "demo.clinic_demo.staff_villanueva"; // Owner + Dentist, Bulilit (
 const ADMIN = "demo.clinic_demo.staff_delacruz"; // Carmen: Admin + Dentist, Imus only
 const NGITI_OWNER = "demo.clinic_ngiti.ngiti_staff_lim"; // Small
 const today = format(new Date(), "yyyy-MM-dd");
-const send = (method: string, body: unknown) => ({ method, body: JSON.stringify(body) });
+/** Every POST carries a fresh Idempotency-Key (B8 E2); routes without one ignore it. `key` to send a chosen one. */
+const send = (method: string, body: unknown, key: string = crypto.randomUUID()) =>
+  ({ method, body: JSON.stringify(body), headers: { [IDEMPOTENCY_HEADER]: key } });
 const finance = (branch?: string) => api(`/reports/finance?today=${today}${branch ? `&branch=${branch}` : ""}`, FinanceSummary);
 const status = (p: Promise<unknown>) => p.then(() => 200, (e: ApiError) => e.status);
 
