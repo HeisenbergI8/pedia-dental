@@ -1,0 +1,41 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "web", "dev", "--port", "3150"],
+      "port": 3150
+    },
+    {
+      "name": "api",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "api", "dev"],
+      "port": 4100
+    },
+    {
+      "name": "api-e2e",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DATABASE_URL=mysql://pedia:pedia@localhost:3307/pedia_dental_e2e",
+        "PORT=4110",
+        "DEMO_LOGINS=true",
+        "COOKIE_SECURE=false",
+        "STORAGE_DIR=var/storage-e2e",
+        "pnpm", "--filter", "api", "dev"
+      ],
+      "port": 4110
+    },
+    {
+      "name": "web-hybrid",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "NEXT_PUBLIC_API_MOCKING=hybrid",
+        "API_PROXY_TARGET=http://localhost:4110",
+        "NEXT_DIST_DIR=.next-hybrid",
+        "pnpm", "--filter", "web", "dev", "--port", "3160"
+      ],
+      "port": 3160
+    }
+  ]
+}
