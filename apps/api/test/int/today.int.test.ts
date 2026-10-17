@@ -1,8 +1,9 @@
 import { DEMO_CLINIC_ID, type Db } from "@pedia/seed";
-import { Appointment, AppointmentRequest, TodaySummary, Visit, todaySummary } from "@pedia/shared";
+import { Appointment, AppointmentRequest, Message, TodaySummary, Visit, todaySummary } from "@pedia/shared";
 import { addDays, format, parseISO, startOfWeek } from "date-fns";
 import { z } from "zod";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { OutboxWorker } from "../../src/outbox/outbox.worker";
 import { ADMIN, FRONT_DESK, NGITI_OWNER, clinicalApp, type Login } from "./clinical-support";
 
 /** apps/web's Today handler tests, and parity with the mock's todaySummary over the same seed (CHUNKS B7 done-when). */
@@ -18,9 +19,9 @@ beforeAll(async () => {
 afterAll(() => t.app.close());
 
 const tenant = (clinicId: string): Db => t.platform.tenants[clinicId]!;
-/** The mock's answer (dashboard/mocks.ts:20–25, 38–47), without greetings: texts are B9's (decision 4). */
+/** The mock's answer (dashboard/mocks.ts:20–25, 38–47), greetings included (B9). */
 const expected = (db: Db, branchIds: string[], day = today) =>
-  todaySummary({ ...db, appointments: db.appointments.filter((a) => branchIds.includes(a.branchId)), messages: [] }, day);
+  todaySummary({ ...db, appointments: db.appointments.filter((a) => branchIds.includes(a.branchId)) }, day);
 const report = (cookie: string, query = `?today=${today}`) => t.call("get", `/reports/today${query}`, cookie);
 const summary = async (cookie: string, query?: string) => t.ok(report(cookie, query), TodaySummary);
 const refused = async (cookie: string, query: string) => { const r = await report(cookie, query); return [r.status, r.text]; };
@@ -59,7 +60,7 @@ describe("Today matches the mock (done-when)", () => {
     }
   });
 
-  it("lists today's birthdays, turning their age, without a greeting (decision 4)", async () => {
+  it("lists today's birthdays, turning their age, none greeted yet", async () => {
     const got = await summary(await t.as(FRONT_DESK));
     expect(got.birthdays.length).toBeGreaterThan(0);
     expect(got.birthdays.every((b) => b.greeting === undefined && b.turning > 0)).toBe(true);
@@ -111,5 +112,20 @@ describe("Today's refusals and agreements (apps/web handlers.test.ts → today)"
     for (const login of [OWNER, ADMIN, REYES, FRONT_DESK]) expect((await report(await t.as(login))).status).toBe(200);
     const guardianId = tenant(DEMO_CLINIC_ID).patients.find((p) => p.id === "patient_sibling")!.guardians[0]!.id;
     expect(await refused(await t.as([DEMO_CLINIC_ID, `guardian.${guardianId}`]), "")).toEqual([403, "You don't have access to this"]);
+  });
+});
+
+describe("Today's greeting ticks (B9)", () => {
+  it("shows a greeting queued, then sent, and leaves another birthday child without one", async () => {
+    const desk = await t.as(FRONT_DESK);
+    const born = (await summary(desk)).birthdays;
+    expect(born.length).toBeGreaterThan(1); // the seed's roster has two (seed.ts)
+    const [greeted, other] = born;
+    await t.ok(t.call("post", `/patients/${greeted!.patientId}/birthday-greeting`, desk), Message, 201);
+    const tick = async (patientId: string) => (await summary(desk)).birthdays.find((b) => b.patientId === patientId)!.greeting;
+    expect(await tick(greeted!.patientId)).toBe("queued");
+    while ((await t.app.get(OutboxWorker).drain()) > 0);
+    expect(await tick(greeted!.patientId)).toBe(new Date().getHours() < 8 || new Date().getHours() >= 20 ? "queued" : "sent"); // sending hours
+    expect(await tick(other!.patientId)).toBeUndefined();
   });
 });

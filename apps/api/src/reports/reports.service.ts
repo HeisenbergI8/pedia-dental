@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
-import { FinanceSummary, TodaySummary, summarizeFinance, todaySummary, unpaidSince, type Payment } from "@pedia/shared";
+import { FinanceSummary, TodaySummary, summarizeFinance, todaySummary, unpaidSince, isBirthdayOn, type Payment } from "@pedia/shared";
 import { addDays, format, isValid, parseISO, startOfWeek } from "date-fns";
 import { AppointmentRecordsService } from "../appointments/appointment-records.service";
 import { AppointmentRequestsService } from "../appointments/appointment-requests.service";
@@ -10,6 +10,7 @@ import { ClinicService } from "../clinic/clinic.service";
 import { Clock } from "../common/clock";
 import { refuse } from "../common/refusal";
 import { requireContext } from "../common/request-context";
+import { MessageQueueService } from "../message-queue/message-queue.service";
 import { PatientsService } from "../patients/patients.service";
 import { VisitDaysService } from "../visits/visit-days.service";
 import { reportBranches } from "./report-branches";
@@ -36,6 +37,7 @@ export class ReportsService {
     private readonly requests: AppointmentRequestsService,
     private readonly billing: BillingRecordsService,
     private readonly clock: Clock,
+    private readonly messages: MessageQueueService,
   ) {}
 
   /**
@@ -83,7 +85,10 @@ export class ReportsService {
     const facts = await this.visitDays.facts(week, branchIds);
     // Today's done appointments are in both lists: one row each.
     const appointments = [...new Map([...todays, ...facts.done].map((a) => [a.id, a])).values()].sort(byStartThenChair(refs.chairOrder));
-    return TodaySummary.parse(todaySummary({ patients, staff, appointments, appointmentRequests: pending, visits: facts.visits, messages: [] }, today));
+    // Only this year's greetings of today's birthday children: all Today's tick reads (birthdayGreeting).
+    const born = patients.filter((p) => isBirthdayOn(p.birthDate, today)).map((p) => p.id);
+    const messages = await this.messages.greetings(born, Number(today.slice(0, 4)));
+    return TodaySummary.parse(todaySummary({ patients, staff, appointments, appointmentRequests: pending, visits: facts.visits, messages }, today));
   }
 
   /** reportBranches with this caller's tier, roles, device branch and usable branches; a refusal is thrown as is. */

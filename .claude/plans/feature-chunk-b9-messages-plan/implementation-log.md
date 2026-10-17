@@ -117,3 +117,12 @@ open the log. The repair statement names `MESSAGE_SEND` as a bound value. `Messa
 `RecordOwners` (`/due-items/:id/message`, owner "record"). Mutation: the greeting without `lockPatient` → the 10-tap
 race red with nine 500s (the unique backstop keeps one row).
 **Gate:** `pnpm run check` exit 0 (api 344) · `pnpm --filter api test:int test/int/messages.int.test.ts` 12 passed.
+
+## Phase 8: "No contact" and Today's greeting ticks — 2026-10-17
+
+**Steps completed:** 8.1, 8.2, 8.3.
+**Files changed:** `apps/api/src/message-queue/message-queue.service.ts` (`lastTried`, `greetings`), `src/patients/{patient-standing,patient-standing.test,patients.service,patient.views}.ts`,
+`src/reports/{reports.service,reports.module}.ts`, `test/int/{patients-read,today}.int.test.ts`.
+**Deviations from plan:** there's no `no_contact` chip (PatientFilter), so the unit case checks `needs_attention`. The Today
+case expects "queued" after the drain when the run is outside sending hours (the handler defers it).
+**Gate:** `pnpm run check` exit 0 (api 345) · `pnpm --filter api test:int test/int/today.int.test.ts test/int/patients-read.int.test.ts` 25 passed.

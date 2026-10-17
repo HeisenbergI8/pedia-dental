@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { FAILURE, choiceDeclined, composeMessage, nextSendingTime, preVisitMessageFor, reminderSendAt, smsNumber, type Appointment, type Message, type MessageEvent, type MessageStatus, type Patient } from "@pedia/shared";
 import { ownClinicId } from "../clinic/account-lock";
 import { Clock } from "../common/clock";
+import { Prisma } from "../generated/prisma/client.ts";
 import { OutboxService } from "../outbox/outbox.service";
 import { PrismaService } from "../prisma/prisma.service";
 import type { Tx } from "../prisma/transaction";
@@ -85,6 +86,32 @@ export class MessageQueueService {
   async list(where: { patientId?: string; status?: MessageStatus }): Promise<Message[]> {
     const rows = await this.prisma.message.findMany({ where, select: MESSAGE_COLUMNS, orderBy: [{ sendAt: "desc" }, { id: "desc" }] });
     return rows.map(toMessage);
+  }
+
+  /**
+   * Each patient's last text that went out or was tried (sent/failed), the only one `hasNoContact` looks at. One query:
+   * raw SQL for the window function, so it names the clinic itself (the tenant extension doesn't see raw SQL).
+   */
+  async lastTried(patientIds: readonly string[]): Promise<Pick<Message, "patientId" | "status" | "sendAt">[]> {
+    if (!patientIds.length) return [];
+    const rows = await this.prisma.$queryRaw<{ patientId: string; status: "sent" | "failed"; sendAt: Date }[]>`
+      SELECT patientId, status, sendAt FROM (
+        SELECT patientId, status, sendAt, ROW_NUMBER() OVER (PARTITION BY patientId ORDER BY sendAt DESC, id DESC) AS rn
+        FROM Message
+        WHERE clinicId = ${ownClinicId()} AND status IN ('sent', 'failed') AND patientId IN (${Prisma.join([...patientIds])})
+      ) last WHERE rn = 1`;
+    return rows.map((r) => ({ ...r, sendAt: r.sendAt.toISOString() }));
+  }
+
+  /** Birthday rows of these children for a Manila year: what `birthdayGreeting` (Today's tick) reads. */
+  async greetings(patientIds: readonly string[], year: number): Promise<Pick<Message, "patientId" | "kind" | "createdAt" | "status">[]> {
+    if (!patientIds.length) return [];
+    const rows = await this.prisma.message.findMany({
+      where: { patientId: { in: [...patientIds] }, greetingYear: year },
+      select: { patientId: true, kind: true, createdAt: true, status: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    return rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() }));
   }
 
   /** Decision 10 / E10: texts the provider took in a Manila month ("yyyy-MM"), and the parts it billed (decision 14). */

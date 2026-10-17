@@ -15,6 +15,7 @@ import type { Tx } from "../prisma/transaction";
 import { VisitDaysService } from "../visits/visit-days.service";
 import { PATIENT_NOT_FOUND } from "./patient-lock";
 import { photoFileName } from "./patient-photo";
+import { MessageQueueService } from "../message-queue/message-queue.service";
 import { standingPage, type Named } from "./patient-standing";
 import { scopeCondition, searchCondition } from "./patient-search";
 import { inScope, toDuplicate, toPatient, toSummary, visibleTo, type Viewer } from "./patient.views";
@@ -32,6 +33,7 @@ export class PatientsService {
     private readonly dueItems: DueItemsService,
     private readonly clock: Clock,
     private readonly billing: BillingRecordsService,
+    private readonly messages: MessageQueueService,
   ) {}
 
   /** Full records for these ids, in this order. Five queries whatever the count (no N+1). Missing ids are skipped. */
@@ -88,9 +90,9 @@ export class PatientsService {
   async summaries(viewer: Viewer, query: PatientListQuery): Promise<PatientPage> {
     const matched = await this.names(await this.matching(viewer, query.q)); // every match: the counts need them all
     const ids = matched.map((p) => p.id);
-    const [facts, due, bills] = await Promise.all([this.visitDays.facts(ids), this.dueItems.openFor(ids), this.billing.billTotals(ids)]);
+    const [facts, due, bills, lastTried] = await Promise.all([this.visitDays.facts(ids), this.dueItems.openFor(ids), this.billing.billTotals(ids), this.messages.lastTried(ids)]);
     const money = rolesCan(viewer.roles, "billing.view");
-    const { rows, total, page, counts } = standingPage(matched, facts, due, bills, query, this.clock.today(), money);
+    const { rows, total, page, counts } = standingPage(matched, facts, due, bills, lastTried, query, this.clock.today(), money);
     const patients = await this.records(rows.map((r) => r.id)); // the page's records, in the page's order
     const siblings = await this.siblingsOf(viewer, patients);
     const standing = new Map(rows.map((r) => [r.id, r]));
