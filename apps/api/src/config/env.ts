@@ -19,6 +19,12 @@ const Env = z.object({
   OUTBOX_POLL_MS: z.coerce.number().int().min(100).default(2000),
   // The local-disk storage driver's root, relative to the API's working directory (B10 adds S3/R2).
   STORAGE_DIR: z.string().min(1).default("var/storage"),
+  // B9: real texts through Semaphore. Unset = the log driver, everywhere, production included (decision 11). Never logged.
+  SEMAPHORE_API_KEY: z.string().min(1).optional(),
+  // One shared sender name for every clinic (decision 3), approved on the Semaphore account first. Not chosen yet
+  // (decision 18): unset sends without one, so Semaphore uses its own default name.
+  SMS_SENDER_NAME: z.string().min(1).max(11).optional(),
+  SEMAPHORE_URL: z.url().default("https://api.semaphore.co/api/v4/messages"),
 });
 
 export type Env = z.infer<typeof Env>;

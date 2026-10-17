@@ -6,7 +6,6 @@ import { FixedClock } from "../../src/common/clock";
 import { Hasher } from "../../src/auth/hashing";
 import { MESSAGE_SEND } from "../../src/message-queue/message.rows";
 import { MessageQueueService } from "../../src/message-queue/message-queue.service";
-import { OutboxHandlers } from "../../src/outbox/outbox.handlers";
 import { PrismaService } from "../../src/prisma/prisma.service";
 import { runInTransaction, type Tx } from "../../src/prisma/transaction";
 import { seedDatabase } from "../../src/seed/seed-database";
@@ -35,9 +34,6 @@ beforeAll(async () => {
   app = await createIntApp({ clock });
   prisma = app.get(PrismaService);
   queue = app.get(MessageQueueService);
-  const handlers = app.get(OutboxHandlers);
-  // Phase 5 registers the real sender; until then the kind needs a handler for enqueue to accept it.
-  if (!handlers.get(MESSAGE_SEND)) handlers.register({ kind: MESSAGE_SEND, handle: async () => {} });
   await resetDatabase(prisma);
   await seedDatabase(prisma, new Hasher(), { DEMO_LOGINS: true }, platform);
 });

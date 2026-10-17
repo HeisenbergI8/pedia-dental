@@ -77,3 +77,16 @@ The int file uses the seeded child objects as the `Patient` argument and orders 
 row the same `createdAt`). Mutations: withdrawal without `dispatchedAt: null` → withdraw case red; consent check removed →
 declined case red.
 **Gate:** `pnpm run check` exit 0 · `pnpm --filter api test:int test/int/message-queue.int.test.ts test/int/outbox.int.test.ts` 8 + 12 passed.
+
+## Phase 5: Providers and the send handler — 2026-10-17
+
+**Steps completed:** 5.1, 5.2, 5.3, 5.4.
+**Files changed:** `apps/api/src/message-queue/{sms-provider,log-sms.provider,log-sms.provider.test,semaphore-sms.provider,semaphore-sms.provider.test,message-send.handler,message-queue.module}.ts`,
+`src/config/env.ts`, `.env.example`, `test/int/message-sending.int.test.ts` (new), `test/int/message-queue.int.test.ts` (guard removed).
+**Deviations from plan:** `SMS_SENDER_NAME` has no default and is optional (decision 18 is open): unset, the form carries
+no `sendername`. Semaphore's docs host isn't reachable from this container, so the contract stays unconfirmed (Question 5).
+The int file spies on each app's real `SMS_PROVIDER` instead of overriding the provider, so `int-app.ts` is unchanged. The
+withdraw-vs-claim case holds the row with the claim's own statements in a test transaction. Mutations: dropping the
+`status !== "queued"` skip → restart, withdrawn and withdraw-vs-claim cases red; dropping the `dispatchedAt` in-doubt branch
+→ the left-no-outcome case red.
+**Gate:** `pnpm run check` exit 0 · `pnpm --filter api test:int test/int/message-sending.int.test.ts test/int/message-queue.int.test.ts` 11 + 8 passed.
