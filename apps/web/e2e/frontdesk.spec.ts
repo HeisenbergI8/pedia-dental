@@ -502,19 +502,19 @@ test.describe("failed paths", () => {
     await expect(page.getByRole("alert").filter({ hasText: "That mobile number or email and password don't match a demo account" })).toBeVisible();
     await expect(page).toHaveURL(/\/login$/);
     // The email stays filled in so she only retypes the password.
-    await expect(page.getByRole("region", { name: "Sign in" }).getByLabel("Email")).toHaveValue(USERS.frontdesk);
+    await expect(page.getByRole("region", { name: "Sign in" }).getByLabel("Mobile number or email")).toHaveValue(USERS.frontdesk);
   });
 
   test("front desk submits the sign-in form empty and with a bad email", async ({ page }) => {
     await page.goto("/login");
     const form = page.getByRole("region", { name: "Sign in" });
     await form.getByRole("button", { name: "Sign in" }).click();
-    await expect(form.getByText("Enter your email address, like name@example.com")).toBeVisible();
+    await expect(form.getByText("Enter your mobile number or email")).toBeVisible();
     await expect(form.getByText("Enter your password")).toBeVisible();
-    await form.getByLabel("Email").fill("frontdesk@");
+    await form.getByLabel("Mobile number or email").fill("frontdesk@");
     await form.getByLabel("Password", { exact: true }).fill("pass123");
     await form.getByRole("button", { name: "Sign in" }).click();
-    await expect(form.getByText("Enter your email address, like name@example.com")).toBeVisible();
+    await expect(form.getByText("Enter a mobile number like 0917 123 4567, or an email address")).toBeVisible();
     await expect(page).toHaveURL(/\/login$/);
   });
 

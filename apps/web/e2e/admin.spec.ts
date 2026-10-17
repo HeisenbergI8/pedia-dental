@@ -323,13 +323,13 @@ test.describe("failed paths", () => {
     await page.goto("/login");
     const form = page.getByRole("region", { name: "Sign in" });
     await form.getByRole("button", { name: "Sign in" }).click();
-    await expect(form.getByText("Enter your email address, like name@example.com")).toBeVisible();
+    await expect(form.getByText("Enter your mobile number or email")).toBeVisible();
     await expect(form.getByText("Enter your password")).toBeVisible();
 
-    await form.getByLabel("Email").fill("admin@gmail");
+    await form.getByLabel("Mobile number or email").fill("admin@gmail");
     await form.getByLabel("Password", { exact: true }).fill(DEMO_PASSWORD);
     await form.getByRole("button", { name: "Sign in" }).click();
-    await expect(form.getByText("Enter your email address, like name@example.com")).toBeVisible();
+    await expect(form.getByText("Enter a mobile number like 0917 123 4567, or an email address")).toBeVisible();
     await expect(page).toHaveURL(/\/login$/);
   });
 
@@ -597,7 +597,7 @@ test.describe("edge cases", () => {
   test("an email typed with capitals and spaces still signs the admin in", async ({ page }) => {
     await page.goto("/login");
     const form = page.getByRole("region", { name: "Sign in" });
-    await form.getByLabel("Email").fill("  Admin@Gmail.com ");
+    await form.getByLabel("Mobile number or email").fill("  Admin@Gmail.com ");
     await form.getByLabel("Password", { exact: true }).fill(DEMO_PASSWORD);
     await form.getByRole("button", { name: "Sign in" }).click();
     await expect(page).toHaveURL(/\/dashboard$/, { timeout: 15_000 });
@@ -607,7 +607,7 @@ test.describe("edge cases", () => {
   test("admin signs in with the keyboard alone", async ({ page }) => {
     await page.goto("/login");
     const form = page.getByRole("region", { name: "Sign in" });
-    await form.getByLabel("Email").focus();
+    await form.getByLabel("Mobile number or email").focus();
     await page.keyboard.type(USERS.admin);
     await page.keyboard.press("Tab");
     await expect(form.getByLabel("Password", { exact: true })).toBeFocused();

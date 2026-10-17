@@ -216,10 +216,10 @@ export const portalHandlers = [
   http.get(url("/auth/demo-texts"), ({ request }) => {
     if (!sessionOf(request)) selectTenant(DEMO_CLINIC_ID);
     const texts = db.portalAccounts
-      .flatMap((a) => a.links.filter(liveLink).map((l) => ({ name: guardianOf(a.guardianId)?.fullName ?? "A parent", purpose: l.purpose, link: linkPath(l.token), expiresAt: l.expiresAt, at: l.createdAt })))
-      .sort((x, y) => y.at.localeCompare(x.at))
+      .flatMap((a) => a.links.filter(liveLink).map((l) => ({ a, l })))
+      .sort((x, y) => y.l.createdAt.localeCompare(x.l.createdAt))
       .slice(0, 5)
-      .map(({ at: _at, ...t }) => t);
+      .map(({ a, l }) => ({ name: guardianOf(a.guardianId)?.fullName ?? "A parent", purpose: l.purpose, link: linkPath(l.token), expiresAt: l.expiresAt }));
     return HttpResponse.json(DemoTexts.parse({ texts }));
   }),
 ];

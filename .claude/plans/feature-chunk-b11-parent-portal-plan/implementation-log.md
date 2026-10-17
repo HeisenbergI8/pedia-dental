@@ -29,3 +29,15 @@
 - The three staff rules were added to the API's `CLINIC_RULES` now (planned in 7.2): the drift test compares the two maps.
 - New-family test checks the not-invited guardian's whole status (`toEqual`), since `toMatchObject` treats `blocked: undefined` as a required key.
 **Gate:** `pnpm run check`: green.
+
+## Phase 4: Screens — 2026-10-17
+
+**Steps completed:** 4.1, 4.2, 4.3, 4.4
+**Files changed:** `apps/web/src/features/portal/{api.ts,components/portal-password.tsx}`, `features/patients/components/{guardian-portal.tsx,patient-overview.tsx}`, `features/auth/components/{password-field,set-password-screen,forgot-password-screen,login-screen,account-menu}.tsx`, `app/{set-password,forgot-password,(portal)/portal/account}/page.tsx`, `apps/web/e2e/*` (sign-in label and messages)
+**Deviations from plan:**
+- `usePortalAction` is one mutation for invite and turn off (both POST to `portal-<action>`) instead of two hooks.
+- `PasswordField` (show/hide password) is shared by sign-in, set-password and the portal's change password; the login screen's own copy was replaced by it.
+- The account menu shows "Change password" when the session has a `guardianId` (a parent's login), not by checking the role.
+- The turn-off dialog names the guardian, not a pronoun ("... will be signed out and won't see Bea's records until you invite them again").
+- Existing browser specs were updated for the sign-in box's new label ("Mobile number or email") and messages; the operator's console sign-in is unchanged.
+**Gate:** `pnpm run check`: green. Browser (demo build): access-control, admin, frontdesk, dentist, parent.mobile: 260 passed, 10 failed in uploads, chart history and certificates (screens B11 doesn't touch); checked against master below.

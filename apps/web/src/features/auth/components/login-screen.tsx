@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useIsMutating } from "@tanstack/react-query";
 import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CalendarCheckIcon, CrownIcon, EyeIcon, EyeOffIcon, HeartHandshakeIcon, HeartIcon, RainbowIcon, ShieldCheckIcon, SparklesIcon, StethoscopeIcon, type LucideIcon } from "lucide-react";
+import { CalendarCheckIcon, CrownIcon, HeartHandshakeIcon, HeartIcon, RainbowIcon, ShieldCheckIcon, SparklesIcon, StethoscopeIcon, type LucideIcon } from "lucide-react";
 import { LoginInput, type ClinicChoice, type DemoAccounts, type Role } from "@pedia/shared";
 import { Loading, LoadingScreen, PrimolarLogo } from "@/components/brand";
 import { FormField } from "@/components/form-field";
@@ -15,7 +15,9 @@ import { env } from "@/lib/env";
 import { ROLE_HOME, ROLE_LABEL, useSession } from "../access";
 import { authKeys, useDemoAccounts, useSignIn } from "../api";
 import { LegalLinks } from "@/features/legal/components/legal-links";
+import { useDemoTexts } from "@/features/portal/api";
 import { ClinicChooser } from "./clinic-chooser";
+import { PasswordField } from "./password-field";
 
 const ROLE_ICON: Record<Role, LucideIcon> = {
   owner: CrownIcon,
@@ -104,6 +106,7 @@ export function LoginScreen() {
                 {demo.isLoading && <Loading label="Loading demo logins" />}
                 {demo.error && <p role="alert" className="text-danger">Couldn&apos;t load the demo logins.</p>}
                 {demo.data && <DemoLogins {...demo.data} />}
+                <DemoTextsList />
               </>
             )}
           </div>
@@ -122,7 +125,6 @@ export function LoginScreen() {
 function EmailSignIn() {
   const signIn = useSignIn();
   const form = useForm<LoginInput>({ resolver: zodResolver(LoginInput), defaultValues: { email: "", password: "" } });
-  const [showPassword, setShowPassword] = useState(false);
   const [choices, setChoices] = useState<ClinicChoice[] | null>(null);
   const submit = (input: LoginInput) => signIn.mutate(input, { onSuccess: (r) => "choices" in r && setChoices(r.choices) });
   if (choices) {
@@ -143,37 +145,20 @@ function EmailSignIn() {
     <section aria-label="Sign in" className="rounded-xl border border-line bg-surface p-4 shadow-card sm:p-6">
       <FormProvider {...form}>
         <form noValidate onSubmit={form.handleSubmit(submit)} className="space-y-4">
-          <FormField name="email" label="Email">
-            <Input type="email" autoComplete="username" {...form.register("email")} />
+          {/* B11 decision 4: parents sign in with their mobile number or email; staff with their email. */}
+          <FormField name="email" label="Mobile number or email">
+            <Input type="text" autoComplete="username" {...form.register("email")} />
           </FormField>
-          <FormField name="password" label="Password">
-            {(control) => (
-              <div className="relative">
-                <Input
-                  {...control}
-                  type={showPassword ? "text" : "password"}
-                  autoComplete="current-password"
-                  className="pr-11"
-                  {...form.register("password")}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                  aria-pressed={showPassword}
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute inset-y-0 right-0 h-full text-ink-muted hover:bg-transparent hover:text-ink-muted dark:hover:bg-transparent"
-                >
-                  {showPassword ? <EyeOffIcon /> : <EyeIcon />}
-                </Button>
-              </div>
-            )}
-          </FormField>
+          <PasswordField name="password" label="Password" autoComplete="current-password" register={form.register("password")} />
           {signIn.error && <p role="alert" className="text-sm text-danger">{signIn.error.message}</p>}
-          <Button type="submit" disabled={signIn.isPending} className="w-full sm:w-auto">
-            {signIn.isPending ? "Signing in" : "Sign in"}
-          </Button>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <Button type="submit" disabled={signIn.isPending} className="w-full sm:w-auto">
+              {signIn.isPending ? "Signing in" : "Sign in"}
+            </Button>
+            <Link href="/forgot-password" className="inline-flex min-h-11 items-center text-sm font-semibold text-brand underline-offset-2 hover:underline">
+              Forgot password?
+            </Link>
+          </div>
         </form>
       </FormProvider>
     </section>
@@ -207,6 +192,31 @@ function DemoLogins({ logins, password }: Pick<DemoAccounts, "logins" | "passwor
             </li>
           );
         })}
+      </ul>
+    </section>
+  );
+}
+
+/** Prototype and demo deployments only (B11 E6): the invite and reset links the demo would have texted. */
+function DemoTextsList() {
+  const { data } = useDemoTexts();
+  if (!data?.texts.length) return null;
+  return (
+    <section aria-labelledby="demo-texts" className="space-y-3">
+      <div>
+        <h2 id="demo-texts" className="text-lg font-semibold">Demo texts</h2>
+        <p className="text-sm text-ink-muted">The demo sends no SMS. These are the links it would have texted to parents.</p>
+      </div>
+      <ul className="space-y-2">
+        {data.texts.map((t) => (
+          <li key={t.link} className="flex flex-wrap items-center gap-x-3 rounded-xl border border-line bg-surface p-3 text-sm">
+            <span className="font-medium">{t.name}</span>
+            <span className="text-ink-muted">{t.purpose === "invite" ? "Portal invite" : "Password reset"}</span>
+            <Link href={t.link} className="ml-auto inline-flex min-h-11 items-center font-semibold text-brand underline-offset-2 hover:underline">
+              Open link
+            </Link>
+          </li>
+        ))}
       </ul>
     </section>
   );

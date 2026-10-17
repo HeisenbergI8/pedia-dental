@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Can, useCan } from "@/features/auth/access";
 import { formatDate, formatPhone } from "@/lib/format";
 import { CONSENT_LABEL } from "../api";
+import { usePortalAccess } from "@/features/portal/api";
 import { ConsentDialog } from "./consent-dialog";
+import { GuardianPortal } from "./guardian-portal";
 import { PrivacyCard } from "./privacy-card";
 import { QuickUpdateDialog } from "./quick-update-dialog";
 
@@ -34,6 +36,8 @@ export function PatientOverview({ patient: p }: { patient: PatientView }) {
   const about = filledProfile(p.profile);
   const can = useCan();
   const canContact = can("patients.contact"); // phones, email and address: admin and front desk only
+  // B11: each guardian's portal status, for those who invite (decisions 16, 17).
+  const portal = new Map(usePortalAccess(p.id, can("portal.manage")).data?.map((a) => [a.guardianId, a]));
   const history = [p.dentalHistory.previousClinic, p.dentalHistory.notes].some(Boolean);
 
   return (
@@ -108,6 +112,7 @@ export function PatientOverview({ patient: p }: { patient: PatientView }) {
                   {g.email && <span className="text-ink-muted"> · {g.email}</span>}
                 </p>
               )}
+              {portal.has(g.id) && <GuardianPortal patientId={p.id} childName={p.firstName} guardian={g} access={portal.get(g.id)!} />}
             </li>
           ))}
         </ul>

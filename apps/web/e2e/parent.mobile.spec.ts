@@ -280,12 +280,12 @@ test.describe("failed paths", () => {
     await page.goto("/login");
     const form = page.getByRole("region", { name: "Sign in" });
     await form.getByRole("button", { name: "Sign in" }).click();
-    await expect(form.getByText("Enter your email address, like name@example.com")).toBeVisible();
+    await expect(form.getByText("Enter your mobile number or email")).toBeVisible();
     await expect(form.getByText("Enter your password")).toBeVisible();
-    await form.getByLabel("Email").fill("parent@gmail");
+    await form.getByLabel("Mobile number or email").fill("parent@gmail");
     await form.getByLabel("Password", { exact: true }).fill(DEMO_PASSWORD);
     await form.getByRole("button", { name: "Sign in" }).click();
-    await expect(form.getByText("Enter your email address, like name@example.com")).toBeVisible();
+    await expect(form.getByText("Enter a mobile number like 0917 123 4567, or an email address")).toBeVisible();
     await expect(page).toHaveURL(/\/login$/);
   });
 

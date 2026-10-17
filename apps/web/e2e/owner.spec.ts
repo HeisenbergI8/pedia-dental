@@ -50,7 +50,7 @@ async function signOut(page: Page) {
 /** Signs in from the sign-in page already on screen (no navigation), like a person on the same device. */
 async function signInHere(page: Page, email: string, password: string) {
   const form = page.getByRole("region", { name: "Sign in" });
-  await form.getByLabel("Email").fill(email);
+  await form.getByLabel("Mobile number or email").fill(email);
   await form.getByLabel("Password", { exact: true }).fill(password);
   await form.getByRole("button", { name: "Sign in" }).click();
 }
