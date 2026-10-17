@@ -198,7 +198,8 @@ describe("appointments (apps/web handlers.test.ts → appointments)", () => {
         ["cancelled", reminderSendAt(appt.startsAt)],
         ["queued", reminderSendAt(moved.startsAt)],
       ]);
-      expect((await texts({ appointmentId: appt.id, kind: "appointment_confirmation" })).map((m) => m.status)).toEqual(["cancelled", "queued"]); // decision 17
+      // Sorted: booked outside sending hours, both confirmations go at the same 8 AM, so their order is a tie (decision 17).
+      expect((await texts({ appointmentId: appt.id, kind: "appointment_confirmation" })).map((m) => m.status).sort()).toEqual(["cancelled", "queued"]);
       await t.ok(status(appt.id, { status: "no_show" }), Appointment);
       const after = await texts({ appointmentId: appt.id });
       expect(after.filter((m) => m.status === "queued").map((m) => m.kind)).toEqual(["missed_appointment"]);

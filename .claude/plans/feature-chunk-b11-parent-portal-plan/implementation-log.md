@@ -41,3 +41,15 @@
 - The turn-off dialog names the guardian, not a pronoun ("... will be signed out and won't see Bea's records until you invite them again").
 - Existing browser specs were updated for the sign-in box's new label ("Mobile number or email") and messages; the operator's console sign-in is unchanged.
 **Gate:** `pnpm run check`: green. Browser (demo build): access-control, admin, frontdesk, dentist, parent.mobile: 260 passed, 10 failed in uploads, chart history and certificates (screens B11 doesn't touch); checked against master below.
+
+**Phase 4 browser follow-up:** the same 10 browser tests fail on master's demo build (built in a separate worktree, port 3151): all 10 failed there too. They predate B11 (the parent page shows B10's seeded photos instead of "Nothing uploaded yet"; chart and certificate cases depend on seeded dates). Not fixed in B11.
+
+## Phase 5: Tables, migration and the API seed — 2026-10-17
+
+**Steps completed:** 5.1, 5.2
+**Files changed:** `apps/api/prisma/schema.prisma`, `prisma/migrations/20261017160000_b11_portal_accounts/migration.sql`, `src/prisma/{model-scope,tenant-scope.test}.ts`, `src/message-queue/message.rows.ts` (cast removed), `src/auth/identity.service.ts` (`email ?? ""`), `src/seed/seed-database.ts`, `test/int/{seed,message-queue,appointments}.int.test.ts`
+**Deviations from plan:**
+- `Credential` also gets `@@index([phone])` (sign-in looks a mobile up across clinics before one is chosen, as `@@index([email])`).
+- `prisma format` realigned three lines of `NoteTemplate` (whitespace only).
+- `appointments.int.test.ts` "withdraws the old reminder on a move": a pre-existing night-time flake (outside sending hours both confirmations go at the same 8 AM, so their order ties). It failed 1 run in 3 at 23:55 Manila; the assertion now compares the statuses sorted.
+**Gate:** `pnpm run check`: green. `pnpm --filter api test:int`: 41 files, 463 passed + the flake above (fixed, then 4/4 green).

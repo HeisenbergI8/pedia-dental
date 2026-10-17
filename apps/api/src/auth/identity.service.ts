@@ -104,7 +104,7 @@ export class IdentityService {
     return {
       clinicId,
       user: { id: accountId, name: staff?.fullName ?? cred.name, role: roles[0]!, roles },
-      email: cred.email,
+      email: cred.email ?? "", // a parent on their mobile only (B11 decision 14)
       staffId: cred.staffId ?? undefined,
       guardianId: cred.guardianId ?? undefined,
       readOnly: suspended,
