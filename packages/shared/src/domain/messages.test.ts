@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MessageTemplate } from "../schemas/message";
-import { birthdayGreeting, isBirthdayOn, messageVars, preVisitMessageFor, renderMessage, reminderSendAt, unknownPlaceholders } from "./messages";
+import { birthdayGreeting, composeMessage, isBirthdayOn, messageVars, preVisitMessageFor, renderMessage, reminderSendAt, unknownPlaceholders } from "./messages";
 
 const bea = { firstName: "Bea", lastName: "Mendoza", guardians: [{ id: "g1", fullName: "Rosa Mendoza", relationship: "Mother", phone: "09171234567", isPrimary: true }] };
 const startsAt = new Date(2030, 0, 8, 10, 30).toISOString(); // Tue Jan 8 2030, 10:30 AM local
@@ -55,5 +55,21 @@ describe("pre-treatment instructions", () => {
     expect(preVisitMessageFor("pulpotomy")).toBe("pre_treatment");
     expect(preVisitMessageFor("oral_exam")).toBeUndefined();
     expect(preVisitMessageFor(undefined)).toBeUndefined();
+  });
+});
+
+describe("composeMessage", () => {
+  const patient = { id: "p1", clinicId: "c1", ...bea } as unknown as Parameters<typeof composeMessage>[1]["patients"][number];
+  const refs = { templates: [{ kind: "birthday" as const, body: "Happy birthday, {child_first_name}!" }], patients: [patient], staff: [], clinicName: "Bulilit" };
+  const meta = { id: "m1", clinicId: "c1", createdAt: startsAt };
+  const e = { kind: "birthday" as const, patientId: "p1", sendAt: startsAt };
+
+  it("renders a queued text to the primary guardian", () => {
+    expect(composeMessage(e, refs, meta)).toMatchObject({ status: "queued", to: "09171234567", recipientName: "Rosa Mendoza", body: "Happy birthday, Bea!" });
+  });
+
+  it("composes nothing without a primary guardian", () => {
+    const orphan = { ...patient, guardians: [{ ...bea.guardians[0]!, isPrimary: false }] };
+    expect(composeMessage(e, { ...refs, patients: [orphan] }, meta)).toBeUndefined();
   });
 });

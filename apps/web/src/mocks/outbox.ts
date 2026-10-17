@@ -1,5 +1,16 @@
 import { format } from "date-fns";
-import { birthdayGreeting, choiceDeclined, isBirthdayOn, preVisitMessageFor, reminderSendAt, type Appointment, type Message } from "@pedia/shared";
+import {
+  FAILURE,
+  birthdayGreeting,
+  choiceDeclined,
+  isBirthdayOn,
+  nextSendingTime,
+  preVisitMessageFor,
+  reminderSendAt,
+  smsNumber,
+  type Appointment,
+  type Message,
+} from "@pedia/shared";
 import { currentAccount, currentClinicId, db } from "./db";
 import { composeMessage, type MessageEvent } from "@pedia/seed";
 
@@ -9,7 +20,10 @@ export function queueMessage(e: MessageEvent): Message | undefined {
   const patient = db.patients.find((p) => p.id === e.patientId);
   if (patient && choiceDeclined(patient, "reminders")) return undefined;
   const refs = { templates: db.messageTemplates, patients: db.patients, staff: db.staff, clinicName: currentAccount().name };
-  const message = composeMessage(e, refs, { id: crypto.randomUUID(), clinicId: currentClinicId(), createdAt: new Date().toISOString() });
+  // Decision 4: inside sending hours. Decision 12: no usable number fails at once (the API's queue does the same).
+  const sendAt = nextSendingTime(new Date(e.sendAt)).toISOString();
+  const composed = composeMessage({ ...e, sendAt }, refs, { id: crypto.randomUUID(), clinicId: currentClinicId(), createdAt: new Date().toISOString() });
+  const message = composed && !smsNumber(composed.to) ? { ...composed, status: "failed" as const, failureReason: FAILURE.noPhone } : composed;
   if (message) db.messages.push(message);
   return message;
 }

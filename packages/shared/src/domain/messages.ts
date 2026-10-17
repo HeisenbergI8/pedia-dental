@@ -1,6 +1,7 @@
 import { addDays, format, parseISO, setHours, startOfDay } from "date-fns";
 import type { Patient } from "../schemas/patient";
-import type { Message, MessageKind } from "../schemas/message";
+import type { StaffMember } from "../schemas/clinic";
+import type { Message, MessageKind, MessageTemplate } from "../schemas/message";
 
 /** Every placeholder a template may use, with the label the editor shows. */
 export const PLACEHOLDERS = {
@@ -79,4 +80,42 @@ export function birthdayGreeting<M extends Pick<Message, "patientId" | "kind" | 
   today: string,
 ): M | undefined {
   return messages.filter((m) => m.patientId === patientId && m.kind === "birthday" && m.createdAt.startsWith(today.slice(0, 4))).at(-1);
+}
+
+/** What happened, and to whom. `startsAt` / `dueOn` / `dentistId` feed the placeholders. */
+export type MessageEvent = Pick<Message, "kind" | "patientId" | "sendAt" | "appointmentId" | "noteId" | "dueItemId"> & {
+  startsAt?: string;
+  dueOn?: string;
+  dentistId?: string;
+};
+
+/** The API passes only the patient, dentist and template it loaded; the mock passes its whole db. */
+export type MessageRefs = {
+  templates: Pick<MessageTemplate, "kind" | "body">[];
+  patients: Patient[];
+  staff: Pick<StaffMember, "id" | "fullName">[];
+  clinicName: string;
+};
+
+/** One queued SMS to the primary guardian, rendered now. Undefined without a template, patient or guardian. */
+export function composeMessage(e: MessageEvent, refs: MessageRefs, meta: Pick<Message, "id" | "clinicId" | "createdAt">): Message | undefined {
+  const template = refs.templates.find((t) => t.kind === e.kind);
+  const patient = refs.patients.find((p) => p.id === e.patientId);
+  const guardian = patient?.guardians.find((g) => g.isPrimary);
+  if (!template || !patient || !guardian) return undefined;
+  const dentistName = refs.staff.find((s) => s.id === e.dentistId)?.fullName;
+  return {
+    ...meta,
+    patientId: patient.id,
+    kind: e.kind,
+    channel: "sms",
+    to: guardian.phone,
+    recipientName: guardian.fullName,
+    body: renderMessage(template.body, messageVars(patient, { clinicName: refs.clinicName, startsAt: e.startsAt, dueOn: e.dueOn, dentistName })),
+    status: "queued",
+    sendAt: e.sendAt,
+    appointmentId: e.appointmentId,
+    noteId: e.noteId,
+    dueItemId: e.dueItemId,
+  };
 }
