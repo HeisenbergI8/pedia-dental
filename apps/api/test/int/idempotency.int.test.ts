@@ -91,7 +91,7 @@ describe("Idempotency-Key on MySQL (B8 E2)", () => {
       Array.from({ length: n }, (_, i) => ({ clinicId, key: `old-${clinicId}-${i}`, fingerprint: "0".repeat(64), status: 201, createdAt: past, expiresAt: past }));
     // Seeded straight in, outside any clinic: the test's own rows.
     for (const [clinicId, n] of [[DEMO_CLINIC_ID, 2000], ["clinic_ngiti", 500]] as const) {
-      await inClinic(clinicId, () => prisma.idempotencyKey.createMany({ data: old(clinicId, n).map(({ clinicId: _, ...r }) => r) }));
+      await inClinic(clinicId, () => prisma.idempotencyKey.createMany({ data: old(clinicId, n) }));
     }
     expect(await keys.sweep()).toBe(2500);
     expect(await demo(() => prisma.idempotencyKey.count())).toBe(live); // the live ones stay

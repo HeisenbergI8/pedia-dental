@@ -76,4 +76,4 @@ Engineering decisions E1–E13 as the plan records them.
 - `voidInvoice` uses `updateMany` (the tenant extension's scoped write) rather than `update`.
 - `IdempotencyModule` imports nothing: `JobsModule` is global.
 - Mutation: with the key claim removed, all 5 parallel-key rounds go red.
-**Gate:** `pnpm run check` exit 0; `test:int` with `idempotency.int.test.ts` 14/14.
+**Gate:** `pnpm run check` exit 0 (after a follow-up fix: the first commit had a type error in the new int test, `createMany` without `clinicId`); `test:int` 32 files, 310 passed + 3 todo.
