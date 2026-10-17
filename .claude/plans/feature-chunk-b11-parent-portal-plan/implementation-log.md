@@ -53,3 +53,37 @@
 - `prisma format` realigned three lines of `NoteTemplate` (whitespace only).
 - `appointments.int.test.ts` "withdraws the old reminder on a move": a pre-existing night-time flake (outside sending hours both confirmations go at the same 8 AM, so their order ties). It failed 1 run in 3 at 23:55 Manila; the assertion now compares the statuses sorted.
 **Gate:** `pnpm run check`: green. `pnpm --filter api test:int`: 41 files, 463 passed + the flake above (fixed, then 4/4 green).
+
+## Phase 6: Identity: sign-in by mobile, parents' passwords, the reset limit — 2026-10-17
+
+**Steps completed:** 6.1, 6.2
+**Files changed:** `apps/api/src/auth/{rate-limit,rate-limit.test,auth.module,identity.service,auth.service}.ts`, `test/int/portal-sign-in.int.test.ts` (new), `test/int/jobs.int.test.ts`
+**Deviations from plan:**
+- `AuthModule` exports `RateLimitService` (and `AuthService`, for PortalService's `open`), not `RateLimitMiddleware`: a middleware is built by the module that applies it, so PortalModule only needs the service.
+- The parent-login helpers (`createParentLogin`, `setParentPassword`, `removeParentLogin`, `phoneHolder`, `emailTaken`, `followPhone`) were written in Phase 7, where they are first used.
+- `jobs.int.test.ts`: the counter sweep's longest window is now the reset hour, so its fixture rows moved to 60 and 59 minutes old.
+**Gate:** `pnpm run check`: green. `portal-sign-in.int`: 4/4.
+
+## Phase 7: The portal module and account texts — 2026-10-17
+
+**Steps completed:** 7.1, 7.2, 7.3, 7.4
+**Files changed:** `apps/api/src/message-queue/{account-links,account-links.test,message-queue.service,message-send.handler,message-queue.module}.ts`, `src/config/{env,env.test}.ts`, `.env.example`, `src/portal/{portal.service,portal-access.controller,password-links.controller,portal.module}.ts` (new), `src/patients/family.service.ts`, `src/auth/{identity.service,access-rules}.ts`, `src/app.module.ts`, `test/auth.test.ts`, `test/int/portal.int.test.ts` (new)
+**Deviations from plan:**
+- The sending-hours check moved inside the claim (it reads the row's kind there); an account text skips it. No other behaviour of the handler changed.
+- PortalModule reads patients through `FamilyService` (new `guardianOn`, `familyOf`, `guardians`) instead of PatientsModule, so PatientsModule can import PortalModule in Phase 8 without a cycle.
+- A number's holder (decision 14) is found through `Credential.phone` (active logins, indexed) plus the invited accounts' guardians, not by scanning every guardian.
+- The 7.3 route test lives in `test/auth.test.ts` (the no-database app that already fakes the rate limiter), not a new file: the link routes' middleware needs that fake.
+- Validation of the signed-out bodies is the controllers' `ZodValidationPipe`, so the service takes parsed input.
+**Gate:** `pnpm run check`: green. `portal.int`: 10/10 (night send with reminders declined, link only in the provider call, single use under a race, resend and failed-send retry, parallel invites on one number, turn off signs out, reset 202/429, dentist and parent 403).
+
+## Phase 8: Number changes and the ownership proof — 2026-10-17
+
+**Steps completed:** 8.1, 8.2, 8.3
+**Files changed:** `apps/api/src/patients/{patient-writes.service,patients.module}.ts`, `src/portal/portal.service.ts` (`numberChanged`), `src/auth/{record-owners,access-rules.test}.ts`, `test/int/{portal-guardians,parent-ownership}.int.test.ts` (new), `test/int/today.int.test.ts`
+**Deviations from plan:**
+- `update` and `quickUpdate` take the clinic's lock first (account before patient), so a number change is checked against other parents' numbers under the same lock as an invite (E8). Patient edits in one clinic now queue behind each other briefly.
+- A number written another way (same `smsNumber`) is not a change: no sessions end.
+- The ownership sweep skips `POST /patients/:id/exports`: the API has no controller for it yet (B13, Data Privacy Act operations), so Nest answers 404 before the guard.
+- The seed's photos all belong to one family, so the sweep writes one other-family photo row.
+- `today.int.test.ts`: its "not vacuous" check failed every Sunday (the seed's clinic is closed on Sundays, so today has no appointments); it now skips that one check on a Sunday. Pre-existing, found tonight.
+**Gate:** `pnpm run check`: green. `pnpm --filter api test:int`: 45 files, 497 passed before the Sunday fix (the one failure was that check), then today.int 10/10.

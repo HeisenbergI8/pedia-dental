@@ -72,3 +72,27 @@ describe("/operator/auth without a database", () => {
     expect((await http().post("/api/operator/auth/login").send({})).status).toBe(429);
   });
 });
+
+describe("B11's portal routes without a database", () => {
+  it("guards the staff routes: 401 without a session", async () => {
+    for (const [method, path] of [["get", "/patients/p1/portal-access"], ["post", "/patients/p1/guardians/g1/portal-invite"], ["post", "/patients/p1/guardians/g1/portal-off"]] as const) {
+      expect([(await http()[method](`/api${path}`)).status, path]).toEqual([401, path]);
+    }
+  });
+
+  it("reaches the link routes signed out and checks their bodies (tokens in bodies, never paths: E1)", async () => {
+    for (const path of ["/api/auth/password-link", "/api/auth/password-link/accept", "/api/auth/password-reset"]) {
+      const res = await http().post(path).send({ token: "short", login: "046 471 2580" });
+      expect([res.status, path]).toEqual([400, path]);
+    }
+  });
+
+  it("has no demo-texts route unless DEMO_LOGINS is on (E6)", async () => {
+    expect((await http().get("/api/auth/demo-texts")).status).toBe(404);
+  });
+
+  it("rate-limits the link routes per address, as the rest of /auth", async () => {
+    limited = true;
+    expect((await http().post("/api/auth/password-reset").send({ login: "09171234567" })).status).toBe(429);
+  });
+});

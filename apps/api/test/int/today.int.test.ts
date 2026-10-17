@@ -30,7 +30,8 @@ describe("Today matches the mock (done-when)", () => {
   it("for Bulilit's front desk at Imus, appointments in order", async () => {
     const got = await summary(await t.as(FRONT_DESK));
     expect(got).toEqual(expected(tenant(DEMO_CLINIC_ID), [IMUS]));
-    expect(got.appointments.length).toBeGreaterThan(0); // not vacuous
+    // Not vacuous, except on a Sunday: the seed's clinic is closed then, so today has no appointments (seedAppointments).
+    if (parseISO(today).getDay() !== 0) expect(got.appointments.length).toBeGreaterThan(0);
   });
 
   it("for a device at Dasmariñas, for all branches (Owner), and for the other branch (someone working at both)", async () => {
