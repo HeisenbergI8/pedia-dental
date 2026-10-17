@@ -90,3 +90,5 @@ withdraw-vs-claim case holds the row with the claim's own statements in a test t
 `status !== "queued"` skip → restart, withdrawn and withdraw-vs-claim cases red; dropping the `dispatchedAt` in-doubt branch
 → the left-no-outcome case red.
 **Gate:** `pnpm run check` exit 0 · `pnpm --filter api test:int test/int/message-sending.int.test.ts test/int/message-queue.int.test.ts` 11 + 8 passed.
+**Correction:** Phase 5's commit (f65e525) went in with `pnpm run check` red: `env.test.ts`'s defaults case didn't know
+`SEMAPHORE_URL`. Fixed in the next commit; check exit 0 after it (api 341).

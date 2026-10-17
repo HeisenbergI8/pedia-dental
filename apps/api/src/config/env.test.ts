@@ -13,6 +13,7 @@ describe("loadEnv", () => {
       BACKGROUND_WORK: true,
       OUTBOX_POLL_MS: 2000,
       STORAGE_DIR: "var/storage",
+      SEMAPHORE_URL: "https://api.semaphore.co/api/v4/messages",
     });
   });
 
