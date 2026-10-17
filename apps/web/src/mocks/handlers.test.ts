@@ -692,13 +692,25 @@ describe("photos", () => {
     await expect(upload(patient.id, { ...meta, visitId: otherVisit.id })).rejects.toMatchObject({ status: 400 });
   });
 
+  it("serves the seeded photo record with real files", async () => {
+    const seeded = db.photos.filter((p) => p.id.startsWith("photo_seed_"));
+    expect(seeded).toHaveLength(4);
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/photos/photo_seed_1/file`);
+    expect([res.status, res.headers.get("content-type")]).toEqual([200, "image/png"]);
+    expect(new Uint8Array(await res.arrayBuffer()).slice(0, 4)).toEqual(new Uint8Array([0x89, 0x50, 0x4e, 0x47]));
+    const listed = await api(`/patients/${seeded[0]!.patientId}/photos`, z.array(ClinicalPhoto));
+    expect(listed.map((p) => p.id)).toEqual(expect.arrayContaining(seeded.map((p) => p.id)));
+  });
+
   it("takes a PDF for a medical document and serves it as a .pdf, but not as a clinical photo", async () => {
     const patient = await api("/patients", Patient, send("POST", newPatient));
     const pdf = new Blob(["%PDF-1.4"], { type: "application/pdf" });
     const doc = await upload(patient.id, { type: "document", takenOn: "2026-10-02", caption: "Lab result" }, pdf);
     expect(doc.contentType).toBe("application/pdf");
     const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/photos/${doc.id}/file`);
-    expect(res.headers.get("content-disposition")).toMatch(/\.pdf"$/);
+    expect(res.headers.get("content-disposition")).toMatch(/^inline; filename=".+\.pdf"$/);
+    const saved = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/photos/${doc.id}/file?download=1`);
+    expect(saved.headers.get("content-disposition")).toMatch(/^attachment; filename=".+\.pdf"$/);
     await expect(upload(patient.id, meta, pdf)).rejects.toMatchObject({ status: 400 });
   });
 });

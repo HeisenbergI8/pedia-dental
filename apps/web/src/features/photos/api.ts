@@ -10,8 +10,12 @@ export const photoKeys = {
   forPatient: (patientId: string) => ["photos", "patient", patientId] as const,
 };
 
-/** Usable directly as an <img> src. */
-export const photoFileUrl = (photoId: string) => `${env.apiUrl}/photos/${photoId}/file`;
+/**
+ * Usable directly as an <img> src or a link. The API answers with a 302 to a 5-minute private link (B10), which <img> and
+ * <a> follow by themselves. `download`: saved rather than opened, because a browser ignores <a download> once a redirect
+ * leaves the page's origin.
+ */
+export const photoFileUrl = (photoId: string, { download = false } = {}) => `${env.apiUrl}/photos/${photoId}/file${download ? "?download=1" : ""}`;
 
 /** Newest first. */
 export function usePhotos(patientId: string) {
