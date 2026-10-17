@@ -1,12 +1,12 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
-import { Message, MessageTemplate, type MessageKind, type MessageStatus, type UpdateMessageTemplateInput } from "@pedia/shared";
+import { Message, MessageTemplate, type LoggedMessageKind, type MessageKind, type MessageStatus, type UpdateMessageTemplateInput } from "@pedia/shared";
 import { api } from "@/lib/api-client";
 
 export const messageKeys = { all: ["messages"] as const, templates: ["message-templates"] as const };
 
-export const KIND_LABEL: Record<MessageKind, string> = {
+export const KIND_LABEL: Record<LoggedMessageKind, string> = {
   appointment_confirmation: "Appointment confirmation",
   appointment_reminder: "Appointment reminder",
   post_extraction: "Post-extraction instructions",
@@ -17,12 +17,14 @@ export const KIND_LABEL: Record<MessageKind, string> = {
   follow_up_reminder: "Follow-up reminder",
   recall: "Recall",
   birthday: "Birthday greeting",
+  portal_invite: "Portal invitation",
+  password_reset: "Password reset link",
 };
 
 export const MESSAGE_STATUS_LABEL: Record<MessageStatus, string> = { queued: "Queued", sent: "Sent", failed: "Failed", cancelled: "Withdrawn" };
 
 /** The messages a parent sees as care instructions in the portal. */
-export const CARE_KINDS: readonly MessageKind[] = ["pre_treatment", "post_extraction", "post_pulpotomy", "fluoride_instructions"];
+export const CARE_KINDS: readonly LoggedMessageKind[] = ["pre_treatment", "post_extraction", "post_pulpotomy", "fluoride_instructions"];
 
 /** One child's messages, newest first. Parents may only ask for their own child (mocks/access.ts). */
 export function usePatientMessages(patientId: string) {

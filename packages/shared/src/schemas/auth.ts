@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ClinicScoped, Id, IsoDateTime, Role } from "./common";
 import { AcknowledgementKind } from "./legal";
+import { loginIdOf } from "../domain/portal";
 
 /**
  * Every access decision names one of these. Who holds which is `ROLE_PERMISSIONS` in
@@ -35,6 +36,7 @@ export const Permission = z.enum([
   "branches.all", // works at every branch of the account, whatever their assignment: the Owner
   "clinic.manage", // Owner settings: the account's profile, branding, branches and staff logins (decision #11)
   "consents.manage", // privacy #15 (P16): switch a child's optional consents (photos, reminders). A parent: their own
+  "portal.manage", // B11 decision 16: invite a guardian to the portal, resend, turn off. Front desk, the Owner, admins
 ]);
 export type Permission = z.infer<typeof Permission>;
 
@@ -70,8 +72,27 @@ export type SessionUser = z.infer<typeof SessionUser>;
 export const Session = z.object({ token: z.string().min(1), user: SessionUser });
 export type Session = z.infer<typeof Session>;
 
+/**
+ * A sign-in box (B11 decision 4): a Philippine mobile or an email, normalised by `loginIdOf` so the mock, the form and
+ * the API compare one form. Parsing it twice gives the same value (the web sends the parsed form).
+ */
+export const LoginId = z
+  .string()
+  .trim()
+  .min(1, "Enter your mobile number or email")
+  .transform((s, ctx) => {
+    const id = loginIdOf(s);
+    if (id) return id.value;
+    ctx.addIssue({ code: "custom", message: "Enter a mobile number like 0917 123 4567, or an email address" });
+    return z.NEVER;
+  });
+
+/** B11 decision 8: every password a person chooses follows the staff rule (B2). */
+export const NewPassword = z.string().min(8, "Use at least 8 characters");
+
 export const LoginInput = z.object({
-  email: z.string().trim().toLowerCase().email("Enter your email address, like name@example.com"),
+  // Still called `email` on the wire (B2's contract, B11 E3): it carries an email or a mobile number.
+  email: LoginId,
   password: z.string().min(1, "Enter your password"),
   clinicId: Id.optional(), // sent on the second step, once the person has picked a clinic
 });
@@ -114,9 +135,10 @@ export type StaffCredential = z.infer<typeof StaffCredential>;
 export const ChangePasswordInput = z
   .object({
     current: z.string().min(1, "Enter your current password"),
-    next: z.string().min(8, "Use at least 8 characters"),
+    next: NewPassword,
   })
-  .refine((p) => p.next !== p.current, { message: "Choose a password different from the temporary one", path: ["next"] });
+  // Parents use it too since B11 (decision 7), so the words no longer assume a temporary password.
+  .refine((p) => p.next !== p.current, { message: "Choose a new password, not the one you use now", path: ["next"] });
 export type ChangePasswordInput = z.infer<typeof ChangePasswordInput>;
 
 /** Prototype only: the one-click accounts on the login screen. NestJS won't serve this. */

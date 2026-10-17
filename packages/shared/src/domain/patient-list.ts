@@ -7,6 +7,7 @@ import type { PatientFilter, PatientFlags, PatientSort } from "../schemas/patien
 import type { DueItem } from "../schemas/recall";
 import type { Visit } from "../schemas/visit";
 import { accountSummary, type BillTotals, type PaidRow } from "./money";
+import { isAccountText } from "./portal";
 import { dueBucket, isDueItemOpen, type DueBucket } from "./recall";
 
 /** "Recent visit": seen within this many days, today included. Data, not an `if` (CONVENTIONS, Domain rules). */
@@ -36,9 +37,13 @@ export const lastVisitOn = (...args: Parameters<typeof visitDays>): string | und
  * "No contact": the last message that actually went out (sent) or was tried (failed) failed. Queued and
  * cancelled messages say nothing about whether the number works. A later success clears it.
  */
-export function hasNoContact(patientId: string, messages: Pick<Message, "patientId" | "status" | "sendAt">[]): boolean {
+/** An account text (an invite, a reset: B11) goes to one guardian about their login, so it never decides "no contact". */
+export function hasNoContact(
+  patientId: string,
+  messages: (Pick<Message, "patientId" | "status" | "sendAt"> & { kind?: Message["kind"] })[],
+): boolean {
   const tried = messages
-    .filter((m) => m.patientId === patientId && (m.status === "sent" || m.status === "failed"))
+    .filter((m) => m.patientId === patientId && !isAccountText(m.kind) && (m.status === "sent" || m.status === "failed"))
     // Same send time: a sent text wins (the family was reached), so the demo and the API agree whatever the order.
     .sort((a, b) => a.sendAt.localeCompare(b.sendAt) || (a.status === b.status ? 0 : a.status === "sent" ? 1 : -1));
   return tried.at(-1)?.status === "failed";

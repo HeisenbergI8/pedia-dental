@@ -30,7 +30,7 @@ type Internal = Pick<Prisma.MessageUncheckedCreateInput, "greetingYear" | "sentA
 /** Contract → row data for a new message (the seed and the queue). */
 export function messageData(m: Message, extra: Internal = {}): Prisma.MessageUncheckedCreateInput {
   return {
-    id: m.id, clinicId: m.clinicId, patientId: m.patientId, kind: m.kind, channel: m.channel, to: m.to,
+    id: m.id, clinicId: m.clinicId, patientId: m.patientId, kind: m.kind as Prisma.MessageUncheckedCreateInput["kind"], channel: m.channel, to: m.to,
     recipientName: m.recipientName, body: m.body, status: m.status, sendAt: new Date(m.sendAt),
     appointmentId: m.appointmentId ?? null, noteId: m.noteId ?? null, dueItemId: m.dueItemId ?? null,
     failureReason: m.failureReason ?? null, createdAt: new Date(m.createdAt), greetingYear: null, ...extra,

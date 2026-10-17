@@ -709,7 +709,7 @@ test.describe("failed paths", () => {
     await expect(page.getByText("Use at least 8 characters")).toBeVisible();
     await page.getByLabel("New password").fill(password);
     await page.getByRole("button", { name: "Save and continue" }).click();
-    await expect(page.getByText("Choose a password different from the temporary one")).toBeVisible();
+    await expect(page.getByText("Choose a new password, not the one you use now")).toBeVisible();
     await page.getByLabel("Temporary password").fill("wrong-temp-pass");
     await page.getByLabel("New password").fill("RosaChoice2026");
     await page.getByRole("button", { name: "Save and continue" }).click();

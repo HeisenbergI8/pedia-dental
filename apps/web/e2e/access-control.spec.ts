@@ -417,7 +417,7 @@ test.describe("failed paths", () => {
 
     await page.getByLabel("New password").fill(temp);
     await page.getByRole("button", { name: "Save and continue" }).click();
-    await expect(page.getByText("Choose a password different from the temporary one")).toBeVisible();
+    await expect(page.getByText("Choose a new password, not the one you use now")).toBeVisible();
 
     await page.getByLabel("Temporary password").fill("not-the-temp-1");
     await page.getByLabel("New password").fill("BagongPass2026");

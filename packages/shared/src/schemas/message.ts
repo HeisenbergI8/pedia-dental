@@ -17,6 +17,13 @@ export const MessageKind = z.enum([
 ]);
 export type MessageKind = z.infer<typeof MessageKind>;
 
+/**
+ * What the log holds: the parent messages above (each a template) and the account texts (B11 E4), whose words are fixed
+ * (`accountText`) and never a template.
+ */
+export const LoggedMessageKind = z.enum([...MessageKind.options, "portal_invite", "password_reset"]);
+export type LoggedMessageKind = z.infer<typeof LoggedMessageKind>;
+
 /** 480 characters is three SMS segments: the most a reminder should cost. */
 const TemplateBody = z
   .string()
@@ -55,9 +62,9 @@ export const MessageChannel = z.enum(["sms"]);
 export const Message = ClinicScoped.extend({
   id: Id,
   patientId: Id,
-  kind: MessageKind,
+  kind: LoggedMessageKind,
   channel: MessageChannel,
-  to: z.string(), // the primary guardian's phone
+  to: z.string(), // the primary guardian's phone; an account text's own guardian (B11)
   recipientName: z.string(),
   body: z.string(), // rendered when queued, so a later template edit doesn't rewrite the log
   status: MessageStatus,
