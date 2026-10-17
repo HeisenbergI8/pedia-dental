@@ -96,6 +96,17 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "POST", path: "/appointment-requests/:id/handled" },
   { method: "GET", path: "/due-items" },
   { method: "GET", path: "/reports/today" },
+  // B8: bills, payments, deposits, credit, voids, the day's collections and the financial dashboard (BillingController,
+  // CollectionsController, ReportsController). Receipts and statements as documents stay on MSW until B10.
+  { method: "GET", path: "/patients/:id/invoices" },
+  { method: "POST", path: "/patients/:id/invoices" },
+  { method: "POST", path: "/invoices/:id/void" },
+  { method: "GET", path: "/patients/:id/payments" },
+  { method: "GET", path: "/payments" },
+  { method: "POST", path: "/invoices/:id/payments" },
+  { method: "POST", path: "/patients/:id/deposits" },
+  { method: "POST", path: "/invoices/:id/apply-credit" },
+  { method: "GET", path: "/reports/finance" },
 ];
 
 export const servedBy = (routes: readonly ApiRoute[], method: string, path: string) =>
