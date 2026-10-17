@@ -105,3 +105,15 @@ cases use 1–5 April 2030 (the race cases own 4–8 Feb). The two `it.todo`s in
 Mutations: move without `lockPatient` → the deterministic case red; `changeChoices` without `withdrawPatient` → privacy
 withdraw case and the bookings race red.
 **Gate:** `pnpm run check` exit 0 · `pnpm --filter api test:int` 38 files, 420 passed.
+
+## Phase 7: Routes and the daily job — 2026-10-17
+
+**Steps completed:** 7.1, 7.2, 7.3.
+**Files changed:** `apps/api/src/messages/{messages.controller,messages.service,messages.module}.ts`, `messages.jobs.ts` (new),
+`src/recalls/due-items.service.ts` (`patientOf`, `openState`), `test/clinical-routes.test.ts` (B9 routes), `test/int/messages.int.test.ts` (new).
+**Deviations from plan:** dentists don't hold `messages.view` (shared ROLE_PERMISSIONS), so the access case expects 403 for a
+dentist; the plan said 200. It also means decision 15 ("phone visible to dentists in the log") is moot: dentists can't
+open the log. The repair statement names `MESSAGE_SEND` as a bound value. `MessagesModule` imports `AuthModule` for
+`RecordOwners` (`/due-items/:id/message`, owner "record"). Mutation: the greeting without `lockPatient` → the 10-tap
+race red with nine 500s (the unique backstop keeps one row).
+**Gate:** `pnpm run check` exit 0 (api 344) · `pnpm --filter api test:int test/int/messages.int.test.ts` 12 passed.
