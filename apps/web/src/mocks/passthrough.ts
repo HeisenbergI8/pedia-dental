@@ -84,7 +84,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "POST", path: "/patients/:id/plan" },
   { method: "PATCH", path: "/plan-items/:id" },
   // B7: the schedule, parents' requests, follow-ups and Today (AppointmentsController, RecallsController,
-  // ReportsController). Texts and greetings stay on MSW until B9 (B7 decisions 3, 4).
+  // ReportsController). The texts they cause are the API's too since B9.
   { method: "GET", path: "/appointments" },
   { method: "GET", path: "/patients/:id/appointments" },
   { method: "POST", path: "/appointments" },
@@ -107,6 +107,11 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "POST", path: "/patients/:id/deposits" },
   { method: "POST", path: "/invoices/:id/apply-credit" },
   { method: "GET", path: "/reports/finance" },
+  // B9: the message log, the due list's recall text and the birthday greeting (MessagesController). Texts are queued
+  // by the API's bookings, notes and privacy choices, and sent by its worker (log driver until a key is set).
+  { method: "GET", path: "/messages" },
+  { method: "POST", path: "/due-items/:id/message" },
+  { method: "POST", path: "/patients/:id/birthday-greeting" },
 ];
 
 export const servedBy = (routes: readonly ApiRoute[], method: string, path: string) =>

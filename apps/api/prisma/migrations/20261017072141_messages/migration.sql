@@ -1,0 +1,31 @@
+-- CreateTable
+CREATE TABLE `Message` (
+    `id` VARCHAR(191) NOT NULL,
+    `clinicId` VARCHAR(191) NOT NULL,
+    `patientId` VARCHAR(191) NOT NULL,
+    `kind` ENUM('appointment_confirmation', 'appointment_reminder', 'post_extraction', 'post_pulpotomy', 'fluoride_instructions', 'pre_treatment', 'missed_appointment', 'follow_up_reminder', 'recall', 'birthday') NOT NULL,
+    `channel` ENUM('sms') NOT NULL DEFAULT 'sms',
+    `to` VARCHAR(32) NOT NULL,
+    `recipientName` VARCHAR(191) NOT NULL,
+    `body` TEXT NOT NULL,
+    `status` ENUM('queued', 'sent', 'failed', 'cancelled') NOT NULL DEFAULT 'queued',
+    `sendAt` DATETIME(3) NOT NULL,
+    `appointmentId` VARCHAR(191) NULL,
+    `noteId` VARCHAR(191) NULL,
+    `dueItemId` VARCHAR(191) NULL,
+    `failureReason` VARCHAR(191) NULL,
+    `createdAt` DATETIME(3) NOT NULL,
+    `greetingYear` INTEGER NULL,
+    `dispatchedAt` DATETIME(3) NULL,
+    `sentAt` DATETIME(3) NULL,
+    `segments` INTEGER NULL,
+    `providerRef` VARCHAR(64) NULL,
+
+    INDEX `Message_clinicId_sendAt_idx`(`clinicId`, `sendAt`),
+    INDEX `Message_clinicId_patientId_status_sendAt_idx`(`clinicId`, `patientId`, `status`, `sendAt`),
+    INDEX `Message_clinicId_appointmentId_idx`(`clinicId`, `appointmentId`),
+    INDEX `Message_clinicId_dueItemId_idx`(`clinicId`, `dueItemId`),
+    INDEX `Message_clinicId_sentAt_idx`(`clinicId`, `sentAt`),
+    UNIQUE INDEX `Message_clinicId_patientId_greetingYear_key`(`clinicId`, `patientId`, `greetingYear`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

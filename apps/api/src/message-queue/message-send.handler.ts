@@ -1,0 +1,86 @@
+import { Inject, Injectable, Logger, type OnModuleInit } from "@nestjs/common";
+import { FAILURE, MESSAGE_RETRY_DELAYS_MS, nextSendingTime, smsNumber } from "@pedia/shared";
+import { ownClinicId } from "../clinic/account-lock";
+import { Clock } from "../common/clock";
+import { OutboxDefer, type OutboxEnvelope, type OutboxHandler, OutboxHandlers, OutboxPermanent } from "../outbox/outbox.handlers";
+import { PrismaService } from "../prisma/prisma.service";
+import { runInTransaction } from "../prisma/transaction";
+import { MESSAGE_SEND } from "./message.rows";
+import { SMS_PROVIDER, SmsInDoubt, SmsRejected, type SmsProvider } from "./sms-provider";
+
+type Claim = { send: { number: string; body: string; dispatchedAt: Date } } | { skip: true } | { permanent: string };
+
+/**
+ * Sends one Message (E2, E3). At least once from the outbox becomes exactly once here: the row is claimed
+ * (`dispatchedAt`) and committed before the provider is called, and a claimed row with no outcome is never sent again.
+ */
+@Injectable()
+export class MessageSendHandler implements OutboxHandler, OnModuleInit {
+  readonly kind = MESSAGE_SEND;
+  readonly retryDelaysMs = MESSAGE_RETRY_DELAYS_MS; // decision 5
+  private readonly log = new Logger(MessageSendHandler.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly clock: Clock,
+    private readonly registry: OutboxHandlers,
+    @Inject(SMS_PROVIDER) private readonly sms: SmsProvider,
+  ) {}
+
+  onModuleInit() {
+    this.registry.register(this);
+    this.log.log(`SMS provider: ${this.sms.name}`); // which driver, never the key
+  }
+
+  async handle({ payload }: OutboxEnvelope): Promise<void> {
+    const { messageId } = payload as { messageId: string };
+    const now = this.clock.now();
+    const open = nextSendingTime(now);
+    if (open > now) throw new OutboxDefer(open); // decision 4: a retry that lands at night waits, without spending a try
+
+    const claim = await runInTransaction(this.prisma, async (tx): Promise<Claim> => {
+      // The first statement locks (CONVENTIONS → lock before the first plain read). Raw SQL: name the clinic.
+      const [m] = await tx.$queryRaw<{ status: string; dispatchedAt: Date | null; to: string; body: string }[]>`
+        SELECT status, dispatchedAt, \`to\`, body FROM Message WHERE id = ${messageId} AND clinicId = ${ownClinicId()} FOR UPDATE`;
+      if (!m || m.status !== "queued") return { skip: true }; // withdrawn, sent or failed already: a redelivery
+      if (m.dispatchedAt) {
+        // A previous try reached the provider and never recorded an outcome (a crash, a timeout): don't risk a second text.
+        await tx.message.update({ where: { id: messageId }, data: { status: "failed", failureReason: FAILURE.notConfirmed }, select: { id: true } });
+        return { skip: true };
+      }
+      const number = smsNumber(m.to);
+      if (!number) {
+        await tx.message.update({ where: { id: messageId }, data: { status: "failed", failureReason: FAILURE.noPhone }, select: { id: true } });
+        return { permanent: FAILURE.noPhone };
+      }
+      await tx.message.update({ where: { id: messageId }, data: { dispatchedAt: now }, select: { id: true } });
+      return { send: { number, body: m.body, dispatchedAt: now } };
+    });
+    if ("skip" in claim) return;
+    if ("permanent" in claim) throw new OutboxPermanent(claim.permanent); // decision 12: no retries
+
+    const mine = { id: messageId, status: "queued" as const, dispatchedAt: claim.send.dispatchedAt };
+    try {
+      const receipt = await this.sms.send({ messageId, number: claim.send.number, body: claim.send.body });
+      await this.prisma.message.updateMany({ where: mine, data: { status: "sent", sentAt: this.clock.now(), segments: receipt.segments, providerRef: receipt.providerRef } });
+    } catch (error) {
+      if (error instanceof SmsInDoubt) {
+        await this.prisma.message.updateMany({ where: mine, data: { status: "failed", failureReason: FAILURE.notConfirmed } });
+        return; // settled: the outbox row is done, nothing is retried (decision 13)
+      }
+      if (error instanceof SmsRejected) {
+        await this.prisma.message.updateMany({ where: mine, data: { status: "failed", failureReason: FAILURE.rejected } });
+        throw new OutboxPermanent(FAILURE.rejected);
+      }
+      // Definitely not taken: release the claim so the retry may send (E3).
+      await this.prisma.message.updateMany({ where: mine, data: { dispatchedAt: null } });
+      throw error;
+    }
+  }
+
+  /** The tries ran out (decision 5): `failed` with the plain reason. A row already settled is left alone. */
+  async deadLetter({ payload }: OutboxEnvelope, reason: string | undefined): Promise<void> {
+    const { messageId } = payload as { messageId: string };
+    await this.prisma.message.updateMany({ where: { id: messageId, status: "queued" }, data: { status: "failed", failureReason: reason ?? FAILURE.gaveUp, dispatchedAt: null } });
+  }
+}

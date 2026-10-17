@@ -4,10 +4,13 @@ import { AuditService } from "../audit/audit.service";
 import { RecordOwners } from "../auth/record-owners";
 import { lockAccount } from "../clinic/account-lock";
 import { ClinicService } from "../clinic/clinic.service";
+import { Clock } from "../common/clock";
 import { refuse } from "../common/refusal";
 import { requireContext } from "../common/request-context";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
+import { MessageQueueService } from "../message-queue/message-queue.service";
 import { lockPatient } from "../patients/patient-lock";
+import { PatientsService } from "../patients/patients.service";
 import { DueItemsService } from "../recalls/due-items.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { clinicData } from "../prisma/tenant-scope";
@@ -38,6 +41,9 @@ export class AppointmentsService implements OnModuleInit {
     private readonly audit: AuditService,
     private readonly owners: RecordOwners,
     private readonly dueItems: DueItemsService,
+    private readonly patients: PatientsService,
+    private readonly messages: MessageQueueService,
+    private readonly clock: Clock,
   ) {}
 
   onModuleInit() {
@@ -73,7 +79,8 @@ export class AppointmentsService implements OnModuleInit {
       const booked = await this.records.create(tx, { ...clinicData(), ...data, procedureCode: input.procedureCode ?? null, sourceRuleId: input.sourceRuleId ?? null });
       // Booked from the due list: the patient's earliest open item for that rule is now booked (mocks.ts:85–91).
       await this.dueItems.takeFor(tx, booked);
-      // B9: queueBookingMessages(booked): a confirmation now, a reminder the day before (mocks.ts:92).
+      // A confirmation now, a reminder the day before, pre-visit instructions with it (mocks.ts:92), in this transaction.
+      await this.messages.queueBooking(tx, booked, await this.patients.one(input.patientId, tx));
       await this.audit.record("create", "Appointment", input.patientId, tx);
       return booked;
     });
@@ -81,8 +88,11 @@ export class AppointmentsService implements OnModuleInit {
 
   /** PUT /appointments/:id: lock → 404 → 400 body → 409 status → slot refusals → write. */
   async move(id: string, body: unknown): Promise<Appointment> {
+    const patientId = await this.records.patientOf(id); // outside the transaction (B6 decision 3)
+    if (!patientId) throw new NotFoundException(APPOINTMENT_NOT_FOUND);
     return runInTransaction(this.prisma, async (tx) => {
       await lockAccount(tx); // E1
+      await lockPatient(tx, patientId); // B9: account → patient → appointment, so a reminders "no" can't interleave
       const current = await this.records.lockOne(tx, id);
       if (!current) throw new NotFoundException(APPOINTMENT_NOT_FOUND);
       const input = new ZodValidationPipe(RescheduleAppointmentInput).transform(body);
@@ -90,7 +100,9 @@ export class AppointmentsService implements OnModuleInit {
       const moved = { ...current, ...input };
       refuse(slotRefusal(moved, { ...(await this.clinic.scheduleRefs(tx)), existing: await this.records.near(tx, moved) }));
       const row = await this.records.update(tx, id, input);
-      // B9: cancelQueued(id) then queueBookingMessages(row): the old time's reminder must not go out (mocks.ts:109–110).
+      // The old time's texts must not go out; the new time's are queued (mocks.ts:109–110, decision 7, E13).
+      await this.messages.withdrawAppointment(tx, id);
+      await this.messages.queueBooking(tx, row, await this.patients.one(current.patientId, tx));
       await this.audit.record("update", "Appointment", current.patientId, tx);
       return row;
     });
@@ -106,7 +118,12 @@ export class AppointmentsService implements OnModuleInit {
       const input = new ZodValidationPipe(ChangeAppointmentStatusInput).transform(body);
       refuse(statusRefusal(current.status, input, rolesCan(roles, "appointments.manage")));
       const row = await this.records.update(tx, id, { status: input.status, ...(input.status === "cancelled" && { cancelReason: input.cancelReason }) });
-      // B9: cancelled / no_show → cancelQueued(id); no_show → queue "missed_appointment" (mocks.ts:129–132).
+      // Decision 7: a cancelled or missed visit withdraws what it queued; a no-show also queues the missed text (mocks.ts:129–132).
+      if (row.status === "cancelled" || row.status === "no_show") await this.messages.withdrawAppointment(tx, id);
+      if (row.status === "no_show") {
+        const missed = { kind: "missed_appointment" as const, patientId, appointmentId: id, startsAt: row.startsAt, dentistId: row.dentistId, sendAt: this.clock.now().toISOString() };
+        await this.messages.queue(tx, missed, await this.patients.one(patientId, tx));
+      }
       await this.audit.record("update", "Appointment status", patientId, tx);
       return row;
     });

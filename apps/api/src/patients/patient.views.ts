@@ -97,7 +97,7 @@ export function visibleTo(viewer: Viewer, p: Patient): PatientView {
 export const toDuplicate = ({ id, patientNo, firstName, lastName, birthDate }: Patient): DuplicateMatch =>
   DuplicateMatch.parse({ id, patientNo, firstName, lastName, birthDate });
 
-/** One row of GET /patient-summaries: last visit, recall and balance from B5/B7/B8 (standingPage); noContact waits for B9. */
+/** One row of GET /patient-summaries: last visit, recall and balance from B5/B7/B8 (standingPage); noContact from the last tried text (B9). */
 export function toSummary(viewer: Viewer, p: Patient, siblings: string[], money: boolean, s: Pick<Standing, "lastVisitOn" | "recallDueOn" | "balance" | "flags">): PatientSummary {
   const g = p.guardians.find((x) => x.isPrimary) ?? p.guardians[0]!;
   return PatientSummary.parse({

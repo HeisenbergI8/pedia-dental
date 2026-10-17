@@ -850,6 +850,31 @@ describe("parent messages", () => {
     await api(path, MessageTemplate, send("PUT", { body: original.body })); // leave the default for later tests
   });
 
+  it("holds a text booked at 9 PM until 8 AM the next morning", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const ninePm = new Date();
+    ninePm.setHours(21, 0, 0, 0); // today: a clock years ahead would outlive the demo session
+    vi.setSystemTime(ninePm);
+    try {
+      const patient = await api("/patients", Patient, send("POST", newPatient));
+      await api("/appointments", Appointment, send("POST", { ...booking, patientId: patient.id, startsAt: "2030-04-09T01:00:00.000Z" }));
+      const [confirmation] = byKind(await messagesFor(patient.id), "appointment_confirmation");
+      const eightAm = new Date(ninePm);
+      eightAm.setDate(eightAm.getDate() + 1);
+      eightAm.setHours(8);
+      expect(confirmation!.sendAt).toBe(eightAm.toISOString());
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("fails a text at once when the guardian's phone isn't a mobile", async () => {
+    const landline = { ...newPatient, guardians: [{ ...newPatient.guardians[0]!, phone: "0281234567" }] };
+    const patient = await api("/patients", Patient, send("POST", landline));
+    await api("/appointments", Appointment, send("POST", { ...booking, patientId: patient.id, startsAt: "2030-04-08T01:00:00.000Z" }));
+    for (const m of await messagesFor(patient.id)) expect(m).toMatchObject({ status: "failed", failureReason: "No phone number" });
+  });
+
   it("seeds a log whose messages are all filled in", async () => {
     const rows = await api("/messages", z.array(Message));
     const seeded = rows.filter((m) => m.id.startsWith("msg_"));

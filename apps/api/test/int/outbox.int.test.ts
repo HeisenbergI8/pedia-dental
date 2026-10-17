@@ -2,7 +2,7 @@ import type { INestApplication } from "@nestjs/common";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { FixedClock } from "../../src/common/clock";
 import { requestContext } from "../../src/common/request-context";
-import { NoopHandler, type OutboxEnvelope } from "../../src/outbox/outbox.handlers";
+import { NoopHandler, OutboxDefer, type OutboxEnvelope, type OutboxHandler, OutboxHandlers, OutboxPermanent } from "../../src/outbox/outbox.handlers";
 import { OutboxService } from "../../src/outbox/outbox.service";
 import { backoffMs, OUTBOX_POLICY, OutboxWorker } from "../../src/outbox/outbox.worker";
 import { PrismaService } from "../../src/prisma/prisma.service";
@@ -17,8 +17,20 @@ const clock = new FixedClock(NOW);
 let a: INestApplication;
 let b: INestApplication;
 
+/** Six hours after the clock: each deferral waits from the moment it was made. */
+const later = () => new Date(clock.now().getTime() + 6 * 60 * 60_000);
+const deadLetters: [kind: string, reason: string | undefined][] = [];
+const recordDeadLetter = async (m: OutboxEnvelope, reason: string | undefined) => void deadLetters.push([m.kind, reason]);
+/** Test-only kinds (B9): one waits, one can never succeed, one fails on its own schedule. */
+const testKinds = (): OutboxHandler[] => [
+  { kind: "test.defer", handle: () => Promise.reject(new OutboxDefer(later())) },
+  { kind: "test.permanent", handle: () => Promise.reject(new OutboxPermanent("No phone number")), deadLetter: recordDeadLetter },
+  { kind: "test.flaky", retryDelaysMs: [60_000, 300_000, 1_800_000], handle: () => Promise.reject(new Error("provider down")), deadLetter: recordDeadLetter },
+];
+
 beforeAll(async () => {
   [a, b] = await Promise.all([createIntApp({ clock }), createIntApp({ clock })]);
+  for (const app of [a, b]) for (const h of testKinds()) app.get(OutboxHandlers).register(h);
 });
 afterAll(async () => {
   await Promise.all([a.close(), b.close()]);
@@ -27,14 +39,15 @@ afterAll(async () => {
 beforeEach(async () => {
   clock.set(NOW);
   vi.restoreAllMocks();
+  deadLetters.length = 0;
   await resetDatabase(prisma);
 });
 
 /** As a feature would: through app `a`'s service, in one transaction, inside a clinic. */
-const enqueue = (count: number, clinicId = "clinic_a") =>
+const enqueue = (count: number, clinicId = "clinic_a", kind = "noop") =>
   inClinic(clinicId, () =>
     runInTransaction(a.get(PrismaService), async (tx) => {
-      for (let n = 0; n < count; n++) await a.get(OutboxService).enqueue(tx, { kind: "noop", payload: { n } });
+      for (let n = 0; n < count; n++) await a.get(OutboxService).enqueue(tx, { kind, payload: { n } });
     }),
   );
 
@@ -155,5 +168,54 @@ describe("the outbox", () => {
     release();
     await holder;
     expect(await a.get(OutboxWorker).drain()).toBe(1); // the held row, once free
+  });
+
+  describe("per-kind retries, deferral and dead letters (B9)", () => {
+    it("never spends a try on a deferral", async () => {
+      await enqueue(1, "clinic_a", "test.defer");
+      const worker = a.get(OutboxWorker);
+      for (let n = 0; n < 3; n++) {
+        const until = later();
+        expect(await worker.drain()).toBe(1);
+        expect(await prisma.outboxMessage.findFirstOrThrow()).toMatchObject({ status: "pending", attempts: 0, availableAt: until });
+        expect(await worker.drain()).toBe(0); // not before `until`
+        clock.set(until);
+      }
+    });
+
+    it("fails a permanent error at once and tells the feature why, once", async () => {
+      await enqueue(1, "clinic_a", "test.permanent");
+      expect(await a.get(OutboxWorker).drain()).toBe(1);
+      expect(await prisma.outboxMessage.findFirstOrThrow()).toMatchObject({ status: "failed", attempts: 1, lastError: "OutboxPermanent" });
+      expect(deadLetters).toEqual([["test.permanent", "No phone number"]]);
+    });
+
+    it("follows a kind's own delays, then gives up and tells the feature the tries ran out", async () => {
+      await enqueue(1, "clinic_a", "test.flaky");
+      const worker = a.get(OutboxWorker);
+      for (const wait of [60_000, 300_000, 1_800_000]) {
+        expect(await worker.drain()).toBe(1);
+        expect((await prisma.outboxMessage.findFirstOrThrow()).availableAt).toEqual(new Date(clock.now().getTime() + wait));
+        clock.set(new Date(clock.now().getTime() + wait));
+      }
+      expect(await worker.drain()).toBe(1); // try 4
+      expect(await prisma.outboxMessage.findFirstOrThrow()).toMatchObject({ status: "failed", attempts: 4 });
+      expect(deadLetters).toEqual([["test.flaky", undefined]]);
+      expect(await worker.drain()).toBe(0);
+    });
+
+    it("tells the feature only from the claim that settled the row", async () => {
+      await enqueue(1, "clinic_a", "test.permanent");
+      let fail: ((e: Error) => void) | undefined;
+      vi.spyOn(b.get(OutboxHandlers).get("test.permanent")!, "handle").mockImplementation(() => new Promise<void>((_, reject) => (fail = reject)));
+      const stuck = b.get(OutboxWorker).drain(); // claims (attempt 1) and hangs
+
+      await vi.waitFor(() => expect(fail).toBeDefined());
+      clock.set(new Date(NOW.getTime() + OUTBOX_POLICY.leaseMs));
+      expect(await a.get(OutboxWorker).drain()).toBe(1); // attempt 2 dead-letters it
+      fail!(new OutboxPermanent("No phone number"));
+      await stuck; // attempt 1's settle is refused, so its hook never runs
+      expect(deadLetters).toHaveLength(1);
+    });
   });
 });

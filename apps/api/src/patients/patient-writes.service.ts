@@ -9,6 +9,7 @@ import { lockAccount } from "../clinic/account-lock";
 import { Clock } from "../common/clock";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { PrivacyNoticeService } from "../legal/privacy-notice.service";
+import { MessageQueueService } from "../message-queue/message-queue.service";
 import { OutboxService } from "../outbox/outbox.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { clinicData } from "../prisma/tenant-scope";
@@ -36,6 +37,7 @@ export class PatientWritesService {
     private readonly clock: Clock,
     private readonly storage: StorageService,
     private readonly outbox: OutboxService,
+    private readonly messages: MessageQueueService,
   ) {}
 
   /** POST /patients (privacy #12): the child, their guardians and the parent's consent, or nothing. */
@@ -156,16 +158,17 @@ export class PatientWritesService {
       if (!current.privacyConsent) throw new ConflictException("Record the parent's consent first");
       const input = parse(ChangePrivacyChoicesInput, body);
       const was = currentChoices(current);
+      const reminders = input.reminders ?? was?.reminders ?? false;
       await tx.privacyChoice.create({
         data: {
           ...clinicData(), patientId: id, position: current.privacyChoices?.length ?? 0,
-          photos: input.photos ?? was?.photos ?? false, reminders: input.reminders ?? was?.reminders ?? false,
+          photos: input.photos ?? was?.photos ?? false, reminders,
           by: viewer.guardianId ? "parent" : "staff", byName: viewer.name, at: this.clock.now(),
         },
         select: { id: true },
       });
-      // #14: a "no" to reminders also withdraws queued messages (mocks.ts:267). Messages arrive with B9, which adds
-      // that withdrawal here, in this transaction. Until then there is nothing queued on the API to withdraw.
+      // #14: a "no" to reminders also withdraws what is queued and not yet handed to the provider (mocks.ts:267, E7).
+      if (!reminders) await this.messages.withdrawPatient(tx, id);
       await this.audit.record("update", "Privacy consent (changed)", id, tx);
       return visibleTo(viewer, await this.patients.one(id, tx));
     });

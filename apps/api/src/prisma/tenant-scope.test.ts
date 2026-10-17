@@ -1,4 +1,4 @@
-import { AccountStatus, Acknowledgement, AgreementRecord, AuditAction, ConsentScope, HeadingFont, MessageKind, PrivacyChoice, Role, Sex, StaffRole, PlanItemStatus, Tier, ToothCondition, VisitStatus, AppointmentRequestStatus, AppointmentStatus, DueItem, PaymentMethod, TimeOfDay } from "@pedia/shared";
+import { AccountStatus, Acknowledgement, AgreementRecord, AuditAction, ConsentScope, HeadingFont, MessageChannel, MessageKind, MessageStatus, PrivacyChoice, Role, Sex, StaffRole, PlanItemStatus, Tier, ToothCondition, VisitStatus, AppointmentRequestStatus, AppointmentStatus, DueItem, PaymentMethod, TimeOfDay } from "@pedia/shared";
 import { describe, expect, it } from "vitest";
 import type { RequestContext } from "../common/request-context";
 import { $Enums, Prisma } from "../generated/prisma/client.ts";
@@ -35,6 +35,8 @@ describe("model registry", () => {
     expect(Object.values($Enums.AcknowledgedKind)).toEqual(Acknowledgement.shape.kind.options);
     expect(Object.values($Enums.AuditAction)).toEqual(AuditAction.options);
     expect(Object.values($Enums.MessageKind)).toEqual(MessageKind.options);
+    expect(Object.values($Enums.MessageStatus)).toEqual(MessageStatus.options);
+    expect(Object.values($Enums.MessageChannel)).toEqual(MessageChannel.options);
     expect(Object.values($Enums.Sex)).toEqual(Sex.options);
     expect(Object.values($Enums.ConsentScope)).toEqual(ConsentScope.options);
     expect(Object.values($Enums.PrivacyChoiceBy)).toEqual(PrivacyChoice.shape.by.options);

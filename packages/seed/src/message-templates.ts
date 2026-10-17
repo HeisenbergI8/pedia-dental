@@ -1,12 +1,4 @@
-import {
-  MessageKind,
-  messageVars,
-  renderMessage,
-  type Message,
-  type MessageTemplate,
-  type Patient,
-  type StaffMember,
-} from "@pedia/shared";
+import { MessageKind, type MessageTemplate } from "@pedia/shared";
 
 /** Default wording, for the clinic to edit on the Messages page. Instructions need the dentist's review (plan Q5). */
 const DEFAULTS: Record<MessageKind, [name: string, body: string]> = {
@@ -25,34 +17,5 @@ const DEFAULTS: Record<MessageKind, [name: string, body: string]> = {
 export const defaultMessageTemplates = (clinicId: string, at: string): MessageTemplate[] =>
   MessageKind.options.map((kind) => ({ clinicId, kind, name: DEFAULTS[kind][0], body: DEFAULTS[kind][1], updatedAt: at }));
 
-/** What happened, and to whom. `startsAt` / `dueOn` / `dentistId` feed the placeholders. */
-export type MessageEvent = Pick<Message, "kind" | "patientId" | "sendAt" | "appointmentId" | "noteId" | "dueItemId"> & {
-  startsAt?: string;
-  dueOn?: string;
-  dentistId?: string;
-};
-
-export type MessageRefs = { templates: MessageTemplate[]; patients: Patient[]; staff: StaffMember[]; clinicName: string };
-
-/** One queued SMS to the primary guardian, rendered now. Undefined without a template, patient or guardian. */
-export function composeMessage(e: MessageEvent, refs: MessageRefs, meta: Pick<Message, "id" | "clinicId" | "createdAt">): Message | undefined {
-  const template = refs.templates.find((t) => t.kind === e.kind);
-  const patient = refs.patients.find((p) => p.id === e.patientId);
-  const guardian = patient?.guardians.find((g) => g.isPrimary);
-  if (!template || !patient || !guardian) return undefined;
-  const dentistName = refs.staff.find((s) => s.id === e.dentistId)?.fullName;
-  return {
-    ...meta,
-    patientId: patient.id,
-    kind: e.kind,
-    channel: "sms",
-    to: guardian.phone,
-    recipientName: guardian.fullName,
-    body: renderMessage(template.body, messageVars(patient, { clinicName: refs.clinicName, startsAt: e.startsAt, dueOn: e.dueOn, dentistName })),
-    status: "queued",
-    sendAt: e.sendAt,
-    appointmentId: e.appointmentId,
-    noteId: e.noteId,
-    dueItemId: e.dueItemId,
-  };
-}
+// Composition is a shared rule now (B9 E14); re-exported so seed.ts and mocks/outbox.ts import it unchanged.
+export { composeMessage, type MessageEvent, type MessageRefs } from "@pedia/shared";

@@ -32,6 +32,19 @@ export class DueItemsService {
     return (await this.openOf(rows)).map((r) => toDueItem(r));
   }
 
+  /** Whose item this is (the recall text's lookup before its transaction, B6 decision 3); undefined if unknown. */
+  async patientOf(id: string): Promise<string | undefined> {
+    return (await this.prisma.dueItem.findFirst({ where: { id }, select: { patientId: true } }))?.patientId;
+  }
+
+  /** The item and whether it is still open, over every appointment of its child (the mock's isDueItemOpen call). */
+  async openState(tx: Tx, id: string): Promise<{ item: DueItem; open: boolean } | undefined> {
+    const row = await tx.dueItem.findFirst({ where: { id }, select: DUE_COLUMNS });
+    if (!row) return undefined;
+    const item = toDueItem(row);
+    return { item, open: isDueItemOpen(item, await this.appointments.forPatients([row.patientId], {}, tx)) };
+  }
+
   /** Signing (NotesService.sign, in its transaction, under the patient's lock): close and open (signChange). */
   async afterSign(tx: Tx, note: { id: string; patientId: string; visitId: string; values: Record<string, unknown> }, procedure: string, visitDate: string, now: Date): Promise<void> {
     const items = (await tx.dueItem.findMany({ where: { patientId: note.patientId, procedure, closedAt: null }, select: DUE_COLUMNS })).map((r) => toDueItem(r));

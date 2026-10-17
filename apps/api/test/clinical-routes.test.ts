@@ -59,14 +59,21 @@ const B8_ROUTES: [Method, string][] = [
   ["post", "/invoices/i1/apply-credit"],
 ];
 
-describe("B5–B8's routes are served and guarded (no database)", () => {
+/** B9's routes, the same promise. */
+const B9_ROUTES: [Method, string][] = [
+  ["get", "/messages"],
+  ["post", "/due-items/d1/message"],
+  ["post", "/patients/p1/birthday-greeting"],
+];
+
+describe("B5–B9's routes are served and guarded (no database)", () => {
   let app: INestApplication;
   beforeAll(async () => {
     app = await createTestApp();
   });
   afterAll(() => app.close());
 
-  it.each([...B5_ROUTES, ...B6_ROUTES, ...B7_ROUTES, ...B8_ROUTES])("%s %s answers 401 without a session", async (method, path) => {
+  it.each([...B5_ROUTES, ...B6_ROUTES, ...B7_ROUTES, ...B8_ROUTES, ...B9_ROUTES])("%s %s answers 401 without a session", async (method, path) => {
     expect((await request(app.getHttpServer())[method](`/api${path}`)).status).toBe(401);
   });
 });

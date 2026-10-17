@@ -297,21 +297,23 @@ recorded once; the dashboard totals equal the sum of payments in SQL.
 
 ---
 
-## Chunk B9: Parent messages and real sending (~22 h) · Large — feature 5
+## ✅ Chunk B9: Parent messages and real sending (done, 2026-10-17) · Large — feature 5
 
 **Goal:** messages actually leave, exactly once, only with consent.
 
 - Message queue through the outbox from B1: booking queues a confirmation and a reminder in the **same transaction**
   as the appointment, so neither exists without the other.
-- Providers behind an interface: Semaphore for SMS, an email provider, and a log-only driver for dev and tests.
+- Providers behind an interface: Semaphore for SMS and a log-only driver (used everywhere until an API key is set).
+  No email in B9 (decision 1).
 - Retries with backoff, a dead-letter state, and delivery status shown in `/messages`.
-- Consent enforced at queue time (`choiceDeclined`), templates from B3, birthday greetings and due-item messages as
-  scheduled jobs.
+- Consent enforced at queue time (`choiceDeclined`), templates from B3, birthday greetings as a daily job. Due-item
+  (recall) texts stay manual (decision 9): no scheduled job for them.
 - A reminders "no" (`POST /patients/:id/privacy-choices`) withdraws the child's queued messages in its transaction (privacy #14; B4 left it out).
 - From B6: enqueue `NOTE_MESSAGES[procedure]` in `NotesService.sign`'s transaction (B6 left a marker).
 
-**Decide first:** the email provider; sending hours (no SMS at night); the per-clinic SMS sender name and who pays for
-SMS credits.
+**Decided** (`.claude/plans/feature-chunk-b9-messages-plan/decisions.md`): SMS only, no email; sending hours 8 AM–8 PM
+Manila; one shared sender name (the name itself still open); the platform pays for SMS, with allowances per plan set
+in B12.
 
 **Done when:** booking an appointment sends one confirmation through the log driver, exactly once across a worker
 restart; a declined consent sends nothing; a failed send retries, then shows as failed.
@@ -344,7 +346,8 @@ even with its key; a refused document produces no file.
 
 **Goal:** parents sign in as themselves and see only their own family.
 
-- Parent accounts and invitations (email or SMS through B9), sign-in on the B2 sessions.
+- Parent accounts and invitations (SMS through B9; B9 built no email, so an email provider is this chunk's open
+  decision), sign-in on the B2 sessions.
 - Ownership checks in the access guard: a parent reaches only their own children's records, and gets 403 otherwise.
 - Portal reads (appointments, plan, invoices, documents), appointment requests, privacy choices.
 
@@ -428,7 +431,7 @@ B0 Skeleton ✅
                      └─ B6 Notes, growth, behavior & plan ✅
                          └─ B7 Scheduling, follow-ups & Today ✅
                              └─ B8 Billing, payments & dashboard ✅
-                                 └─ B9 Parent messages & real sending
+                                 └─ B9 Parent messages & real sending ✅
                                      └─ B10 Photos & documents
                                          └─ B11 Parent portal & parent accounts
                                              └─ B12 Operator console, sign-ups & subscriptions

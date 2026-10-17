@@ -1,4 +1,4 @@
-import { PatientFilter, PatientListQuery, type Appointment, type DueItem } from "@pedia/shared";
+import { PatientFilter, PatientListQuery, type Appointment, type DueItem, type Message } from "@pedia/shared";
 import { describe, expect, it } from "vitest";
 import type { VisitFacts } from "../visits/visit-days.service";
 import type { BillTotalsOf } from "../billing-records/billing-records.service";
@@ -17,10 +17,21 @@ const due = (patientId: string, dueOn: string): DueItem => ({
   sourceNoteId: "n", createdAt: "2026-04-01T00:00:00.000Z",
 });
 const NO_BILLS = { invoices: [], payments: [] };
-const page = (matched: Named[], facts: Partial<VisitFacts>, items: DueItem[] = [], q: object = {}, money = false, bills: BillTotalsOf = NO_BILLS) =>
-  standingPage(matched, { visits: [], done: [], ...facts }, items, bills, query(q), TODAY, money);
+type Tried = Pick<Message, "patientId" | "status" | "sendAt">;
+const page = (matched: Named[], facts: Partial<VisitFacts>, items: DueItem[] = [], q: object = {}, money = false, bills: BillTotalsOf = NO_BILLS, tried: Tried[] = []) =>
+  standingPage(matched, { visits: [], done: [], ...facts }, items, bills, tried, query(q), TODAY, money);
 
 describe("standingPage (patients/mocks.ts:114–151)", () => {
+  it("flags no contact when the last tried text failed, and needs attention for it; a later sent one clears it", () => {
+    const failed: Tried = { patientId: "p1", status: "failed", sendAt: "2026-10-10T01:00:00.000Z" };
+    const res = page([kid("p1"), kid("p2")], {}, [], {}, false, NO_BILLS, [failed]);
+    expect(res.rows.map((r) => [r.id, r.flags.noContact])).toEqual([["p1", true], ["p2", false]]);
+    expect(res.counts.needs_attention).toBe(1);
+    const sent: Tried = { patientId: "p1", status: "sent", sendAt: "2026-10-12T01:00:00.000Z" };
+    expect(page([kid("p1")], {}, [], {}, false, NO_BILLS, [failed, sent]).rows[0]!.flags.noContact).toBe(false);
+    expect(page([kid("p1")], {}, [], {}, false, NO_BILLS, [{ ...sent, sendAt: failed.sendAt }, failed]).rows[0]!.flags.noContact).toBe(false); // a tie: reached
+  });
+
   it("flags a recall overdue or due this week, not one due this month", () => {
     const res = page([kid("p1"), kid("p2"), kid("p3")], {}, [due("p1", "2026-10-13"), due("p2", "2026-10-21"), due("p3", "2026-11-05")]);
     expect(res.rows.map((r) => [r.id, r.recallDueOn, r.flags.recallDue])).toEqual([["p1", "2026-10-13", true], ["p2", "2026-10-21", true], ["p3", undefined, false]]);

@@ -13,7 +13,7 @@ describe("which routes the API serves", () => {
     expect(servedBy(routes, "POST", "/branches")).toBe(false);
     expect(servedBy(routes, "GET", "/branches/b1")).toBe(false);
   });
-  it("serves B2's sign-in, B3's clinic setup, B4's patients, B5's chart, B6's clinical record, B7's schedule and B8's billing from the API, and their mocked neighbours from MSW", () => {
+  it("serves B2's sign-in, B3's clinic setup, B4's patients, B5's chart, B6's clinical record, B7's schedule, B8's billing and B9's messages from the API, and their mocked neighbours from MSW", () => {
     const api = (method: string, path: string) => servedBy(API_ROUTES, method, path);
     for (const path of ["/auth/login", "/auth/logout", "/auth/switch", "/auth/password", "/auth/acknowledgement", "/operator/auth/login"]) {
       expect(api("POST", path), path).toBe(true);
@@ -65,12 +65,16 @@ describe("which routes the API serves", () => {
       ["GET", "/reports/finance"],
     ] as const;
     for (const [method, path] of b8) expect(api(method, path), `${method} ${path}`).toBe(true);
-    expect(API_ROUTES).toHaveLength(14 + b3.length + b4.length + b5.length + b6.length + b7.length + b8.length);
-    // Same prefixes, other chunks (B12, B13, B9, B10): still MSW's. DELETE /notes/:id isn't a route (exact method).
+    // B9: the message log, the recall text and the birthday greeting.
+    const b9 = [["GET", "/messages"], ["POST", "/due-items/d1/message"], ["POST", "/patients/p1/birthday-greeting"]] as const;
+    for (const [method, path] of b9) expect(api(method, path), `${method} ${path}`).toBe(true);
+    expect([api("PUT", "/messages"), api("GET", "/due-items/d1/message")]).toEqual([false, false]); // exact method
+    expect(API_ROUTES).toHaveLength(14 + b3.length + b4.length + b5.length + b6.length + b7.length + b8.length + b9.length);
+    // Same prefixes, other chunks (B12, B13, B10): still MSW's. DELETE /notes/:id isn't a route (exact method).
     expect([api("GET", "/clinic/subscription"), api("POST", "/patients/p1/exports"), api("POST", "/patients/p1/documents"), api("DELETE", "/notes/n1")]).toEqual([false, false, false, false]);
     expect([api("GET", "/documents"), api("POST", "/operator/accounts/a1/subscription/payments")]).toEqual([false, false]);
-    expect([api("POST", "/due-items/d1/message"), api("POST", "/patients/p1/birthday-greeting"), api("DELETE", "/appointments/a1")]).toEqual([false, false, false]);
-    expect([api("GET", "/operator/accounts"), api("GET", "/patients/p1/photos"), api("GET", "/messages"), api("DELETE", "/branches/b1")]).toEqual([false, false, false, false]);
+    expect(api("DELETE", "/appointments/a1")).toBe(false);
+    expect([api("GET", "/operator/accounts"), api("GET", "/patients/p1/photos"), api("DELETE", "/branches/b1")]).toEqual([false, false, false]);
   });
 });
 

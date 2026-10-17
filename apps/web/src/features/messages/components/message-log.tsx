@@ -113,7 +113,7 @@ export function MessageLog() {
           </span>
         </div>
       )}
-      <p className="text-xs text-ink-muted">Prototype: messages are queued and logged here, never actually sent.</p>
+      <p className="text-xs text-ink-muted">Texts go out between 8 AM and 8 PM, Philippine time. Until SMS sending is switched on, they are logged here only.</p>
     </SectionCard>
   );
 }

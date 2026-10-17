@@ -32,6 +32,7 @@ export * from "./domain/money";
 export * from "./domain/recall";
 export * from "./domain/appointments";
 export * from "./domain/messages";
+export * from "./domain/sending";
 export * from "./domain/documents";
 export * from "./domain/finance";
 export * from "./domain/patient-list";

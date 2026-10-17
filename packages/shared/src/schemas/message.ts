@@ -48,10 +48,10 @@ export type UpdateMessageTemplateInput = z.infer<typeof UpdateMessageTemplateInp
 export const MessageStatus = z.enum(["queued", "sent", "failed", "cancelled"]);
 export type MessageStatus = z.infer<typeof MessageStatus>;
 
-/** SMS only in the prototype (Semaphore later); email arrives with the NestJS outbox. */
+/** SMS only (B9 decision 1): Semaphore on the API, nothing sent in the demo. */
 export const MessageChannel = z.enum(["sms"]);
 
-/** One message to a guardian. The prototype queues and logs it; nothing is ever sent. */
+/** One text to a guardian. The demo queues and logs it; the API sends it through its outbox (B9). */
 export const Message = ClinicScoped.extend({
   id: Id,
   patientId: Id,

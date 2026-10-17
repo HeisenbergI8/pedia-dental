@@ -1,4 +1,5 @@
 import { DEMO_PASSWORD, OPERATORS, allAccounts, demoAccounts, demoLogins, staffEmail, type Platform } from "@pedia/seed";
+import { smsSegments } from "@pedia/shared";
 import { requestContext } from "../common/request-context";
 import type { Env } from "../config/env";
 import type { PrismaService } from "../prisma/prisma.service";
@@ -12,6 +13,8 @@ import { patientRows } from "../patients/patient.rows";
 import { planItemRow } from "../plan/plan.rows";
 import { invoiceRows, paymentRows, receiptCounters } from "../billing-records/billing.rows";
 import { dueItemData } from "../recalls/due-item.rows";
+import { MESSAGE_SEND, messageData } from "../message-queue/message.rows";
+import { manilaDate } from "../common/clock";
 import { visitRow } from "../visits/visit.rows";
 
 export class SeedRefused extends Error {
@@ -123,6 +126,22 @@ export async function seedDatabase(prisma: PrismaService, hasher: Hasher, env: P
       await prisma.invoiceLine.createMany({ data: bills.flatMap((b) => b.lines.map((l) => ({ ...l, clinicId }))) });
       await prisma.payment.createMany({ data: paymentRows(db.payments).map((p) => ({ ...p, clinicId })) });
       await prisma.receiptCounter.createMany({ data: receiptCounters(db.payments).map((c) => ({ ...c, clinicId })) });
+      // B9: the message log with the seed's ids. A `sent` row counts in the month it went (E10); a `queued` one gets its
+      // outbox row, so a demo deployment's worker sends it through the log driver when it falls due (E2).
+      await prisma.message.createMany({
+        data: db.messages.map((m) =>
+          messageData(m, {
+            greetingYear: m.kind === "birthday" ? Number(manilaDate(new Date(m.createdAt)).slice(0, 4)) : null,
+            ...(m.status === "sent" ? { sentAt: new Date(m.sendAt), segments: smsSegments(m.body) } : {}),
+          }),
+        ),
+      });
+      const now = new Date();
+      await prisma.outboxMessage.createMany({
+        data: db.messages
+          .filter((m) => m.status === "queued")
+          .map((m) => ({ clinicId, kind: MESSAGE_SEND, payload: { messageId: m.id }, availableAt: new Date(m.sendAt), createdAt: now })),
+      });
     });
   }
 }
