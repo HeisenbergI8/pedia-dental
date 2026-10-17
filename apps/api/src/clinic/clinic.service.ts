@@ -64,6 +64,11 @@ export class ClinicService {
     return (await this.prisma.clinicAccount.findUniqueOrThrow({ where: { id: ownClinicId() }, select: { tier: true } })).tier;
   }
 
+  /** New money is received by someone who works here now (decision #23): an active staff row of this clinic. */
+  async isActiveStaff(id: string): Promise<boolean> {
+    return (await this.prisma.staff.count({ where: { id, deactivatedAt: null } })) > 0;
+  }
+
   /** Is `id` an active login of this clinic holding the dentist role (visits/mocks.ts)? In the caller's transaction. */
   async isActiveDentist(id: string, tx: Tx = this.prisma): Promise<boolean> {
     const s = await tx.staff.findUnique({ where: { id }, select: { role: true, alsoRoles: true, deactivatedAt: true } });

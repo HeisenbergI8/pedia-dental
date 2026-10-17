@@ -82,4 +82,9 @@ export class PlanService {
       data: { status: "done", completedVisitId: note.visitId, completedNoteId: note.id },
     });
   }
+
+  /** A patient's plan items, in a caller's transaction (billing reads them under the patient's lock). */
+  async items(tx: Tx, patientId: string): Promise<PlanItem[]> {
+    return (await tx.planItem.findMany({ where: { patientId }, select: PLAN_COLUMNS, orderBy: [...PLAN_ORDER] })).map(toPlanItem);
+  }
 }

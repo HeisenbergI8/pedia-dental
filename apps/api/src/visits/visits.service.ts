@@ -117,4 +117,11 @@ export class VisitsService {
     const rows = await tx.visit.findMany({ where: { id: { in: [...new Set(visitIds)] } }, select: { id: true, date: true } });
     return new Map(rows.map((r) => [r.id, r.date.toISOString().slice(0, 10)]));
   }
+
+  /** Visit id → the appointment it was started from (an invoice's appointmentId). One query. */
+  async appointmentsOf(tx: Tx, visitIds: readonly string[]): Promise<Map<string, string | undefined>> {
+    if (!visitIds.length) return new Map();
+    const rows = await tx.visit.findMany({ where: { id: { in: [...new Set(visitIds)] } }, select: { id: true, appointmentId: true } });
+    return new Map(rows.map((r) => [r.id, r.appointmentId ?? undefined]));
+  }
 }

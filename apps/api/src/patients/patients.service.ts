@@ -71,6 +71,11 @@ export class PatientsService {
     return rows.map((r) => ({ ...r, birthDate: r.birthDate.toISOString().slice(0, 10) }));
   }
 
+  /** Whether this clinic has the patient (the billing routes' 404 before the body, as the mock). */
+  async exists(id: string): Promise<boolean> {
+    return (await this.prisma.patient.count({ where: { id } })) > 0;
+  }
+
   /** GET /patients: the directory (⌘K, pickers). Unpaged, as the mock (see Follow Ups). Not audited (decision 4). */
   async directory(viewer: Viewer, q: string): Promise<PatientView[]> {
     const ids = await this.matching(viewer, q);

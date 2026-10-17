@@ -77,3 +77,13 @@ Engineering decisions E1–E13 as the plan records them.
 - `IdempotencyModule` imports nothing: `JobsModule` is global.
 - Mutation: with the key claim removed, all 5 parallel-key rounds go red.
 **Gate:** `pnpm run check` exit 0 (after a follow-up fix: the first commit had a type error in the new int test, `createMany` without `clinicId`); `test:int` 32 files, 310 passed + 3 todo.
+
+## Phase 6: Services, controller, module — 2026-10-17
+
+**Steps completed:** 6.1–6.3
+**Files changed:** `apps/api/src/billing/{invoices.service,payments.service,billing.controller,billing.module}.ts` (new), `apps/api/src/reports/{collections.controller (new),reports.service,reports.module}.ts`, `apps/api/src/{patients/patients.service,plan/plan.service,visits/visits.service,clinic/clinic.service}.ts` (`exists`, `items`, `appointmentsOf`, `isActiveStaff`), `apps/api/src/app.module.ts`, `apps/api/test/clinical-routes.test.ts`
+**Deviations from plan:**
+- The plan's QUESTION: procedures have no archived state, so `ClinicService.procedures()` returns every one, and a bill's line always gets its name.
+- The bill's lines follow the order the treatments were asked in, as the mock's `filter` over its own order (Phase 7's case checks it). It doesn't use the plan's order.
+- `isDay` is shared by `/reports/today` and `/payments` (the real-calendar-day check from B7's review fix).
+**Gate:** `pnpm run check` exit 0.
