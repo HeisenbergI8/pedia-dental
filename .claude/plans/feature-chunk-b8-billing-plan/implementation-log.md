@@ -87,3 +87,15 @@ Engineering decisions E1–E13 as the plan records them.
 - The bill's lines follow the order the treatments were asked in, as the mock's `filter` over its own order (Phase 7's case checks it). It doesn't use the plan's order.
 - `isDay` is shared by `/reports/today` and `/payments` (the real-calendar-day check from B7's review fix).
 **Gate:** `pnpm run check` exit 0.
+
+## Phase 7: Port the billing cases; races — 2026-10-17
+
+**Steps completed:** 7.1, 7.2
+**Files changed:** `apps/api/test/int/billing.int.test.ts`, `apps/api/test/int/billing-races.int.test.ts` (new)
+**Deviations from plan:**
+- The header summary's balance (case 1) and the patient list wait for Phase 8, which owns them.
+- A replay's body equals the first by value, not byte for byte: MySQL's JSON column reorders an object's keys. The race compares values; the API contract is unaffected.
+- The mixed load runs 25 rounds × 3 families × 5 requests (375 requests) rather than 100 rounds, which keeps the suite under a minute. Nothing came back as a 5xx, balances and deposits stayed ≥ 0, and AR stayed gapless.
+- The parent case has no audit assertion: the guard's own-child read is B7's, and its audit is already covered in `appointments`.
+- Mutations: with both locks removed from `pay`, all 5 overpay rounds go red. With `lockPatient` removed from `applyCredit`, all 20 overdraw rounds go red.
+**Gate:** `pnpm run check` exit 0; `test:int` 34 files, 372 passed + 3 todo.
