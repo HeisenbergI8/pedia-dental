@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -33,8 +33,11 @@ const linkClass = "font-semibold text-brand underline-offset-2 hover:underline";
  */
 export function SetPasswordScreen() {
   const [token, setToken] = useState<string | null>(null);
+  // Kept in a ref: development runs this effect twice, and the second run would find the address already cleared.
+  const read = useRef<string | null>(null);
   useEffect(() => {
-    setToken(new URLSearchParams(window.location.hash.slice(1)).get("t") ?? "");
+    read.current ??= new URLSearchParams(window.location.hash.slice(1)).get("t") ?? "";
+    setToken(read.current);
     window.history.replaceState(null, "", window.location.pathname);
   }, []);
   const link = usePasswordLink(token || undefined);

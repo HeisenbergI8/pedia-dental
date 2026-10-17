@@ -87,3 +87,16 @@
 - The seed's photos all belong to one family, so the sweep writes one other-family photo row.
 - `today.int.test.ts`: its "not vacuous" check failed every Sunday (the seed's clinic is closed on Sundays, so today has no appointments); it now skips that one check on a Sunday. Pre-existing, found tonight.
 **Gate:** `pnpm run check`: green. `pnpm --filter api test:int`: 45 files, 497 passed before the Sunday fix (the one failure was that check), then today.int 10/10.
+
+## Phase 9: `hybrid`, the browser spec, the docs — 2026-10-17
+
+**Steps completed:** 9.1, 9.2, 9.3
+**Files changed:** `apps/web/src/mocks/{passthrough,passthrough.test}.ts`, `apps/web/e2e/api-portal.spec.ts` (new), `apps/web/src/features/auth/components/set-password-screen.tsx`, `CONVENTIONS.md`, `apps/api/{CONVENTIONS,CHUNKS}.md`
+**Deviations from plan:**
+- The browser spec found a real bug: in development React runs effects twice, and the set-password page cleared the token from the address on the first run, so the second run showed "This link isn't complete". The token is now read once into a ref.
+- The spec has 4 steps (invite on the Overview; first sign-in with the notice and a 403 for another family's child from the API; sign-in by mobile, forgot password and reset by text; turn off signs the parent out).
+**Gate:** `pnpm run check`: green. Browser against apps/api on a fresh database (`pedia_dental_e2e_b11`, `DEMO_LOGINS=true WEB_URL=http://localhost:3190`): `api-portal.spec.ts` 4/4 three times, with `api-patients.spec.ts` 5/5 twice.
+
+## Steps not implemented
+
+None skipped. Still open by decision: Semaphore account, credits and PRIMOLAR's approval (the user), `WEB_URL` in production (B13), pruning expired `PortalLink` rows (later).

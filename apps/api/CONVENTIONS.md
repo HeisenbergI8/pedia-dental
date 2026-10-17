@@ -6,7 +6,7 @@ The Primolar backend. It replaces the browser mocks (MSW) in `apps/web` **endpoi
 feature code in the web app**. The product, the users and the domain are the ones in the root `CONVENTIONS.md`
 and `ROADMAP.md`; read those first. This file covers only how the API is built.
 
-**Current phase: B1–B10 done** (2026-10-17). The runtime core (request context, `Clock`, logs, tenant scoping,
+**Current phase: B1–B11 done** (2026-10-17). The runtime core (request context, `Clock`, logs, tenant scoping,
 transactions, audit), `@pedia/seed`, the `test:int` suite on MySQL and CI, identity, sessions and the access guard,
 `/auth/*`, `/operator/auth/*` and the clinic reads, with the web signing in against them in `hybrid` mode. B1-c added
 the outbox, scheduled jobs and file storage. B3: the Owner's settings
@@ -25,7 +25,10 @@ worker inside 8 AM–8 PM Manila (the log driver until `SEMAPHORE_API_KEY` is se
 patient list's "no contact" and Today's greeting ticks, served in `hybrid`. B10: clinical photos and parents'
 documents (uploads streamed through the API, checked, then stored; reads are a 302 to a 5-minute private link), the
 issued-documents log with the mock's checks, S3 storage (local disk without `S3_BUCKET`), the patient photo off
-multer, and each clinic's stored bytes, served in `hybrid`. B11 (parent portal and accounts) is next. The
+multer, and each clinic's stored bytes, served in `hybrid`. B11: parents' portal accounts (staff invite a guardian by
+SMS, the parent sets a password from the texted link, signs in with their mobile or email, resets it by text, and staff
+can turn it off), sign-in by mobile, parents' own password change, a number change moving the sign-in, and every route a
+parent can pass proven owner-checked, served in `hybrid`. B12 (operator console, sign-ups, subscriptions) is next. The
 build order is [CHUNKS.md](CHUNKS.md).
 
 **Stack:** NestJS 12 (ESM, Express) · Prisma 7 + MySQL 8.4 (MariaDB driver adapter) · Zod 4 schemas from
@@ -93,6 +96,7 @@ Run from the repo root.
 | Scheduled jobs | `src/jobs/`, `src/<feature>/<feature>.jobs.ts` | `JobRunner.run(job, fn)` (the `JobLock` lease). Each `@Cron` lives in the module that owns its tables: `auth.jobs.ts` (session and rate-limit sweeps), `outbox.jobs.ts` (prune), `messages.jobs.ts` (birthday greetings and the dead-letter repair, B9) |
 | File storage | `src/storage/` | `StorageService` (clinic-scoped keys), `FileStorage` (the driver), `LocalDiskStorage`, and the `storage.delete` outbox handler (`delete-file.handler.ts`). Import `StorageModule` where files are kept |
 | File storage (B10) | `src/storage/` | `S3FileStorage`, `fileStorageOf` (picks the driver), `readUpload` (busboy → temp file, `multipart.ts`), `sniff`, `LocalFilesController` (`GET /files/:token`, the local driver's signed links), the `StoredFile` ledger and `StorageService.link`/`putFile`/`usedBytes` |
+| Portal | `src/portal/` | B11: `PortalService` (the only reader and writer of `PortalAccount` and `PortalLink`: invite, turn off, link check, accept, reset, the demo's texts, the link minter, a number change), `PortalAccessController` (`/patients/:id/portal-access`, `…/portal-invite`, `…/portal-off`), `PasswordLinksController` (`/auth/password-link`, `…/accept`, `/auth/password-reset`, `/auth/demo-texts`) |
 | Photos | `src/photos/` | B10: `PhotosService` (the only reader and writer of `ClinicalPhoto`: list, upload, open), `photo-file.ts` (the file rule), `photo.rows.ts` |
 | Documents | `src/documents/` | B10: `DocumentsService` (the issued-documents log), `documents.rules.ts` (the mock's checks, in order), `document.rows.ts` |
 | Demo seed | `src/seed/seed-database.ts`, `prisma/seed.ts` | Maps `@pedia/seed`'s `seedPlatform()` to rows |
@@ -378,6 +382,18 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   patient-lock` made the provider undefined at decoration time. Keep shared constants in the leaf file.
 - **A batch's chart entries share `recordedAt`**; `GET /patients/:id/chart` breaks the tie by id, not insertion order.
 - `test/app.test.ts` logs a stack trace on purpose (the "unexpected error" case). It isn't a failure.
+- **An invite or reset link is made when its text is sent, never stored readable** (B11 E5). The log's body holds
+  `[link]`; `MessageSendHandler` asks `AccountLinks` (the portal registers the one minter) inside its claim, stores only
+  the token's SHA-256, and puts the link in the body it hands the provider. A retry after a definite failure mints a
+  new token, so only the last text's link works. Lock order: `Message`, then `PortalLink` (a resend or a turn-off
+  withdraws the texts before it cancels the links).
+- **`PortalLink.demoToken` is filled only on a demo deployment (`DEMO_LOGINS`)**, for `GET /auth/demo-texts`. Elsewhere
+  the route is a 404 and no usable link is in the database.
+- **Set `WEB_URL` in production**: the texted links open the web app there (the default is dev's
+  `http://localhost:3000`).
+- **A patient edit takes the clinic's lock first since B11** (`update`, `quickUpdate`): a guardian's new number is
+  checked against other parents' numbers under the same lock as an invite.
+- **A database seeded before B11 has no portal accounts or mobile sign-ins:** use a fresh one.
 
 ---
 
@@ -486,6 +502,20 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
     a credit draws the bill's branch's deposits first (E11, `depositLegs`). The day's list and the dashboard filter by it.
   - The demo keeps Idempotency-Keys in memory per clinic for 24 hours (E12); the API in `IdempotencyKey` rows.
   - A payment's reference number is capped at 100 characters and a refund's or void's reason at 500 (E13).
+- **Parent portal accounts** (B11, decisions in the B11 plan's `decisions.md`, settled with the user before planning):
+  - Any guardian with a mobile number can be invited, by staff with `portal.manage` (front desk, the Owner, admins)
+    from the child's Overview; registering sends nothing (1, 2, 16). The invite is an SMS through the B9 queue with
+    sender PRIMOLAR; no email in B11 (3). Status per guardian: not invited, invited (with expiry), active, off (17).
+  - Links: an invite works once for 72 hours, a reset once for 30 minutes; a resend cancels the older link (5, 6).
+    Invite and reset texts go at any hour and even when the family declined reminders (12, 20), and count in SMS usage (21).
+  - Sign-in by mobile or email in one box (4); one mobile (or email) is one sign-in per clinic, a second guardian on a
+    taken number is refused, a shared email leaves that parent on their number (14); one account per clinic, with the
+    chooser (9). The staff password rule for everyone (8); parents change theirs in the portal (7).
+  - Forgot password never says whether an account exists; 3 reset texts per number per hour (19).
+  - A guardian removed from their last child stops being a login at once (10); a number changed by staff moves the
+    sign-in and ends the parent's sessions (15); staff can turn one guardian off, which signs them out (18). A suspended
+    clinic's parents still sign in, read-only (11). After setting a password, the privacy notice, then the portal (22).
+  - The seeded parents are active on the demo password, in development and tests only (13).
 - **Photos and documents** (B10, decisions in the B10 plan's `decisions.md`, settled with the user before planning):
   - Amazon S3 in ap-southeast-1 in production through an S3-compatible driver (R2 by config); local disk in development
     and tests (1). Uploads go through the API, checked, then streamed to storage; never presigned uploads (2, E1).

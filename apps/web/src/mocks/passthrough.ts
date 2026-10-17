@@ -122,6 +122,15 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "GET", path: "/patients/:id/documents" },
   { method: "POST", path: "/patients/:id/documents" },
   { method: "GET", path: "/files/:token" },
+  // B11: parents' portal accounts (PortalAccessController, PasswordLinksController). Invite and reset texts are queued
+  // by the API and sent by its worker; on a demo deployment (DEMO_LOGINS) /auth/demo-texts lists their links.
+  { method: "GET", path: "/patients/:id/portal-access" },
+  { method: "POST", path: "/patients/:id/guardians/:guardianId/portal-invite" },
+  { method: "POST", path: "/patients/:id/guardians/:guardianId/portal-off" },
+  { method: "POST", path: "/auth/password-link" },
+  { method: "POST", path: "/auth/password-link/accept" },
+  { method: "POST", path: "/auth/password-reset" },
+  { method: "GET", path: "/auth/demo-texts" },
 ];
 
 export const servedBy = (routes: readonly ApiRoute[], method: string, path: string) =>
