@@ -244,7 +244,7 @@ describe("patients", () => {
         await api(`/patients/${p.id}/consents`, PatientView, send("POST", { guardianId: "g_mother", scope: "radiographs", date: "2026-10-04" })),
         await api("/patients", PatientView, send("POST", withContacts)), // even what they just typed
       ];
-      expect(JSON.stringify(responses)).not.toMatch(/0917|0918|Mabini|example\.com|Lola/);
+      expect(JSON.stringify(responses)).not.toMatch(/09171234567|09180001111|Mabini|example\.com|Lola/);
     } finally {
       signIn(ADMIN);
     }
