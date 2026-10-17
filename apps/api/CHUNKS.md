@@ -339,7 +339,8 @@ restart; a declined consent sends nothing; a failed send retries, then shows as 
 (ap-southeast-1), uploads through the API, 5-minute links, no delete, PDFs built in the browser, stored bytes counted.
 
 **Done when:** a photo is stored in S3 without being held in the API's memory and survives an API restart; one clinic can't read another's file
-even with its key; a refused document produces no file.
+even with its key; a refused document produces no file. *Delivered against local disk; the S3 driver is unit-tested
+only, so a run against MinIO or the real bucket is a go-live check (B13).*
 
 **Depends on:** B9.
 

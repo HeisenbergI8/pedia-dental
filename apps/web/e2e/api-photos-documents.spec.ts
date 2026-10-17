@@ -28,7 +28,7 @@ async function viaApi(page: Page, path: RegExp, method: string, status: number, 
   expect([res.status(), await fromApi(res)]).toEqual([status, true]);
   return res;
 }
-const FILE_LINK = /^\/api\/files\/[\w-]+\.[\w-]+$/;
+const FILE_LINK = /^\/api\/files\/[\w-]+$/;
 
 async function signInAs(page: Page, email: string) {
   await page.context().clearCookies();

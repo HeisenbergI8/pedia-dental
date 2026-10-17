@@ -26,7 +26,7 @@ const log = (cookie = desk) => t.ok(t.call("get", "/documents", cookie), z.array
 const pay = (path: string, body: object) => request(t.app.getHttpServer()).post(`/api${path}`).set("Cookie", desk).set("Idempotency-Key", crypto.randomUUID()).send(body);
 
 /** A child with a completed visit, a signed extraction note and a paid bill, all through the API's own routes. */
-async function child() {
+async function child({ byCredit = false } = {}) {
   const id = await t.register();
   await t.ok(t.call("post", `/patients/${id}/plan`, admin, { procedureCode: "fluoride", fee: 80_000 }), PlanItem, 201);
   const visit = await t.start(id, admin);
@@ -39,7 +39,10 @@ async function child() {
   await t.complete(visit.id, admin);
   const [item] = await t.ok(t.call("get", `/patients/${id}/plan`, admin), z.array(PlanItem));
   const invoice = Invoice.parse((await pay(`/patients/${id}/invoices`, { planItemIds: [item!.id] })).body);
-  const payment = Payment.parse((await pay(`/invoices/${invoice.id}/payments`, { amount: 80_000, method: "cash", receivedBy: "staff_cruz" })).body);
+  // byCredit: the bill is settled from a deposit, so its payment is a transfer of credit (account_credit), not money in.
+  if (byCredit) Payment.parse((await pay(`/patients/${id}/deposits`, { amount: 80_000, method: "cash", receivedBy: "staff_cruz" })).body);
+  const settle = byCredit ? pay(`/invoices/${invoice.id}/apply-credit`, { amount: 80_000, receivedBy: "staff_cruz" }) : pay(`/invoices/${invoice.id}/payments`, { amount: 80_000, method: "cash", receivedBy: "staff_cruz" });
+  const payment = Payment.parse((await settle).body);
   return { id, visit, extraction, unsigned, payment };
 }
 
@@ -81,6 +84,12 @@ describe("documents (apps/web handlers.test.ts → documents)", () => {
     const postOp = await t.ok(issue(a.id, { type: "post_op_instructions", sourceId: a.extraction.id, issuedBy: "staff_reyes" }), PatientDocument, 201);
     expect(postOp.sourceId).toBe(a.extraction.id);
     expect([await rows(), await audits()]).toEqual([rowsBefore + 1, auditsBefore + 1]);
+  });
+
+  it("gives no receipt for a transfer of credit, only for money received", async () => {
+    const { id, payment } = await child({ byCredit: true });
+    expect(payment.method).toBe("account_credit");
+    expect(await said(issue(id, { type: "receipt", sourceId: payment.id, issuedBy: "staff_cruz" }))).toEqual([400, "Pick the payment for this patient"]);
   });
 
   it("issues a dental clearance only through a dentist, from a visit of this child", async () => {

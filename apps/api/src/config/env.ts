@@ -17,7 +17,7 @@ const Env = z.object({
   BACKGROUND_WORK: flag().default(true),
   // How long the outbox worker waits after finding nothing to send.
   OUTBOX_POLL_MS: z.coerce.number().int().min(100).default(2000),
-  // The local-disk storage driver's root, relative to the API's working directory (B10 adds S3/R2).
+  // The local-disk storage driver's root, relative to the API's working directory (used when S3_BUCKET is unset, B10).
   STORAGE_DIR: z.string().min(1).default("var/storage"),
   // B10 (E11): the S3-compatible driver. Unset S3_BUCKET: the local-disk driver under STORAGE_DIR.
   S3_BUCKET: z.string().min(3).optional(),

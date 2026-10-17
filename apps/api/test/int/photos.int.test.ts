@@ -185,11 +185,12 @@ describe("B10's guarantees", () => {
     const storage = app.get(StorageService);
     expect(await inClinic("clinic_ngiti", () => storage.link(key, { fileName: "x.jpg" }))).toBeUndefined();
     expect(await inClinic("clinic_ngiti", () => storage.get(key))).toBeUndefined();
-    // A real token of Ngiti's re-pointed at Bulilit's key, keeping Ngiti's signature.
+    // A link can't be forged to name Bulilit's key: the token is encrypted and authenticated (audit finding 1, E8), and it
+    // never shows the child's name in the URL.
     const link = (await openFile(app, dentist, `/api/photos/${photo.id}/file`)).first.headers.location!;
-    const [, signature] = link.slice("/api/files/".length).split(".");
+    expect(Buffer.from(link.slice("/api/files/".length), "base64url").toString("latin1")).not.toContain(another.lastName.toLowerCase());
     const forged = Buffer.from(JSON.stringify({ key, exp: Date.now() + 60_000, name: "x.jpg", download: false })).toString("base64url");
-    expect(await said(http().get(`/api/files/${forged}.${signature}`))).toEqual([404, LINK_GONE]);
+    expect(await said(http().get(`/api/files/${forged}`))).toEqual([404, LINK_GONE]);
   });
 
   it("keeps photos across an API restart (done-when)", async () => {

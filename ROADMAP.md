@@ -145,7 +145,7 @@ from the patient profile. Organized as patient → visit → date → type, with
 comparison slider.
 
 - **Prototype:** files stay in the browser (object URLs or compressed data in IndexedDB).
-- **Later:** S3 or R2 with presigned uploads, as decided.
+- **Later (done in B10):** Amazon S3 (R2 by config); uploads stream through the API, reads are 5-minute private links.
 
 ## 13. Document generation
 

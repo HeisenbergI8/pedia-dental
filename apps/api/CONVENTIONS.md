@@ -323,7 +323,10 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   "no" that landed in between queues the file's deletion (B10 E6).
 - **`StorageService` writes the `StoredFile` ledger** (every put and delete), so unit tests that build `StorageModule`
   must provide `PrismaService` and `Clock`. Logos and patient photos stored before B10 have no ledger row.
-- **The S3 bucket stays private** (Block Public Access, SSE-S3, no CORS: the browser only follows links). Presigned
+- **The S3 bucket stays private** (Block Public Access, SSE-S3, no CORS: the browser only follows links), with
+  versioning on and no lifecycle expiry (nothing is deleted on purpose), and the API's IAM role limited to
+  `s3:PutObject`/`GetObject`/`DeleteObject` on `clinics/*`. A presigned link names the download file (the child's name)
+  in `response-content-disposition`; it goes only to the signed-in browser, never to our logs. Presigned
   URLs need the host clock NTP-synced. Credentials: both `S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY` or neither (the
   SDK's default chain, an IAM role in production).
 - **A database seeded before B10 has no photos, documents or ledger rows:** use a fresh one. `db:seed` writes the
@@ -488,9 +491,9 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
     and tests (1). Uploads go through the API, checked, then streamed to storage; never presigned uploads (2, E1).
   - Opening a file is a 302 to a private link valid `FILE_LINK_SECONDS` (300), `no-store`, re-checked and audited on
     every open (3, E2). Three isolation layers: tenant-scoped rows, `StorageService` links only its clinic's keys, and
-    an HMAC over the key and expiry (E8).
+    an encrypted local-link token (AES-256-GCM over the key and expiry: no name in a URL or log) (E8).
   - The demo's limits: 10 MB, images only, PDFs only for documents and referrals (4); the bytes decide the type (E4).
-    Photos are never edited or deleted (5). Parents upload intraoral, extraoral and medical documents, blocked when the
+    A body declaring more than twice the limit is refused before it is read (E13). Photos are never edited or deleted (5). Parents upload intraoral, extraoral and medical documents, blocked when the
     family declined photos (7, E12).
   - The documents log stores no PDF: the browser builds it after a 201, so a refused document makes no file (6). The
     checks run in the mock's order: issuer (any staff row, deactivated included), dentist, source, allergy.

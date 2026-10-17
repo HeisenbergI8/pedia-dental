@@ -16,6 +16,10 @@ export function fileStorageOf(env: StorageEnv, nowMs: () => number = Date.now): 
   const client = new S3Client({
     region: env.S3_REGION,
     forcePathStyle: env.S3_FORCE_PATH_STYLE,
+    // Checksums only where the API requires one: SDK 3.7xx+ adds them to every streamed put by default, which some
+    // S3-compatible stores (R2, MinIO) have refused. Amazon S3 still checks ContentLength and the transport's own MD5.
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
     ...(env.S3_ENDPOINT && { endpoint: env.S3_ENDPOINT }),
     ...(env.S3_ACCESS_KEY_ID && { credentials: { accessKeyId: env.S3_ACCESS_KEY_ID, secretAccessKey: env.S3_SECRET_ACCESS_KEY! } }),
   });

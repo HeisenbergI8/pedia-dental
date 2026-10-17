@@ -164,3 +164,21 @@ passed 6. Servers then stopped by their own process trees; `tsconfig.json` rever
   pre-existing and out of B10's scope.
 - The 14 stale files the tester saw under `primolar-uploads` came from my Phase 5 mutation run (the `dispose()` removal);
   removed. **Gate:** `pnpm run check` exit 0; `test:int test/int/photos.int.test.ts` 14 passed.
+
+## Auditor fixes (2026-10-17, score 77/100 before fixes)
+
+- **Link token named the child** (local driver): the token is now AES-256-GCM encrypted (iv, tag, ciphertext;
+  key = sha256 of `STORAGE_LINK_SECRET`), so no key or name shows in a URL or a log. Opacity test added. The S3
+  presigned link still names the download file in `response-content-disposition`; accepted and documented (it goes
+  only to the signed-in browser).
+- **Two surviving mutations**: a credit-transfer receipt case (documents.int) and a no-Content-Length size-guard case
+  (multipart.test). Both went red under their mutation, then the source was restored.
+- **S3 never run against a real store**: the client now sends checksums only when required (R2/MinIO compatibility).
+  CHUNKS "done when" says the S3 path is unit-tested only; a MinIO/S3 run is a go-live check.
+- **E2E gaps recorded**: the avatar upload and the receipt download aren't driven through the browser (MSW's worker
+  follows the 302); they are covered by the int tests.
+- **Docs**: stale markers in `env.ts`, `seed-database.ts`, `ROADMAP.md`; bucket notes (versioning, no expiry, IAM
+  scope); E13 in the decisions block.
+- **Smells**: the misplaced JSDoc in `clinic.service.ts` moved back; one `StorageService.keepIf` replaces the two
+  remove-on-failure copies; one shared `ID_MAX` (`common/ids.ts`, also used by messages); patient-photo.int uses
+  `support/files`.

@@ -4,6 +4,7 @@ import { AuditService } from "../audit/audit.service";
 import { BillingRecordsService } from "../billing-records/billing-records.service";
 import { ClinicService } from "../clinic/clinic.service";
 import { Clock } from "../common/clock";
+import { ID_MAX } from "../common/ids";
 import { refuse } from "../common/refusal";
 import { ZodIssuesException } from "../common/zod-validation.pipe";
 import { NotesService } from "../notes/notes.service";
@@ -16,8 +17,6 @@ import { DOCUMENT_SELECT, documentData, toDocument } from "./document.rows";
 import { documentRefusal, documentTitle } from "./documents.rules";
 
 const NEWEST_FIRST = [{ createdAt: "desc" as const }, { id: "desc" as const }];
-/** The id columns are VARCHAR(191): a longer id can't name a record. */
-const ID_MAX = 191;
 
 /**
  * The issued-documents log (features/documents/mocks.ts; decision 6). The only reader and writer of PatientDocument.

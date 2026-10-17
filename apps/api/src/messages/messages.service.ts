@@ -3,6 +3,7 @@ import { MessageKind, MessageStatus, MessageTemplate, UpdateMessageTemplateInput
 import { AuditService } from "../audit/audit.service";
 import { RecordOwners } from "../auth/record-owners";
 import { Clock, manilaDate } from "../common/clock";
+import { ID_MAX } from "../common/ids";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { MessageQueueService } from "../message-queue/message-queue.service";
 import { lockPatient } from "../patients/patient-lock";
@@ -17,8 +18,6 @@ const toTemplate = (t: TemplateRow): MessageTemplate => MessageTemplate.parse({ 
 
 const DECLINED = "This family declined reminder messages. Change it under Privacy on the child's Overview."; // mocks.ts:9
 const NO_GUARDIAN = "This patient has no primary guardian to message";
-/** The id columns are VARCHAR(191): a longer id can't name a record. */
-const ID_MAX = 191;
 
 /** features/messages/mocks.ts: the templates (B3), the log and the two manual texts (B9). The log itself is MessageQueueService's. */
 @Injectable()

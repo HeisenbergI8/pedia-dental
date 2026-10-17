@@ -15,6 +15,7 @@ import { PrismaService } from "../../src/prisma/prisma.service";
 import { seedDatabase } from "../../src/seed/seed-database";
 import { StorageService } from "../../src/storage/storage.service";
 import { inClinic, resetDatabase } from "./support/database";
+import { binary } from "./support/files";
 import { createIntApp } from "./support/int-app";
 
 /** The mock's "stores, serves and removes the child's photo" and the photo routes' rules, against the API (B4e). */
@@ -54,10 +55,6 @@ const del = (cookie: string, id: string) => http().delete(`/api/patients/${id}/p
 const photoRef = (id: string) => inClinic(DEMO_CLINIC_ID, async () => (await prisma.patient.findUniqueOrThrow({ where: { id }, select: { photoRef: true } })).photoRef);
 const deletions = () => prisma.outboxMessage.findMany({ where: { kind: "storage.delete", status: "pending" }, select: { payload: true } });
 const stored = (key: string) => inClinic(DEMO_CLINIC_ID, () => app.get(StorageService).get(key));
-const binary = (res: request.Response, done: (err: Error | null, body: Buffer) => void) => {
-  const chunks: Buffer[] = [];
-  res.on("data", (c: Buffer) => chunks.push(c)).on("end", () => done(null, Buffer.concat(chunks)));
-};
 /** GET and follow the 302 once (the local driver's /api/files/<token>), as a browser does (B10 E2). */
 async function open(cookie: string, id: string) {
   const first = await get(cookie, id);

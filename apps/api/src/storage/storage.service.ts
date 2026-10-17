@@ -43,6 +43,19 @@ export class StorageService {
     return this.files.link(key, { contentType: CONTENT_TYPES[parts.ext], fileName, download, expiresInSeconds: FILE_LINK_SECONDS });
   }
 
+  /**
+   * Runs the write that points at a just-stored file; if it fails, the file is removed so nothing unreferenced stays
+   * stored or counted (B10 tester D2). The removal is best effort: the error that matters is the write's.
+   */
+  async keepIf<T>(key: string, write: () => Promise<T>): Promise<T> {
+    try {
+      return await write();
+    } catch (error) {
+      await this.delete(key).catch(() => undefined);
+      throw error;
+    }
+  }
+
   async get(key: string): Promise<StoredFile | undefined> {
     const parts = this.own(key);
     const body = parts && (await this.files.get(key));

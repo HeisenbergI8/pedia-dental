@@ -186,12 +186,7 @@ export class PatientWritesService {
       if ("problem" in clean) throw clean.status === 413 ? new PayloadTooLargeException(clean.problem) : new BadRequestException(clean.problem);
       // Stored before the transaction: runInTransaction reruns its callback on a deadlock (CONVENTIONS → Traps).
       const key = await this.storage.putFile("patients", clean.ext, upload.file!);
-      try {
-        return await this.swapPhoto(viewer, id, key);
-      } catch (error) {
-        await this.storage.delete(key).catch(() => undefined); // nothing points at it: don't keep or count it (B10 tester D2)
-        throw error;
-      }
+      return await this.storage.keepIf(key, () => this.swapPhoto(viewer, id, key));
     } finally {
       await upload.dispose();
     }

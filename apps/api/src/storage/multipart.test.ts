@@ -39,6 +39,13 @@ describe("readUpload (B10 E1)", () => {
     await exact.dispose();
   });
 
+  it("stops writing a body with no Content-Length at the limit: the disk never holds more (busboy's fileSize)", async () => {
+    const upload = await readUpload(await request([["file", blob(jpeg(200_000))]]), { maxBytes: 10_000 });
+    const { size } = await import("node:fs/promises").then((fs) => fs.stat(upload.file!.path));
+    expect([upload.file!.tooLarge, size <= 10_001]).toEqual([true, true]);
+    await upload.dispose();
+  });
+
   it("keeps the first 16 bytes even when they arrive a byte at a time", async () => {
     const bytes = jpeg(40);
     const upload = await readUpload(await request([["file", blob(bytes)]], 1), { maxBytes: 1_000 });

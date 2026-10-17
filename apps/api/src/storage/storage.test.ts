@@ -118,7 +118,7 @@ describe("StorageService on the local disk", () => {
   it("links only the request's clinic's files, and the link opens the bytes (E8)", async () => {
     const key = await as("clinic_a", () => storage.put("photos", "png", Buffer.from([9, 8, 7])));
     const link = await as("clinic_a", () => storage.link(key, { fileName: "bea.png", download: true }));
-    expect(link).toMatch(/^\/api\/files\/[\w-]+\.[\w-]+$/);
+    expect(link).toMatch(/^\/api\/files\/[\w-]+$/);
     const driver = (storage as unknown as { files: LocalDiskStorage }).files;
     const opened = await driver.open(link!.slice("/api/files/".length));
     expect(opened).toMatchObject({ bytes: 3, contentType: "image/png", name: "bea.png", download: true });

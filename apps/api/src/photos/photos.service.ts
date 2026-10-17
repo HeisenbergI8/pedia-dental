@@ -4,6 +4,7 @@ import type { Request } from "express";
 import { AuditService } from "../audit/audit.service";
 import { RecordOwners } from "../auth/record-owners";
 import { Clock } from "../common/clock";
+import { ID_MAX } from "../common/ids";
 import { ZodIssuesException } from "../common/zod-validation.pipe";
 import { OutboxService } from "../outbox/outbox.service";
 import { lockPatient } from "../patients/patient-lock";
@@ -22,8 +23,6 @@ import { PHOTO_SELECT, photoData, toPhoto } from "./photo.rows";
 
 /** What a parent may upload from the portal (photos/mocks.ts:10). Clinical imaging (X-rays) is the clinic's. */
 const PARENT_TYPES: readonly PhotoType[] = ["intraoral", "extraoral", "document"];
-/** The id columns are VARCHAR(191): a longer id can't name a record. */
-const ID_MAX = 191;
 const declined = (patient: Patient, type: PhotoType) => CONSENTED_PHOTO_TYPES.includes(type) && choiceDeclined(patient, "photos");
 const declinedWords = (p: Patient) =>
   `${p.firstName}'s family declined clinical photos. Staff can change this under Privacy on the child's Overview; parents on the portal's Home page.`;
@@ -96,7 +95,7 @@ export class PhotosService implements OnModuleInit {
 
       // Stored before the transaction (slow work first; runInTransaction may rerun its callback).
       const key = await this.storage.putFile("photos", checked.ext, file);
-      const saved = await this.storedOrRemoved(key, () => runInTransaction(this.prisma, async (tx) => {
+      const saved = await this.storage.keepIf(key, () => runInTransaction(this.prisma, async (tx) => {
         await lockPatient(tx, patientId); // before any read (CONVENTIONS → Traps); privacy choices hold the same lock
         if (declined(await this.patients.one(patientId, tx), input.type)) {
           await this.outbox.enqueue(tx, { kind: DELETE_FILE, payload: { key } }); // E6: a "no" landed in between
@@ -122,16 +121,6 @@ export class PhotosService implements OnModuleInit {
       return saved;
     } finally {
       await upload.dispose();
-    }
-  }
-
-  /** A stored file whose row then failed to commit is removed, so nothing unreferenced stays stored or counted (tester D2). */
-  private async storedOrRemoved<T>(key: string, write: () => Promise<T>): Promise<T> {
-    try {
-      return await write();
-    } catch (error) {
-      await this.storage.delete(key).catch(() => undefined); // best effort: the error that matters is the write's
-      throw error;
     }
   }
 
