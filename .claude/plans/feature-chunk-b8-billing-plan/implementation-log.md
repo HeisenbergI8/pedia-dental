@@ -99,3 +99,12 @@ Engineering decisions E1–E13 as the plan records them.
 - The parent case has no audit assertion: the guard's own-child read is B7's, and its audit is already covered in `appointments`.
 - Mutations: with both locks removed from `pay`, all 5 overpay rounds go red. With `lockPatient` removed from `applyCredit`, all 20 overdraw rounds go red.
 **Gate:** `pnpm run check` exit 0; `test:int` 34 files, 372 passed + 3 todo.
+
+## Phase 8: The patient list and the header — 2026-10-17
+
+**Steps completed:** 8.1, 8.2; 8.3's parity part (its dashboard case moves after Phase 9, which serves `/reports/finance`)
+**Files changed:** `apps/api/src/billing-records/billing-records.service.ts` (`billTotals`, `BillTotalsOf`), `apps/api/src/patients/{patient-standing,patient-standing.test,patients.service,patients.module}.ts`, `apps/api/test/int/patients-read.int.test.ts`
+**Deviations from plan:**
+- `patient.views.test.ts` unchanged: `toSummary` already passes the standing's balance through with `billing.view` (B7's test covers it).
+- The parity case now compares each row's balance with the mock's `patientStanding` over the seed's real bills and payments. `needs_attention` is checked as recall or balance due.
+**Gate:** `pnpm run check` exit 0; `patients-read.int.test.ts` 14 passed + 1 todo (the dashboard case, after Phase 9).

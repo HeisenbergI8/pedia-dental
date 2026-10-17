@@ -132,19 +132,20 @@ describe("the list (decision 3)", () => {
 
   // The mock's standing over the seed (patients/mocks.ts:126): money and messages are B8/B9, so none yet.
   const today = () => format(new Date(), "yyyy-MM-dd"); // Manila: the process is pinned (E3)
-  const facts = { visits: db.visits, appointments: db.appointments, dueItems: db.dueItems, invoices: [], payments: [], messages: [] };
+  const facts = { visits: db.visits, appointments: db.appointments, dueItems: db.dueItems, invoices: db.invoices, payments: db.payments, messages: [] };
   const standingOf = (id: string) => patientStanding(id, facts, today());
 
   it("shows each row's last visit, recall and flags as the mock computes them, and counts every chip", async () => {
     const page = await ok(get("/patient-summaries?pageSize=100", await as(ADMIN)), PatientPage);
-    expect(page.rows.map((r) => [r.id, r.lastVisitOn, r.recallDueOn, r.flags])).toEqual(page.rows.map((r) => {
+    expect(page.rows.map((r) => [r.id, r.lastVisitOn, r.recallDueOn, r.balance, r.flags])).toEqual(page.rows.map((r) => {
       const s = standingOf(r.id);
-      return [r.id, s.lastVisitOn, s.recallDueOn, s.flags];
+      return [r.id, s.lastVisitOn, s.recallDueOn, s.balance, s.flags];
     }));
-    expect(page.rows.every((r) => r.balance === 0 && !r.flags.balanceDue && !r.flags.noContact)).toBe(true); // B8, B9
+    expect(page.rows.some((r) => r.flags.balanceDue)).toBe(true); // B8: not vacuous
+    expect(page.rows.every((r) => !r.flags.noContact)).toBe(true); // B9
     const counts = Object.fromEntries(PatientFilter.options.map((f) => [f, page.rows.filter((r) => matchesFilter(f, r, today())).length]));
     expect(page.counts).toEqual(counts);
-    expect(page.counts.needs_attention).toBe(page.counts.recall_due); // until B8/B9
+    expect(page.counts.needs_attention).toBe(page.rows.filter((r) => r.flags.recallDue || r.flags.balanceDue).length); // noContact: B9
     for (const f of PatientFilter.options) {
       expect([f, (await ok(get(`/patient-summaries?filter=${f}&pageSize=100`, await as(ADMIN)), PatientPage)).total]).toEqual([f, page.counts[f]]);
     }

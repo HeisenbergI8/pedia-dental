@@ -1,10 +1,14 @@
 import { Injectable } from "@nestjs/common";
-import { receiptNo, type Invoice, type Payment, type ReceiptSeries } from "@pedia/shared";
+import { receiptNo, type BillTotals, type Invoice, type PaidRow, type Payment, type ReceiptSeries } from "@pedia/shared";
 import { requireContext } from "../common/request-context";
+import { Prisma } from "../generated/prisma/client.ts";
 import { PrismaService } from "../prisma/prisma.service";
 import { clinicData } from "../prisma/tenant-scope";
 import type { Tx } from "../prisma/transaction";
 import { INVOICE_COLUMNS, LINE_COLUMNS, PAYMENT_COLUMNS, PAYMENT_ORDER, invoiceRows, toInvoice, toPayment } from "./billing.rows";
+
+/** Some patients' live bills as the shared money rules read them (E8). */
+export type BillTotalsOf = { invoices: (BillTotals & { patientId: string })[]; payments: PaidRow[] };
 
 export type NewPayment = Omit<Payment, "id" | "clinicId"> & { receiptLeg: number };
 
@@ -34,6 +38,25 @@ export class BillingRecordsService {
       where: { branchId: { in: [...branchIds] }, receivedAt: { gte: from, lt: to } }, select: PAYMENT_COLUMNS, orderBy: PAYMENT_ORDER,
     });
     return rows.map(toPayment);
+  }
+
+  /**
+   * Each live bill of these patients with its line sum and payment sum (E8): one aggregate query, shaped for the shared
+   * rules (one line carrying the sum; one payment row per bill). Voided bills are left out, as accountSummary would.
+   */
+  async billTotals(patientIds: readonly string[]): Promise<BillTotalsOf> {
+    if (!patientIds.length) return { invoices: [], payments: [] };
+    const rows = await this.prisma.$queryRaw<{ id: string; patientId: string; discount: number; billed: unknown; paid: unknown }[]>`
+      SELECT i.id, i.patientId, i.discount,
+        (SELECT COALESCE(SUM(l.amount), 0) FROM InvoiceLine l WHERE l.clinicId = i.clinicId AND l.invoiceId = i.id) AS billed,
+        (SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.clinicId = i.clinicId AND p.invoiceId = i.id) AS paid
+      FROM Invoice i
+      WHERE i.clinicId = ${requireContext().clinicId!} AND i.voidedAt IS NULL AND i.patientId IN (${Prisma.join([...patientIds])})`;
+    // SUM of INT is DECIMAL: the driver gives a string (CONVENTIONS → raw SQL numbers).
+    return {
+      invoices: rows.map((r) => ({ id: r.id, patientId: r.patientId, discount: Number(r.discount), lines: [{ amount: Number(r.billed) }] })),
+      payments: rows.map((r) => ({ invoiceId: r.id, amount: Number(r.paid) })),
+    };
   }
 
   /** The bill's patient, read outside the transaction (B6 decision 3: it never changes). Undefined → 404. */

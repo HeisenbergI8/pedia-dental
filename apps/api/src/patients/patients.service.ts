@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import {
-  PatientHeaderSummary, PatientPage, findDuplicates, permissionScopeFor, rolesCan, searchWords,
+  PatientHeaderSummary, PatientPage, accountCredit, accountSummary, findDuplicates, permissionScopeFor, rolesCan, searchWords,
   type DuplicateMatch, type Patient, type PatientListQuery, type PatientView,
 } from "@pedia/shared";
 import { AuditService } from "../audit/audit.service";
@@ -8,6 +8,7 @@ import { Clock } from "../common/clock";
 import { requireContext } from "../common/request-context";
 import { Prisma } from "../generated/prisma/client.ts";
 import { PrismaService } from "../prisma/prisma.service";
+import { BillingRecordsService } from "../billing-records/billing-records.service";
 import { DueItemsService } from "../recalls/due-items.service";
 import { StorageService, type StoredFile } from "../storage/storage.service";
 import type { Tx } from "../prisma/transaction";
@@ -30,6 +31,7 @@ export class PatientsService {
     private readonly visitDays: VisitDaysService,
     private readonly dueItems: DueItemsService,
     private readonly clock: Clock,
+    private readonly billing: BillingRecordsService,
   ) {}
 
   /** Full records for these ids, in this order. Five queries whatever the count (no N+1). Missing ids are skipped. */
@@ -86,9 +88,9 @@ export class PatientsService {
   async summaries(viewer: Viewer, query: PatientListQuery): Promise<PatientPage> {
     const matched = await this.names(await this.matching(viewer, query.q)); // every match: the counts need them all
     const ids = matched.map((p) => p.id);
-    const [facts, due] = await Promise.all([this.visitDays.facts(ids), this.dueItems.openFor(ids)]);
+    const [facts, due, bills] = await Promise.all([this.visitDays.facts(ids), this.dueItems.openFor(ids), this.billing.billTotals(ids)]);
     const money = rolesCan(viewer.roles, "billing.view");
-    const { rows, total, page, counts } = standingPage(matched, facts, due, query, this.clock.today(), money);
+    const { rows, total, page, counts } = standingPage(matched, facts, due, bills, query, this.clock.today(), money);
     const patients = await this.records(rows.map((r) => r.id)); // the page's records, in the page's order
     const siblings = await this.siblingsOf(viewer, patients);
     const standing = new Map(rows.map((r) => [r.id, r]));
@@ -105,16 +107,17 @@ export class PatientsService {
     return visibleTo(viewer, p);
   }
 
-  /** GET /patients/:id/summary: the pinned header. Money is zero until B8; the last visit counts done appointments (B7). */
+  /** GET /patients/:id/summary: the pinned header. Balance and credit are the shared rules over live bills (B8 E8). */
   async headerSummary(viewer: Viewer, id: string): Promise<PatientHeaderSummary> {
     const p = await this.one(id);
     await this.audit.record("view", "Patient profile", id);
     const money = inScope(viewer, "billing.view", id);
-    const lastVisitOn = (await this.visitDays.lastVisitOn([id])).get(id);
+    const [lastVisits, bills] = await Promise.all([this.visitDays.lastVisitOn([id]), money ? this.billing.billTotals([id]) : undefined]);
+    const lastVisitOn = lastVisits.get(id);
     return PatientHeaderSummary.parse({
       patientId: p.id, patientNo: p.patientNo,
       ...(lastVisitOn && { lastVisitOn }),
-      ...(money && { balance: 0, credit: 0 }),
+      ...(bills && { balance: accountSummary(bills.invoices, bills.payments).balance, credit: accountCredit(bills.invoices, bills.payments) }),
       siblings: (await this.siblingsOf(viewer, [p])).get(p.id) ?? [],
     });
   }
