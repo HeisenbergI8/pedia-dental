@@ -1,12 +1,12 @@
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
 import type { Appointment } from "../schemas/appointment";
-import type { Invoice, Payment } from "../schemas/billing";
+import type { Invoice } from "../schemas/billing";
 import type { Message } from "../schemas/message";
 import type { Patient } from "../schemas/patient";
 import type { PatientFilter, PatientFlags, PatientSort } from "../schemas/patient-list";
 import type { DueItem } from "../schemas/recall";
 import type { Visit } from "../schemas/visit";
-import { accountSummary } from "./money";
+import { accountSummary, type BillTotals, type PaidRow } from "./money";
 import { dueBucket, isDueItemOpen, type DueBucket } from "./recall";
 
 /** "Recent visit": seen within this many days, today included. Data, not an `if` (CONVENTIONS, Domain rules). */
@@ -61,8 +61,8 @@ export type PatientFacts = {
   visits: Pick<Visit, "patientId" | "status" | "date">[];
   appointments: Pick<Appointment, "id" | "patientId" | "status" | "startsAt" | "procedureCode">[];
   dueItems: Pick<DueItem, "patientId" | "dueOn" | "appointmentId" | "closedAt" | "ruleId" | "createdAt">[];
-  invoices: Pick<Invoice, "id" | "patientId" | "lines" | "discount">[];
-  payments: Payment[];
+  invoices: (BillTotals & Pick<Invoice, "patientId">)[];
+  payments: PaidRow[];
   messages: Pick<Message, "patientId" | "status" | "sendAt">[];
 };
 

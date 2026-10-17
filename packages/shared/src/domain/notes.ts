@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Invoice } from "../schemas/billing";
+import { liveInvoices } from "./money";
 import type { Procedure } from "../schemas/clinic";
 import type { ClinicalNote, NoteTemplate, TemplateField } from "../schemas/notes";
 import type { PlanItem } from "../schemas/plan";
@@ -47,10 +48,11 @@ export type NoteService = { planItemId: string; name: string; tooth?: number; am
 export function noteServices(
   note: Pick<ClinicalNote, "id">,
   planItems: PlanItem[],
-  invoices: Pick<Invoice, "lines">[],
+  invoices: Pick<Invoice, "lines" | "voided">[],
   procedures: Pick<Procedure, "code" | "name">[],
 ): NoteService[] {
-  const lines = new Map(invoices.flatMap((inv) => inv.lines).flatMap((l) => (l.planItemId ? [[l.planItemId, l] as const] : [])));
+  // A voided bill's lines no longer price anything: the item is "not billed yet" at its plan fee again (decision 2).
+  const lines = new Map(liveInvoices(invoices).flatMap((inv) => inv.lines).flatMap((l) => (l.planItemId ? [[l.planItemId, l] as const] : [])));
   return planItems
     .filter((i) => i.completedNoteId === note.id)
     .map((i) => {

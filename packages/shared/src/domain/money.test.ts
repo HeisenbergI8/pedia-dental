@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Payment } from "../schemas/billing";
 import type { PlanItem } from "../schemas/plan";
-import { accountCredit, accountSummary, appliedCredit, depositBalance, formatPeso, invoiceBalance, invoiceTotal, isMoneyIn, pesos, unbilledItems } from "./money";
+import { accountCredit, accountSummary, appliedCredit, depositBalance, depositLegs, depositPool, formatPeso, invoiceBalance, invoiceTotal, isMoneyIn, pesos, unbilledItems } from "./money";
 
 describe("money", () => {
   it("matches the spec example: 8,500 total, 5,000 paid, 3,500 balance", () => {
@@ -71,5 +71,47 @@ describe("deposits", () => {
   });
   it("treats only the transfer as not money in", () => {
     expect(rows.filter(isMoneyIn).map((p) => p.id)).toEqual(["d", "r", "x"]);
+  });
+});
+
+describe("voided bills (B8 decision 2)", () => {
+  const VOID = { at: "2026-10-02T00:00:00.000Z", by: "u1", reason: "Wrong tooth" };
+  const bill = (id: string, php: number, planItemId?: string) => ({ id, discount: 0, lines: [{ planItemId, procedureCode: "x", description: "x", amount: pesos(php) }] });
+  const row = (invoiceId: string, php: number) => ({ invoiceId, amount: pesos(php) });
+
+  it("owe nothing and count in no account, so the 8,500 example holds beside one", () => {
+    const voided = { ...bill("v", 800), voided: VOID };
+    expect(invoiceBalance(voided, [])).toBe(0);
+    expect(accountSummary([bill("i", 8500), voided], [row("i", 5000)])).toEqual({ total: pesos(8500), paid: pesos(5000), balance: pesos(3500) });
+    expect(accountCredit([voided], [row("v", 900)])).toBe(0);
+  });
+
+  it("free their treatments to be billed again, unless a live bill has them", () => {
+    const item = { id: "it", clinicId: "c", patientId: "p", procedureCode: "x", fee: 1, status: "done" as const, createdAt: "2026-10-01T00:00:00Z" } as PlanItem;
+    const voided = { ...bill("v", 1, "it"), voided: VOID };
+    expect(unbilledItems([item], [voided]).map((i) => i.id)).toEqual(["it"]);
+    expect(unbilledItems([item], [bill("l", 1, "it")])).toEqual([]);
+    expect(unbilledItems([item], [voided, bill("l", 1, "it")])).toEqual([]);
+  });
+});
+
+describe("deposit legs (B8 E10)", () => {
+  const dep = (branchId: string, php: number, appliedTo?: string) => ({ patientId: "p", branchId, amount: pesos(php), ...(appliedTo && { appliedTo }) });
+
+  it("draw from the bill's branch first, then in the order branches first held money", () => {
+    const pool = depositPool([dep("imus", 300), dep("dasma", 400)], "p", "inv", pesos(500));
+    expect(pool).toEqual([["imus", pesos(300)], ["dasma", pesos(400)]]);
+    expect(depositLegs("dasma", pool, pesos(500))).toEqual([["dasma", -pesos(400)], ["imus", -pesos(100)]]);
+  });
+
+  it("return money to the branches it was drawn from for this bill only", () => {
+    const rows = [dep("imus", 300), dep("dasma", 400), dep("dasma", -400, "inv"), dep("imus", -100, "inv"), dep("imus", -50, "other")];
+    const pool = depositPool(rows, "p", "inv", -pesos(500));
+    expect(pool).toEqual([["dasma", pesos(400)], ["imus", pesos(100)]]);
+    expect(depositLegs("dasma", pool, -pesos(500))).toEqual([["dasma", pesos(400)], ["imus", pesos(100)]]);
+  });
+
+  it("skip empty branches and never take more than is held", () => {
+    expect(depositLegs("imus", [["imus", 0], ["dasma", -pesos(5)], ["bacoor", pesos(100)]], pesos(500))).toEqual([["bacoor", -pesos(100)]]);
   });
 });

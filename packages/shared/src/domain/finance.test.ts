@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Appointment } from "../schemas/appointment";
 import type { Invoice, Payment } from "../schemas/billing";
-import { financeSummary } from "./finance";
+import { financeFacts, financeSummary, financeWindow, summarizeFinance } from "./finance";
 import { pesos } from "./money";
 
 const local = (m: number, d: number, h = 10) => new Date(2026, m - 1, d, h).toISOString();
@@ -74,5 +74,49 @@ describe("deposits on the dashboard", () => {
     expect(d.outstandingTotal).toBe(s.outstandingTotal - pesos(600));
     expect(d.depositsHeld).toBe(pesos(400));
     expect(s.depositsHeld).toBe(0);
+  });
+});
+
+describe("facts and summary (B8 E7)", () => {
+  const inputs = { invoices, payments, appointments };
+
+  it("compose to financeSummary", () => {
+    expect(summarizeFinance(financeFacts(inputs, "2026-10-03"), "2026-10-03")).toEqual(s);
+  });
+
+  it("leave a voided bill out of revenue, discounts, outstanding and the unpaid appointments' bills", () => {
+    const voided: Invoice = {
+      id: "C", clinicId: "c", branchId: "b", patientId: "p3", appointmentId: "a3", issuedAt: local(10, 2), discount: pesos(50),
+      lines: [{ procedureCode: "sealant", description: "Sealant", amount: pesos(1000) }], voided: { at: local(10, 2, 11), by: "u", reason: "Wrong child" },
+    };
+    const v = financeSummary({ ...inputs, invoices: [...invoices, voided] }, "2026-10-03");
+    expect([v.revenueByProcedure, v.discounts, v.outstanding]).toEqual([s.revenueByProcedure, s.discounts, s.outstanding]);
+    expect(v.unpaidAppointments.find((a) => a.appointmentId === "a3")).toEqual({ appointmentId: "a3", patientId: "p1", startsAt: local(10, 2, 9), reason: "Check-up" });
+  });
+
+  it("break ties by id, so any source lists equal rows in one order", () => {
+    const facts = {
+      collected: [], discounts: 0, deposits: [],
+      balances: [{ patientId: "z", balance: 5 }, { patientId: "a", balance: 5 }],
+      revenue: [{ procedureCode: "z", amount: 5, count: 1 }, { procedureCode: "a", amount: 5, count: 1 }],
+      done: [{ appointmentId: "z", patientId: "p", startsAt: local(10, 1), reason: "r" }, { appointmentId: "a", patientId: "p", startsAt: local(10, 1), reason: "r" }],
+    };
+    const t = summarizeFinance(facts, "2026-10-03");
+    expect([t.outstanding.map((r) => r.patientId), t.revenueByProcedure.map((r) => r.procedureCode), t.unpaidAppointments.map((r) => r.appointmentId)])
+      .toEqual([["a", "z"], ["a", "z"], ["a", "z"]]);
+  });
+
+  it("reads collections from six months back", () => {
+    expect(financeWindow("2026-10-03")).toEqual({ from: "2026-05-01", to: "2026-10-03" });
+  });
+
+  it("judge an appointment billed twice by its earlier bill", () => {
+    const later: Invoice = { ...invoices[1]!, id: "B2", appointmentId: "a1", issuedAt: local(10, 2), lines: [{ procedureCode: "x", description: "x", amount: pesos(1) }] };
+    const f = financeFacts({ ...inputs, invoices: [later, ...invoices] }, "2026-10-03");
+    expect(f.done.find((d) => d.appointmentId === "a1")?.invoiceId).toBe("A");
+  });
+
+  it("floor each patient's deposits at zero", () => {
+    expect(summarizeFinance({ collected: [], revenue: [], discounts: 0, balances: [], done: [], deposits: [{ patientId: "a", held: -5 }, { patientId: "b", held: 7 }] }, "2026-10-03").depositsHeld).toBe(7);
   });
 });
