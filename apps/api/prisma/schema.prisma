@@ -915,3 +915,96 @@ model IdempotencyKey {
   @@id([clinicId, key])
   @@index([expiresAt])
 }
+
+/// B10: ClinicalPhoto.type in @pedia/shared. `document`: a medical document a parent photographed or scanned.
+enum PhotoType {
+  intraoral
+  extraoral
+  xray
+  referral
+  document
+}
+
+enum PhotoStage {
+  before
+  after
+}
+
+enum UploadedBy {
+  staff
+  parent
+}
+
+/// B10: a clinical photo or a parent's medical document (features/photos/mocks.ts). Append-only: photos are part of the
+/// medical record and are never edited or deleted (decision 5). The bytes are in storage under `fileKey`.
+model ClinicalPhoto {
+  id          String      @id @default(cuid(2))
+  clinicId    String
+  patientId   String
+  visitId     String?
+  type        PhotoType
+  stage       PhotoStage?
+  tooth       Int?
+  takenOn     DateTime    @db.Date
+  /// Unbounded in the contract, so TEXT.
+  caption     String      @db.Text
+  /// The sniffed type (E4), never the browser's claim.
+  contentType String      @db.VarChar(64)
+  uploadedBy  UploadedBy
+  /// clinics/<clinicId>/photos/<uuid>.<ext>, built by StorageService.
+  fileKey     String      @db.VarChar(191)
+  bytes       Int
+  createdAt   DateTime
+
+  /// GET /patients/:id/photos, newest takenOn then createdAt.
+  @@index([clinicId, patientId, takenOn, createdAt])
+}
+
+/// B10: DocumentType in @pedia/shared (feature 13).
+enum DocumentType {
+  dental_certificate
+  treatment_plan
+  consent_form
+  referral_letter
+  clearance
+  dental_clearance
+  post_op_instructions
+  prescription
+  receipt
+  patient_summary
+  notes_report
+  privacy_consent
+}
+
+/// B10: one issued document (features/documents/mocks.ts). Append-only; the PDF is built in the browser and never
+/// stored (decision 6). `details` and `items` are stored as given after GenerateDocumentInput parsed them.
+model PatientDocument {
+  id        String       @id @default(cuid(2))
+  clinicId  String
+  patientId String
+  type      DocumentType
+  title     String       @db.Text
+  /// The visit, payment or signed note it came from, checked when one is required; otherwise kept as given (as the mock).
+  sourceId  String?      @db.VarChar(191)
+  details   Json?
+  items     Json?
+  issuedBy  String       @db.VarChar(191)
+  createdAt DateTime
+
+  /// GET /documents (clinic-wide, newest first) and GET /patients/:id/documents.
+  @@index([clinicId, createdAt])
+  @@index([clinicId, patientId, createdAt])
+}
+
+/// B10 (E5): every file a clinic keeps, written and removed only by StorageService. SUM(bytes) is the clinic's storage.
+model StoredFile {
+  id        String   @id @default(cuid(2))
+  clinicId  String
+  key       String   @unique @db.VarChar(191)
+  /// A StorageArea: branding, patients, photos.
+  area      String   @db.VarChar(32)
+  bytes     Int
+  createdAt DateTime
+
+  @@index([clinicId])
+}

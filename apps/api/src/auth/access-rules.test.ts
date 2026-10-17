@@ -22,9 +22,10 @@ describe("the API's route map mirrors the mock's gate", () => {
     const api = CLINIC_RULES.map(({ method, path, permission }) => ({ method, path, permission: [permission].flat() }));
     expect(sorted(api)).toEqual(sorted(webRules("RULES")));
   });
-  it("has every operator and public route, and no other (plus GET /health)", () => {
+  it("has every operator and public route, and no other (plus the API's own GET /health and GET /files/:token)", () => {
     expect(sorted([...OPERATOR_RULES])).toEqual(sorted(webRules("OPERATOR_RULES")));
-    expect(sorted(PUBLIC_RULES.filter((r) => r.path !== "/health"))).toEqual(sorted(webRules("PUBLIC_RULES")));
+    const apiOnly = new Set(["/health", "/files/:token"]);
+    expect(sorted(PUBLIC_RULES.filter((r) => !apiOnly.has(r.path)))).toEqual(sorted(webRules("PUBLIC_RULES")));
   });
 });
 
@@ -35,6 +36,8 @@ describe("matchRoute: deny by default", () => {
     expect(matchRoute("GET", "/operator/nothing")).toBeUndefined();
     expect(matchRoute("GET", "/auth/me")).toMatchObject({ kind: "self" });
     expect(matchRoute("GET", "/health")).toMatchObject({ kind: "public" });
+    expect(matchRoute("GET", "/files/abc.def")).toMatchObject({ kind: "public" });
+    expect(matchRoute("POST", "/files/abc.def")).toBeUndefined();
   });
   it("never lets a clinic rule answer an /operator path", () => {
     expect(matchRoute("GET", "/operator/accounts")).toMatchObject({ kind: "operator" });

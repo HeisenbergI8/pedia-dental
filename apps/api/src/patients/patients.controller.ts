@@ -1,24 +1,11 @@
-import {
-  type ArgumentsHost, Body, Catch, Controller, Delete, type ExceptionFilter, Get, HttpCode, NotFoundException, Param, Patch,
-  PayloadTooLargeException, Post, Put, Query, Req, Res, StreamableFile, UploadedFile, UseFilters, UseInterceptors,
-} from "@nestjs/common";
-import { FileInterceptor } from "@nestjs/platform-express";
+import { Body, Controller, Delete, Get, HttpCode, NotFoundException, Param, Patch, Post, Put, Query, Req, Res } from "@nestjs/common";
 import { PatientListQuery, RegisterPatientInput } from "@pedia/shared";
 import type { Request, Response } from "express";
 import { identityOf } from "../auth/access.guard";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
-import { MAX_PHOTO_BYTES, PHOTO_TOO_LARGE, type PhotoUpload } from "./patient-photo";
 import { PatientWritesService } from "./patient-writes.service";
 import { PatientsService } from "./patients.service";
 import { viewerOf } from "./patient.views";
-
-/** Multer stops reading at MAX_PHOTO_BYTES and Nest answers "File too large"; this gives the mock's words. */
-@Catch(PayloadTooLargeException)
-class PhotoTooLarge implements ExceptionFilter {
-  catch(_error: PayloadTooLargeException, host: ArgumentsHost) {
-    host.switchToHttp().getResponse<Response>().status(413).type("text/plain").send(PHOTO_TOO_LARGE);
-  }
-}
 
 /** The guard has loaded a clinic identity on every route here (access-rules.ts: patients.view / patients.write). */
 const viewer = (req: Request) => viewerOf(identityOf(req)!);
@@ -90,21 +77,20 @@ export class PatientsController {
     return this.writes.changeChoices(viewer(req), id, body);
   }
 
-  // Memory storage, at most 10 MB read (the mock's limit). The web downscales first; B10 moves photos to presigned uploads.
+  // Streamed to a temp file, checked, then streamed to storage (decision 2, E1): never whole in memory. The body is read
+  // by the service, after the 404 (the mock's order).
   @Put("patients/:id/photo")
-  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: MAX_PHOTO_BYTES, files: 1 } }))
-  @UseFilters(PhotoTooLarge)
-  uploadPhoto(@Req() req: Request, @Param("id") id: string, @UploadedFile() file: PhotoUpload | undefined) {
-    return this.writes.uploadPhoto(viewer(req), id, file);
+  uploadPhoto(@Req() req: Request, @Param("id") id: string) {
+    return this.writes.uploadPhoto(viewer(req), id, req);
   }
 
-  // The <img> request carries the API's httpOnly cookie, so the guard sees the session as for any read.
+  // The <img> request carries the API's httpOnly cookie, so the guard sees the session as for any read. Answers a 302 to a
+  // private link valid 5 minutes (decision 3, E2); no-store, so each open is checked and audited again.
   @Get("patients/:id/photo")
-  async photo(@Param("id") id: string, @Res({ passthrough: true }) res: Response): Promise<StreamableFile> {
-    const found = await this.patients.photo(id);
-    if (!found) throw new NotFoundException("No photo");
-    res.set({ "Content-Disposition": `inline; filename="${found.name}"`, "X-Content-Type-Options": "nosniff" });
-    return new StreamableFile(found.file.body, { type: found.file.contentType });
+  async photo(@Param("id") id: string, @Res() res: Response): Promise<void> {
+    const link = await this.patients.photoLink(id);
+    if (!link) throw new NotFoundException("No photo");
+    res.set("Cache-Control", "no-store").redirect(302, link);
   }
 
   @Delete("patients/:id/photo")

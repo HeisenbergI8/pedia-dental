@@ -1,5 +1,8 @@
 import { findConflict, patientSearchText, planProgress } from "@pedia/shared";
-import { DEMO_CLINIC_ID, DEMO_PASSWORD, OPERATORS, accountsByEmail, demoLogins, seedPlatform } from "@pedia/seed";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DEMO_CLINIC_ID, DEMO_PASSWORD, OPERATORS, SEED_FILES, accountsByEmail, demoLogins, seedPlatform, type SeedFileType } from "@pedia/seed";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Hasher } from "../../src/auth/hashing";
 import { APPOINTMENT_COLUMNS, toAppointment } from "../../src/appointments/appointment.rows";
@@ -12,6 +15,9 @@ import { PLAN_COLUMNS, toPlanItem } from "../../src/plan/plan.rows";
 import { MESSAGE_COLUMNS, MESSAGE_SEND, toMessage } from "../../src/message-queue/message.rows";
 import { DUE_COLUMNS, toDueItem } from "../../src/recalls/due-item.rows";
 import { seedDatabase } from "../../src/seed/seed-database";
+import { DOCUMENT_SELECT, toDocument } from "../../src/documents/document.rows";
+import { PHOTO_SELECT, toPhoto } from "../../src/photos/photo.rows";
+import { LocalDiskStorage } from "../../src/storage/local-disk.storage";
 import { VISIT_COLUMNS, toVisit } from "../../src/visits/visit.rows";
 import { inClinic, resetDatabase, testPrisma } from "./support/database";
 
@@ -144,6 +150,28 @@ describe("prisma db seed (seedDatabase) on MySQL", () => {
       expect(outbox.map((o) => (o.payload as { messageId: string }).messageId).sort()).toEqual(queued);
     }
     expect(platform.tenants[DEMO_CLINIC_ID]!.messages.length).toBeGreaterThan(0);
+  });
+
+  it("writes each clinic's photos (with files) and documents with the mock's ids (B10)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "b10-seed-"));
+    const files = new LocalDiskStorage(root, "s".repeat(32));
+    await resetDatabase(prisma);
+    await seedDatabase(prisma, hasher, { DEMO_LOGINS: true }, platform, files);
+    const db = platform.tenants[DEMO_CLINIC_ID]!;
+    await inClinic(DEMO_CLINIC_ID, async () => {
+      const photos = await prisma.clinicalPhoto.findMany({ select: { ...PHOTO_SELECT, fileKey: true }, orderBy: { id: "asc" } });
+      expect(photos.map(({ fileKey: _, ...p }) => toPhoto(p))).toEqual([...db.photos].sort((a, b) => a.id.localeCompare(b.id)));
+      for (const p of photos) expect((await files.get(p.fileKey))?.equals(Buffer.from(SEED_FILES[p.contentType as SeedFileType]))).toBe(true);
+      const documents = (await prisma.patientDocument.findMany({ select: DOCUMENT_SELECT })).map(toDocument);
+      expect(new Map(documents.map((d) => [d.id, d]))).toEqual(new Map(db.documents.map((d) => [d.id, d])));
+      const used = (await prisma.storedFile.aggregate({ _sum: { bytes: true } }))._sum.bytes;
+      expect(used).toBe(db.photos.reduce((n, p) => n + SEED_FILES[p.contentType as SeedFileType].length, 0));
+    });
+    await inClinic("clinic_ngiti", async () => expect([await prisma.clinicalPhoto.count(), await prisma.patientDocument.count()]).toEqual([0, 0]));
+    // Without a driver (most integration tests): the rows, and no stored files.
+    await resetDatabase(prisma);
+    await seedDatabase(prisma, hasher, { DEMO_LOGINS: true }, platform);
+    expect(await inClinic(DEMO_CLINIC_ID, async () => [await prisma.clinicalPhoto.count(), await prisma.storedFile.count()])).toEqual([db.photos.length, 0]);
   });
 
   it("gives every mock login the same email in the same clinics, opened by the demo password", async () => {

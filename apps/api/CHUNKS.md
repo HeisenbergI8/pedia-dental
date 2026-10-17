@@ -151,7 +151,7 @@ patient photo, the 17 routes in `API_ROUTES`, and `e2e/api-patients.spec.ts`. "D
 `test:int` `patients-write.int.test.ts` (create, edit, refused without consent), `patients-read.int.test.ts` (search,
 contacts for front desk not a dentist, one audit entry per record view), `privacy.int.test.ts`, `patient-photo.int.test.ts`.
 **Deferred by design:** list flags, last visits and balances (B5, B7, B8, decision 3), withdrawing queued messages on a
-reminders "no" (B9), the photo through presigned uploads (B10), `denied` audit entries.
+reminders "no" (B9), the photo off multer (done in B10), `denied` audit entries.
 
 **Goal:** the child's record, with the Data Privacy Act rules built in from the first row.
 
@@ -278,7 +278,8 @@ proofs: `billing.int.test.ts` (the ₱8,500 / ₱5,000 / ₱3,500 example; one k
 `billing-races.int.test.ts` (no overpayment, over-refund or overdraft; receipts never repeat or skip; ten parallel
 retries record one row), `idempotency.int.test.ts`, `finance.int.test.ts` (parity with `financeSummary` for every branch
 choice and the bucket-edge days; totals equal SQL sums), and the e2e. **Deferred by design:** receipts and statements as
-documents in `hybrid` (B10), the operator's payment keys (B12), BIR official receipts (Later).
+documents in `hybrid` (done in B10: receipts are logged by the API's documents), the operator's payment keys (B12), BIR
+official receipts (Later).
 
 
 **Goal:** money that is never wrong.
@@ -322,21 +323,24 @@ restart; a declined consent sends nothing; a failed send retries, then shows as 
 
 ---
 
-## Chunk B10: Photos and documents (~16 h) · Large — features 12 and 13
+## ✅ Chunk B10: Photos and documents (done, 2026-10-17) · Large — features 12 and 13
 
 **Goal:** files at scale, never through the API's memory.
 
-- S3/R2 driver for the storage interface: **presigned uploads and downloads**, so files go straight between the
-  browser and storage. Size and type checks, and keys scoped by clinic.
+- S3/R2 driver for the storage interface. **Uploads stream through the API** (decision 2: spooled to a temp file,
+  checked, then streamed to storage; never whole in memory); reads are 5-minute private links (presigned on S3). Size
+  and type checks (the bytes decide), and keys scoped by clinic.
 - Clinical photos (intraoral and extraoral consent enforced), before-and-after per tooth, patient photo.
 - Document log (certificates, receipts), with the server checks (issuer, source, allergy) on the log request, before
   any PDF is built, like the mock.
-- Move the patient photo (`PUT /patients/:id/photo`, B4: 10 MB through the API's memory) to presigned uploads.
+- Move the patient photo (`PUT /patients/:id/photo`, B4: 10 MB through the API's memory) to the streamed upload.
 
-**Decide first:** S3 vs R2, and the region (data residency for patient photos).
+**Decided** (`.claude/plans/feature-chunk-b10-photos-documents-plan/decisions.md`): Amazon S3 in Singapore
+(ap-southeast-1), uploads through the API, 5-minute links, no delete, PDFs built in the browser, stored bytes counted.
 
-**Done when:** a photo uploads straight to storage and survives an API restart; one clinic can't read another's file
-even with its key; a refused document produces no file.
+**Done when:** a photo is stored in S3 without being held in the API's memory and survives an API restart; one clinic can't read another's file
+even with its key; a refused document produces no file. *Delivered against local disk; the S3 driver is unit-tested
+only, so a run against MinIO or the real bucket is a go-live check (B13).*
 
 **Depends on:** B9.
 
@@ -362,6 +366,7 @@ for the first time and sets a password.
 
 **Goal:** Primolar runs its own business on the API.
 
+- Storage limits per plan read `StorageService.usedBytes()` (B10's ledger); the SMS count reads `MessageQueueService.sentIn`.
 - Operator console: accounts, tiers, Owners, suspend and reactivate, branding for "Design it for me", usage, the price
   list.
 - Public sign-ups: multipart form with files through storage, status by reference, record payment, fix, reject,
@@ -432,7 +437,7 @@ B0 Skeleton ✅
                          └─ B7 Scheduling, follow-ups & Today ✅
                              └─ B8 Billing, payments & dashboard ✅
                                  └─ B9 Parent messages & real sending ✅
-                                     └─ B10 Photos & documents
+                                     └─ B10 Photos & documents ✅
                                          └─ B11 Parent portal & parent accounts
                                              └─ B12 Operator console, sign-ups & subscriptions
                                                  └─ B13 Production readiness & full cut-over

@@ -14,6 +14,8 @@ describe("loadEnv", () => {
       OUTBOX_POLL_MS: 2000,
       STORAGE_DIR: "var/storage",
       SEMAPHORE_URL: "https://api.semaphore.co/api/v4/messages",
+      S3_REGION: "ap-southeast-1",
+      S3_FORCE_PATH_STYLE: false,
     });
   });
 
@@ -25,5 +27,12 @@ describe("loadEnv", () => {
 
   it("names every bad variable", () => {
     expect(() => loadEnv({ DATABASE_URL: "postgres://x", PORT: "abc" })).toThrow(/DATABASE_URL[\s\S]*PORT/);
+  });
+
+  it("takes B10's storage settings, and refuses a short link secret or a bad endpoint", () => {
+    const base = { DATABASE_URL: "mysql://u:p@h/db" };
+    expect(() => loadEnv({ ...base, STORAGE_LINK_SECRET: "x".repeat(31) })).toThrow(/STORAGE_LINK_SECRET must be at least 32 characters/);
+    expect(() => loadEnv({ ...base, S3_ENDPOINT: "not a url" })).toThrow(/S3_ENDPOINT/);
+    expect(loadEnv({ ...base, S3_BUCKET: "primolar-files", S3_FORCE_PATH_STYLE: "true" })).toMatchObject({ S3_BUCKET: "primolar-files", S3_FORCE_PATH_STYLE: true });
   });
 });

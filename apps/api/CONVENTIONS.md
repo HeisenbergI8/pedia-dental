@@ -6,7 +6,7 @@ The Primolar backend. It replaces the browser mocks (MSW) in `apps/web` **endpoi
 feature code in the web app**. The product, the users and the domain are the ones in the root `CONVENTIONS.md`
 and `ROADMAP.md`; read those first. This file covers only how the API is built.
 
-**Current phase: B1–B9 done** (2026-10-17). The runtime core (request context, `Clock`, logs, tenant scoping,
+**Current phase: B1–B10 done** (2026-10-17). The runtime core (request context, `Clock`, logs, tenant scoping,
 transactions, audit), `@pedia/seed`, the `test:int` suite on MySQL and CI, identity, sessions and the access guard,
 `/auth/*`, `/operator/auth/*` and the clinic reads, with the web signing in against them in `hybrid` mode. B1-c added
 the outbox, scheduled jobs and file storage. B3: the Owner's settings
@@ -22,7 +22,10 @@ in the patient list and header, the day's collections and the financial dashboar
 texts queued in the transaction of the change that causes them (booking, move, no-show, a signed note, the due list's
 recall text, the birthday greeting and its daily job), consent checked when queued, sent exactly once by the outbox
 worker inside 8 AM–8 PM Manila (the log driver until `SEMAPHORE_API_KEY` is set), retried then shown as failed, and the
-patient list's "no contact" and Today's greeting ticks, served in `hybrid`. B10 (documents and storage) is next. The
+patient list's "no contact" and Today's greeting ticks, served in `hybrid`. B10: clinical photos and parents'
+documents (uploads streamed through the API, checked, then stored; reads are a 302 to a 5-minute private link), the
+issued-documents log with the mock's checks, S3 storage (local disk without `S3_BUCKET`), the patient photo off
+multer, and each clinic's stored bytes, served in `hybrid`. B11 (parent portal and accounts) is next. The
 build order is [CHUNKS.md](CHUNKS.md).
 
 **Stack:** NestJS 12 (ESM, Express) · Prisma 7 + MySQL 8.4 (MariaDB driver adapter) · Zod 4 schemas from
@@ -89,6 +92,9 @@ Run from the repo root.
 | Outbox | `src/outbox/` | `OutboxService.enqueue(tx, …)` (the write side, inside the caller's transaction), `OutboxWorker` (claim, run, settle), `OutboxHandlers` (features register a handler per kind), `NoopHandler` |
 | Scheduled jobs | `src/jobs/`, `src/<feature>/<feature>.jobs.ts` | `JobRunner.run(job, fn)` (the `JobLock` lease). Each `@Cron` lives in the module that owns its tables: `auth.jobs.ts` (session and rate-limit sweeps), `outbox.jobs.ts` (prune), `messages.jobs.ts` (birthday greetings and the dead-letter repair, B9) |
 | File storage | `src/storage/` | `StorageService` (clinic-scoped keys), `FileStorage` (the driver), `LocalDiskStorage`, and the `storage.delete` outbox handler (`delete-file.handler.ts`). Import `StorageModule` where files are kept |
+| File storage (B10) | `src/storage/` | `S3FileStorage`, `fileStorageOf` (picks the driver), `readUpload` (busboy → temp file, `multipart.ts`), `sniff`, `LocalFilesController` (`GET /files/:token`, the local driver's signed links), the `StoredFile` ledger and `StorageService.link`/`putFile`/`usedBytes` |
+| Photos | `src/photos/` | B10: `PhotosService` (the only reader and writer of `ClinicalPhoto`: list, upload, open), `photo-file.ts` (the file rule), `photo.rows.ts` |
+| Documents | `src/documents/` | B10: `DocumentsService` (the issued-documents log), `documents.rules.ts` (the mock's checks, in order), `document.rows.ts` |
 | Demo seed | `src/seed/seed-database.ts`, `prisma/seed.ts` | Maps `@pedia/seed`'s `seedPlatform()` to rows |
 | Features | `src/<name>/` | `<name>.module.ts`, `<name>.controller.ts`, `<name>.service.ts`. Same `<name>` as `apps/web/src/features/<name>` |
 | Tests | `src/**/*.test.ts` (unit), `test/*.test.ts` (HTTP) | Run without a database, in `pnpm run check`. HTTP tests build the app with `test/support/test-app.ts`. `test/clinic-routes.test.ts` (B3), `test/patients-routes.test.ts` (B4) and `test/clinical-routes.test.ts` (B5–B7) hold every route to "reaches a controller and the guard" (401 without a session); add a route there with its controller |
@@ -167,7 +173,8 @@ These hold from the first feature on. Chunk B1 builds the pieces they name.
 - Anything leaving the system (SMS, email, webhooks) is written to the **outbox in the same transaction** as the
   change that caused it, and sent by the worker. Never call a provider from a request.
 - Scheduled jobs are idempotent and take a DB lock, so running twice or on two instances is harmless.
-- Files go to object storage through presigned URLs, never through the API's memory.
+- Uploads stream through the API to a temp file, are checked, then streamed to object storage; never held whole in
+  memory (B10 decision 2). Reads are a 302 to a 5-minute private link (presigned on S3, signed locally).
 
 **Migrations**
 - Every schema change is a committed migration. Never edit a migration that has run anywhere but your machine.
@@ -263,7 +270,8 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   idempotency key. Never call `enqueue` outside
   `runInTransaction`'s `tx`: TypeScript can't tell the root client from a transaction.
 - **A job's `leaseMs` must be longer than a run and shorter than its cron period**, or it runs twice or skips ticks.
-- **`LocalDiskStorage` is per instance.** A multi-instance deployment needs B10's driver before files are uploaded.
+- **`LocalDiskStorage` is per instance.** Set `S3_BUCKET` before running a second instance; local links are signed with
+  `STORAGE_LINK_SECRET` (unset: a random secret per process, so links die on restart; files don't).
 - **`COOKIE_SECURE=false` only on local http.** It defaults to true; `DEMO_LOGINS` defaults to false.
 - **Nest answers every `@Post` with 201.** The mock answers 201 only when it creates something (`POST /branches`,
   `POST /staff`); an action (`/archive`, `/deactivate`) answers 200. Give those `@HttpCode(200)`.
@@ -276,8 +284,9 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **`migrate dev` won't run non-interactively when it warns** (a new unique index on existing rows). Write the SQL with
   `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` into a new
   `prisma/migrations/<timestamp>_<name>/migration.sql`, then `db:deploy` and `db:generate` (B3 did).
-- **The logo passes through the API's memory** (multer, at most 1 MB). B10's presigned uploads are for photos; don't
-  raise `LOGO_RULES.maxBytes` without moving the logo to them.
+- **The logo passes through the API's memory** (multer, at most 1 MB) and is served as bytes, not a link: the PDF
+  letterhead draws it into a canvas, which a cross-origin redirect would taint. Don't raise `LOGO_RULES.maxBytes`
+  without moving it to `readUpload`.
 - **`"branch"` scope narrows reads to the device's branch.** A branch-level table that is read account-wide (`Chair`)
   is `"clinic"` in `MODEL_SCOPE`, with `branchId` as a plain column.
 - **A unit test that builds `StorageModule`** must override `OutboxModule` (it registers `storage.delete` there), as
@@ -290,8 +299,6 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   `refreshSearch` for PATCH's phone, which follows the guardian to siblings).
 - **Every patient write locks the patient's row first** (`lockPatient`, which is also the 404); registration takes the
   clinic's lock (`lockAccount`) for the next number. Account before patient, never the other way round.
-- **The patient photo passes through the API's memory** (multer, at most 10 MB, JPEG/PNG/WebP only) until B10 moves it
-  to presigned uploads.
 - **A database seeded before B4 has no patients**, and `db:seed` refuses a database with accounts: use a fresh volume or
   a new database, as for B3. The same for B5's visits and chart entries.
 - **Lock before the first plain read.** MySQL's REPEATABLE READ takes the transaction's snapshot at its first plain
@@ -301,8 +308,6 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   the first read a locking one (`SELECT … FOR UPDATE`, as `VisitsService.complete`). Race tests catch it.
 - **Every visit and chart write locks the patient's row first** (`src/patients/patient-lock.ts`). `complete` locks the
   visit, then the patient; no path locks them the other way round.
-- **In `hybrid`, photos on a visit the API started answer 404 from MSW** until B10 (B5 decision 7). Seeded visits
-  have the same ids on both sides and keep working.
 - **A child row's patient is read outside the transaction, then `lockPatient`, then the row** (B6 decision 3: notes,
   growth, plan items). Safe because `patientId` never changes and nothing is deleted. No B6 path locks a child row
   first: sign holds the patient, then updates plan items, so a path that locked an item first would deadlock with it.
@@ -310,8 +315,22 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   null` that must touch one row. A race test only fails when both are removed.
 - **Growth's "can't be in the future" uses the process clock** (`SaveGrowthInput`), which reads Manila time since B7
   (`clinic-time.ts`), so B6 decision 8's 00:00–08:00 window is closed.
-- **In `hybrid`, MSW's documents don't see API-created notes, plan items, bills or payments** until B10 (B6 decision 2,
-  B8).
+- **Upload routes read the raw request** (`readUpload`, busboy): no global multipart, raw or text body parser, or the
+  stream is gone before the service reads it. The temp disk needs (instances × concurrent uploads × 10 MB) under
+  `os.tmpdir()/primolar-uploads`; every upload's temp file is removed in `finally`.
+- **The bytes decide a file's type** (`sniff`): JPEG, PNG or WebP for an image, `%PDF-` for a PDF; the stored and served
+  type is the sniffed one. A photo's consent is read again under the patient's lock after the file is stored, and a
+  "no" that landed in between queues the file's deletion (B10 E6).
+- **`StorageService` writes the `StoredFile` ledger** (every put and delete), so unit tests that build `StorageModule`
+  must provide `PrismaService` and `Clock`. Logos and patient photos stored before B10 have no ledger row.
+- **The S3 bucket stays private** (Block Public Access, SSE-S3, no CORS: the browser only follows links), with
+  versioning on and no lifecycle expiry (nothing is deleted on purpose), and the API's IAM role limited to
+  `s3:PutObject`/`GetObject`/`DeleteObject` on `clinics/*`. A presigned link names the download file (the child's name)
+  in `response-content-disposition`; it goes only to the signed-in browser, never to our logs. Presigned
+  URLs need the host clock NTP-synced. Credentials: both `S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY` or neither (the
+  SDK's default chain, an IAM role in production).
+- **A database seeded before B10 has no photos, documents or ledger rows:** use a fresh one. `db:seed` writes the
+  seeded photos' files through the API's own driver (`fileStorageOf`).
 - **Records that share a time sort by id**, not insertion order: give seeded records that must read in order distinct
   times (B6 fixed the growth examples' tie).
 - **The process runs in Asia/Manila** (`src/clinic-time.ts`, the first import of every entry point and test runner).
@@ -391,7 +410,8 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   `JobLock` lease shorter than the job's period and keeps it after a successful run, so a second instance's tick
   skips; a failed run releases it.
 - **Storage** (B1): keys are `clinics/<clinicId>/<area>/<uuid>.<ext>`, built and checked only by `StorageService`;
-  another clinic's key reads as missing. The content type comes from an extension allowlist. Local disk until B10.
+  another clinic's key reads as missing and gets no link. The content type comes from an extension allowlist. Local disk
+  or S3 (`S3_BUCKET`, B10).
 - **Tier limits** (B3): `TIER_LIMITS` in `@pedia/shared` is the only copy; the tier is `ClinicAccount.tier`. What
   counts is `accountUsage` (open branches; active staff logins, the Owner included, parents never). Every limit-checked
   write locks the clinic's `ClinicAccount` row (`SELECT … FOR UPDATE`) and counts inside the transaction; proven with
@@ -466,6 +486,18 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
     a credit draws the bill's branch's deposits first (E11, `depositLegs`). The day's list and the dashboard filter by it.
   - The demo keeps Idempotency-Keys in memory per clinic for 24 hours (E12); the API in `IdempotencyKey` rows.
   - A payment's reference number is capped at 100 characters and a refund's or void's reason at 500 (E13).
+- **Photos and documents** (B10, decisions in the B10 plan's `decisions.md`, settled with the user before planning):
+  - Amazon S3 in ap-southeast-1 in production through an S3-compatible driver (R2 by config); local disk in development
+    and tests (1). Uploads go through the API, checked, then streamed to storage; never presigned uploads (2, E1).
+  - Opening a file is a 302 to a private link valid `FILE_LINK_SECONDS` (300), `no-store`, re-checked and audited on
+    every open (3, E2). Three isolation layers: tenant-scoped rows, `StorageService` links only its clinic's keys, and
+    an encrypted local-link token (AES-256-GCM over the key and expiry: no name in a URL or log) (E8).
+  - The demo's limits: 10 MB, images only, PDFs only for documents and referrals (4); the bytes decide the type (E4).
+    A body declaring more than twice the limit is refused before it is read (E13). Photos are never edited or deleted (5). Parents upload intraoral, extraoral and medical documents, blocked when the
+    family declined photos (7, E12).
+  - The documents log stores no PDF: the browser builds it after a 201, so a refused document makes no file (6). The
+    checks run in the mock's order: issuer (any staff row, deactivated included), dentist, source, allergy.
+  - Each clinic's stored bytes are counted in the `StoredFile` ledger (8, E5), never limited in B10 (limits: B12).
 - **Messages** (B9, decisions in the B9 plan's `decisions.md`, settled with the user before planning; 13–17 after):
   - SMS only, through Semaphore; no email in B9 (1). One platform-owned Semaphore account (2) and one shared sender
     name, with the clinic's name in the text (3); the name itself isn't chosen yet (18).

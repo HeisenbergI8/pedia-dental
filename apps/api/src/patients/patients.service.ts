@@ -10,7 +10,7 @@ import { Prisma } from "../generated/prisma/client.ts";
 import { PrismaService } from "../prisma/prisma.service";
 import { BillingRecordsService } from "../billing-records/billing-records.service";
 import { DueItemsService } from "../recalls/due-items.service";
-import { StorageService, type StoredFile } from "../storage/storage.service";
+import { StorageService } from "../storage/storage.service";
 import type { Tx } from "../prisma/transaction";
 import { VisitDaysService } from "../visits/visit-days.service";
 import { PATIENT_NOT_FOUND } from "./patient-lock";
@@ -136,13 +136,13 @@ export class PatientsService {
     return findDuplicates(candidate, shaped).map((r) => toDuplicate(r as Patient));
   }
 
-  /** GET /patients/:id/photo. One audit entry per view (decision 4), only when there is a photo to see. */
-  async photo(id: string): Promise<{ file: StoredFile; name: string } | undefined> {
+  /** GET /patients/:id/photo: a 5-minute private link (B10 E2). One audit entry per view (decision 4), only when there is a photo. */
+  async photoLink(id: string): Promise<string | undefined> {
     const row = await this.prisma.patient.findUnique({ where: { id }, select: { photoRef: true, firstName: true, lastName: true } });
-    const file = row?.photoRef ? await this.storage.get(row.photoRef) : undefined;
-    if (!row || !file) return undefined;
+    const link = row?.photoRef ? await this.storage.link(row.photoRef, { fileName: photoFileName(row) }) : undefined;
+    if (!link) return undefined;
     await this.audit.record("view", "Patient photo", id);
-    return { file, name: photoFileName(row) };
+    return link;
   }
 
   /**

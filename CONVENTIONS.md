@@ -4,7 +4,7 @@
 
 Primolar: pediatric dental clinic management sold as a service to many clinics. Each paying clinic is a
 **clinic account** with its own branches, staff, patients and branding (ROADMAP feature 16). **Current phase: frontend prototype.** In the demo every API call is
-answered in the browser by MSW using fake, seeded data; in `hybrid` mode the routes apps/api already serves (B2: sign-in; B3: the Owner's settings and reference data; B4: patients, consents and the privacy notice; B5: visits and the chart; B6: notes, growth and the treatment plan; B7: appointments, requests, the due list and Today; B8: billing, payments and the financial dashboard; B9: the message log, recall texts and birthday greetings) go to it. A NestJS + MySQL API
+answered in the browser by MSW using fake, seeded data; in `hybrid` mode the routes apps/api already serves (B2: sign-in; B3: the Owner's settings and reference data; B4: patients, consents and the privacy notice; B5: visits and the chart; B6: notes, growth and the treatment plan; B7: appointments, requests, the due list and Today; B8: billing, payments and the financial dashboard; B9: the message log, recall texts and birthday greetings; B10: photos, the documents log and file links) go to it. A NestJS + MySQL API
 (`apps/api`, scaffolded; its own rules are in `apps/api/CONVENTIONS.md`) will replace the mocks later, endpoint by endpoint, without changing feature code. A clinic joins through
 the public **Get started** form, and Primolar approves it in the operator console (ROADMAP feature 17). Each clinic
 then pays Primolar monthly; the operator records payments by hand, and a clinic 7 days overdue pauses itself.
@@ -26,13 +26,14 @@ TanStack Query · React Hook Form + Zod 4 · Zustand (UI state, plus the demo se
 | Tests, one file | `pnpm --filter <web|@pedia/shared|@pedia/seed> exec vitest run <path>` |
 | Design guards (contrast, tokens, shell, screens) | `pnpm run check -- design` (typecheck + every `src/design/design-*.test.ts`) |
 | Run the app locally | `pnpm dev` → http://localhost:3000 |
-| Run against the real API | `NEXT_PUBLIC_API_MOCKING=hybrid API_PROXY_TARGET=http://localhost:4100 pnpm dev` with `pnpm dev:api` running (`DEMO_LOGINS=true COOKIE_SECURE=false`, seeded with `pnpm --filter api db:seed`). `enabled` = MSW answers everything (the demo); `hybrid` = MSW answers all but `API_ROUTES` (`mocks/passthrough.ts`: since B2, sign-in, `/operator/auth/*` and the clinic reads; since B3, the Owner's settings, `/clinic/usage`, the logo and the reference data; since B4, patients, consents, the patient photo and the privacy notice; since B5, visits and the dental chart; since B6, notes, growth and the treatment plan; since B7, appointments, parents' requests, the due list and Today; since B8, bills, payments, deposits, voids, the day's collections and the financial dashboard; since B9, the message log, recall texts and birthday greetings), which go through Next's `/api` proxy to the API; `disabled`/unset = no MSW |
+| Run against the real API | `NEXT_PUBLIC_API_MOCKING=hybrid API_PROXY_TARGET=http://localhost:4100 pnpm dev` with `pnpm dev:api` running (`DEMO_LOGINS=true COOKIE_SECURE=false`, seeded with `pnpm --filter api db:seed`). `enabled` = MSW answers everything (the demo); `hybrid` = MSW answers all but `API_ROUTES` (`mocks/passthrough.ts`: since B2, sign-in, `/operator/auth/*` and the clinic reads; since B3, the Owner's settings, `/clinic/usage`, the logo and the reference data; since B4, patients, consents, the patient photo and the privacy notice; since B5, visits and the dental chart; since B6, notes, growth and the treatment plan; since B7, appointments, parents' requests, the due list and Today; since B8, bills, payments, deposits, voids, the day's collections and the financial dashboard; since B9, the message log, recall texts and birthday greetings; since B10, clinical photos, the issued-documents log and the API's `/files/<token>` links), which go through Next's `/api` proxy to the API; `disabled`/unset = no MSW |
 | Sign-in against the API, end to end | Both servers on free ports (the web on its own `NEXT_DIST_DIR=.next-hybrid`), then in `apps/web`: `E2E_API=1 E2E_BASE_URL=… npx playwright test e2e/api-sign-in.spec.ts --project=desktop`. Start-up commands: the B2d plan, Step 4.1. It signs in 10 times; the API allows 20 sign-ins per 5 minutes per address |
 | Owner settings against the API, end to end | As sign-in, against a fresh database that has B3's rows: `E2E_API=1 E2E_BASE_URL=… npx playwright test e2e/api-owner-settings.spec.ts --project=desktop` (9 sign-ins a run). Start-up commands: the B3 plan, Step 11.1 |
 | Notes, growth and the plan against the API | Fresh database with B6's rows: `E2E_API=1 E2E_BASE_URL=… npx playwright test e2e/api-notes-plan.spec.ts --project=desktop` (4 sign-ins a run). Start-up commands: the B6 plan, Step 7.2 |
 | Scheduling against the API | Fresh database with B7's rows: `E2E_API=1 E2E_BASE_URL=… npx playwright test e2e/api-scheduling.spec.ts --project=desktop` (8 sign-ins a run; re-runnable on one database). Start-up commands: the spec's header, or the B7 plan, Step 9.2 |
 | Billing against the API | Fresh database with B8's rows: `E2E_API=1 E2E_BASE_URL=… npx playwright test e2e/api-billing.spec.ts --project=desktop` (about 8 sign-ins a run; re-runnable on one database). Start-up commands: the spec's header, or the B8 plan, Step 10.2 |
 | Messages against the API | Fresh database with B9's rows: `E2E_API=1 E2E_BASE_URL=… npx playwright test e2e/api-messages.spec.ts --project=desktop` (7 sign-ins a run; re-runnable on one database; texts outside 8 AM–8 PM Manila stay Queued). Start-up commands: the spec's header, or the B9 plan, Step 9.3. Running it with the B7 and B8 specs in one go can trip the sign-in limit: clear `RateLimitCounter` between them |
+| Photos and documents against the API | Fresh database with B10's rows and files: `E2E_API=1 E2E_BASE_URL=… npx playwright test e2e/api-photos-documents.spec.ts --project=desktop` (6 sign-ins a run; re-runnable on one database). Start-up commands, with `STORAGE_DIR` and `STORAGE_LINK_SECRET`: the spec's header |
 | Reset demo data | account menu → Reset demo data (keeps you signed in). `localStorage.clear()` then reload also works, but signs you out |
 
 ---
@@ -151,7 +152,7 @@ MSW handler (now) or NestJS (later).
   and only import `@/mocks/browser` dynamically from `app/providers.tsx`.
 - `NEXT_PUBLIC_*` env vars are inlined at build time. Changing `.env.local` needs a dev-server restart.
 - Mock data lives in `localStorage`. After changing `seed()` or `Db`, bump the key in `mocks/db.ts`
-  or clear storage, or you'll keep seeing old data. The key is `pedia-dental:mock-db:v28`; each bump gets a
+  or clear storage, or you'll keep seeing old data. The key is `pedia-dental:mock-db:v29`; each bump gets a
   one-line comment above it saying why.
 - The mock store is partitioned by clinic account: `Platform = { accounts, tenants, signups, prices, subscriptions, agreements }`
   in `mocks/db.ts`. Sign-ups, prices, subscriptions and agreements are Primolar's, never inside a tenant. `db` is a
@@ -171,12 +172,12 @@ MSW handler (now) or NestJS (later).
   lists fall back to its own first branch. The subscription (B12) stays on MSW. Since B4, patients, their
   consents and photo, and the privacy notice are the API's: a child registered in `hybrid` exists only on the API, so
   MSW's visits, chart, billing and appointments answer `Patient not found` for them; MSW's parent gate still uses MSW's
-  families. Since B5, visits and the chart are the API's: photos
-  on a visit the API started answer 404 from MSW until B10. Since B6, notes, growth and the plan are the API's: MSW's
-  documents don't see notes or plan items created on the API until B10. Since B7, appointments, requests, due items
-  and Today are the API's. Since B8, bills, payments, deposits, voids, the day's
-  collections and the financial dashboard are the API's: MSW's documents (statements, receipts as documents) don't see
-  API bills or payments until B10. Since B9, the message log, recall texts and birthday greetings are the API's, and
+  families. Since B5, visits and the chart are the API's. Since B6, notes, growth and the plan are the API's. Since B7,
+  appointments, requests, due items and Today are the API's. Since B8, bills, payments, deposits, voids, the day's
+  collections and the financial dashboard are the API's. Since B10, clinical photos, the issued-documents log and the
+  API's file links are the API's too: a file read is a 302 to a 5-minute link (`/api/files/<token>` locally, S3 in
+  production), which `<img>` and `<a>` follow by themselves (inside MSW's service worker for an `<img>`, so the page
+  sees the final 200). Never `fetch()` a photo or draw it into a canvas without adding CORS to the bucket. Since B9, the message log, recall texts and birthday greetings are the API's, and
   so are the texts its bookings, moves, no-shows, signed notes and reminders "no" queue or withdraw. The API sends them
   through its outbox worker, with the log driver (ids and part counts logged, nothing sent) until `SEMAPHORE_API_KEY`
   is set.
@@ -249,7 +250,7 @@ MSW handler (now) or NestJS (later).
 ## Reporting rules
 
 - **A deferral is not a gap.** Deliberately deferred for the prototype: real authentication (the demo
-  login is a demo control: anyone can sign in as any account with the shown password; the token is the account id; staff PINs and Owner-added passwords are stored as typed and PINs are listed in the Switch user dialog's "Demo PINs" hint; the operator's demo sign-in, operator@primolar.demo with the demo password), the NestJS backend, real SMS sending (the API has it since B9, but logs instead of sending until `SEMAPHORE_API_KEY` is set), email sending and staff email invites, real file storage in the demo (MSW keeps files in the browser; the API sanitises uploaded SVG logos since B3), BIR
+  login is a demo control: anyone can sign in as any account with the shown password; the token is the account id; staff PINs and Owner-added passwords are stored as typed and PINs are listed in the Switch user dialog's "Demo PINs" hint; the operator's demo sign-in, operator@primolar.demo with the demo password), the NestJS backend, real SMS sending (the API has it since B9, but logs instead of sending until `SEMAPHORE_API_KEY` is set), email sending and staff email invites, real file storage in the demo (MSW keeps files in the browser; the API stores files in S3 or on its disk since B10, and sanitises uploaded SVG logos since B3), BIR
   official receipts, and every screen that currently renders `ComingSoon`. Their absence is intentional.
 - **A claim that ages carries the date it was measured.** Any count or "every / all / none" statement
   written into something durable says when it was measured.

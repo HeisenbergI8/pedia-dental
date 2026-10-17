@@ -64,6 +64,12 @@ export class ClinicService {
     return (await this.prisma.clinicAccount.findUniqueOrThrow({ where: { id: ownClinicId() }, select: { tier: true } })).tier;
   }
 
+  /** Any staff row of this clinic, deactivated included (the mock's db.staff: a document names who issued it then). */
+  async staffRoles(id: string): Promise<Pick<StaffMember, "role" | "alsoRoles"> | undefined> {
+    const s = await this.prisma.staff.findUnique({ where: { id }, select: { role: true, alsoRoles: true } });
+    return s ? { role: s.role, alsoRoles: StaffRole.array().parse(s.alsoRoles) } : undefined; // another clinic's id reads as missing
+  }
+
   /** New money is received by someone who works here now (decision #23): an active staff row of this clinic. */
   async isActiveStaff(id: string): Promise<boolean> {
     return (await this.prisma.staff.count({ where: { id, deactivatedAt: null } })) > 0;

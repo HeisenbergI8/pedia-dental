@@ -1,4 +1,4 @@
-import { AccountStatus, Acknowledgement, AgreementRecord, AuditAction, ConsentScope, HeadingFont, MessageChannel, MessageKind, MessageStatus, PrivacyChoice, Role, Sex, StaffRole, PlanItemStatus, Tier, ToothCondition, VisitStatus, AppointmentRequestStatus, AppointmentStatus, DueItem, PaymentMethod, TimeOfDay } from "@pedia/shared";
+import { AccountStatus, Acknowledgement, AgreementRecord, AuditAction, ConsentScope, HeadingFont, MessageChannel, MessageKind, MessageStatus, PhotoStage, PhotoType, DocumentType, PrivacyChoice, Role, Sex, StaffRole, PlanItemStatus, Tier, ToothCondition, VisitStatus, AppointmentRequestStatus, AppointmentStatus, DueItem, PaymentMethod, TimeOfDay } from "@pedia/shared";
 import { describe, expect, it } from "vitest";
 import type { RequestContext } from "../common/request-context";
 import { $Enums, Prisma } from "../generated/prisma/client.ts";
@@ -36,6 +36,9 @@ describe("model registry", () => {
     expect(Object.values($Enums.AuditAction)).toEqual(AuditAction.options);
     expect(Object.values($Enums.MessageKind)).toEqual(MessageKind.options);
     expect(Object.values($Enums.MessageStatus)).toEqual(MessageStatus.options);
+    expect(Object.values($Enums.PhotoType)).toEqual(PhotoType.options);
+    expect(Object.values($Enums.PhotoStage)).toEqual(PhotoStage.options);
+    expect(Object.values($Enums.DocumentType)).toEqual(DocumentType.options);
     expect(Object.values($Enums.MessageChannel)).toEqual(MessageChannel.options);
     expect(Object.values($Enums.Sex)).toEqual(Sex.options);
     expect(Object.values($Enums.ConsentScope)).toEqual(ConsentScope.options);
@@ -125,6 +128,14 @@ describe("append-only", () => {
     expect(APPEND_ONLY.has("Visit")).toBe(false);
     expect(() => scopeArgs("ChartEntry", "update", { where: { id: "e1" }, data: { condition: "sound" } }, clinicA)).toThrow(/append-only/);
     expect(() => scopeArgs("ChartEntry", "deleteMany", { where: {} }, clinicA)).toThrow(/append-only/);
+  });
+
+  it("keeps B10's photos and documents append-only and its ledger deletable", () => {
+    for (const model of ["ClinicalPhoto", "PatientDocument"] as const) {
+      expect(() => scopeArgs(model, "update", { where: { id: "x" }, data: {} }, clinicA)).toThrow(/append-only/);
+      expect(() => scopeArgs(model, "deleteMany", { where: {} }, clinicA)).toThrow(/append-only/);
+    }
+    expect(scopeArgs("StoredFile", "deleteMany", { where: { key: "k" } }, clinicA)?.where).toMatchObject({ clinicId: "clinic_a" });
   });
 
   it("leaves B6's tables editable: a draft note, a growth record and a plan item change in place", () => {

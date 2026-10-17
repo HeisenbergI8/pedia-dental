@@ -28,6 +28,9 @@ import { PatientsModule } from "./patients/patients.module";
 import { VisitsModule } from "./visits/visits.module";
 import { NotesModule } from "./notes/notes.module";
 import { OutboxModule } from "./outbox/outbox.module";
+import { StorageModule } from "./storage/storage.module";
+import { PhotosModule } from "./photos/photos.module";
+import { DocumentsModule } from "./documents/documents.module";
 import { PrismaModule } from "./prisma/prisma.module";
 
 @Module({})
@@ -47,6 +50,9 @@ export class AppModule implements NestModule {
         // Without ScheduleModule, `@Cron` methods are inert: they still run when called (test/int/jobs.int.test.ts).
         ...(background ? [ScheduleModule.forRoot()] : []),
         OutboxModule,
+        StorageModule,
+        PhotosModule,
+        DocumentsModule,
         AuthModule,
         ClinicModule,
         NotesModule,

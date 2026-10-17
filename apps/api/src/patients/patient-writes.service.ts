@@ -17,7 +17,9 @@ import { runInTransaction, type Tx } from "../prisma/transaction";
 import { DELETE_FILE } from "../storage/delete-file.handler";
 import { StorageService } from "../storage/storage.service";
 import { lockPatient } from "./patient-lock";
-import { cleanPhoto, type PhotoUpload } from "./patient-photo";
+import type { Request } from "express";
+import { readUpload, tooLargeToRead } from "../storage/multipart";
+import { cleanPhoto, MAX_PHOTO_BYTES, PHOTO_TOO_LARGE } from "./patient-photo";
 import { PatientsService } from "./patients.service";
 import { consentFrom, dropsConsenter, guardianRows, mergeEdit, patientColumns, refusedTag, tidy, withStoredContacts } from "./patient.rows";
 import { inScope, visibleTo, type Viewer } from "./patient.views";
@@ -175,12 +177,19 @@ export class PatientWritesService {
   }
 
   /** PUT /patients/:id/photo: checked (cleanPhoto), stored, then swapped in. 404 before the file is looked at. */
-  async uploadPhoto(viewer: Viewer, id: string, file: PhotoUpload | undefined): Promise<PatientView> {
-    await this.patients.one(id); // the mock's order: 404 first
-    const clean = cleanPhoto(file);
-    if ("problem" in clean) throw clean.status === 413 ? new PayloadTooLargeException(clean.problem) : new BadRequestException(clean.problem);
-    // Stored before the transaction: runInTransaction reruns its callback on a deadlock (CONVENTIONS → Traps).
-    return this.swapPhoto(viewer, id, await this.storage.put("patients", clean.ext, clean.body));
+  async uploadPhoto(viewer: Viewer, id: string, req: Request): Promise<PatientView> {
+    await this.patients.one(id); // the mock's order: 404 before the body is read
+    if (tooLargeToRead(req.headers, MAX_PHOTO_BYTES)) throw new PayloadTooLargeException(PHOTO_TOO_LARGE); // E13
+    const upload = await readUpload(req, { maxBytes: MAX_PHOTO_BYTES });
+    try {
+      const clean = cleanPhoto(upload.file);
+      if ("problem" in clean) throw clean.status === 413 ? new PayloadTooLargeException(clean.problem) : new BadRequestException(clean.problem);
+      // Stored before the transaction: runInTransaction reruns its callback on a deadlock (CONVENTIONS → Traps).
+      const key = await this.storage.putFile("patients", clean.ext, upload.file!);
+      return await this.storage.keepIf(key, () => this.swapPhoto(viewer, id, key));
+    } finally {
+      await upload.dispose();
+    }
   }
 
   /** DELETE /patients/:id/photo. */

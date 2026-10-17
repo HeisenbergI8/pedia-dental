@@ -8,8 +8,15 @@ export const ClinicScoped = z.object({ clinicId: Id });
 /** Records that also belong to one branch of the account: appointments, chairs, invoices and payments (decision #16). */
 export const BranchScoped = ClinicScoped.extend({ branchId: Id });
 
-/** Calendar date, YYYY-MM-DD. Pass a message to word the error for a specific field. */
-export const isoDate = (message = "Enter a date") => z.string().regex(/^\d{4}-\d{2}-\d{2}$/, message);
+/** A real day of the calendar: 2026-02-30 and 2026-13-45 match the shape but aren't (B10 tester D2). */
+const isCalendarDay = (s: string) => {
+  const [y, m, d] = s.split("-").map(Number) as [number, number, number];
+  const date = new Date(Date.UTC(y, m - 1, d));
+  return y >= 1900 && date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
+};
+
+/** Calendar date, YYYY-MM-DD, a day that exists. Pass a message to word the error for a specific field. */
+export const isoDate = (message = "Enter a date") => z.string().regex(/^\d{4}-\d{2}-\d{2}$/, message).refine(isCalendarDay, message);
 export const IsoDate = isoDate();
 /** Full timestamp, ISO 8601. */
 export const IsoDateTime = z.string().datetime({ offset: true });

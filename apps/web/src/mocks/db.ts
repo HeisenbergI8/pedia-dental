@@ -6,7 +6,8 @@ import { clearBlobs } from "./blob-store";
 export { emptyDb, seedPlatform, type Db, type Platform } from "@pedia/seed";
 
 // v28: privacy (chunk 24): Platform gains `agreements`; each Db gains `privacyNotices` and `acknowledgements`; patients gain consents.
-const KEY = "pedia-dental:mock-db:v28";
+// v29: B10 seeds photos and issued documents (photo_seed_*, doc_seed_*).
+const KEY = "pedia-dental:mock-db:v29";
 
 function load(): Platform {
   if (typeof window === "undefined") return seedPlatform();

@@ -29,6 +29,24 @@ export function groupPhotos<P extends Groupable>(photos: P[], visitDate: (visitI
 export const PDF = "application/pdf";
 export const isPdf = (contentType: string) => contentType === PDF;
 
+/** How long a private link to a file stays valid, in seconds (B10 decision 3). The API answers a file read with a 302 to one. */
+export const FILE_LINK_SECONDS = 300;
+
+const EXTENSION: Record<string, string> = { "image/png": "png", "image/webp": "webp", [PDF]: "pdf" };
+
+/**
+ * The name a saved clinical file gets, never the record id: "mendoza-bea-intraoral-74-2026-10-02.jpg". The mock and the
+ * API both name files with it (Content-Disposition). Any other image type saves as `.jpg`, as the demo always did.
+ */
+export function photoFileName(patient: { lastName: string; firstName: string }, photo: Pick<ClinicalPhoto, "type" | "tooth" | "takenOn" | "contentType">): string {
+  const name = [patient.lastName, patient.firstName, photo.type, photo.tooth, photo.takenOn]
+    .filter(Boolean)
+    .join("-")
+    .replace(/[^\w.-]+/g, "-")
+    .toLowerCase();
+  return `${name}.${EXTENSION[photo.contentType] ?? "jpg"}`;
+}
+
 /** Upload rules as data. PDFs only where a paper document is expected (a clearance, a lab result, a referral). */
 export const UPLOAD_RULES = { maxBytes: 10 * 1024 * 1024, pdfTypes: ["document", "referral"] as PhotoType[] };
 

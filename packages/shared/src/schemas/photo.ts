@@ -10,7 +10,10 @@ export type PhotoType = z.infer<typeof PhotoType>;
 export const PhotoStage = z.enum(["before", "after"]);
 export type PhotoStage = z.infer<typeof PhotoStage>;
 
-/** The file itself is served from `GET /photos/:id/file`. */
+/**
+ * The file itself is served from `GET /photos/:id/file`: the bytes (the demo), or a 302 to a private link valid
+ * FILE_LINK_SECONDS (apps/api, B10). `?download=1` asks for it as an attachment. Both work as an <img> src or a link.
+ */
 export const ClinicalPhoto = ClinicScoped.extend({
   id: Id,
   patientId: Id,

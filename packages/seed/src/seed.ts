@@ -34,6 +34,7 @@ import type { Db } from "./platform";
 import { composeMessage, defaultMessageTemplates, type MessageEvent, type MessageRefs } from "./message-templates";
 import { NOTE_TEMPLATES } from "./note-templates";
 import { firstNotice, staffAcknowledged, withConsent } from "./seed-privacy";
+import { seedPhotos } from "./seed-photos";
 
 /**
  * The demo clinic account's id, for seed rows only. Handlers stamp `currentClinicId()` (mocks/db.ts), never this:
@@ -251,11 +252,17 @@ export function seed(): Db {
   const roster = seedRoster(billing.payments.length, { templates: messageTemplates, staff: STAFF, clinicName: DEMO_ACCOUNT.name });
   const allVisits = [...visits, ...roster.visits];
   const allNotes = [...notes, ...example.notes, ...roster.notes];
+  // Privacy #24 (P24): index 5 has no consent (the flag), index 11 declined photos (the block). The rest consented.
+  const consented = withConsent(seedProfiles([...patients, ...family.patients, ...roster.patients]), STAFF.find((s) => s.id === "staff_cruz")!, { none: [5], noPhotos: [11] });
+  // B10: the example child's photos (with files, seed-files.ts) and two issued documents. No faker.
+  const files = seedPhotos({
+    clinicId: CLINIC_ID, patients: consented, visits: allVisits, payments: [...billing.payments, ...roster.payments],
+    childId: example.planItems[0]?.patientId, dentistId: "staff_reyes", deskId: "staff_cruz",
+  });
 
   return {
     branches: BRANCHES,
-    // Privacy #24 (P24): index 5 has no consent (the flag), index 11 declined photos (the block). The rest consented.
-    patients: withConsent(seedProfiles([...patients, ...family.patients, ...roster.patients]), STAFF.find((s) => s.id === "staff_cruz")!, { none: [5], noPhotos: [11] }),
+    patients: consented,
     staff: STAFF,
     chairs: CHAIRS,
     procedures: PROCEDURES,
@@ -266,13 +273,13 @@ export function seed(): Db {
     growth: seedGrowth(patients, visits),
     planItems: example.planItems,
     appointments: [...appointments, ...family.appointments, ...roster.appointments, ...seedDasmarinas(roster.patients)],
-    photos: [],
+    photos: files.photos,
     dueItems: seedDueItems(allVisits, allNotes),
     invoices: [...billing.invoices, ...roster.invoices],
     payments: [...billing.payments, ...roster.payments],
     messageTemplates,
     messages: [...seedMessages(appointments, { templates: messageTemplates, patients, staff: STAFF, clinicName: DEMO_ACCOUNT.name }), ...roster.messages],
-    documents: [],
+    documents: files.documents,
     appointmentRequests: roster.requests,
     auditEvents: seedAudit(patients, example.planItems[0]?.patientId),
     staffPins: STAFF.map((s) => ({ clinicId: CLINIC_ID, staffId: s.id, pin: STAFF_PINS[s.id]!, failedAt: [] })),

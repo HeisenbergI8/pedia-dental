@@ -1,5 +1,6 @@
 import type { INestApplication } from "@nestjs/common";
 import request from "supertest";
+import { LINK_GONE } from "../src/storage/local-files.controller";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApp } from "./support/test-app";
 
@@ -59,6 +60,16 @@ const B8_ROUTES: [Method, string][] = [
   ["post", "/invoices/i1/apply-credit"],
 ];
 
+/** B10's routes, the same promise. A POST without a session is refused before its body is read. */
+const B10_ROUTES: [Method, string][] = [
+  ["get", "/patients/p1/photos"],
+  ["post", "/patients/p1/photos"],
+  ["get", "/photos/ph1/file"],
+  ["get", "/documents"],
+  ["get", "/patients/p1/documents"],
+  ["post", "/patients/p1/documents"],
+];
+
 /** B9's routes, the same promise. */
 const B9_ROUTES: [Method, string][] = [
   ["get", "/messages"],
@@ -73,7 +84,12 @@ describe("B5–B9's routes are served and guarded (no database)", () => {
   });
   afterAll(() => app.close());
 
-  it.each([...B5_ROUTES, ...B6_ROUTES, ...B7_ROUTES, ...B8_ROUTES, ...B9_ROUTES])("%s %s answers 401 without a session", async (method, path) => {
+  it("serves GET /files/:token without a session, and an unknown token is the link's own 404 (B10)", async () => {
+    const res = await request(app.getHttpServer()).get("/api/files/junk");
+    expect([res.status, res.text]).toEqual([404, LINK_GONE]);
+  });
+
+  it.each([...B5_ROUTES, ...B6_ROUTES, ...B7_ROUTES, ...B8_ROUTES, ...B9_ROUTES, ...B10_ROUTES])("%s %s answers 401 without a session", async (method, path) => {
     expect((await request(app.getHttpServer())[method](`/api${path}`)).status).toBe(401);
   });
 });

@@ -120,13 +120,14 @@ export const OPERATOR_RULES: readonly Route[] = [
   { method: "PUT", path: "/operator/prices" },
 ];
 
-/** PUBLIC_RULES in the mock (no session of any kind), plus the API's own health check. */
+/** PUBLIC_RULES in the mock (no session of any kind), plus the API's own: the health check and B10's local file links. */
 export const PUBLIC_RULES: readonly Route[] = [
   { method: "GET", path: "/signups/prices" },
   { method: "POST", path: "/signups" },
   { method: "GET", path: "/signups/:reference" },
   { method: "GET", path: "/legal/notices/:clinicId" },
   { method: "GET", path: "/health" },
+  { method: "GET", path: "/files/:token" },
 ];
 
 /**

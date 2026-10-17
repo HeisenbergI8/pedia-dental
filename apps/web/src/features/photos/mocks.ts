@@ -1,7 +1,8 @@
 import { http, HttpResponse, delay } from "msw";
-import { CONSENTED_PHOTO_TYPES, UPLOAD_RULES, UploadPhotoInput, choiceDeclined, isPdf, rolesCan, uploadProblem, type ClinicalPhoto, type PhotoType } from "@pedia/shared";
+import { CONSENTED_PHOTO_TYPES, UPLOAD_RULES, UploadPhotoInput, choiceDeclined, photoFileName, rolesCan, uploadProblem, type ClinicalPhoto, type PhotoType } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { inScope, sessionOf } from "@/mocks/access";
+import { seedFileOf } from "@pedia/seed";
 import { getBlob, putBlob } from "@/mocks/blob-store";
 import { currentClinicId, db, persist } from "@/mocks/db";
 
@@ -77,16 +78,16 @@ export const photoHandlers = [
     if (photo && photo.uploadedBy !== "parent" && !inScope(sessionOf(request), "clinical.view", photo.patientId)) {
       return new HttpResponse("Photo not found", { status: 404 }); // a parent can't open clinical imaging
     }
-    const blob = photo && (await getBlob(photo.id));
+    // A seeded photo's bytes come from @pedia/seed, so "Reset demo data" (which clears the blob store) never loses them.
+    const seeded = photo && seedFileOf(photo);
+    const blob = photo && ((await getBlob(photo.id)) ?? (seeded && new Blob([seeded.slice()], { type: photo.contentType })));
     if (!photo || !blob) return new HttpResponse("Photo not found", { status: 404 });
-    // A readable name if saved, never the record id: "mendoza-bea-intraoral-74-2026-10-02.jpg".
-    const patient = db.patients.find((p) => p.id === photo.patientId);
-    const name = [patient?.lastName, patient?.firstName, photo.type, photo.tooth, photo.takenOn]
-      .filter(Boolean)
-      .join("-")
-      .replace(/[^\w.-]+/g, "-")
-      .toLowerCase();
-    const ext = isPdf(photo.contentType) ? "pdf" : "jpg";
-    return new HttpResponse(blob, { headers: { "Content-Type": photo.contentType, "Content-Disposition": `inline; filename="${name}.${ext}"` } });
+    // A readable name if saved, never the record id (photoFileName, shared with the API).
+    const patient = db.patients.find((p) => p.id === photo.patientId) ?? { lastName: "", firstName: "" };
+    // ?download=1: saved rather than opened (FileCard's Download). The API's 5-minute link carries the same disposition.
+    const disposition = new URL(request.url).searchParams.get("download") === "1" ? "attachment" : "inline";
+    return new HttpResponse(blob, {
+      headers: { "Content-Type": photo.contentType, "Content-Disposition": `${disposition}; filename="${photoFileName(patient, photo)}"` },
+    });
   }),
 ];

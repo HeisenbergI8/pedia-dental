@@ -1,5 +1,7 @@
-/** Where a clinic's files are grouped. B4: a child's own photo. B10 adds "photos" and "documents"; B12's sign-up files need a platform area. */
-export const STORAGE_AREAS = ["branding", "patients"] as const;
+import type { Readable } from "node:stream";
+
+/** Where a clinic's files are grouped. B4: a child's own photo; B10: clinical photos (documents store no file, decision 6). B12's sign-up files need a platform area. */
+export const STORAGE_AREAS = ["branding", "patients", "photos"] as const;
 export type StorageArea = (typeof STORAGE_AREAS)[number];
 
 /** Extension → content type. A key's extension decides how its file is served; no other extension is stored. */
@@ -23,14 +25,22 @@ export function parseKey(key: string): { clinicId: string; area: string; name: s
   return { clinicId: match[1]!, area: match[2]!, name: match[3]!, ext: match[4] as FileExtension };
 }
 
+/** What a driver needs to store a file: S3 wants the length up front, and the type is served back. */
+export type PutInfo = { contentType: string; bytes: number };
+/** A private link's terms (E2). `fileName` is already safe for a header (photoFileName). */
+export type LinkOptions = { contentType: string; fileName: string; download: boolean; expiresInSeconds: number };
+
 /**
  * Where bytes live (CONVENTIONS → Side effects: files go to object storage). Drivers know nothing of clinics:
- * StorageService builds and checks every key. LocalDiskStorage now; B10's S3/R2 driver adds presigned URLs to this class.
+ * StorageService builds and checks every key. LocalDiskStorage (development, tests, one-server demos) and S3FileStorage (B10).
  */
 export abstract class FileStorage {
-  abstract put(key: string, body: Buffer): Promise<void>;
-  /** Undefined when there is no such file. */
+  /** A Buffer for small files from memory (the logo); a Readable for a checked upload's temp file (E1). */
+  abstract put(key: string, body: Buffer | Readable, info: PutInfo): Promise<void>;
+  /** Undefined when there is no such file. Only for the logo, which the API serves itself (E3); everything else is a link. */
   abstract get(key: string): Promise<Buffer | undefined>;
+  /** A private URL that serves the file for `expiresInSeconds`. Doesn't check that the file exists. */
+  abstract link(key: string, options: LinkOptions): Promise<string>;
   /** Succeeds when there is no such file. */
   abstract delete(key: string): Promise<void>;
 }

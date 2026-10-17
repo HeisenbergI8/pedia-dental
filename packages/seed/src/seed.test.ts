@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { differenceInYears, format, parseISO } from "date-fns";
 import {
+  ClinicalPhoto,
+  PatientDocument,
   PriceList,
+  choiceDeclined,
+  isMoneyIn,
   Signup,
   Subscription,
   TIER_LIMITS,
@@ -20,6 +24,7 @@ import {
 } from "@pedia/shared";
 import { seedPlatform } from "./platform";
 import { seed } from "./seed";
+import { seedFileOf } from "./seed-files";
 
 const today = format(new Date(), "yyyy-MM-dd");
 const db = seed();
@@ -192,5 +197,39 @@ describe("demo subscriptions (billing #34, S11)", () => {
     }
     const numbers = p.subscriptions.flatMap((s) => s.payments.map((x) => x.invoiceNo));
     expect(numbers).toEqual(numbers.map((_, i) => primolarInvoiceNo(i + 1)));
+  });
+});
+
+describe("photos and documents (B10)", () => {
+  const child = db.patients.find((p) => p.id === db.photos[0]?.patientId)!;
+
+  it("gives the example child four photos with real files and up to two issued documents", () => {
+    expect(db.photos.map((p) => p.id)).toEqual(["photo_seed_1", "photo_seed_2", "photo_seed_3", "photo_seed_4"]);
+    expect(db.documents.length).toBeGreaterThanOrEqual(1);
+    expect(db.documents.every((d) => d.id.startsWith("doc_seed_") && d.patientId === child.id)).toBe(true);
+    for (const p of db.photos) {
+      expect(ClinicalPhoto.safeParse(p).success).toBe(true);
+      if (p.visitId) expect(db.visits.find((v) => v.id === p.visitId)).toMatchObject({ patientId: child.id, status: "completed" });
+      const bytes = seedFileOf(p)!;
+      expect(p.contentType === "application/pdf" ? new TextDecoder().decode(bytes.slice(0, 5)) : [...bytes.slice(0, 4)]).toEqual(
+        p.contentType === "application/pdf" ? "%PDF-" : [0x89, 0x50, 0x4e, 0x47],
+      );
+    }
+    for (const d of db.documents) expect(PatientDocument.safeParse(d).success).toBe(true);
+    const receipt = db.documents.find((d) => d.type === "receipt");
+    if (receipt) expect(isMoneyIn(db.payments.find((p) => p.id === receipt.sourceId && p.patientId === child.id)!)).toBe(true);
+  });
+
+  it("never seeds photos for a family that declined them, nor for the other clinics", () => {
+    expect(choiceDeclined(child, "photos")).toBe(false);
+    const { tenants } = seedPlatform();
+    expect([tenants["clinic_ngiti"]!.photos, tenants["clinic_ipin"]!.photos]).toEqual([[], []]);
+  });
+
+  it("is the same on every seed, apart from times that move with today", () => {
+    const strip = <T extends { createdAt: string }>(xs: T[]) => xs.map(({ createdAt: _, ...x }) => x);
+    const again = seed();
+    expect(strip(again.photos)).toEqual(strip(db.photos));
+    expect(strip(again.documents)).toEqual(strip(db.documents));
   });
 });
