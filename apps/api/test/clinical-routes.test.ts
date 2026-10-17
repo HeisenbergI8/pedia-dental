@@ -1,5 +1,6 @@
 import type { INestApplication } from "@nestjs/common";
 import request from "supertest";
+import { LINK_GONE } from "../src/storage/local-files.controller";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApp } from "./support/test-app";
 
@@ -72,6 +73,11 @@ describe("B5–B9's routes are served and guarded (no database)", () => {
     app = await createTestApp();
   });
   afterAll(() => app.close());
+
+  it("serves GET /files/:token without a session, and an unknown token is the link's own 404 (B10)", async () => {
+    const res = await request(app.getHttpServer()).get("/api/files/junk");
+    expect([res.status, res.text]).toEqual([404, LINK_GONE]);
+  });
 
   it.each([...B5_ROUTES, ...B6_ROUTES, ...B7_ROUTES, ...B8_ROUTES, ...B9_ROUTES])("%s %s answers 401 without a session", async (method, path) => {
     expect((await request(app.getHttpServer())[method](`/api${path}`)).status).toBe(401);

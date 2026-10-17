@@ -49,6 +49,10 @@ export const MODEL_SCOPE = {
   IdempotencyKey: "clinic",
   // B9: the message log. Clinic-level (a message speaks for the account, whichever branch).
   Message: "clinic",
+  // B10: clinical photos, the issued-documents log, and the ledger of stored files (E5).
+  ClinicalPhoto: "clinic",
+  PatientDocument: "clinic",
+  StoredFile: "clinic",
   // Platform: Primolar's own records
   ClinicAccount: "platform",
   Agreement: "platform",
@@ -78,4 +82,6 @@ export const APPEND_ONLY: ReadonlySet<string> = new Set<Prisma.ModelName>([
   "ChartEntry",
   // B8: payments. A refund or a returned credit is a new row.
   "Payment",
+  // B10: photos are part of the medical record (decision 5); an issued document is a fact (decision 6).
+  "ClinicalPhoto", "PatientDocument",
 ]);

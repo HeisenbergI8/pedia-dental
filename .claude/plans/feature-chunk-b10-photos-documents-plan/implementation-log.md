@@ -73,3 +73,13 @@ before go-live to confirm a cross-origin 302 renders.
 **Deviations from plan:** the seeded bytes go into a `Blob` as `seeded.slice()` (TS's `BlobPart` refuses
 `Uint8Array<ArrayBufferLike>`). `seed.test.ts`'s first-patient assertions unchanged (faker order intact).
 **Gate:** `pnpm run check` exit 0 (shared 209, seed 25, web 360, api 345).
+
+## Phase 3: Tables, streaming put, links and the ledger — 2026-10-17
+
+**Steps completed:** 3.1, 3.2, 3.3, 3.4.
+**Files changed:** `apps/api/prisma/schema.prisma`, `migrations/20261017105005_b10_photos_documents/`, `src/prisma/{model-scope,tenant-scope.test}.ts`,
+`src/storage/{storage,local-disk.storage,storage.service,storage.module,storage.test}.ts`, `local-links{,.test}.ts` and `local-files.controller.ts` (new),
+`src/auth/access-rules{,.test}.ts`, `src/app.module.ts`, `test/clinical-routes.test.ts`.
+**Deviations from plan:** `tenant-scope.test.ts` also checks the new Prisma enums against the shared ones (as B9 did).
+`storage.test.ts`'s fake ledger scopes by the request's clinic, so `usedBytes` per clinic is tested at unit level too.
+**Gate:** `pnpm run check` exit 0 (api 353) · `test:int` clinic-branding, patient-photo, tenancy: 18 passed.
