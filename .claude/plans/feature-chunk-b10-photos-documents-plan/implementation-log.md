@@ -131,3 +131,22 @@ The tests use a pulpotomy-free extraction note (`teeth`, `reason`) per the seede
 **Files changed:** `apps/api/src/seed/seed-database.ts`, `prisma/seed.ts`, `test/int/seed.int.test.ts`.
 **Deviations from plan:** none (the new seed case reseeds with a `LocalDiskStorage`, then without one).
 **Gate:** `pnpm run check` exit 0 · `pnpm --filter api test:int` 41 files, 460 passed.
+
+## Phase 9: Cut-over — 2026-10-17
+
+**Steps completed:** 9.1, 9.2, 9.3.
+**Files changed:** `apps/web/src/mocks/{passthrough,passthrough.test}.ts`, `apps/web/e2e/api-photos-documents.spec.ts` (new),
+`CONVENTIONS.md`, `apps/api/CONVENTIONS.md`, `apps/api/CHUNKS.md`.
+**Deviations from plan:** the spec signs in as the admin, not the dentist (the dentist's email is at two clinics, so
+sign-in stops at a clinic picker). Inside the page, MSW's service worker follows the 302 itself, so the page sees the
+`<img>`'s final 200; the 302 is asserted through Next's proxy with `page.request` (`maxRedirects: 0`), which also proves
+the proxy passes a 302 (plan Question 6, local driver). Setup writes, the parent upload, the documents issue and the
+prescription refusal go through `page.request`; the photo uploads, the PDF Open/Download, the declined family's words,
+the documents page and the image rendering go through the UI.
+**E2E:** fresh database `pedia_dental_e2e_b10`, seeded with `STORAGE_DIR=var/e2e-b10` (13 files written by `db:seed`
+through the local driver), API on 4150 with `STORAGE_LINK_SECRET`, web on 3190 in `hybrid`. Run 1: 6 passed. Run 2 on the
+same database: 6 passed; `api-patients.spec.ts` (the avatar now through a 302): 5 passed. **Restart (done-when):** the
+container restarted (my process-stop command matched the session's own parent; nothing in the tree was lost); on a
+fresh API process the photo uploaded before it (`hpypy39…`) answered 302 then 200 `image/jpeg` (762 bytes), and run 3
+passed 6. Servers then stopped by their own process trees; `tsconfig.json` reverted; the temporary config deleted.
+**Gate:** `pnpm run check` exit 0.

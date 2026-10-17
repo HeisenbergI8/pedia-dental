@@ -72,8 +72,8 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "GET", path: "/patients/:id/chart" },
   { method: "POST", path: "/patients/:id/chart" },
   { method: "POST", path: "/patients/:id/chart/batch" },
-  // B6: notes, growth and the treatment plan (NotesController, GrowthController, PlanController). MSW's
-  // documents still read their own notes and plan items until B10 (B6 decision 2).
+  // B6: notes, growth and the treatment plan (NotesController, GrowthController, PlanController). Documents are the
+  // API's too since B10.
   { method: "GET", path: "/patients/:id/notes" },
   { method: "POST", path: "/patients/:id/notes" },
   { method: "PUT", path: "/notes/:id" },
@@ -97,7 +97,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "GET", path: "/due-items" },
   { method: "GET", path: "/reports/today" },
   // B8: bills, payments, deposits, credit, voids, the day's collections and the financial dashboard (BillingController,
-  // CollectionsController, ReportsController). Receipts and statements as documents stay on MSW until B10.
+  // CollectionsController, ReportsController). Receipts are logged by the API's documents since B10.
   { method: "GET", path: "/patients/:id/invoices" },
   { method: "POST", path: "/patients/:id/invoices" },
   { method: "POST", path: "/invoices/:id/void" },
@@ -112,6 +112,16 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "GET", path: "/messages" },
   { method: "POST", path: "/due-items/:id/message" },
   { method: "POST", path: "/patients/:id/birthday-greeting" },
+  // B10: clinical photos and parents' documents (PhotosController), the issued-documents log (DocumentsController), and
+  // the local storage driver's 5-minute file links (LocalFilesController: API-only, public, signed). A file read
+  // answers a 302 to a link; a new tab opening /api/files/<token> must reach the API, not MSW's gate.
+  { method: "GET", path: "/patients/:id/photos" },
+  { method: "POST", path: "/patients/:id/photos" },
+  { method: "GET", path: "/photos/:id/file" },
+  { method: "GET", path: "/documents" },
+  { method: "GET", path: "/patients/:id/documents" },
+  { method: "POST", path: "/patients/:id/documents" },
+  { method: "GET", path: "/files/:token" },
 ];
 
 export const servedBy = (routes: readonly ApiRoute[], method: string, path: string) =>

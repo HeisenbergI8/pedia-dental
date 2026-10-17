@@ -13,7 +13,7 @@ describe("which routes the API serves", () => {
     expect(servedBy(routes, "POST", "/branches")).toBe(false);
     expect(servedBy(routes, "GET", "/branches/b1")).toBe(false);
   });
-  it("serves B2's sign-in, B3's clinic setup, B4's patients, B5's chart, B6's clinical record, B7's schedule, B8's billing and B9's messages from the API, and their mocked neighbours from MSW", () => {
+  it("serves B2's sign-in, B3's clinic setup, B4's patients, B5's chart, B6's clinical record, B7's schedule, B8's billing, B9's messages and B10's photos and documents from the API, and their mocked neighbours from MSW", () => {
     const api = (method: string, path: string) => servedBy(API_ROUTES, method, path);
     for (const path of ["/auth/login", "/auth/logout", "/auth/switch", "/auth/password", "/auth/acknowledgement", "/operator/auth/login"]) {
       expect(api("POST", path), path).toBe(true);
@@ -69,12 +69,19 @@ describe("which routes the API serves", () => {
     const b9 = [["GET", "/messages"], ["POST", "/due-items/d1/message"], ["POST", "/patients/p1/birthday-greeting"]] as const;
     for (const [method, path] of b9) expect(api(method, path), `${method} ${path}`).toBe(true);
     expect([api("PUT", "/messages"), api("GET", "/due-items/d1/message")]).toEqual([false, false]); // exact method
-    expect(API_ROUTES).toHaveLength(14 + b3.length + b4.length + b5.length + b6.length + b7.length + b8.length + b9.length);
-    // Same prefixes, other chunks (B12, B13, B10): still MSW's. DELETE /notes/:id isn't a route (exact method).
-    expect([api("GET", "/clinic/subscription"), api("POST", "/patients/p1/exports"), api("POST", "/patients/p1/documents"), api("DELETE", "/notes/n1")]).toEqual([false, false, false, false]);
-    expect([api("GET", "/documents"), api("POST", "/operator/accounts/a1/subscription/payments")]).toEqual([false, false]);
+    // B10: photos, the documents log and the local driver's file links.
+    const b10 = [
+      ["GET", "/patients/p1/photos"], ["POST", "/patients/p1/photos"], ["GET", "/photos/ph1/file"], ["GET", "/documents"],
+      ["GET", "/patients/p1/documents"], ["POST", "/patients/p1/documents"], ["GET", "/files/abc.def"],
+    ] as const;
+    for (const [method, path] of b10) expect(api(method, path), `${method} ${path}`).toBe(true);
+    expect([api("POST", "/files/x"), api("DELETE", "/photos/ph1")]).toEqual([false, false]); // exact method
+    expect(API_ROUTES).toHaveLength(14 + b3.length + b4.length + b5.length + b6.length + b7.length + b8.length + b9.length + b10.length);
+    // Same prefixes, other chunks (B12, B13): still MSW's. DELETE /notes/:id isn't a route (exact method).
+    expect([api("GET", "/clinic/subscription"), api("POST", "/patients/p1/exports"), api("DELETE", "/notes/n1")]).toEqual([false, false, false]);
+    expect(api("POST", "/operator/accounts/a1/subscription/payments")).toBe(false);
     expect(api("DELETE", "/appointments/a1")).toBe(false);
-    expect([api("GET", "/operator/accounts"), api("GET", "/patients/p1/photos"), api("DELETE", "/branches/b1")]).toEqual([false, false, false]);
+    expect([api("GET", "/operator/accounts"), api("DELETE", "/branches/b1")]).toEqual([false, false]);
   });
 });
 
