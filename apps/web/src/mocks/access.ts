@@ -170,6 +170,10 @@ const RULES: Rule[] = [
   { method: "GET", path: "/patients/:id/photo", permission: "patients.view", owner: byId, audit: "Patient photo" },
   // AuditAction has no "delete": removing the photo changes the profile.
   { method: "DELETE", path: "/patients/:id/photo", permission: "patients.write", audit: "Patient photo", action: "update" },
+  // B11: portal invitations (decisions 2, 16–18): front desk, the Owner and admins. Parents hold nothing here.
+  { method: "GET", path: "/patients/:id/portal-access", permission: "portal.manage", audit: "Portal access" },
+  { method: "POST", path: "/patients/:id/guardians/:guardianId/portal-invite", permission: "portal.manage", audit: "Portal invitation" },
+  { method: "POST", path: "/patients/:id/guardians/:guardianId/portal-off", permission: "portal.manage", audit: "Portal access (turned off)", action: "update" },
   // Clinical records
   { method: "GET", path: "/patients/:id/visits", permission: "clinical.view", audit: "Visits" },
   { method: "POST", path: "/patients/:id/visits", permission: "clinical.write", audit: "Visit" },
@@ -234,7 +238,7 @@ const RULES: Rule[] = [
 ];
 
 /** For the separation test (mocks/operator.test.ts): every clinic route, which an operator token must never pass. */
-export const ACCESS_RULES: readonly Pick<Rule, "method" | "path">[] = RULES;
+export const ACCESS_RULES: readonly Pick<Rule, "method" | "path" | "permission" | "owner">[] = RULES;
 
 /**
  * Every operator route. One question only, "is this a Primolar operator?": the operator holds no clinic Permission

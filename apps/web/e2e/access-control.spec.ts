@@ -19,7 +19,7 @@ const NAMES = {
 } as const;
 
 const NO_ACCESS = "You don't have access to this page";
-const SIGN_IN_ERROR = "That email and password don't match a demo account";
+const SIGN_IN_ERROR = "That mobile number or email and password don't match a demo account";
 const NOTICE_HEADING = "Bulilit Smiles Pediatric Dental's privacy notice";
 
 // ---------- helpers (UI only) ----------

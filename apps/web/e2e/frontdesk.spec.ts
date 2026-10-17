@@ -499,7 +499,7 @@ test.describe("happy paths", () => {
 test.describe("failed paths", () => {
   test("front desk mistypes the password and is told so", async ({ page }) => {
     await signIn(page, USERS.frontdesk, "wrong-pass");
-    await expect(page.getByRole("alert").filter({ hasText: "That email and password don't match a demo account" })).toBeVisible();
+    await expect(page.getByRole("alert").filter({ hasText: "That mobile number or email and password don't match a demo account" })).toBeVisible();
     await expect(page).toHaveURL(/\/login$/);
     // The email stays filled in so she only retypes the password.
     await expect(page.getByRole("region", { name: "Sign in" }).getByLabel("Email")).toHaveValue(USERS.frontdesk);

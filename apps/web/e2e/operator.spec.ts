@@ -9,7 +9,7 @@ import { DEMO_PASSWORD, USERS, expectSignedIn, signIn, signInOperator } from "./
 // ---------- helpers (own to this spec) ----------
 
 const CONSOLE_ERROR = "That email and password don't match a Primolar operator";
-const CLINIC_ERROR = "That email and password don't match a demo account";
+const CLINIC_ERROR = "That mobile number or email and password don't match a demo account";
 const SEEDED_PATIENT = "Calista Langworth"; // a Bulilit patient: the operator must never see her
 
 /** Signs in to the console and waits for the clinic list. */

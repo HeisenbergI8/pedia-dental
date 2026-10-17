@@ -44,6 +44,7 @@ import {
   isClosedWeekday,
   isMoneyIn,
   pesos,
+  permissionScopeFor,
   planProgress,
   reminderSendAt,
   surfacesFor,
@@ -51,6 +52,7 @@ import {
   type RegisterPatientInput,
 } from "@pedia/shared";
 import { api, ApiError } from "@/lib/api-client";
+import { ACCESS_RULES } from "./access";
 import { db } from "./db";
 import { handlers } from "./handlers";
 
@@ -1585,5 +1587,50 @@ describe("parent portal", () => {
     const pdf = await api("/patients/patient_sibling/photos", ClinicalPhoto, { method: "POST", body });
     expect(pdf).toMatchObject({ contentType: "application/pdf", uploadedBy: "parent" });
     signIn(ADMIN);
+  });
+
+  it("refuses another family's child on every route a parent can pass, swept from RULES (B11 E12)", async () => {
+    const { mine, other } = await signInAsFamily();
+    const ours = new Set(mine.map((p) => p.id));
+    const parentRoutes = ACCESS_RULES.filter((r) => [r.permission].flat().some((p) => permissionScopeFor(["parent"], p) === "own"));
+    // A route with no owner is staff-only for a parent (the whole calendar): refused outright, whoever it names.
+    for (const r of parentRoutes.filter((x) => !x.owner)) {
+      await expect(api(r.path, z.unknown(), r.method === "GET" ? undefined : send(r.method, {})), `${r.method} ${r.path}`).rejects.toMatchObject({
+        status: 403,
+        message: "You don't have access to this",
+      });
+    }
+    // A record route needs another family's record; a new one without a fixture here fails the test, not passes it.
+    const recordOf: Record<string, string | undefined> = {
+      "/appointments/:id/status": db.appointments.find((a) => !ours.has(a.patientId))?.id,
+      "/photos/:id/file": db.photos.find((p) => !ours.has(p.patientId))?.id,
+    };
+    for (const r of parentRoutes.filter((x) => x.owner && x.owner !== "filtered")) {
+      const id = r.path.startsWith("/patients/:id") ? other.id : r.path === "/messages" ? "" : recordOf[r.path];
+      expect(id, `${r.method} ${r.path}: add a fixture`).toBeDefined();
+      const path = r.path === "/messages" ? `/messages?patientId=${other.id}` : r.path.replace(":id", id!);
+      await expect(api(path, z.unknown(), r.method === "GET" ? undefined : send(r.method, {})), `${r.method} ${r.path}`).rejects.toMatchObject({
+        status: 403,
+        message: "This isn't one of your children's records",
+      });
+    }
+  });
+
+  it("drops a guardian taken off their only child from the logins at once (B11 decision 10)", async () => {
+    signIn(ADMIN);
+    const kid = await api("/patients", Patient, send("POST", { ...newPatient, firstName: "Lone", guardians: [{ ...newPatient.guardians[0]!, id: "g_lone", phone: "09170000021" }], privacyConsent: { ...newPatient.privacyConsent, guardianId: "g_lone" } }));
+    db.portalAccounts.push({ clinicId: "clinic_demo", guardianId: "g_lone", state: "active", links: [] });
+    signIn("demo.clinic_demo.guardian.g_lone");
+    expect((await api("/patients", z.array(Patient))).map((p) => p.id)).toEqual([kid.id]);
+    db.patients.find((p) => p.id === kid.id)!.guardians[0]!.id = "g_someone_else"; // what a PUT replacing the guardian leaves
+    await expect(api("/patients", z.array(Patient))).rejects.toMatchObject({ status: 401 });
+  });
+
+  it("refuses a contact edit onto a number another parent signs in with (B11 decision 14)", async () => {
+    signIn(ADMIN);
+    const sibling = db.patients.find((p) => p.id === "patient_sibling")!;
+    const kid = await api("/patients", Patient, send("POST", { ...newPatient, firstName: "Clash", guardians: [{ ...newPatient.guardians[0]!, id: "g_clash", phone: "09170000022" }], privacyConsent: { ...newPatient.privacyConsent, guardianId: "g_clash" } }));
+    db.portalAccounts.push({ clinicId: "clinic_demo", guardianId: "g_clash", state: "active", links: [] });
+    await expect(api(`/patients/${kid.id}`, Patient, send("PATCH", { phone: sibling.guardians[0]!.phone, nickname: "", tags: [], alerts: [] }))).rejects.toMatchObject({ status: 409 });
   });
 });

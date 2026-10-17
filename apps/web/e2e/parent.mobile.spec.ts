@@ -272,7 +272,7 @@ test.describe("happy paths", () => {
 test.describe("failed paths", () => {
   test("parent types the wrong password and is told plainly", async ({ page }) => {
     await signIn(page, USERS.parent, "pass1234");
-    await expect(page.getByRole("alert").filter({ hasText: "That email and password don't match a demo account" })).toBeVisible();
+    await expect(page.getByRole("alert").filter({ hasText: "That mobile number or email and password don't match a demo account" })).toBeVisible();
     await expect(page).toHaveURL(/\/login$/);
   });
 

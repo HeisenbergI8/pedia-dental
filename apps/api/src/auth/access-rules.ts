@@ -48,6 +48,10 @@ export const CLINIC_RULES: readonly ClinicRule[] = [
   { method: "PUT", path: "/patients/:id/photo", permission: "patients.write" },
   { method: "GET", path: "/patients/:id/photo", permission: "patients.view", owner: "id" },
   { method: "DELETE", path: "/patients/:id/photo", permission: "patients.write" },
+  // B11: portal invitations (decisions 2, 16–18): front desk, the Owner and admins. Parents hold nothing here.
+  { method: "GET", path: "/patients/:id/portal-access", permission: "portal.manage" },
+  { method: "POST", path: "/patients/:id/guardians/:guardianId/portal-invite", permission: "portal.manage" },
+  { method: "POST", path: "/patients/:id/guardians/:guardianId/portal-off", permission: "portal.manage" },
   { method: "GET", path: "/patients/:id/visits", permission: "clinical.view" },
   { method: "POST", path: "/patients/:id/visits", permission: "clinical.write" },
   { method: "POST", path: "/visits/:id/complete", permission: "clinical.write", owner: "record" },

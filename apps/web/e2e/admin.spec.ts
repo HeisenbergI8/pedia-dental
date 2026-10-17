@@ -315,7 +315,7 @@ test.describe("happy paths", () => {
 test.describe("failed paths", () => {
   test("a wrong password keeps admin on the sign-in page with a plain message", async ({ page }) => {
     await signIn(page, USERS.admin, "pass1234");
-    await expect(page.getByText("That email and password don't match a demo account")).toBeVisible();
+    await expect(page.getByText("That mobile number or email and password don't match a demo account")).toBeVisible();
     await expect(page).toHaveURL(/\/login$/);
   });
 
