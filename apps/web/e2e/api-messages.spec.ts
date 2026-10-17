@@ -8,7 +8,7 @@ import { USERS, signIn } from "./support/users";
  *   DATABASE_URL=… PORT=4130 DEMO_LOGINS=true COOKIE_SECURE=false BACKGROUND_WORK=true OUTBOX_POLL_MS=500 pnpm dev:api
  *   NEXT_DIST_DIR=.next-hybrid NEXT_PUBLIC_API_MOCKING=hybrid API_PROXY_TARGET=http://localhost:4130 pnpm exec next dev --port 3180
  * No SEMAPHORE_API_KEY: the log driver sends. Texts outside 8 AM–8 PM Manila stay "Queued", so checks accept either.
- * Re-runnable against one database: every run registers its own children. About 5 sign-ins a run.
+ * Re-runnable against one database: every run registers its own children. 7 sign-ins a run.
  */
 test.skip(!process.env.E2E_API, "Needs apps/api and a hybrid web server: E2E_API=1 E2E_BASE_URL=…");
 test.describe.configure({ mode: "serial", timeout: 180_000 });

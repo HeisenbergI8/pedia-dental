@@ -39,7 +39,8 @@ export const lastVisitOn = (...args: Parameters<typeof visitDays>): string | und
 export function hasNoContact(patientId: string, messages: Pick<Message, "patientId" | "status" | "sendAt">[]): boolean {
   const tried = messages
     .filter((m) => m.patientId === patientId && (m.status === "sent" || m.status === "failed"))
-    .sort((a, b) => a.sendAt.localeCompare(b.sendAt));
+    // Same send time: a sent text wins (the family was reached), so the demo and the API agree whatever the order.
+    .sort((a, b) => a.sendAt.localeCompare(b.sendAt) || (a.status === b.status ? 0 : a.status === "sent" ? 1 : -1));
   return tried.at(-1)?.status === "failed";
 }
 

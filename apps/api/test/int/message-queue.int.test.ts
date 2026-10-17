@@ -121,6 +121,21 @@ describe("the message queue on MySQL", () => {
     expect((await inClinic(DEMO_CLINIC_ID, () => queue.list({ patientId: child.id }))).length).toBe(3);
   });
 
+  it("reads a child's last tried text, a sent one winning a tie at one send time (hasNoContact's rule)", async () => {
+    const base = { clinicId: DEMO_CLINIC_ID, patientId: child.id, kind: "recall" as const, to: "09171234567", recipientName: "Rosa", body: "Hi", createdAt: clock.now() };
+    const tie = at("2026-10-19T10:00:00");
+    await inClinic(DEMO_CLINIC_ID, () =>
+      prisma.message.createMany({
+        data: [
+          { ...base, id: "msg_tie_a", status: "sent", sendAt: tie, sentAt: tie },
+          { ...base, id: "msg_tie_z", status: "failed", sendAt: tie, failureReason: "No phone number" }, // the higher id
+          { ...base, id: "msg_tie_older", status: "failed", sendAt: at("2026-10-18T10:00:00"), failureReason: "No phone number" },
+        ],
+      }),
+    );
+    expect(await inClinic(DEMO_CLINIC_ID, () => queue.lastTried([child.id]))).toEqual([{ patientId: child.id, status: "sent", sendAt: tie.toISOString() }]);
+  });
+
   it("counts a month's sent texts and parts by Manila time", async () => {
     await inTx((tx) => queue.queueBooking(tx, booking, child));
     const [first, second] = await rows();

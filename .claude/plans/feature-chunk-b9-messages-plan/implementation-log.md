@@ -151,3 +151,24 @@ the first value (`URLSearchParams.get`), so `list` now reads the first value too
 listed. **Tester D2 (low):** a `patientId` of 192+ characters answered 500 (P2000); it now matches nothing (`[]`, no
 audit row). New case in `messages.int` (13 passed). The same long-id 500 on B7's `GET /patients/:id/appointments` is
 pre-existing and out of B9's scope.
+
+**Auditor (79/100), fixed:** (1) the same-transaction rule now has a test (`appointments.int`: an outbox write fails
+mid-booking → no appointment, no texts; red with the texts moved to a second transaction). (2) `verification.md`'s
+status filled and its mutation table corrected. (5) The spec signs in 7 times, not 5 (CONVENTIONS and the spec header).
+(7) `today.int`'s greeting tick no longer flakes across 8 AM / 8 PM. (8) The scheduled-jobs row lists `messages.jobs.ts`.
+The birthday "declined" 409 now checks its words.
+**Recorded, not changed:** (3) Semaphore's contract stays unconfirmed (go-live step, in CONVENTIONS). (4) Decision 15 was
+moot: dentists don't hold `messages.view` (the user is told). (6) Deviations not logged before: the plan's 8 e2e tests are 7
+(tests 3 and 4 merged); the recall test and the declined-family check read `/api/messages` through `page.request`, not the
+page; `notes.int` uses a pulpotomy note (care text `post_pulpotomy`) rather than an extraction; `message-sending.int` case 1
+queues through `queueBooking`, not `book` (the new `appointments.int` case covers `book`'s transaction); the recall route's
+"no primary guardian" 409 isn't reachable over HTTP (registration requires one primary guardian); the withdraw case has no
+`failed` row. `queue` creates the row without `...clinicData()`: `clinicId` comes from `ownClinicId()` and the tenant
+extension checks it.
+
+**Found while re-running the full suite:** `patients-read`'s parity case failed at about 16:40 Manila. A seeded child had a
+failed and a sent text at one `sendAt` (the seed is built from the clock, so ties come and go); the mock broke the tie
+by array order, the API by id. The plan's "seeded texts never share a sendAt" was wrong. Fix: one rule in the shared
+`hasNoContact` (at one send time a sent text wins: the family was reached) and the same order in `lastTried`'s SQL;
+cases in `patient-list.test.ts`, `patient-standing.test.ts` and `message-queue.int` (controlled ids; red without the SQL
+rule). **Gate:** `pnpm run check` exit 0; `pnpm --filter api test:int` 39 files, 436 passed.

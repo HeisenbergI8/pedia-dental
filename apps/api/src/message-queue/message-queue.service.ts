@@ -89,14 +89,15 @@ export class MessageQueueService {
   }
 
   /**
-   * Each patient's last text that went out or was tried (sent/failed), the only one `hasNoContact` looks at. One query:
-   * raw SQL for the window function, so it names the clinic itself (the tenant extension doesn't see raw SQL).
+   * Each patient's last text that went out or was tried (sent/failed), the only one `hasNoContact` looks at; at one send
+   * time a sent text wins, as `hasNoContact` breaks the tie. One query: raw SQL for the window function, so it names the
+   * clinic itself (the tenant extension doesn't see raw SQL).
    */
   async lastTried(patientIds: readonly string[]): Promise<Pick<Message, "patientId" | "status" | "sendAt">[]> {
     if (!patientIds.length) return [];
     const rows = await this.prisma.$queryRaw<{ patientId: string; status: "sent" | "failed"; sendAt: Date }[]>`
       SELECT patientId, status, sendAt FROM (
-        SELECT patientId, status, sendAt, ROW_NUMBER() OVER (PARTITION BY patientId ORDER BY sendAt DESC, id DESC) AS rn
+        SELECT patientId, status, sendAt, ROW_NUMBER() OVER (PARTITION BY patientId ORDER BY sendAt DESC, status = 'sent' DESC, id DESC) AS rn
         FROM Message
         WHERE clinicId = ${ownClinicId()} AND status IN ('sent', 'failed') AND patientId IN (${Prisma.join([...patientIds])})
       ) last WHERE rn = 1`;

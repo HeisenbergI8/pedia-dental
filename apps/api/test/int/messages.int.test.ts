@@ -155,7 +155,7 @@ describe("the birthday greeting (POST /patients/:id/birthday-greeting)", () => {
     await sayNo(declined);
     const desk = await as(FRONT_DESK);
     expect(await refused(call("post", "/patients/no_such_child/birthday-greeting", desk))).toEqual([404, "Patient not found"]);
-    expect((await refused(call("post", `/patients/${declined}/birthday-greeting`, desk)))[0]).toBe(409);
+    expect(await refused(call("post", `/patients/${declined}/birthday-greeting`, desk))).toEqual([409, "This family declined reminder messages. Change it under Privacy on the child's Overview."]);
     expect(await refused(call("post", `/patients/${notToday}/birthday-greeting`, desk))).toEqual([409, "It isn't Bea's birthday today"]);
     expect(await ok(call("post", `/patients/${id}/birthday-greeting`, desk), Message, 201)).toMatchObject({ kind: "birthday", status: "queued" });
     expect(await refused(call("post", `/patients/${id}/birthday-greeting`, desk))).toEqual([409, "Bea already has a birthday greeting this year"]);

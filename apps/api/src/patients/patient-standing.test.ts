@@ -29,6 +29,7 @@ describe("standingPage (patients/mocks.ts:114–151)", () => {
     expect(res.counts.needs_attention).toBe(1);
     const sent: Tried = { patientId: "p1", status: "sent", sendAt: "2026-10-12T01:00:00.000Z" };
     expect(page([kid("p1")], {}, [], {}, false, NO_BILLS, [failed, sent]).rows[0]!.flags.noContact).toBe(false);
+    expect(page([kid("p1")], {}, [], {}, false, NO_BILLS, [{ ...sent, sendAt: failed.sendAt }, failed]).rows[0]!.flags.noContact).toBe(false); // a tie: reached
   });
 
   it("flags a recall overdue or due this week, not one due this month", () => {

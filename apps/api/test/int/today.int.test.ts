@@ -124,8 +124,12 @@ describe("Today's greeting ticks (B9)", () => {
     await t.ok(t.call("post", `/patients/${greeted!.patientId}/birthday-greeting`, desk), Message, 201);
     const tick = async (patientId: string) => (await summary(desk)).birthdays.find((b) => b.patientId === patientId)!.greeting;
     expect(await tick(greeted!.patientId)).toBe("queued");
+    const inHours = () => new Date().getHours() >= 8 && new Date().getHours() < 20; // Manila: the process is pinned
+    const before = inHours();
     while ((await t.app.get(OutboxWorker).drain()) > 0);
-    expect(await tick(greeted!.patientId)).toBe(new Date().getHours() < 8 || new Date().getHours() >= 20 ? "queued" : "sent"); // sending hours
+    const after = await tick(greeted!.patientId);
+    if (before === inHours()) expect(after).toBe(before ? "sent" : "queued"); // a run crossing 8 AM or 8 PM checks only that it moved on
+    else expect(["queued", "sent"]).toContain(after);
     expect(await tick(other!.patientId)).toBeUndefined();
   });
 });

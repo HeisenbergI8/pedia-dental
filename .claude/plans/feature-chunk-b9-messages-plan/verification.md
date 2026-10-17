@@ -1,7 +1,12 @@
 # Verification: B9 (parent messages and real sending)
 
-**Status:** not run yet. The independent tester fills this in after Phase 9, in B8's shape: results with evidence, a
-mutation table run in a throwaway copy with its own `_test` database, findings, and what wasn't verified.
+**Status:** run 2026-10-17. The tester's live results and its two defects (D1, D2, both fixed in cda8e47) are appended
+at the end. The auditor scored the work 79/100 and ran 10 mutations (rows 1, 8, 10, 12, 13, 15–19): nine were caught.
+Row 1 (the booking's texts outside its transaction) survived until `appointments.int` gained "saves a booking and its
+texts together, or neither", which fails an outbox write mid-booking; with the texts moved to a second transaction it
+goes red. Row 2: the brute-force races never reached the window; `messages-races.int`'s deterministic lock case is the
+one that goes red. Rows 4 and 9 were run against `message-queue.int` and `outbox.int`. The table below is the plan's;
+these notes correct it.
 
 ## Checks to run
 

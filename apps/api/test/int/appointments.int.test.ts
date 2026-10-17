@@ -1,7 +1,8 @@
 import { DEMO_CLINIC_ID } from "@pedia/seed";
 import { Appointment, findConflict, reminderSendAt } from "@pedia/shared";
 import { z } from "zod";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { OutboxService } from "../../src/outbox/outbox.service";
 import { inClinic } from "./support/database";
 import { ADMIN, FRONT_DESK, NGITI_OWNER, clinicalApp, type Login } from "./clinical-support";
 
@@ -201,6 +202,21 @@ describe("appointments (apps/web handlers.test.ts → appointments)", () => {
       await t.ok(status(appt.id, { status: "no_show" }), Appointment);
       const after = await texts({ appointmentId: appt.id });
       expect(after.filter((m) => m.status === "queued").map((m) => m.kind)).toEqual(["missed_appointment"]);
+    });
+
+    it("saves a booking and its texts together, or neither (same transaction)", async () => {
+      const id = await t.register();
+      // The reminder's outbox row fails after the appointment and the confirmation were written.
+      const enqueue = t.app.get(OutboxService).enqueue.bind(t.app.get(OutboxService));
+      let n = 0;
+      const spy = vi.spyOn(t.app.get(OutboxService), "enqueue").mockImplementation(async (...args) => (++n === 2 ? Promise.reject(new Error("outbox down")) : enqueue(...args)));
+      try {
+        expect((await book(slot(id, { startsAt: at("2030-04-08", "09:00") }))).status).toBe(500);
+      } finally {
+        spy.mockRestore();
+      }
+      expect(await rows({ patientId: id })).toBe(0);
+      expect(await texts({ patientId: id })).toEqual([]);
     });
 
     it("queues nothing when a booking is refused", async () => {

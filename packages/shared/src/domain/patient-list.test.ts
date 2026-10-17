@@ -42,6 +42,9 @@ describe("no contact", () => {
   it("is the latest sent-or-failed message failing; queued and cancelled don't count", () => {
     expect(hasNoContact("p", [m("2026-09-01", "sent"), m("2026-09-05", "failed"), m("2026-09-09", "queued")])).toBe(true);
     expect(hasNoContact("p", [m("2026-09-05", "failed"), m("2026-09-06", "sent")])).toBe(false);
+    // One send time, both outcomes: reached, whichever came first in the list (the API reads the same rule).
+    expect(hasNoContact("p", [m("2026-09-05", "sent"), m("2026-09-05", "failed")])).toBe(false);
+    expect(hasNoContact("p", [m("2026-09-05", "failed"), m("2026-09-05", "sent")])).toBe(false);
     expect(hasNoContact("p", [])).toBe(false);
   });
 });
