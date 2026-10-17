@@ -65,3 +65,15 @@ Engineering decisions E1–E13 as the plan records them.
 **Files changed:** `apps/api/prisma/schema.prisma`, `apps/api/prisma/migrations/*_billing/migration.sql`, `apps/api/src/prisma/{model-scope,tenant-scope.test}.ts`, `apps/api/src/billing-records/{billing.rows,billing.rows.test}.ts`, `apps/api/src/billing/{billing.rules,billing.rules.test}.ts`, `apps/api/src/seed/seed-database.ts`, `apps/api/test/int/seed.int.test.ts`
 **Deviations from plan:** the migration is generated with `prisma migrate diff` (CONVENTIONS' route), not `migrate dev`. It has 5 tables and nothing touching earlier tables. The enum parity test gains `PaymentMethod`.
 **Gate:** `pnpm run check` exit 0; `test:int` 31 files, 296 passed + 3 todo.
+
+## Phase 5: Records, idempotency, receipts, sweep — 2026-10-17
+
+**Steps completed:** 5.1–5.4
+**Files changed:** `apps/api/src/billing-records/{billing-records.service,billing-records.module}.ts`, `apps/api/src/idempotency/{idempotency.service,idempotency.jobs,idempotency.module,idempotency.test}.ts` (all new), `apps/api/src/app.module.ts`, `apps/api/test/int/idempotency.int.test.ts` (new)
+**Deviations from plan:**
+- The two plan QUESTIONs are settled by tests. Raw SQL dates go in as UTC text (`utc()`), and the int test asserts no 8-hour shift. `isDuplicateKey` accepts P2002 or P2010-wrapping-1062, and case 10 pins it.
+- `createInvoice` lets Prisma's `cuid(2)` default make the id: the contract input has none.
+- `voidInvoice` uses `updateMany` (the tenant extension's scoped write) rather than `update`.
+- `IdempotencyModule` imports nothing: `JobsModule` is global.
+- Mutation: with the key claim removed, all 5 parallel-key rounds go red.
+**Gate:** `pnpm run check` exit 0; `test:int` with `idempotency.int.test.ts` 14/14.
