@@ -29,6 +29,7 @@ import { VisitsModule } from "./visits/visits.module";
 import { NotesModule } from "./notes/notes.module";
 import { OutboxModule } from "./outbox/outbox.module";
 import { StorageModule } from "./storage/storage.module";
+import { PhotosModule } from "./photos/photos.module";
 import { PrismaModule } from "./prisma/prisma.module";
 
 @Module({})
@@ -49,6 +50,7 @@ export class AppModule implements NestModule {
         ...(background ? [ScheduleModule.forRoot()] : []),
         OutboxModule,
         StorageModule,
+        PhotosModule,
         AuthModule,
         ClinicModule,
         NotesModule,

@@ -103,3 +103,13 @@ decides `tooLarge` from its own count (a file of exactly the limit passes, as th
 can't crowd out `file`. The patient photo GET uses `@Res()` without passthrough for the redirect. Mutation: no
 `dispose()` → the no-temp-file case red.
 **Gate:** `pnpm run check` exit 0 · `test:int test/int/patient-photo.int.test.ts` 9 passed.
+
+## Phase 6: PhotosModule — 2026-10-17
+
+**Steps completed:** 6.1, 6.2, 6.3.
+**Files changed:** `apps/api/src/photos/{photo-file,photo-file.test,photo.rows,photos.service,photos.controller,photos.module}.ts` (new), `src/app.module.ts`,
+`test/clinical-routes.test.ts` (3 photo routes), `test/int/support/files.ts` and `test/int/photos.int.test.ts` (new).
+**Deviations from plan:** `patientOf`/`fileLink` use `findFirst` (tenant-scoped like the rest). The file route redirects
+with `@Res()` (no passthrough). `patient-photo.int` keeps its own `open` helper (it also needs the clock); `files.ts`
+serves the photos file. Mutation: the in-transaction consent re-check removed → the E6 race case red.
+**Gate:** `pnpm run check` exit 0 · `test:int test/int/photos.int.test.ts` 12 passed.
