@@ -83,3 +83,12 @@ before go-live to confirm a cross-origin 302 renders.
 **Deviations from plan:** `tenant-scope.test.ts` also checks the new Prisma enums against the shared ones (as B9 did).
 `storage.test.ts`'s fake ledger scopes by the request's clinic, so `usedBytes` per clinic is tested at unit level too.
 **Gate:** `pnpm run check` exit 0 (api 353) · `test:int` clinic-branding, patient-photo, tenancy: 18 passed.
+
+## Phase 4: The S3 driver and its configuration — 2026-10-17
+
+**Steps completed:** 4.1, 4.2, 4.3.
+**Files changed:** `apps/api/package.json` (+ lockfile: `@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner` 3.1152.0, `busboy`, `@types/busboy`),
+`src/config/{env,env.test}.ts`, `.env.example`, `src/storage/{s3.storage,s3.storage.test,file-storage,file-storage.test}.ts` (new), `storage.module.ts`.
+**Deviations from plan:** versions written as `^3` like the repo's other majors. The env defaults test lists `S3_REGION`
+and `S3_FORCE_PATH_STYLE`.
+**Gate:** `pnpm run check` exit 0.

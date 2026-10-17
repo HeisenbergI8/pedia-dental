@@ -19,6 +19,17 @@ const Env = z.object({
   OUTBOX_POLL_MS: z.coerce.number().int().min(100).default(2000),
   // The local-disk storage driver's root, relative to the API's working directory (B10 adds S3/R2).
   STORAGE_DIR: z.string().min(1).default("var/storage"),
+  // B10 (E11): the S3-compatible driver. Unset S3_BUCKET: the local-disk driver under STORAGE_DIR.
+  S3_BUCKET: z.string().min(3).optional(),
+  S3_REGION: z.string().min(1).default("ap-southeast-1"),
+  // R2 or MinIO; unset for Amazon S3.
+  S3_ENDPOINT: z.url().optional(),
+  S3_FORCE_PATH_STYLE: flag().default(false),
+  // Both or neither; neither = the SDK's default chain (an IAM role in production). Checked by fileStorageOf.
+  S3_ACCESS_KEY_ID: z.string().min(1).optional(),
+  S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  // Signs the local driver's links. Unset: a random secret per process (links die with it; each open makes a new one).
+  STORAGE_LINK_SECRET: z.string().min(32, "STORAGE_LINK_SECRET must be at least 32 characters").optional(),
   // B9: real texts through Semaphore. Unset = the log driver, everywhere, production included (decision 11). Never logged.
   SEMAPHORE_API_KEY: z.string().min(1).optional(),
   // One shared sender name for every clinic (decision 3), approved on the Semaphore account first. Not chosen yet
