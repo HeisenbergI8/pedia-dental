@@ -65,6 +65,9 @@ const B10_ROUTES: [Method, string][] = [
   ["get", "/patients/p1/photos"],
   ["post", "/patients/p1/photos"],
   ["get", "/photos/ph1/file"],
+  ["get", "/documents"],
+  ["get", "/patients/p1/documents"],
+  ["post", "/patients/p1/documents"],
 ];
 
 /** B9's routes, the same promise. */

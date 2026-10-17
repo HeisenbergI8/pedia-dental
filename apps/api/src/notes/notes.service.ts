@@ -113,6 +113,13 @@ export class NotesService {
     });
   }
 
+  /** The procedure of a signed note of this patient (a post-op document's source, B10), or undefined. Two one-column reads. */
+  async signedProcedure(noteId: string, patientId: string): Promise<string | undefined> {
+    const note = await this.prisma.clinicalNote.findFirst({ where: { id: noteId, patientId, signedAt: { not: null } }, select: { templateId: true } });
+    if (!note) return undefined;
+    return (await this.prisma.noteTemplate.findFirst({ where: { id: note.templateId }, select: { procedure: true } }))?.procedure;
+  }
+
   /**
    * Every signed note of the clinic as the backfill reads it (E8): its template's procedure and its visit's day. Three
    * queries whatever the count (no N+1).

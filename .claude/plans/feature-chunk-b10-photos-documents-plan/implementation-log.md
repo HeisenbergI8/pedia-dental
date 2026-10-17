@@ -113,3 +113,21 @@ can't crowd out `file`. The patient photo GET uses `@Res()` without passthrough 
 with `@Res()` (no passthrough). `patient-photo.int` keeps its own `open` helper (it also needs the clock); `files.ts`
 serves the photos file. Mutation: the in-transaction consent re-check removed → the E6 race case red.
 **Gate:** `pnpm run check` exit 0 · `test:int test/int/photos.int.test.ts` 12 passed.
+
+## Phase 7: DocumentsModule — 2026-10-17
+
+**Steps completed:** 7.1, 7.2, 7.3.
+**Files changed:** `apps/api/src/documents/{documents.rules,documents.rules.test,document.rows,documents.service,documents.controller,documents.module}.ts` (new),
+`src/clinic/clinic.service.ts` (`staffRoles`), `src/notes/notes.service.ts` (`signedProcedure`), `src/app.module.ts`, `test/clinical-routes.test.ts`,
+`test/int/documents.int.test.ts` (new).
+**Deviations from plan:** case 7 (a read-only session still issues a document) isn't reachable: `readOnly` is set only
+for a suspended clinic's parents, who don't hold `documents.issue`; the guard's `exportRead` rule is unit-tested already.
+The tests use a pulpotomy-free extraction note (`teeth`, `reason`) per the seeded template, and Midazolam as the S2 drug.
+**Gate:** `pnpm run check` exit 0 · `test:int test/int/documents.int.test.ts` 8 passed (after Phase 8's seed).
+
+## Phase 8: The API seed — 2026-10-17
+
+**Steps completed:** 8.1, 8.2.
+**Files changed:** `apps/api/src/seed/seed-database.ts`, `prisma/seed.ts`, `test/int/seed.int.test.ts`.
+**Deviations from plan:** none (the new seed case reseeds with a `LocalDiskStorage`, then without one).
+**Gate:** `pnpm run check` exit 0 · `pnpm --filter api test:int` 41 files, 460 passed.

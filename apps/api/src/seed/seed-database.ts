@@ -1,4 +1,4 @@
-import { DEMO_PASSWORD, OPERATORS, allAccounts, demoAccounts, demoLogins, staffEmail, type Platform } from "@pedia/seed";
+import { DEMO_PASSWORD, OPERATORS, SEED_FILES, allAccounts, demoAccounts, demoLogins, staffEmail, type Platform, type SeedFileType } from "@pedia/seed";
 import { smsSegments } from "@pedia/shared";
 import { requestContext } from "../common/request-context";
 import type { Env } from "../config/env";
@@ -16,6 +16,9 @@ import { dueItemData } from "../recalls/due-item.rows";
 import { MESSAGE_SEND, messageData } from "../message-queue/message.rows";
 import { manilaDate } from "../common/clock";
 import { visitRow } from "../visits/visit.rows";
+import { photoData } from "../photos/photo.rows";
+import { documentData } from "../documents/document.rows";
+import { CONTENT_TYPES, clinicKey, type FileExtension, type FileStorage } from "../storage/storage";
 
 export class SeedRefused extends Error {
   override name = "SeedRefused";
@@ -39,7 +42,11 @@ const dateOnly = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
  * order. B4 adds patients, B5 their visits and chart entries, B6 notes, growth records and plan items; the rest arrive
  * with their chunks.
  */
-export async function seedDatabase(prisma: PrismaService, hasher: Hasher, env: Pick<Env, "DEMO_LOGINS">, platform: Platform): Promise<void> {
+/**
+ * `files`: where seeded photo bytes go (prisma/seed.ts passes fileStorageOf(env)). Omitted (most integration tests), the
+ * photo rows are still written and their files aren't: opening one then 404s at the link, which those tests never do.
+ */
+export async function seedDatabase(prisma: PrismaService, hasher: Hasher, env: Pick<Env, "DEMO_LOGINS">, platform: Platform, files?: FileStorage): Promise<void> {
   assertSeedAllowed(env, await prisma.clinicAccount.count());
   // Every demo login shares the public demo password: hash it once (argon2 is slow on purpose).
   const demoHash = await hasher.hash(DEMO_PASSWORD);
@@ -141,6 +148,27 @@ export async function seedDatabase(prisma: PrismaService, hasher: Hasher, env: P
         data: db.messages
           .filter((m) => m.status === "queued")
           .map((m) => ({ clinicId, kind: MESSAGE_SEND, payload: { messageId: m.id }, availableAt: new Date(m.sendAt), createdAt: now })),
+      });
+      // B10: photos with their files, and the issued-documents log, with the seed's ids (MSW's and the API's agree in
+      // `hybrid`). Keys are built here, as StorageService would, because the seed has no request; the ledger (E5) gets a
+      // row per stored file.
+      const EXT: Record<SeedFileType, FileExtension> = { "image/png": "png", "application/pdf": "pdf" };
+      const photos = db.photos.map((p) => {
+        const ext = EXT[p.contentType as SeedFileType];
+        return { photo: p, ext, key: clinicKey(clinicId, "photos", p.id, ext), body: SEED_FILES[p.contentType as SeedFileType] };
+      });
+      if (files) {
+        for (const { key, ext, body } of photos) await files.put(key, Buffer.from(body), { contentType: CONTENT_TYPES[ext], bytes: body.length });
+        await prisma.storedFile.createMany({ data: photos.map(({ key, body }) => ({ clinicId, key, area: "photos", bytes: body.length, createdAt: now })) });
+      }
+      await prisma.clinicalPhoto.createMany({
+        data: photos.map(({ photo: p, key, ext, body }) => ({
+          ...photoData(p), id: p.id, clinicId, patientId: p.patientId, contentType: CONTENT_TYPES[ext],
+          uploadedBy: p.uploadedBy ?? "staff", fileKey: key, bytes: body.length, createdAt: new Date(p.createdAt),
+        })),
+      });
+      await prisma.patientDocument.createMany({
+        data: db.documents.map((d) => ({ ...documentData(d), id: d.id, clinicId, patientId: d.patientId, title: d.title, createdAt: new Date(d.createdAt) })),
       });
     });
   }
