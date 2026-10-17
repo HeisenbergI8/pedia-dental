@@ -89,7 +89,36 @@ For every step, determine its true state and gather proof:
 Plan steps routinely assume cross-cutting registration nobody wrote a step for. These fail *silently*,
 so check them directly — `CONVENTIONS.md` lists this project's, under "Registering something new".
 
-### 6. Report — in the chat, never to a file
+### 6. Name the merge danger and the smells
+
+**Merge danger.** Answer two questions about the change as a whole, with evidence:
+
+- **Door:** one-way or two-way? A one-way door is hard to undo once merged and deployed: a destructive
+  migration, a changed public contract, data written in a new shape, a message already sent. A two-way
+  door reverts cleanly. An additive column is two-way; dropping one is one-way.
+- **Blast radius:** what breaks if this is wrong? Name the module, the data, or the users, not "low".
+
+**Smells.** Read the diff against this baseline, from Fowler's *Refactoring* (ch. 3). Every one is a
+judgement call, never a hard violation. `CONVENTIONS.md` wins wherever it endorses something the
+baseline would flag, and skip anything a linter already enforces.
+
+- **Mysterious Name**: the name does not say what it does or holds. Rename it.
+- **Duplicated Code**: the same logic shape in more than one hunk or file. Extract it once.
+- **Feature Envy**: a function reaching into another object's data more than its own. Move it there.
+- **Data Clumps**: the same few fields always travelling together. Make them one type.
+- **Primitive Obsession**: a string or number standing in for a domain concept. Give it a type.
+- **Repeated Switches**: the same `switch` or `if` cascade on the same value in several places. One map.
+- **Shotgun Surgery**: one logical change scattered across many files. Gather it into one module.
+- **Divergent Change**: one file edited for several unrelated reasons. Split it.
+- **Speculative Generality**: parameters, hooks or abstraction no plan step needs. Delete it.
+- **Message Chains**: long `a.b().c().d()` walks the caller should not depend on. Hide the walk.
+- **Middle Man**: a function that only delegates. Call the real target.
+- **Refused Bequest**: an implementer ignoring most of what it inherits. Use composition.
+
+Smells do not move the confidence score. They go in their own section so they cannot be mistaken for
+delivery gaps.
+
+### 7. Report — in the chat, never to a file
 
 **Write the report as your final message. Create no files.** The report is the last thing the user
 reads, so it has to be there, not behind a path. You have no Write tool; do not work around that with
@@ -134,6 +163,15 @@ Bash — a report the user has to open is a report they will skim.
 ## Unplanned Changes
 
 [Anything in the diff no plan step called for. Scope creep belongs here, not silently accepted.]
+
+## Merge Danger
+
+- **Door:** one-way | two-way: [why, with evidence]
+- **Blast radius:** [what breaks if this is wrong]
+
+## Smells
+
+[Judgement calls only: `possible <Smell>` + file:line + the one-line fix. "None" if none.]
 
 ## Not Audited
 
