@@ -32,8 +32,8 @@ const Env = z.object({
   STORAGE_LINK_SECRET: z.string().min(32, "STORAGE_LINK_SECRET must be at least 32 characters").optional(),
   // B9: real texts through Semaphore. Unset = the log driver, everywhere, production included (decision 11). Never logged.
   SEMAPHORE_API_KEY: z.string().min(1).optional(),
-  // One shared sender name for every clinic (decision 3), approved on the Semaphore account first. Not chosen yet
-  // (decision 18): unset sends without one, so Semaphore uses its own default name.
+  // One shared sender name for every clinic (decision 3), approved on the Semaphore account first. It is
+  // "PRIMOLAR" (decision 18); unset until Semaphore approves it, which sends with Semaphore's own default name.
   SMS_SENDER_NAME: z.string().min(1).max(11).optional(),
   SEMAPHORE_URL: z.url().default("https://api.semaphore.co/api/v4/messages"),
 });

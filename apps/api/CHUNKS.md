@@ -313,7 +313,7 @@ recorded once; the dashboard totals equal the sum of payments in SQL.
 - From B6: enqueue `NOTE_MESSAGES[procedure]` in `NotesService.sign`'s transaction (B6 left a marker).
 
 **Decided** (`.claude/plans/feature-chunk-b9-messages-plan/decisions.md`): SMS only, no email; sending hours 8 AM–8 PM
-Manila; one shared sender name (the name itself still open); the platform pays for SMS, with allowances per plan set
+Manila; one shared sender name, "PRIMOLAR"; the platform pays for SMS, with allowances per plan set
 in B12.
 
 **Done when:** booking an appointment sends one confirmation through the log driver, exactly once across a worker

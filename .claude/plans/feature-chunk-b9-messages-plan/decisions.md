@@ -34,4 +34,4 @@ Settled with the user on 2026-10-17. The architect plans against these and does 
 15. **Phone in the log**: stays visible to dentists in B9 (as the demo); masked later in shared, mock and API together.
 16. **Suspended clinics**: no automatic birthday texts; texts already queued still go.
 17. **Moved appointment**: also sends a new confirmation with the new time (as the demo).
-18. **Sender name**: not yet settled. The user didn't accept "PRIMOLAR". It stays a setting (`SMS_SENDER_NAME`), needed only before real sending.
+18. **Sender name**: "PRIMOLAR" (settled 2026-10-17, after B10). It stays a setting (`SMS_SENDER_NAME`), set once Semaphore approves the name.

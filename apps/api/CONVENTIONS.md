@@ -359,8 +359,8 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **The log driver never logs a number or a body**, only the message id and its parts. Semaphore's contract was taken
   from its documentation as summarised (the docs host wasn't reachable when B9 was built): confirm it against
   api.semaphore.co/docs, and get the sender name approved on the Semaphore account, **before** setting
-  `SEMAPHORE_API_KEY`. `SMS_SENDER_NAME` is unset until the name is chosen (decision 18), and then Semaphore's default
-  name is used.
+  `SEMAPHORE_API_KEY`. `SMS_SENDER_NAME=PRIMOLAR` (decision 18) is set only once Semaphore approves it; until then
+  Semaphore's default name is used.
 - **A database seeded before B9 has no messages:** use a fresh one.
 - **Every money write locks in one order: the Idempotency-Key claim → the patient → the bill → the receipt counter**
   (B8 E1). The key claim is a raw `INSERT`: Prisma's `create` reads the row back, a plain read that would take the
@@ -500,7 +500,7 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   - Each clinic's stored bytes are counted in the `StoredFile` ledger (8, E5), never limited in B10 (limits: B12).
 - **Messages** (B9, decisions in the B9 plan's `decisions.md`, settled with the user before planning; 13–17 after):
   - SMS only, through Semaphore; no email in B9 (1). One platform-owned Semaphore account (2) and one shared sender
-    name, with the clinic's name in the text (3); the name itself isn't chosen yet (18).
+    name, with the clinic's name in the text (3); "PRIMOLAR" (18, set once Semaphore approves it).
   - Texts go out 8 AM–8 PM Manila only; anything due outside waits until 8 AM, at queue time and again at send time (4).
   - A failed send retries about 1, 5 and 30 minutes later, then shows as failed with its reason; no Resend (5). A
     number that isn't a Philippine mobile fails at once, "No phone number" (12). An in-doubt send is never resent (13).
