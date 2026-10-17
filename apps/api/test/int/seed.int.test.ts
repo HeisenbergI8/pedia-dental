@@ -9,6 +9,7 @@ import { CHART_COLUMNS, toChartEntry } from "../../src/chart/chart.rows";
 import { GROWTH_COLUMNS, toGrowth } from "../../src/growth/growth.rows";
 import { NOTE_COLUMNS, toNote } from "../../src/notes/note.rows";
 import { PLAN_COLUMNS, toPlanItem } from "../../src/plan/plan.rows";
+import { MESSAGE_COLUMNS, MESSAGE_SEND, toMessage } from "../../src/message-queue/message.rows";
 import { DUE_COLUMNS, toDueItem } from "../../src/recalls/due-item.rows";
 import { seedDatabase } from "../../src/seed/seed-database";
 import { VISIT_COLUMNS, toVisit } from "../../src/visits/visit.rows";
@@ -127,6 +128,22 @@ describe("prisma db seed (seedDatabase) on MySQL", () => {
       });
     }
     expect(platform.tenants[DEMO_CLINIC_ID]!.payments.length).toBeGreaterThan(0);
+  });
+
+  it("writes each clinic's message log with the mock's ids, an outbox row per queued text and a month for each sent one (B9)", async () => {
+    for (const { id } of platform.accounts) {
+      const db = platform.tenants[id]!;
+      const queued = db.messages.filter((m) => m.status === "queued").map((m) => m.id).sort();
+      await inClinic(id, async () => {
+        const messages = (await prisma.message.findMany({ select: MESSAGE_COLUMNS })).map(toMessage);
+        const byId = new Map(messages.map((m) => [m.id, m]));
+        expect(byId).toEqual(new Map(db.messages.map((m) => [m.id, { ...m, clinicId: id }])));
+        expect(await prisma.message.count({ where: { status: "sent", sentAt: null } })).toBe(0);
+      });
+      const outbox = await prisma.outboxMessage.findMany({ where: { clinicId: id, kind: MESSAGE_SEND }, select: { payload: true } });
+      expect(outbox.map((o) => (o.payload as { messageId: string }).messageId).sort()).toEqual(queued);
+    }
+    expect(platform.tenants[DEMO_CLINIC_ID]!.messages.length).toBeGreaterThan(0);
   });
 
   it("gives every mock login the same email in the same clinics, opened by the demo password", async () => {

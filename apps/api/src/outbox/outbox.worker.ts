@@ -7,13 +7,20 @@ import { Prisma } from "../generated/prisma/client.ts";
 import { BACKGROUND } from "../jobs/job-runner";
 import { PrismaService } from "../prisma/prisma.service";
 import { runInTransaction } from "../prisma/transaction";
-import { type OutboxEnvelope, OutboxHandlers } from "./outbox.handlers";
+import { OutboxDefer, type OutboxEnvelope, type OutboxHandler, OutboxHandlers, OutboxPermanent } from "./outbox.handlers";
 
 /** Data, so B9 can tune it. The lease outlasts a batch of slow provider calls. */
 export const OUTBOX_POLICY = { batch: 10, leaseMs: 5 * 60_000, maxAttempts: 5, baseBackoffMs: 30_000, maxBackoffMs: 60 * 60_000 } as const;
 
 /** The wait after failed attempt `attempt` (1-based): 30 s, 1 min, 2 min, … at most an hour. */
 export const backoffMs = (attempt: number) => Math.min(OUTBOX_POLICY.baseBackoffMs * 2 ** (attempt - 1), OUTBOX_POLICY.maxBackoffMs);
+
+/** The wait after failed attempt `attempt`: the kind's own schedule (retryDelaysMs) or the default. `undefined`: give up. */
+export function nextDelayMs(handler: Pick<OutboxHandler, "retryDelaysMs"> | undefined, attempt: number): number | undefined {
+  const delays = handler?.retryDelaysMs;
+  if (delays) return delays[attempt - 1];
+  return attempt >= OUTBOX_POLICY.maxAttempts ? undefined : backoffMs(attempt);
+}
 
 /** What may be stored and logged about an error: its name and Prisma code. Never the message (personal data). */
 export function describeError(error: unknown): string {
@@ -109,20 +116,34 @@ export class OutboxWorker implements OnApplicationBootstrap, OnModuleDestroy {
       await requestContext.run(ctx, async () => await handler.handle(message));
       await this.settle(message, { status: "done", processedAt: this.clock.now() });
     } catch (error) {
+      if (error instanceof OutboxDefer) {
+        // Not a failure: hand the try back, so sending hours never spend a retry (B9 E4).
+        await this.settle(message, { availableAt: error.until, attempts: { decrement: 1 } });
+        return;
+      }
       const now = this.clock.now();
       const lastError = describeError(error);
-      const giveUp = !handler || message.attempt >= OUTBOX_POLICY.maxAttempts;
+      const delay = error instanceof OutboxPermanent ? undefined : nextDelayMs(handler, message.attempt);
+      const giveUp = !handler || delay === undefined;
       this.log.warn(`Outbox ${message.kind} ${message.id} attempt ${message.attempt} failed (${lastError})${giveUp ? "; giving up" : ""}`);
-      await this.settle(
+      const settled = await this.settle(
         message,
-        giveUp ? { status: "failed", processedAt: now, lastError } : { availableAt: new Date(now.getTime() + backoffMs(message.attempt)), lastError },
+        giveUp ? { status: "failed", processedAt: now, lastError } : { availableAt: new Date(now.getTime() + delay), lastError },
       );
+      // Only the claim that settled the row tells the feature (a lost lease means a newer claim owns it).
+      if (giveUp && settled && handler?.deadLetter) {
+        const reason = error instanceof OutboxPermanent ? error.reason : undefined;
+        await requestContext
+          .run(ctx, async () => await handler.deadLetter!(message, reason))
+          .catch((e: unknown) => this.log.error(`Outbox ${message.kind} ${message.id}: dead-letter hook failed (${describeError(e)})`));
+      }
     }
   }
 
   /** Only while the claim is still this one: a worker whose lease ran out has been replaced by a newer claim. */
-  private async settle({ id, attempt }: OutboxEnvelope, data: Prisma.OutboxMessageUpdateManyMutationInput): Promise<void> {
+  private async settle({ id, attempt }: OutboxEnvelope, data: Prisma.OutboxMessageUpdateManyMutationInput): Promise<boolean> {
     const { count } = await this.prisma.outboxMessage.updateMany({ where: { id, attempts: attempt }, data });
     if (count === 0) this.log.warn(`Outbox ${id}: lease lost before attempt ${attempt} settled`);
+    return count === 1;
   }
 }

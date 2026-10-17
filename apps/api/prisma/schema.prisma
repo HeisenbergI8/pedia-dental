@@ -327,6 +327,59 @@ model MessageTemplate {
   @@id([clinicId, kind])
 }
 
+/// Mirrors MessageStatus in packages/shared/src/schemas/message.ts (tenant-scope.test.ts checks they match).
+enum MessageStatus {
+  queued
+  sent
+  failed
+  cancelled
+}
+
+/// Mirrors MessageChannel (SMS only, decision 1).
+enum MessageChannel {
+  sms
+}
+
+/// One text to a primary guardian: the log in /messages (features/messages/mocks.ts). Rendered when queued, so a later
+/// template edit doesn't rewrite it. Sent through one OutboxMessage ("message.send", payload { messageId }). Written
+/// only by MessageQueueService (B9 E1).
+model Message {
+  id            String         @id @default(cuid(2))
+  clinicId      String
+  patientId     String
+  kind          MessageKind
+  channel       MessageChannel @default(sms)
+  /// The guardian's phone as stored (the contract's `to`); normalised only when sent (smsNumber).
+  to            String         @db.VarChar(32)
+  recipientName String         @db.VarChar(191)
+  /// The rendered body: a 480-character template can render longer, so TEXT.
+  body          String         @db.Text
+  status        MessageStatus  @default(queued)
+  /// When it goes out: already inside sending hours (nextSendingTime, E4).
+  sendAt        DateTime
+  appointmentId String?
+  noteId        String?
+  dueItemId     String?
+  /// A FAILURE reason from @pedia/shared. Never a provider's or library's message.
+  failureReason String?        @db.VarChar(191)
+  createdAt     DateTime
+  /// Birthday rows only: the Manila year it greets. The unique below makes "once a year" hold under races (E9).
+  greetingYear  Int?
+  /// Set before the provider is called (E3). Set with no outcome = in doubt: never sent again.
+  dispatchedAt  DateTime?
+  sentAt        DateTime?
+  /// Parts the provider billed (smsSegments), for the monthly count (E10).
+  segments      Int?
+  providerRef   String?        @db.VarChar(64)
+
+  @@unique([clinicId, patientId, greetingYear])
+  @@index([clinicId, sendAt])
+  @@index([clinicId, patientId, status, sendAt])
+  @@index([clinicId, appointmentId])
+  @@index([clinicId, dueItemId])
+  @@index([clinicId, sentAt])
+}
+
 /// Demo deployments only (DEMO_LOGINS=true): the sign-in page's one-click accounts, with the PIN shown in the clear,
 /// because PINs are otherwise stored only as hashes. Written only by the seed. Platform: served before sign-in.
 model DemoLogin {

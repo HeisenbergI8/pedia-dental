@@ -7,6 +7,29 @@ export type OutboxEnvelope = { id: string; clinicId: string | null; kind: string
 export interface OutboxHandler {
   readonly kind: string;
   handle(message: OutboxEnvelope): Promise<void>;
+  /** Waits after failed try 1, 2, …; its length + 1 is the number of tries. Default: OUTBOX_POLICY (5 tries, 30 s → 1 h). */
+  readonly retryDelaysMs?: readonly number[];
+  /**
+   * The row is given up (tries spent, or OutboxPermanent). Runs inside the row's clinic, after the row is `failed`.
+   * `reason` is the OutboxPermanent's reason, or undefined when the tries ran out. Must be idempotent.
+   */
+  deadLetter?(message: OutboxEnvelope, reason: string | undefined): Promise<void>;
+}
+
+/** Thrown by a handler: not now, try at `until`. The try isn't counted (B9: sending hours). */
+export class OutboxDefer extends Error {
+  override name = "OutboxDefer";
+  constructor(readonly until: Date) {
+    super("deferred");
+  }
+}
+
+/** Thrown by a handler: retrying can't help (a refused number). Dead-letters the row at once. */
+export class OutboxPermanent extends Error {
+  override name = "OutboxPermanent";
+  constructor(readonly reason: string) {
+    super("permanent");
+  }
 }
 
 /**

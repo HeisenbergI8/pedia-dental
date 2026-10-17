@@ -26,3 +26,12 @@ Settled with the user on 2026-10-17. The architect plans against these and does 
 ## Still open
 
 - SMS allowance per plan tier: decided in B12 (user).
+
+## Settled after planning (2026-10-17, plan Follow Ups 1–4 and 6)
+
+13. **In-doubt send**: a text whose outcome is unknown (crash or timeout mid-send) shows as failed, "Not confirmed by the SMS provider", and is never resent.
+14. **Monthly count**: keep both texts and billed parts; B12 decides which one the plan limit uses.
+15. **Phone in the log**: stays visible to dentists in B9 (as the demo); masked later in shared, mock and API together.
+16. **Suspended clinics**: no automatic birthday texts; texts already queued still go.
+17. **Moved appointment**: also sends a new confirmation with the new time (as the demo).
+18. **Sender name**: not yet settled. The user didn't accept "PRIMOLAR". It stays a setting (`SMS_SENDER_NAME`), needed only before real sending.

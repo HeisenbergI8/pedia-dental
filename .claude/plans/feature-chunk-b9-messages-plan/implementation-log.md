@@ -44,3 +44,23 @@ Engineering decisions E1–E14 as the plan records them.
 books its own slot (2030-04-09) so it can't clash with earlier cases. Seed guardian phones are all `09\d{9}`: no seed fix.
 Semaphore's docs host can't be reached from this container (DNS); the driver's contract stays to confirm before going live.
 **Gate:** `pnpm run check` exit 0 (shared 207, seed 22, web 358, api 325).
+
+## Phase 2: The `Message` table — 2026-10-17
+
+**Steps completed:** 2.1, 2.2, 2.3.
+**Files changed:** `apps/api/prisma/schema.prisma`, `prisma/migrations/20261017072141_messages/`, `src/prisma/{model-scope,tenant-scope.test}.ts`,
+`src/message-queue/message.rows{,.test}.ts` (new), `src/seed/seed-database.ts`, `test/int/seed.int.test.ts`.
+**Deviations from plan:** `MESSAGE_SEND` lives in `message.rows.ts` (the seed needs it before Phase 4's service exists);
+`messageData` also takes `sentAt`/`segments`, so seeded `sent` rows count in their month (Potential Issues).
+**Gate:** `pnpm run check` exit 0 · `pnpm --filter api test:int test/int/seed.int.test.ts` 12 passed.
+
+## Phase 3: Outbox retries per kind, deferral, dead letters — 2026-10-17
+
+**Steps completed:** 3.1, 3.2.
+**Files changed:** `apps/api/src/outbox/{outbox.handlers,outbox.worker,outbox.worker.test}.ts`, `test/int/outbox.int.test.ts`.
+**Deviations from plan:** the test handlers are plain objects registered on both apps (the lost-lease case needs B's).
+Deferral case moves `until` each round. Mutations: dropping `attempts: { decrement: 1 }` → deferral case red; dropping
+`settled &&` → lost-lease hook case red.
+**Gate:** `pnpm run check` exit 0 (api 329) · `pnpm --filter api test:int test/int/outbox.int.test.ts` 12 passed.
+
+User answers after planning: Q13–Q17 as recommended; Q18 (sender name) open — see `decisions.md`.

@@ -47,6 +47,8 @@ export const MODEL_SCOPE = {
   Payment: "clinic",
   ReceiptCounter: "clinic",
   IdempotencyKey: "clinic",
+  // B9: the message log. Clinic-level (a message speaks for the account, whichever branch).
+  Message: "clinic",
   // Platform: Primolar's own records
   ClinicAccount: "platform",
   Agreement: "platform",
