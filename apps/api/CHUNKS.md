@@ -353,9 +353,14 @@ for the first time and sets a password.
 - Subscriptions: due dates only from `subscriptionDueOn`, states from `subscriptionStatus`. **Settling overdue
   accounts becomes a daily scheduled job** (plus a check at sign-in) instead of the mock's settle-on-every-request.
 - Primolar invoices.
+- **Manual QR payments** (owner's decision, 2026-10-17: no payment gateway until there are paying clinics). The
+  operator uploads Primolar's payment QR (GCash, Maya or bank) in the console and can replace it any time. New clinics
+  see it on the sign-up thank-you page; Owners see it in Settings → Plan when the monthly fee is due. The clinic uploads
+  a screenshot of the receipt and types the reference number; the operator checks it and records the payment by hand,
+  as the prototype. Screenshots go through `StorageService` (private, the clinic's and the operator's only). The web
+  gains these screens and their MSW handlers first (the mocks are the API's spec), then the API serves them.
 
-**Decide first:** PayMongo checkout and auto-charging now or later (recommended: a separate chunk after B13; this
-chunk keeps payments recorded by hand, like the prototype).
+**Decided (2026-10-17):** PayMongo checkout and auto-charging wait for their own chunk after B13; payments stay manual.
 
 **Done when:** a sign-up submitted, paid and approved becomes a working clinic whose Owner can sign in; a clinic
 approved on the 31st is due on the 30th next month; an account 7 days overdue pauses itself after the nightly job.
@@ -390,7 +395,8 @@ restoring last night's backup to a fresh database works; the load test meets its
 
 ## Later (own chunks, after B13)
 
-- PayMongo checkout and automatic monthly charging; BIR official receipts.
+- PayMongo checkout and automatic monthly charging, replacing B12's manual QR payments once there are paying clinics;
+  BIR official receipts.
 - Read replicas and caching (Redis) when the load test or real traffic says so, not before.
 - Per-clinic web addresses; operator impersonation with an audit trail.
 - Patient merge (after duplicate detection in B4).
