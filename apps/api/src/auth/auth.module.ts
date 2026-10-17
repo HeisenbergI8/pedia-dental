@@ -22,7 +22,7 @@ import { SessionService } from "./session.service";
   imports: [AuditModule, FamilyModule],
   controllers: [AuthController, OperatorAuthController],
   providers: [Hasher, SessionService, IdentityService, AuthService, RateLimitService, AuthJobs, RecordOwners, AccessGuard, { provide: APP_GUARD, useExisting: AccessGuard }],
-  exports: [Hasher, SessionService, IdentityService, RecordOwners],
+  exports: [Hasher, SessionService, IdentityService, AuthService, RecordOwners, RateLimitService],
 })
 export class AuthModule implements NestModule {
   /** Every /auth route is rate-limited before the guard runs (CHUNKS B2). Bound by controller: no path syntax to drift. */

@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { ConflictException, Injectable } from "@nestjs/common";
 import {
   Branch as BranchSchema, CONFIDENTIALITY_NOTICE, LEGAL_DOCUMENTS, Role as RoleSchema, StaffRole, pinLockout, rolesCan, rolesOf, termsOutdated, usableBranches,
   type AcknowledgementKind, type AcknowledgementPrompt, type OperatorUser, type Role, type SessionUser,
@@ -14,6 +14,7 @@ import { runInTransaction } from "../prisma/transaction";
 import { Hasher, pinAttempt, type PinAttempt } from "./hashing";
 import { newPin, temporaryPassword } from "./secrets";
 import { FamilyService } from "../patients/family.service";
+import { isDuplicateKey } from "../idempotency/idempotency.service";
 
 /** Who a live clinic session is, right now. What the guard puts in the request context and checks. */
 export type ClinicIdentity = {
@@ -92,6 +93,9 @@ export class IdentityService {
     ]);
     if (!account || !cred) return undefined;
     const suspended = account.status !== "active";
+    // B11 decision 10: a guardian taken off their last child here is no login any more (the session closes).
+    const children = cred.guardianId ? await this.family.childrenOf(cred.guardianId) : undefined;
+    if (children?.size === 0) return undefined;
 
     const staff = cred.staffId ? await this.prisma.staff.findUnique({ where: { id: cred.staffId } }) : null;
     if (cred.staffId && (!staff || staff.deactivatedAt || suspended)) return undefined;
@@ -111,7 +115,7 @@ export class IdentityService {
       mustChangePassword: cred.mustChange,
       mustAcknowledge: await this.pendingAcknowledgement(clinicId, accountId, roles, !!staff, !!cred.guardianId),
       branches: usableBranches(roles, assigned, all),
-      children: cred.guardianId ? await this.family.childrenOf(cred.guardianId) : undefined,
+      children,
     };
   }
 
@@ -160,13 +164,14 @@ export class IdentityService {
   }
 
   /**
-   * Every login this email has, across clinic accounts (decision #27), in clinic-name order for the chooser.
-   * Deactivated staff are left out (#23), as `allAccounts` does in the mock, so they read as a wrong password.
+   * Every login this email or mobile (LoginId's form, B11 decision 4) has, across clinic accounts (decision #27), in
+   * clinic-name order for the chooser. Deactivated staff (#23) and guardians with no child left (B11 decision 10) are
+   * left out, as `allAccounts` does in the mock, so they read as a wrong password.
    */
-  async loginsByEmail(email: string): Promise<LoginCandidate[]> {
+  async loginsBy(login: string): Promise<LoginCandidate[]> {
     const creds = await this.prisma.credential.findMany({
-      where: { email },
-      select: { clinicId: true, accountId: true, staffId: true, name: true, passwordHash: true },
+      where: login.includes("@") ? { email: login } : { phone: login },
+      select: { clinicId: true, accountId: true, staffId: true, guardianId: true, name: true, passwordHash: true },
     });
     if (creds.length === 0) return [];
     const accounts = await this.prisma.clinicAccount.findMany({
@@ -178,6 +183,7 @@ export class IdentityService {
       const account = accounts.find((a) => a.id === c.clinicId);
       const actor = account && (await this.actorOf(c.clinicId, c));
       if (!account || !actor) continue;
+      if (c.guardianId && (await requestContext.within({ clinicId: c.clinicId }, () => this.family.childrenOf(c.guardianId!))).size === 0) continue;
       found.push({ clinicId: c.clinicId, clinicName: account.name, active: account.status === "active", accountId: c.accountId, passwordHash: c.passwordHash, isStaff: !!c.staffId, actor });
     }
     return found.sort((a, b) => a.clinicName.localeCompare(b.clinicName));
@@ -299,6 +305,59 @@ export class IdentityService {
       data: { clinicId, accountId: staffId, email, staffId, guardianId: null, name, passwordHash, mustChange: true, pinHash, pinFailedAt: [] },
       select: { id: true },
     });
+  }
+
+  /**
+   * B11: a parent's login, made when they accept an invite (in PortalService's transaction, under the account lock).
+   * `clash`: the words for the unique-number backstop (decision 14), should a check before it have missed a race.
+   */
+  async createParentLogin(tx: Tx, login: { clinicId: string; guardianId: string; name: string; phone: string; email: string | null; passwordHash: string }, clash: string): Promise<string> {
+    const { clinicId, guardianId, name, phone, email, passwordHash } = login;
+    const accountId = `guardian.${guardianId}`;
+    try {
+      await tx.credential.create({
+        data: { clinicId, accountId, email, phone, staffId: null, guardianId, name, passwordHash, mustChange: false, pinHash: null, pinFailedAt: [] },
+        select: { id: true },
+      });
+    } catch (error) {
+      if (isDuplicateKey(error)) throw new ConflictException(clash);
+      throw error;
+    }
+    return accountId;
+  }
+
+  /** A reset link's new password (B11 decision 6). False: this guardian has no login (turned off meanwhile). */
+  async setParentPassword(tx: Tx, clinicId: string, guardianId: string, passwordHash: string): Promise<boolean> {
+    return (await tx.credential.updateMany({ where: { clinicId, guardianId }, data: { passwordHash } })).count > 0;
+  }
+
+  /** Turn off (B11 decision 18): the login goes; its sessions read as signed out from the next request. */
+  async removeParentLogin(tx: Tx, clinicId: string, guardianId: string): Promise<void> {
+    await tx.credential.deleteMany({ where: { clinicId, guardianId } });
+  }
+
+  /** The other parent of this clinic who signs in with this mobile (smsNumber form), if any (B11 decision 14). */
+  async phoneHolder(tx: Tx, clinicId: string, phone: string, exceptGuardianId: string): Promise<string | undefined> {
+    const row = await tx.credential.findFirst({ where: { clinicId, phone, guardianId: { not: exceptGuardianId } }, select: { guardianId: true } });
+    return row?.guardianId ?? undefined;
+  }
+
+  /** Is this email already a login of the clinic, staff or parent? (decision #27: one login per email per account). */
+  async emailTaken(tx: Tx, clinicId: string, email: string): Promise<boolean> {
+    return !!(await tx.credential.findFirst({ where: { clinicId, email }, select: { id: true } }));
+  }
+
+  /**
+   * A guardian's number changed (B11 decision 15): their mobile sign-in follows it. True when they have a login, whose
+   * sessions the caller then ends. `clash`: the backstop's words, as createParentLogin.
+   */
+  async followPhone(tx: Tx, clinicId: string, guardianId: string, phone: string | null, clash: string): Promise<boolean> {
+    try {
+      return (await tx.credential.updateMany({ where: { clinicId, guardianId }, data: { phone } })).count > 0;
+    } catch (error) {
+      if (isDuplicateKey(error)) throw new ConflictException(clash);
+      throw error;
+    }
   }
 
   /** Does a parent of this clinic sign in with this email? (decision #27: one login per email per account). */

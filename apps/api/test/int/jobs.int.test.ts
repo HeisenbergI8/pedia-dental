@@ -41,8 +41,8 @@ async function seedExpiring() {
   await prisma.operatorSession.createMany({ data: [op("oplive", at(-1)), op("opidle", at(-45))] });
   await prisma.rateLimitCounter.createMany({
     data: [
-      { bucket: "login:ended", windowStart: at(-5), hits: 3 }, // the longest window (5 min) has just ended
-      { bucket: "login:open", windowStart: at(-4), hits: 3 },
+      { bucket: "reset:ended", windowStart: at(-60), hits: 3 }, // the longest window (B11's reset hour) has just ended
+      { bucket: "reset:open", windowStart: at(-59), hits: 3 },
     ],
   });
 }
@@ -55,7 +55,7 @@ describe("scheduled jobs across two API instances", () => {
 
     expect((await prisma.session.findMany({ select: { tokenHash: true } })).map((s) => label(s.tokenHash))).toEqual(["live"]);
     expect((await prisma.operatorSession.findMany({ select: { tokenHash: true } })).map((s) => label(s.tokenHash))).toEqual(["oplive"]);
-    expect((await prisma.rateLimitCounter.findMany({ select: { bucket: true } })).map((r) => r.bucket)).toEqual(["login:open"]);
+    expect((await prisma.rateLimitCounter.findMany({ select: { bucket: true } })).map((r) => r.bucket)).toEqual(["reset:open"]);
     expect(await prisma.jobLock.findUnique({ where: { name: AUTH_SWEEP.name } })).toMatchObject({ lockedUntil: at(10), lastFinishedAt: NOW });
   });
 

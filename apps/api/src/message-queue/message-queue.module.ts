@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ENV, type Env } from "../config/env";
 import { OutboxModule } from "../outbox/outbox.module";
+import { AccountLinks } from "./account-links";
 import { LogSmsProvider } from "./log-sms.provider";
 import { MessageQueueService } from "./message-queue.service";
 import { MessageSendHandler } from "./message-send.handler";
@@ -13,9 +14,10 @@ import { SMS_PROVIDER } from "./sms-provider";
   providers: [
     MessageQueueService,
     MessageSendHandler,
+    AccountLinks,
     // Decision 11: the log driver until a key is configured, production included.
     { provide: SMS_PROVIDER, inject: [ENV], useFactory: (env: Env) => (env.SEMAPHORE_API_KEY ? new SemaphoreSmsProvider(env) : new LogSmsProvider()) },
   ],
-  exports: [MessageQueueService],
+  exports: [MessageQueueService, AccountLinks],
 })
 export class MessageQueueModule {}

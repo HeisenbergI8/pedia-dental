@@ -1,14 +1,15 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from "@nestjs/common";
-import { FAILURE, MESSAGE_RETRY_DELAYS_MS, nextSendingTime, smsNumber } from "@pedia/shared";
+import { FAILURE, LINK_MARK, MESSAGE_RETRY_DELAYS_MS, isAccountText, nextSendingTime, smsNumber } from "@pedia/shared";
 import { ownClinicId } from "../clinic/account-lock";
 import { Clock } from "../common/clock";
 import { OutboxDefer, type OutboxEnvelope, type OutboxHandler, OutboxHandlers, OutboxPermanent } from "../outbox/outbox.handlers";
 import { PrismaService } from "../prisma/prisma.service";
 import { runInTransaction } from "../prisma/transaction";
+import { AccountLinks } from "./account-links";
 import { MESSAGE_SEND } from "./message.rows";
 import { SMS_PROVIDER, SmsInDoubt, SmsRejected, type SmsProvider } from "./sms-provider";
 
-type Claim = { send: { number: string; body: string; dispatchedAt: Date } } | { skip: true } | { permanent: string };
+type Claim = { send: { number: string; body: string; dispatchedAt: Date } } | { skip: true } | { permanent: string } | { defer: Date };
 
 /**
  * Sends one Message (E2, E3). At least once from the outbox becomes exactly once here: the row is claimed
@@ -24,6 +25,7 @@ export class MessageSendHandler implements OutboxHandler, OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly clock: Clock,
     private readonly registry: OutboxHandlers,
+    private readonly links: AccountLinks,
     @Inject(SMS_PROVIDER) private readonly sms: SmsProvider,
   ) {}
 
@@ -36,13 +38,14 @@ export class MessageSendHandler implements OutboxHandler, OnModuleInit {
     const { messageId } = payload as { messageId: string };
     const now = this.clock.now();
     const open = nextSendingTime(now);
-    if (open > now) throw new OutboxDefer(open); // decision 4: a retry that lands at night waits, without spending a try
 
     const claim = await runInTransaction(this.prisma, async (tx): Promise<Claim> => {
       // The first statement locks (CONVENTIONS → lock before the first plain read). Raw SQL: name the clinic.
-      const [m] = await tx.$queryRaw<{ status: string; dispatchedAt: Date | null; to: string; body: string }[]>`
-        SELECT status, dispatchedAt, \`to\`, body FROM Message WHERE id = ${messageId} AND clinicId = ${ownClinicId()} FOR UPDATE`;
+      const [m] = await tx.$queryRaw<{ status: string; dispatchedAt: Date | null; to: string; body: string; kind: string; linkId: string | null }[]>`
+        SELECT status, dispatchedAt, \`to\`, body, kind, linkId FROM Message WHERE id = ${messageId} AND clinicId = ${ownClinicId()} FOR UPDATE`;
       if (!m || m.status !== "queued") return { skip: true }; // withdrawn, sent or failed already: a redelivery
+      // Decision 4: a retry that lands at night waits, without spending a try. An invite or reset goes at any hour (B11 decision 12).
+      if (open > now && !isAccountText(m.kind)) return { defer: open };
       if (m.dispatchedAt) {
         // A previous try reached the provider and never recorded an outcome (a crash, a timeout): don't risk a second text.
         await tx.message.update({ where: { id: messageId }, data: { status: "failed", failureReason: FAILURE.notConfirmed }, select: { id: true } });
@@ -53,9 +56,16 @@ export class MessageSendHandler implements OutboxHandler, OnModuleInit {
         await tx.message.update({ where: { id: messageId }, data: { status: "failed", failureReason: FAILURE.noPhone }, select: { id: true } });
         return { permanent: FAILURE.noPhone };
       }
+      // B11 E5: the link is made now, inside the claim, and exists only in memory until the provider has it.
+      const link = m.linkId ? await this.links.mint(tx, m.linkId) : undefined;
+      if (m.linkId && !link) {
+        await tx.message.update({ where: { id: messageId }, data: { status: "cancelled" }, select: { id: true } }); // used, cancelled or expired
+        return { skip: true };
+      }
       await tx.message.update({ where: { id: messageId }, data: { dispatchedAt: now }, select: { id: true } });
-      return { send: { number, body: m.body, dispatchedAt: now } };
+      return { send: { number, body: link ? m.body.replace(LINK_MARK, link) : m.body, dispatchedAt: now } };
     });
+    if ("defer" in claim) throw new OutboxDefer(claim.defer);
     if ("skip" in claim) return;
     if ("permanent" in claim) throw new OutboxPermanent(claim.permanent); // decision 12: no retries
 

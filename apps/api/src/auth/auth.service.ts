@@ -61,14 +61,14 @@ export class AuthService {
 
   /** POST /auth/login, in the mock's order: the password, then suspension, then which clinic (decision #27). */
   async login({ email, password, clinicId }: LoginInput): Promise<{ result: LoginResult; token?: string }> {
-    const matches = await this.identity.loginsByEmail(email);
+    const matches = await this.identity.loginsBy(email); // `email` holds a mobile or an email (LoginId, B11 decision 4)
     if (matches.length === 0) await this.hasher.matches(await (this.decoy ??= this.hasher.hash("no such login")), password);
     const opened: LoginCandidate[] = [];
     for (const m of matches) if (await this.hasher.matches(m.passwordHash, password)) opened.push(m);
     if (opened.length === 0) {
       // Each failure is logged in the account it names; an unknown email has no one to log against.
       for (const m of matches) await this.auditAs(m.clinicId, m.actor, "sign_in_failed", "Session");
-      throw new UnauthorizedException("That email and password don't match an account");
+      throw new UnauthorizedException("That mobile number or email and password don't match an account");
     }
     // Checked after the password, so a stranger can't learn that an account is suspended.
     const open = opened.filter((m) => m.active || !m.isStaff);
@@ -140,9 +140,12 @@ export class AuthService {
     return this.open(current.clinicId, accountId);
   }
 
-  /** POST /auth/password: at first sign-in with the temporary password (decision #21), or any time after. */
+  /**
+   * POST /auth/password: a staff login at first sign-in with the temporary password (decision #21) or any time after;
+   * a parent any time (B11 decision 7).
+   */
   async changePassword(who: ClinicIdentity | undefined, body: unknown) {
-    if (!who?.staffId) throw new UnauthorizedException("Sign in with your staff login to change its password");
+    if (!who) throw new UnauthorizedException("Sign in to change your password");
     const { current, next } = parse(ChangePasswordInput, body);
     // Decision 4: on a demo deployment the shown password stays the shown password.
     if (this.env.DEMO_LOGINS && current === DEMO_PASSWORD) throw new ForbiddenException(`Demo logins keep the demo password (${DEMO_PASSWORD})`);

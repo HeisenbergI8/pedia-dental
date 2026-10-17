@@ -148,6 +148,11 @@ export const SELF_CHECKED_RULES: readonly Route[] = [
   { method: "POST", path: "/auth/password" },
   { method: "GET", path: "/auth/acknowledgement" },
   { method: "POST", path: "/auth/acknowledgement" },
+  // B11: the link routes (signed out) and the demo's texts (E1, E6).
+  { method: "POST", path: "/auth/password-link" },
+  { method: "POST", path: "/auth/password-link/accept" },
+  { method: "POST", path: "/auth/password-reset" },
+  { method: "GET", path: "/auth/demo-texts" },
   { method: "POST", path: "/operator/auth/login" },
   { method: "GET", path: "/operator/auth/me" },
   { method: "POST", path: "/operator/auth/logout" },

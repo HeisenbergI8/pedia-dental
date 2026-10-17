@@ -1,5 +1,6 @@
 import { Injectable, type NestMiddleware } from "@nestjs/common";
 import type { NextFunction, Request, Response } from "express";
+import { RESET_TEXTS_PER_HOUR } from "@pedia/shared";
 import { Clock } from "../common/clock";
 import { PrismaService } from "../prisma/prisma.service";
 import { runInTransaction } from "../prisma/transaction";
@@ -14,6 +15,9 @@ export type RateLimit = { hits: number; windowSeconds: number };
 export const RATE_LIMITS = {
   login: { hits: 20, windowSeconds: 300 },
   auth: { hits: 120, windowSeconds: 60 },
+  // B11 decision 19: reset texts per sign-in value (a number or an email), not per address. Counted by PortalService
+  // before it looks the value up, so a refusal says nothing about whether an account exists. A fixed window.
+  reset: { hits: RESET_TEXTS_PER_HOUR, windowSeconds: 3600 },
 } as const satisfies Record<string, RateLimit>;
 export type RateLimitGroup = keyof typeof RATE_LIMITS;
 

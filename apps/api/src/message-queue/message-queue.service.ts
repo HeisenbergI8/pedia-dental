@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { FAILURE, choiceDeclined, composeMessage, nextSendingTime, preVisitMessageFor, reminderSendAt, smsNumber, type Appointment, type Message, type MessageEvent, type MessageStatus, type Patient } from "@pedia/shared";
+import { FAILURE, choiceDeclined, composeMessage, nextSendingTime, preVisitMessageFor, reminderSendAt, smsNumber, type Appointment, type Guardian, type Message, type MessageEvent, type MessageStatus, type Patient } from "@pedia/shared";
 import { ownClinicId } from "../clinic/account-lock";
 import { Clock } from "../common/clock";
 import { Prisma } from "../generated/prisma/client.ts";
@@ -51,6 +51,32 @@ export class MessageQueueService {
     return toMessage(row);
   }
 
+  /**
+   * An invite or reset text (B11 E4): to this guardian's own number, now, whatever the hour (decision 12) and the
+   * family's reminders choice (decision 20). The body holds [link]; the sender puts the real link in (E5).
+   */
+  async queueAccountText(
+    tx: Tx,
+    t: { kind: "portal_invite" | "password_reset"; patientId: string; guardian: Pick<Guardian, "fullName" | "phone">; linkId: string; body: string },
+  ): Promise<Message> {
+    const now = this.clock.now();
+    const row = await tx.message.create({
+      data: {
+        clinicId: ownClinicId(), patientId: t.patientId, kind: t.kind, channel: "sms", to: t.guardian.phone, recipientName: t.guardian.fullName,
+        body: t.body, status: "queued", sendAt: now, createdAt: now, linkId: t.linkId,
+      },
+      select: MESSAGE_COLUMNS,
+    });
+    await this.outbox.enqueue(tx, { kind: MESSAGE_SEND, payload: { messageId: row.id }, availableAt: now });
+    return toMessage(row);
+  }
+
+  /** Withdraws the account texts of these links not yet handed to the provider (a resend, a turn-off: B11 E9). */
+  async withdrawLinks(tx: Tx, linkIds: readonly string[]): Promise<number> {
+    if (!linkIds.length) return 0;
+    return (await tx.message.updateMany({ where: { linkId: { in: [...linkIds] }, ...WITHDRAWABLE }, data: { status: "cancelled" } })).count;
+  }
+
   /** mocks/outbox.ts `queueBookingMessages`: a confirmation now, a reminder the day before, pre-visit instructions with it. */
   async queueBooking(tx: Tx, a: Pick<Appointment, "id" | "patientId" | "startsAt" | "dentistId" | "procedureCode">, patient: Patient): Promise<void> {
     const base = { patientId: a.patientId, appointmentId: a.id, startsAt: a.startsAt, dentistId: a.dentistId };
@@ -99,7 +125,8 @@ export class MessageQueueService {
       SELECT patientId, status, sendAt FROM (
         SELECT patientId, status, sendAt, ROW_NUMBER() OVER (PARTITION BY patientId ORDER BY sendAt DESC, status = 'sent' DESC, id DESC) AS rn
         FROM Message
-        WHERE clinicId = ${ownClinicId()} AND status IN ('sent', 'failed') AND patientId IN (${Prisma.join([...patientIds])})
+        WHERE clinicId = ${ownClinicId()} AND status IN ('sent', 'failed') AND kind NOT IN ('portal_invite', 'password_reset')
+          AND patientId IN (${Prisma.join([...patientIds])})
       ) last WHERE rn = 1`;
     return rows.map((r) => ({ ...r, sendAt: r.sendAt.toISOString() }));
   }

@@ -20,6 +20,11 @@ describe("rate-limit policy", () => {
     expect(retryAfter(new Date("2026-10-16T02:04:59.999Z"), RATE_LIMITS.login)).toBe(1);
   });
 
+  it("allows 3 reset texts per sign-in value per hour, never routed by path (B11 decision 19)", () => {
+    expect(RATE_LIMITS.reset).toEqual({ hits: 3, windowSeconds: 3600 });
+    expect(groupOf("POST", "/auth/password-reset")).toBe("auth"); // the address limit still applies; the per-number one is PortalService's
+  });
+
   it("keeps a bucket inside its column", () => {
     expect(bucketOf("login", "x".repeat(300))).toHaveLength(191);
   });
