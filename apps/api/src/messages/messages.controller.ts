@@ -19,7 +19,7 @@ export class MessagesController {
 
   /** GET /messages?patientId=&status=: messages.view; a parent only for their own child (owner "query", the guard). */
   @Get("messages")
-  list(@Query("patientId") patientId?: string, @Query("status") status?: string) {
+  list(@Query("patientId") patientId?: unknown, @Query("status") status?: unknown) {
     return this.messages.list(patientId, status);
   }
 

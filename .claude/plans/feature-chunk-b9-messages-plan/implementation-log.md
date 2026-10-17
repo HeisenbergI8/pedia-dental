@@ -143,3 +143,11 @@ scheduling spec's Today case couldn't sign in after about 20 sign-ins: the sign-
 `RateLimitCounter`, `api-scheduling` alone: 5 passed. Both servers stopped by their process tree; `tsconfig.json` reverted;
 the temporary Playwright config deleted.
 **Gate:** `pnpm run check` exit 0 (shared 207, seed 22, web 358, api 345).
+
+## Review fixes — 2026-10-17
+
+**Tester D1 (medium):** `GET /messages?patientId=a&patientId=b` answered 500 (an array reached Prisma). The guard checks
+the first value (`URLSearchParams.get`), so `list` now reads the first value too: what the guard allowed is what is
+listed. **Tester D2 (low):** a `patientId` of 192+ characters answered 500 (P2000); it now matches nothing (`[]`, no
+audit row). New case in `messages.int` (13 passed). The same long-id 500 on B7's `GET /patients/:id/appointments` is
+pre-existing and out of B9's scope.

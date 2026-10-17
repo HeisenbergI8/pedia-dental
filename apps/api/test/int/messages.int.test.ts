@@ -99,6 +99,16 @@ describe("the message log (GET /messages)", () => {
     expect(await ok(call("get", `/messages?patientId=${own.id}`, await as(NGITI_OWNER)), z.array(Message))).toEqual([]);
   });
 
+  it("reads a repeated patientId as the one the guard checked, and an over-long one as no child (tester D1, D2)", async () => {
+    clock.set(at("2026-03-16T10:00:00"));
+    const other = db.patients.find((p) => !p.guardians.some((g) => g.id === parentGuardianId))!;
+    const parent = await as(PARENT);
+    const twice = await ok(call("get", `/messages?patientId=${own.id}&patientId=${other.id}`, parent), z.array(Message));
+    expect(twice.every((m) => m.patientId === own.id)).toBe(true);
+    expect((await call("get", `/messages?patientId=${other.id}&patientId=${own.id}`, parent)).status).toBe(403);
+    expect(await ok(call("get", `/messages?patientId=${"x".repeat(192)}`, await as(FRONT_DESK)), z.array(Message))).toEqual([]);
+  });
+
   it("audits a child's log, not the clinic's", async () => {
     clock.set(at("2026-03-16T10:00:00"));
     const views = () => inClinic(DEMO_CLINIC_ID, () => prisma.auditEvent.count({ where: { record: "Messages", action: "view" } }));

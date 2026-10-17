@@ -17,6 +17,8 @@ const toTemplate = (t: TemplateRow): MessageTemplate => MessageTemplate.parse({ 
 
 const DECLINED = "This family declined reminder messages. Change it under Privacy on the child's Overview."; // mocks.ts:9
 const NO_GUARDIAN = "This patient has no primary guardian to message";
+/** The id columns are VARCHAR(191): a longer id can't name a record. */
+const ID_MAX = 191;
 
 /** features/messages/mocks.ts: the templates (B3), the log and the two manual texts (B9). The log itself is MessageQueueService's. */
 @Injectable()
@@ -50,8 +52,15 @@ export class MessagesService implements OnModuleInit {
     return toTemplate(await this.prisma.messageTemplate.findFirstOrThrow({ where: { kind: found.kind }, select: TEMPLATE }));
   }
 
-  /** GET /messages: newest first. An unknown `status` is ignored, as the mock's safeParse. Audited per child only (E12). */
-  async list(patientId: string | undefined, status: string | undefined): Promise<Message[]> {
+  /**
+   * GET /messages: newest first. An unknown `status` is ignored, as the mock's safeParse. Audited per child only (E12).
+   * A repeated `patientId` is read as its first value, the one the guard checked (URLSearchParams.get); an id longer
+   * than any stored one matches nothing.
+   */
+  async list(query: unknown, status: unknown): Promise<Message[]> {
+    const first = Array.isArray(query) ? query[0] : query;
+    const patientId = typeof first === "string" && first ? first : undefined;
+    if (patientId && patientId.length > ID_MAX) return [];
     const s = MessageStatus.safeParse(status);
     const rows = await this.queue.list({ ...(patientId && { patientId }), ...(s.success && { status: s.data }) });
     if (patientId) await this.audit.record("view", "Messages", patientId);
