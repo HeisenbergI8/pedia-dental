@@ -126,3 +126,20 @@ race red with nine 500s (the unique backstop keeps one row).
 **Deviations from plan:** there's no `no_contact` chip (PatientFilter), so the unit case checks `needs_attention`. The Today
 case expects "queued" after the drain when the run is outside sending hours (the handler defers it).
 **Gate:** `pnpm run check` exit 0 (api 345) · `pnpm --filter api test:int test/int/today.int.test.ts test/int/patients-read.int.test.ts` 25 passed.
+
+## Phase 9: Cut-over — 2026-10-17
+
+**Steps completed:** 9.1, 9.2, 9.3, 9.4.
+**Files changed:** `apps/web/src/mocks/{passthrough,passthrough.test}.ts`, `apps/web/src/features/messages/components/message-log.tsx` (footer copy),
+`apps/web/e2e/api-messages.spec.ts` (new), `CONVENTIONS.md`, `apps/api/CONVENTIONS.md`, `apps/api/CHUNKS.md`, `packages/shared/src/schemas/message.ts` (comments).
+**Deviations from plan:** the spec's setup writes (register, book, cancel, privacy "no") go through `page.request` as the
+signed-in user, and every check of the log goes through the page. The UI cancel and privacy flows were B7's and B4's
+specs' job. The parent case checks the care page's `GET /messages?patientId=` comes from the API. CONVENTIONS records the
+sender name as unset (decision 18), not `PRIMOLAR`.
+**E2E:** fresh database `pedia_dental_e2e_b9`, API on 4130 (log driver, `BACKGROUND_WORK=true`, poll 500 ms), web on
+3180 in `hybrid`, run at about 15:30 Manila (inside sending hours, so "Sent" was checked). Run 1: `api-messages` 7 passed.
+Run 2 on the same database: `api-messages` + `api-scheduling` + `api-billing` together, 18 passed and 1 failed (the
+scheduling spec's Today case couldn't sign in after about 20 sign-ins: the sign-in limit). After clearing
+`RateLimitCounter`, `api-scheduling` alone: 5 passed. Both servers stopped by their process tree; `tsconfig.json` reverted;
+the temporary Playwright config deleted.
+**Gate:** `pnpm run check` exit 0 (shared 207, seed 22, web 358, api 345).

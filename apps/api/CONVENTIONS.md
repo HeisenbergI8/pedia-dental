@@ -6,7 +6,7 @@ The Primolar backend. It replaces the browser mocks (MSW) in `apps/web` **endpoi
 feature code in the web app**. The product, the users and the domain are the ones in the root `CONVENTIONS.md`
 and `ROADMAP.md`; read those first. This file covers only how the API is built.
 
-**Current phase: B1–B8 done** (2026-10-17). The runtime core (request context, `Clock`, logs, tenant scoping,
+**Current phase: B1–B9 done** (2026-10-17). The runtime core (request context, `Clock`, logs, tenant scoping,
 transactions, audit), `@pedia/seed`, the `test:int` suite on MySQL and CI, identity, sessions and the access guard,
 `/auth/*`, `/operator/auth/*` and the clinic reads, with the web signing in against them in `hybrid` mode. B1-c added
 the outbox, scheduled jobs and file storage. B3: the Owner's settings
@@ -18,8 +18,11 @@ entries, corrections as new rows) and the last visit in the patient list and hea
 B7: appointments without double-booking, parents' requests, follow-ups and recalls, the patient list's recall and visit
 filters, and Today, served in `hybrid`. B8: bills, payments, deposits and credit (every money POST behind an
 Idempotency-Key, gapless receipt numbers), voiding a bill made by mistake, refunds for the Owner and admins, balances
-in the patient list and header, the day's collections and the financial dashboard, served in `hybrid`. B9 (messages)
-is next. The
+in the patient list and header, the day's collections and the financial dashboard, served in `hybrid`. B9: parent
+texts queued in the transaction of the change that causes them (booking, move, no-show, a signed note, the due list's
+recall text, the birthday greeting and its daily job), consent checked when queued, sent exactly once by the outbox
+worker inside 8 AM–8 PM Manila (the log driver until `SEMAPHORE_API_KEY` is set), retried then shown as failed, and the
+patient list's "no contact" and Today's greeting ticks, served in `hybrid`. B10 (documents and storage) is next. The
 build order is [CHUNKS.md](CHUNKS.md).
 
 **Stack:** NestJS 12 (ESM, Express) · Prisma 7 + MySQL 8.4 (MariaDB driver adapter) · Zod 4 schemas from
@@ -81,7 +84,8 @@ Run from the repo root.
 | Notes | `src/notes/` | `NotesService`: templates (B3), notes and signing (B6); `note.rows.ts`, `note.rules.ts` (the mock's refusals, `checkValues`) |
 | Growth | `src/growth/` | B6: `GrowthService` (one record per visit, replaced), `growth.rows.ts` |
 | Plan | `src/plan/` | B6: `PlanService` (list, add, status; `completeBy` for signing), `plan.rows.ts`, `plan.rules.ts` |
-| Messages | `src/messages/` | B3: `GET`/`PUT /message-templates`. B9 adds the queue |
+| Messages | `src/messages/` | B3: `GET`/`PUT /message-templates`. B9: `GET /messages`, `POST /due-items/:id/message`, `POST /patients/:id/birthday-greeting`; `messages.jobs.ts` (the daily birthday job, 08:05 Manila, and the dead-letter repair) |
+| Message queue | `src/message-queue/` | B9: `MessageQueueService` (the only reader and writer of `Message`: queue, withdraw, the birthday rule, the monthly count), `MessageSendHandler` (the `message.send` outbox kind), `SmsProvider` with `LogSmsProvider` and `SemaphoreSmsProvider`, `message.rows.ts` |
 | Outbox | `src/outbox/` | `OutboxService.enqueue(tx, …)` (the write side, inside the caller's transaction), `OutboxWorker` (claim, run, settle), `OutboxHandlers` (features register a handler per kind), `NoopHandler` |
 | Scheduled jobs | `src/jobs/`, `src/<feature>/<feature>.jobs.ts` | `JobRunner.run(job, fn)` (the `JobLock` lease). Each `@Cron` lives in the module that owns its tables: `auth.jobs.ts` (session and rate-limit sweeps), `outbox.jobs.ts` (prune) |
 | File storage | `src/storage/` | `StorageService` (clinic-scoped keys), `FileStorage` (the driver), `LocalDiskStorage`, and the `storage.delete` outbox handler (`delete-file.handler.ts`). Import `StorageModule` where files are kept |
@@ -288,8 +292,6 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   clinic's lock (`lockAccount`) for the next number. Account before patient, never the other way round.
 - **The patient photo passes through the API's memory** (multer, at most 10 MB, JPEG/PNG/WebP only) until B10 moves it
   to presigned uploads.
-- **A reminders "no" doesn't withdraw queued messages yet** (privacy #14): messages arrive with B9, which adds the
-  withdrawal to `PatientWritesService.changeChoices`, in its transaction.
 - **A database seeded before B4 has no patients**, and `db:seed` refuses a database with accounts: use a fresh volume or
   a new database, as for B3. The same for B5's visits and chart entries.
 - **Lock before the first plain read.** MySQL's REPEATABLE READ takes the transaction's snapshot at its first plain
@@ -309,7 +311,7 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **Growth's "can't be in the future" uses the process clock** (`SaveGrowthInput`), which reads Manila time since B7
   (`clinic-time.ts`), so B6 decision 8's 00:00–08:00 window is closed.
 - **In `hybrid`, MSW's documents don't see API-created notes, plan items, bills or payments** until B10 (B6 decision 2,
-  B8), and signing on the API queues no care message until B9 (decision 1).
+  B8).
 - **Records that share a time sort by id**, not insertion order: give seeded records that must read in order distinct
   times (B6 fixed the growth examples' tie).
 - **The process runs in Asia/Manila** (`src/clinic-time.ts`, the first import of every entry point and test runner).
@@ -322,9 +324,25 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   `BranchesService`, `VisitDaysService` and `DueItemsService` share one owner without a module cycle.
 - **A database seeded before B7 has no appointments, requests or due items:** use a fresh one. On a live database,
   `pnpm --filter api db:backfill-due-items` opens the due items of notes signed before B7 (idempotent), and nothing else.
-- **In `hybrid` until B9:** no booking, move or no-show texts are queued for API appointments, and Today shows no
-  greeting ticks (B7 decisions 3, 4); MSW's `POST /due-items/:id/message` answers 404 for items created on the API
-  (seeded ones keep their ids); "No contact" stays false on the API's patient list.
+- **Every `Message` write for a child runs under that child's lock** (B9 E8). Book, status, sign, the reminders "no",
+  the recall text and the greeting already held it; move takes it since B9, in the order account → patient →
+  appointment, so a reminders "no" can't slip between move's consent read and its inserts. `Message` rows are written
+  last; the send handler locks only its `Message` row.
+- **`MessageQueueService` reads three other tables** to render a body (one template, the dentist's name, the account's
+  name), each one column, read-only (B9 E1). That keeps its module a leaf; it isn't a pattern for writes.
+- **Texts are sent exactly once, except in one window** (B9 E3, decision 13): the handler marks a text `dispatchedAt`
+  and commits before calling the provider; a text found dispatched with no outcome (a crash or timeout mid-call) becomes
+  failed, "Not confirmed by the SMS provider", and is never sent again. A withdrawal stops only undispatched texts.
+- **Outbox handlers can steer the worker** (B9): `retryDelaysMs` (their own schedule), `deadLetter` (told once when a
+  row is given up, by the claim that settled it), `OutboxDefer` (not now, without spending a try: sending hours) and
+  `OutboxPermanent` (fail at once). The daily birthday job also repairs a text left `queued` when its outbox row failed
+  and the hook never ran.
+- **The log driver never logs a number or a body**, only the message id and its parts. Semaphore's contract was taken
+  from its documentation as summarised (the docs host wasn't reachable when B9 was built): confirm it against
+  api.semaphore.co/docs, and get the sender name approved on the Semaphore account, **before** setting
+  `SEMAPHORE_API_KEY`. `SMS_SENDER_NAME` is unset until the name is chosen (decision 18), and then Semaphore's default
+  name is used.
+- **A database seeded before B9 has no messages:** use a fresh one.
 - **Every money write locks in one order: the Idempotency-Key claim → the patient → the bill → the receipt counter**
   (B8 E1). The key claim is a raw `INSERT`: Prisma's `create` reads the row back, a plain read that would take the
   snapshot before `lockPatient` (the lock-before-the-first-read trap). The receipt counter is always the last lock.
@@ -367,7 +385,8 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   A claim leases rows by moving `availableAt` forward; a result is saved only while `attempts` still matches the claim.
   Delivery is at least once: handlers are idempotent and pass the row id to the provider as its idempotency key.
   Payloads hold ids only; `lastError` holds only an error's name and Prisma code. 5 attempts, backoff 30 s → 1 h, sent
-  rows pruned after 7 days (`OUTBOX_POLICY`, tuned in B9).
+  rows pruned after 7 days (`OUTBOX_POLICY`); since B9 a kind may bring its own schedule (`message.send`: 4 tries,
+  about 1, 5 and 30 minutes apart).
 - **Scheduled jobs** (B1): `@nestjs/schedule`, started only with `background` (`BACKGROUND_WORK`). Each run takes a
   `JobLock` lease shorter than the job's period and keeps it after a successful run, so a second instance's tick
   skips; a failed run releases it.
@@ -393,7 +412,7 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
     leading wildcard can't use an index, so a search scans one clinic's rows; full-text when a clinic passes ~10k.
   - **No column encryption** of medical fields: the disk is encrypted (B13).
   - **`/patient-summaries` and the header summary** are the API's; last visit, recall and balance are filled (B5, B7,
-    B8); "no contact" stays false until B9.
+    B8); "no contact" from each child's last sent or failed text (B9, `lastTried`).
   - **Audit**: one `view` "Patient profile" per single-record read (`GET /patients/:id`, its summary) and `view`
     "Patient photo", except that the same user viewing the same record again within five minutes isn't logged twice
     (`REPEAT_WINDOW_MS`, B1, as the mock); **lists, searches and duplicate checks aren't audited**, unlike the mock's "Patient list" entries.
@@ -417,7 +436,7 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
     "Dental chart" once per request), written in the write's transaction.
 - **Notes, growth and the plan** (B6, decisions in the B6 plan; the user confirmed 1, 4, 5 and 8):
   - Signing completes the plan items it covers (`itemsCompletedBy`) and (since B7) opens its due item, in its
-    transaction; the care message (B9) is a marker in `NotesService.sign`.
+    transaction, and since B9 queues the procedure's care text (`NOTE_MESSAGES`) in it.
   - Any staff with `clinical.write` may edit and sign a draft, even after the visit; the author is the visit's dentist.
   - A signed note is read-only in `NotesService` (lock + guarded update); `ClinicalNote` isn't append-only (drafts edit).
   - `sourceChartEntryId` is stored as given, unchecked, as the mock.
@@ -447,6 +466,22 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
     a credit draws the bill's branch's deposits first (E11, `depositLegs`). The day's list and the dashboard filter by it.
   - The demo keeps Idempotency-Keys in memory per clinic for 24 hours (E12); the API in `IdempotencyKey` rows.
   - A payment's reference number is capped at 100 characters and a refund's or void's reason at 500 (E13).
+- **Messages** (B9, decisions in the B9 plan's `decisions.md`, settled with the user before planning; 13–17 after):
+  - SMS only, through Semaphore; no email in B9 (1). One platform-owned Semaphore account (2) and one shared sender
+    name, with the clinic's name in the text (3); the name itself isn't chosen yet (18).
+  - Texts go out 8 AM–8 PM Manila only; anything due outside waits until 8 AM, at queue time and again at send time (4).
+  - A failed send retries about 1, 5 and 30 minutes later, then shows as failed with its reason; no Resend (5). A
+    number that isn't a Philippine mobile fails at once, "No phone number" (12). An in-doubt send is never resent (13).
+  - Texts go to the primary guardian's phone only (6). Consent is checked when a text is queued; a reminders "no"
+    withdraws the child's waiting texts in its own transaction.
+  - A cancel withdraws an appointment's waiting texts; a move withdraws them and queues the new time's, a new
+    confirmation included (7, 17); a no-show also queues the missed-appointment text.
+  - Birthday greetings: a daily job at 08:05 Manila, once per child per Manila year (`greetingYear`, unique), the
+    button kept (8); suspended clinics get none, while their queued texts still go (16). Recall texts stay manual (9).
+  - Each clinic's sent texts and billed parts per month are counted, never stored and never blocking (10, 14): limits
+    come with B12. The log driver is used everywhere, production included, until `SEMAPHORE_API_KEY` is set (11).
+  - The log stays unpaged, as the demo; it shows the guardian's number to anyone with `messages.view` (15: dentists
+    don't hold it). Only a child's log is audited ("Messages").
 - **Scheduling, follow-ups and Today** (B7, decisions in the B7 plan; the user confirmed 1–4 and 6):
   - Double-booking is the demo's rule: the same chair or the same dentist at an overlapping time, at any branch; the
     same child twice is allowed (1). Bookings and moves serialise on the clinic's row (E1), tested with parallel requests.
