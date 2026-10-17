@@ -83,7 +83,9 @@ export function birthdayGreeting<M extends Pick<Message, "patientId" | "kind" | 
 }
 
 /** What happened, and to whom. `startsAt` / `dueOn` / `dentistId` feed the placeholders. */
-export type MessageEvent = Pick<Message, "kind" | "patientId" | "sendAt" | "appointmentId" | "noteId" | "dueItemId"> & {
+/** A parent message's cause: always a template kind (account texts are queued apart, B11 E4). */
+export type MessageEvent = Pick<Message, "patientId" | "sendAt" | "appointmentId" | "noteId" | "dueItemId"> & {
+  kind: MessageKind;
   startsAt?: string;
   dueOn?: string;
   dentistId?: string;

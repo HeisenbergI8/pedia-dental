@@ -19,7 +19,7 @@ const NAMES = {
 } as const;
 
 const NO_ACCESS = "You don't have access to this page";
-const SIGN_IN_ERROR = "That email and password don't match a demo account";
+const SIGN_IN_ERROR = "That mobile number or email and password don't match a demo account";
 const NOTICE_HEADING = "Bulilit Smiles Pediatric Dental's privacy notice";
 
 // ---------- helpers (UI only) ----------
@@ -31,7 +31,7 @@ const NOTICE_HEADING = "Bulilit Smiles Pediatric Dental's privacy notice";
 async function signIn(page: Page, email: string, password: string = DEMO_PASSWORD) {
   await openSignIn(page);
   const form = page.getByRole("region", { name: "Sign in" });
-  await form.getByLabel("Email").fill(email);
+  await form.getByLabel("Mobile number or email").fill(email);
   await form.getByLabel("Password", { exact: true }).fill(password);
   await form.getByRole("button", { name: "Sign in" }).click();
 }
@@ -206,7 +206,7 @@ test.describe("happy paths", () => {
     await page.getByRole("button", { name: "Sign in as someone else" }).click();
     await expectOnSignIn(page);
     // The form is empty, ready for the next person.
-    await expect(signInForm(page).getByLabel("Email")).toHaveValue("");
+    await expect(signInForm(page).getByLabel("Mobile number or email")).toHaveValue("");
     await signInAs(page, "frontdesk");
     await mainNav(page).getByRole("link", { name: "Billing" }).click();
     await expect(page.getByRole("heading", { name: "Billing", level: 1 })).toBeVisible({ timeout: 30_000 });
@@ -247,7 +247,7 @@ test.describe("failed paths", () => {
     await expect(signInForm(page).getByRole("alert")).toHaveText(SIGN_IN_ERROR, { timeout: 30_000 });
     await expect(page).toHaveURL(/\/login$/);
     // The email stays typed so they only retype the password.
-    await expect(signInForm(page).getByLabel("Email")).toHaveValue(USERS.owner);
+    await expect(signInForm(page).getByLabel("Mobile number or email")).toHaveValue(USERS.owner);
   });
 
   test("an unknown email gets the same message as a wrong password, so emails can't be probed", async ({ page }) => {
@@ -259,17 +259,17 @@ test.describe("failed paths", () => {
   test("submitting an empty sign-in form asks for the email and the password", async ({ page }) => {
     await openSignIn(page);
     await signInForm(page).getByRole("button", { name: "Sign in" }).click();
-    await expect(page.getByText("Enter your email address, like name@example.com")).toBeVisible();
+    await expect(page.getByText("Enter your mobile number or email")).toBeVisible();
     await expect(page.getByText("Enter your password")).toBeVisible();
     await expect(page).toHaveURL(/\/login$/);
   });
 
   test("an email without a domain is caught before anything is sent", async ({ page }) => {
     await openSignIn(page);
-    await signInForm(page).getByLabel("Email").fill("owner@");
+    await signInForm(page).getByLabel("Mobile number or email").fill("owner@");
     await signInForm(page).getByLabel("Password", { exact: true }).fill(DEMO_PASSWORD);
     await signInForm(page).getByRole("button", { name: "Sign in" }).click();
-    await expect(page.getByText("Enter your email address, like name@example.com")).toBeVisible();
+    await expect(page.getByText("Enter a mobile number like 0917 123 4567, or an email address")).toBeVisible();
     await expect(page).toHaveURL(/\/login$/);
   });
 
@@ -417,7 +417,7 @@ test.describe("failed paths", () => {
 
     await page.getByLabel("New password").fill(temp);
     await page.getByRole("button", { name: "Save and continue" }).click();
-    await expect(page.getByText("Choose a password different from the temporary one")).toBeVisible();
+    await expect(page.getByText("Choose a new password, not the one you use now")).toBeVisible();
 
     await page.getByLabel("Temporary password").fill("not-the-temp-1");
     await page.getByLabel("New password").fill("BagongPass2026");
@@ -530,7 +530,7 @@ test.describe("edge cases", () => {
 
   test("an email typed in capitals with spaces around it still signs in", async ({ page }) => {
     await openSignIn(page);
-    await signInForm(page).getByLabel("Email").fill("  OWNER@Gmail.COM  ");
+    await signInForm(page).getByLabel("Mobile number or email").fill("  OWNER@Gmail.COM  ");
     await signInForm(page).getByLabel("Password", { exact: true }).fill(DEMO_PASSWORD);
     await signInForm(page).getByRole("button", { name: "Sign in" }).click();
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 30_000 });
@@ -565,7 +565,7 @@ test.describe("edge cases", () => {
 
   test("a person signs in using only the keyboard", async ({ page }) => {
     await openSignIn(page);
-    await signInForm(page).getByLabel("Email").focus();
+    await signInForm(page).getByLabel("Mobile number or email").focus();
     await page.keyboard.type(USERS.admin);
     await page.keyboard.press("Tab");
     await expect(signInForm(page).getByLabel("Password", { exact: true })).toBeFocused();
@@ -582,7 +582,7 @@ test.describe("edge cases", () => {
 
   test("double-clicking Sign in signs the person in once and lands them home", async ({ page }) => {
     await openSignIn(page);
-    await signInForm(page).getByLabel("Email").fill(USERS.frontdesk);
+    await signInForm(page).getByLabel("Mobile number or email").fill(USERS.frontdesk);
     await signInForm(page).getByLabel("Password", { exact: true }).fill(DEMO_PASSWORD);
     await signInForm(page).getByRole("button", { name: "Sign in" }).dblclick();
     await expect(page).toHaveURL(/\/appointments/, { timeout: 30_000 });
@@ -591,10 +591,10 @@ test.describe("edge cases", () => {
 
   test("a very long email is refused politely without breaking the page", async ({ page }) => {
     await openSignIn(page);
-    await signInForm(page).getByLabel("Email").fill(`${"a".repeat(300)}@gmail.com`);
+    await signInForm(page).getByLabel("Mobile number or email").fill(`${"a".repeat(300)}@gmail.com`);
     await signInForm(page).getByLabel("Password", { exact: true }).fill("x".repeat(500));
     await signInForm(page).getByRole("button", { name: "Sign in" }).click();
-    await expect(signInForm(page).getByRole("alert").or(page.getByText("Enter your email address, like name@example.com"))).toBeVisible({ timeout: 30_000 });
+    await expect(signInForm(page).getByRole("alert").or(page.getByText("Enter a mobile number like 0917 123 4567, or an email address"))).toBeVisible({ timeout: 30_000 });
     await expect(page).toHaveURL(/\/login$/);
     await expect(page.getByRole("heading", { name: "Sign in", level: 1 })).toBeVisible();
   });
@@ -628,7 +628,7 @@ test.describe("edge cases", () => {
     await expect(page.getByRole("navigation", { name: "Main" })).toHaveCount(0);
     await chooser.getByRole("button", { name: /back|someone else|different/i }).click();
     await expect(signInForm(page)).toBeVisible();
-    await signInForm(page).getByLabel("Email").fill(USERS.frontdesk);
+    await signInForm(page).getByLabel("Mobile number or email").fill(USERS.frontdesk);
     await signInForm(page).getByLabel("Password", { exact: true }).fill(DEMO_PASSWORD);
     await signInForm(page).getByRole("button", { name: "Sign in" }).click();
     await expect(page).toHaveURL(/\/appointments/, { timeout: 30_000 });

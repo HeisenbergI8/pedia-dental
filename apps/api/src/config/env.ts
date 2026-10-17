@@ -36,6 +36,8 @@ const Env = z.object({
   // "PRIMOLAR" (decision 18); unset until Semaphore approves it, which sends with Semaphore's own default name.
   SMS_SENDER_NAME: z.string().min(1).max(11).optional(),
   SEMAPHORE_URL: z.url().default("https://api.semaphore.co/api/v4/messages"),
+  // B11: the web app's address, which texted invite and reset links open. Set it in production (the default is dev's).
+  WEB_URL: z.url().default("http://localhost:3000"),
 });
 
 export type Env = z.infer<typeof Env>;

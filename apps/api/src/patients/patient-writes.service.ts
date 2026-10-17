@@ -1,16 +1,18 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, PayloadTooLargeException } from "@nestjs/common";
 import {
   AddConsentInput, ChangePrivacyChoicesInput, CreatePatientInput, EditPatientWithoutContactsInput, QuickUpdatePatientInput,
-  RecordPrivacyConsentInput, currentChoices, nextPatientNo, patientSearchText, type PatientView, type RegisterPatientInput,
+  RecordPrivacyConsentInput, currentChoices, nextPatientNo, patientSearchText, smsNumber, type Guardian, type Patient, type PatientView, type RegisterPatientInput,
 } from "@pedia/shared";
 import type { z } from "zod";
 import { AuditService } from "../audit/audit.service";
-import { lockAccount } from "../clinic/account-lock";
+import { SessionService } from "../auth/session.service";
+import { lockAccount, ownClinicId } from "../clinic/account-lock";
 import { Clock } from "../common/clock";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { PrivacyNoticeService } from "../legal/privacy-notice.service";
 import { MessageQueueService } from "../message-queue/message-queue.service";
 import { OutboxService } from "../outbox/outbox.service";
+import { PortalService } from "../portal/portal.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { clinicData } from "../prisma/tenant-scope";
 import { runInTransaction, type Tx } from "../prisma/transaction";
@@ -40,7 +42,29 @@ export class PatientWritesService {
     private readonly storage: StorageService,
     private readonly outbox: OutboxService,
     private readonly messages: MessageQueueService,
+    private readonly portal: PortalService,
+    private readonly sessions: SessionService,
   ) {}
+
+  /**
+   * B11 decision 15: a guardian whose mobile this edit changed moves their portal sign-in with it (409 when another
+   * parent signs in with, or was invited on, the new number: decision 14). The logins moved, for ending their sessions.
+   */
+  private async followNumbers(tx: Tx, before: Patient, after: readonly Guardian[]): Promise<string[]> {
+    const moved: string[] = [];
+    for (const g of after) {
+      const old = before.guardians.find((x) => x.id === g.id);
+      if (!old || smsNumber(old.phone) === smsNumber(g.phone)) continue; // the same number, written another way
+      const login = await this.portal.numberChanged(tx, { guardianId: g.id, fullName: g.fullName, phone: g.phone, email: g.email ?? null });
+      if (login) moved.push(login);
+    }
+    return moved;
+  }
+
+  /** After the commit, as changePassword: every device of a parent whose sign-in moved signs in again (decision 15). */
+  private async endSessions(logins: readonly string[]): Promise<void> {
+    for (const login of logins) await this.sessions.closeAllFor(ownClinicId(), login);
+  }
 
   /** POST /patients (privacy #12): the child, their guardians and the parent's consent, or nothing. */
   async register(viewer: Viewer, input: RegisterPatientInput): Promise<PatientView> {
@@ -69,7 +93,8 @@ export class PatientWritesService {
 
   /** PUT /patients/:id: the whole record but consents. Without patients.contact the stored contacts are kept. */
   async update(viewer: Viewer, id: string, body: unknown): Promise<PatientView> {
-    return runInTransaction(this.prisma, async (tx) => {
+    const { view, moved } = await runInTransaction(this.prisma, async (tx) => {
+      await lockAccount(tx); // B11: a number change is checked against other parents' numbers (decision 14, E8)
       await lockPatient(tx, id);
       const current = await this.patients.one(id, tx);
       let input: CreatePatientInput;
@@ -87,20 +112,25 @@ export class PatientWritesService {
       await tx.patient.update({ where: { id }, data: columns, select: { id: true } });
       await tx.patientGuardian.deleteMany({ where: { patientId: id } });
       await tx.patientGuardian.createMany({ data: guardianRows(id, next.guardians).map((g) => ({ ...clinicData(), ...g })) });
+      const moved = await this.followNumbers(tx, current, next.guardians);
       await this.audit.record("update", "Patient profile", id, tx);
-      return visibleTo(viewer, await this.patients.one(id, tx));
+      return { view: visibleTo(viewer, await this.patients.one(id, tx)), moved };
     });
+    await this.endSessions(moved);
+    return view;
   }
 
   /** PATCH /patients/:id: phone, nickname, tags and alerts. The phone is the primary guardian's, on every child of theirs. */
   async quickUpdate(viewer: Viewer, id: string, body: unknown): Promise<PatientView> {
-    return runInTransaction(this.prisma, async (tx) => {
+    const { view, moved } = await runInTransaction(this.prisma, async (tx) => {
+      await lockAccount(tx); // B11: as update
       await lockPatient(tx, id);
       const input = parse(QuickUpdatePatientInput, body);
       const refused = refusedTag(input.tags);
       if (refused) throw new BadRequestException(refused);
       const current = await this.patients.one(id, tx);
       let touched = [id];
+      let moved: string[] = [];
       if (input.phone !== undefined) {
         if (!inScope(viewer, "patients.contact", id)) throw new ForbiddenException("Only front desk and admin can change contact details");
         const primary = current.guardians.find((g) => g.isPrimary) ?? current.guardians[0]!;
@@ -108,12 +138,15 @@ export class PatientWritesService {
         await tx.patientGuardian.updateMany({ where: { guardianId: primary.id }, data: { phone: input.phone } });
         const kin = await tx.patientGuardian.findMany({ where: { guardianId: primary.id }, select: { patientId: true } });
         touched = [...new Set([id, ...kin.map((k) => k.patientId)])];
+        moved = await this.followNumbers(tx, current, [{ ...primary, phone: input.phone }]);
       }
       await tx.patient.update({ where: { id }, data: { nickname: input.nickname || null, tags: input.tags, alerts: input.alerts }, select: { id: true } });
       await this.refreshSearch(tx, touched);
       await this.audit.record("update", "Patient profile", id, tx);
-      return visibleTo(viewer, await this.patients.one(id, tx));
+      return { view: visibleTo(viewer, await this.patients.one(id, tx)), moved };
     });
+    await this.endSessions(moved);
+    return view;
   }
 
   /** POST /patients/:id/consents: a treatment consent by one of this child's guardians. Never edited. */

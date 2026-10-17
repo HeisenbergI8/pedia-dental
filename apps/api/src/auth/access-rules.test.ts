@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { rolesCan } from "@pedia/shared";
 import { CLINIC_RULES, OPERATOR_RULES, PUBLIC_RULES, clinicRefusal, matchRoute, type Route } from "./access-rules";
 
 // A guard that reads source, like apps/web/src/design/*: the mock's gate IS the contract (CONVENTIONS → Data flow).
@@ -63,6 +64,15 @@ describe("clinicRefusal (rolesCan only)", () => {
     const list = rule("/patients");
     expect(clinicRefusal(["parent"], list.rule, list.params, q, new Set())).toBeUndefined();
   });
+  it("gives every route a parent passes at `own` an owner, or refuses the parent outright (B11 E12)", () => {
+    const parentOwn = CLINIC_RULES.filter((r) => [r.permission].flat().some((p) => rolesCan(["parent"], p) && !rolesCan(["parent"], p, "all")));
+    for (const r of parentOwn.filter((x) => !x.owner)) {
+      expect([clinicRefusal(["parent"], r, {}, q, new Set(["kid1"])), r.path]).toEqual(["You don't have access to this", r.path]);
+    }
+    // The record routes a parent can pass; each one's lookup is registered (proven with the real app on MySQL).
+    expect(parentOwn.filter((r) => r.owner === "record").map((r) => r.path).sort()).toEqual(["/appointments/:id/status", "/photos/:id/file"]);
+  });
+
   it("refuses a parent on a record-owned route until its lookup exists (fail closed)", () => {
     const { rule: r, params } = rule("/appointments/a1/status", "POST");
     expect(clinicRefusal(["parent"], r, params, q, new Set(["kid1"]))).toBe("This isn't one of your children's records");

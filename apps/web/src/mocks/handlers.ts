@@ -1,5 +1,6 @@
 import { appointmentHandlers } from "@/features/appointments/mocks";
 import { authHandlers } from "@/features/auth/mocks";
+import { portalHandlers } from "@/features/portal/mocks";
 import { billingHandlers } from "@/features/billing/mocks";
 import { chartHandlers } from "@/features/chart/mocks";
 import { clinicHandlers } from "@/features/clinic/mocks";
@@ -26,6 +27,7 @@ import { accessGate } from "./access";
 export const handlers = [
   accessGate,
   ...authHandlers,
+  ...portalHandlers,
   ...operatorHandlers,
   ...operatorSignupHandlers,
   ...signupHandlers,

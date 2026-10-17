@@ -35,6 +35,10 @@ describe("ROLE_PERMISSIONS", () => {
     expect(Role.options.filter((r) => roleCan(r, "dashboard.view"))).toEqual(["owner", "admin"]);
   });
 
+  it("lets front desk, the Owner and admins invite parents to the portal, never a dentist or a parent (B11 decision 16)", () => {
+    expect(Role.options.filter((r) => roleCan(r, "portal.manage"))).toEqual(["owner", "admin", "front_desk"]);
+  });
+
   it("shows today at a glance to every staff role, and every family's contacts only to admin and front desk", () => {
     expect(Role.options.filter((r) => roleCan(r, "today.view"))).toEqual(["owner", "admin", "dentist", "front_desk"]);
     expect(Role.options.filter((r) => roleCan(r, "patients.contact", "all"))).toEqual(["owner", "admin", "front_desk"]);

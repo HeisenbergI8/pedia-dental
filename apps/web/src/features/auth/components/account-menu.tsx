@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
-import { ChevronsUpDownIcon, LogOutIcon, RotateCcwIcon, UsersIcon } from "lucide-react";
+import Link from "next/link";
+import { ChevronsUpDownIcon, KeyRoundIcon, LogOutIcon, RotateCcwIcon, UsersIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -78,6 +79,13 @@ export function AccountMenu({ variant = "full" }: { variant?: "full" | "bar" | "
             <span className="block font-medium">{user.name}</span>
             <span className="block text-xs text-ink-muted">{ROLE_LABEL[user.role]}</span>
           </DropdownMenuLabel>
+          {user.guardianId && (
+            <DropdownMenuItem asChild>
+              <Link href="/portal/account">
+                <KeyRoundIcon /> Change password
+              </Link>
+            </DropdownMenuItem>
+          )}
           <Can permission="session.switch">
             <DropdownMenuItem onSelect={() => setSwitching(true)}>
               <UsersIcon /> Switch user

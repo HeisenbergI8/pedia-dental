@@ -22,8 +22,9 @@ import {
   sameClinicName,
   subscriptionStatus,
 } from "@pedia/shared";
+import { accountsByLogin, allAccounts } from "./logins";
 import { seedPlatform } from "./platform";
-import { seed } from "./seed";
+import { DEMO_CLINIC_ID, seed } from "./seed";
 import { seedFileOf } from "./seed-files";
 
 const today = format(new Date(), "yyyy-MM-dd");
@@ -231,5 +232,32 @@ describe("photos and documents (B10)", () => {
     const again = seed();
     expect(strip(again.photos)).toEqual(strip(db.photos));
     expect(strip(again.documents)).toEqual(strip(db.documents));
+  });
+});
+
+describe("portal accounts (B11)", () => {
+  const platform = seedPlatform();
+  it("gives every seeded guardian an active account on the demo password (decision 13)", () => {
+    for (const db of Object.values(platform.tenants)) {
+      const guardians = new Set(db.patients.flatMap((p) => p.guardians.map((g) => g.id)));
+      expect(db.portalAccounts.map((a) => a.guardianId).sort()).toEqual([...guardians].sort());
+      expect(db.portalAccounts.every((a) => a.state === "active" && !a.password && a.links.length === 0)).toBe(true);
+    }
+  });
+  it("never gives two parents of one clinic the same mobile sign-in (decision 14)", () => {
+    for (const db of Object.values(platform.tenants)) {
+      const phones = allAccounts(db).flatMap((a) => (a.phone ? [a.phone] : []));
+      expect(new Set(phones).size).toBe(phones.length);
+    }
+  });
+  it("still signs the sibling family in as parent@gmail.com, and by their number", () => {
+    const [byEmail] = accountsByLogin(platform, "parent@gmail.com");
+    expect(byEmail?.account.role).toBe("parent");
+    expect(accountsByLogin(platform, byEmail!.account.phone!).map((m) => m.account.id)).toContain(byEmail!.account.id);
+  });
+  it("drops a guardian whose access is off from the logins", () => {
+    const db = structuredClone(platform.tenants[DEMO_CLINIC_ID]!);
+    db.portalAccounts[0]!.state = "off";
+    expect(allAccounts(db).some((a) => a.guardianId === db.portalAccounts[0]!.guardianId)).toBe(false);
   });
 });

@@ -1,6 +1,6 @@
 import type { INestApplication } from "@nestjs/common";
 import { DEMO_CLINIC_ID, seedPlatform } from "@pedia/seed";
-import { composeMessage, reminderSendAt, type Patient } from "@pedia/shared";
+import { MessageKind, composeMessage, reminderSendAt, type Patient } from "@pedia/shared";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { FixedClock } from "../../src/common/clock";
 import { Hasher } from "../../src/auth/hashing";
@@ -56,7 +56,7 @@ describe("the message queue on MySQL", () => {
     ]);
     const refs = { templates: db.messageTemplates, patients: db.patients, staff: db.staff, clinicName };
     for (const m of texts) {
-      const e = { kind: m.kind, patientId: child.id, sendAt: m.sendAt.toISOString(), appointmentId: booking.id, startsAt: booking.startsAt, dentistId: booking.dentistId };
+      const e = { kind: MessageKind.parse(m.kind), patientId: child.id, sendAt: m.sendAt.toISOString(), appointmentId: booking.id, startsAt: booking.startsAt, dentistId: booking.dentistId };
       expect(m.body).toBe(composeMessage(e, refs, { id: "x", clinicId: DEMO_CLINIC_ID, createdAt: now })!.body);
     }
     const outbox = await outboxFor(texts.map((m) => m.id));

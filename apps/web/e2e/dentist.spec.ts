@@ -452,7 +452,7 @@ test.describe("failed paths", () => {
     await page.goto("/login");
     const form = page.getByRole("region", { name: "Sign in" });
     await form.getByRole("button", { name: "Sign in" }).click();
-    await expect(form.getByLabel("Email")).toHaveAttribute("aria-invalid", "true");
+    await expect(form.getByLabel("Mobile number or email")).toHaveAttribute("aria-invalid", "true");
     await expect(form.getByLabel("Password", { exact: true })).toHaveAttribute("aria-invalid", "true");
     await expect(page).toHaveURL(/\/login/);
   });

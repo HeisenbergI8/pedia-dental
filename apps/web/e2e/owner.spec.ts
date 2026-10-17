@@ -50,7 +50,7 @@ async function signOut(page: Page) {
 /** Signs in from the sign-in page already on screen (no navigation), like a person on the same device. */
 async function signInHere(page: Page, email: string, password: string) {
   const form = page.getByRole("region", { name: "Sign in" });
-  await form.getByLabel("Email").fill(email);
+  await form.getByLabel("Mobile number or email").fill(email);
   await form.getByLabel("Password", { exact: true }).fill(password);
   await form.getByRole("button", { name: "Sign in" }).click();
 }
@@ -386,7 +386,7 @@ test.describe("happy paths", () => {
     // The temporary password no longer opens the login; the chosen one does, with no more first-time screens
     await signOut(page);
     await signInHere(page, "nina.bautista@bulilitsmiles.ph", password);
-    await expect(page.getByRole("region", { name: "Sign in" }).getByRole("alert")).toHaveText("That email and password don't match a demo account");
+    await expect(page.getByRole("region", { name: "Sign in" }).getByRole("alert")).toHaveText("That mobile number or email and password don't match a demo account");
     await signInHere(page, "nina.bautista@bulilitsmiles.ph", "NinaSecure2026");
     await expect(page.getByRole("button", { name: /Niña Bautista, Dentist\. Account menu/ })).toBeVisible();
     await expect(page.getByRole("button", { name: "I understand" })).toHaveCount(0);
@@ -501,10 +501,10 @@ test.describe("failed paths", () => {
   test("owner mistypes the password and is told plainly, without a hint which part was wrong", async ({ page }) => {
     await signIn(page, USERS.owner, "pass1234");
     const form = page.getByRole("region", { name: "Sign in" });
-    await expect(form.getByRole("alert")).toHaveText("That email and password don't match a demo account");
+    await expect(form.getByRole("alert")).toHaveText("That mobile number or email and password don't match a demo account");
     await expect(page).toHaveURL(/\/login/);
     await signInHere(page, "owner@gmail.co", DEMO_PASSWORD);
-    await expect(form.getByRole("alert")).toHaveText("That email and password don't match a demo account");
+    await expect(form.getByRole("alert")).toHaveText("That mobile number or email and password don't match a demo account");
   });
 
   test("owner clears the clinic details and gets a message for each field, and nothing is saved", async ({ page }) => {
@@ -709,7 +709,7 @@ test.describe("failed paths", () => {
     await expect(page.getByText("Use at least 8 characters")).toBeVisible();
     await page.getByLabel("New password").fill(password);
     await page.getByRole("button", { name: "Save and continue" }).click();
-    await expect(page.getByText("Choose a password different from the temporary one")).toBeVisible();
+    await expect(page.getByText("Choose a new password, not the one you use now")).toBeVisible();
     await page.getByLabel("Temporary password").fill("wrong-temp-pass");
     await page.getByLabel("New password").fill("RosaChoice2026");
     await page.getByRole("button", { name: "Save and continue" }).click();

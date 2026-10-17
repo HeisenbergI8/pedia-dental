@@ -3,13 +3,13 @@ import { AcknowledgeInput, ChangePasswordInput, LoginInput, LogoutInput, SwitchU
 import { env } from "@/lib/env";
 import { branchOf, recordAudit, sessionOf } from "@/mocks/access";
 import { accountById, credentialOf, db, persist, platform, selectTenant } from "@/mocks/db";
-import { DEMO_PASSWORD, accountsByEmail, allAccounts, demoAccounts, demoLogins, passwordOpens, tokenFor, type AccountMatch, type DemoAccountRecord } from "@/mocks/demo-accounts";
+import { DEMO_PASSWORD, accountsByLogin, allAccounts, demoAccounts, demoLogins, passwordOpens, portalAccountOf, tokenFor, type AccountMatch, type DemoAccountRecord } from "@/mocks/demo-accounts";
 import { acknowledgementPrompt, expectedVersion, pendingAcknowledgement, recordAcknowledgement } from "@/mocks/privacy";
 import { DEMO_CLINIC_ID, onlineAgreement } from "@pedia/seed";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 
-const userOf = (account: DemoAccountRecord, clinicId: string): SessionUser => {
+export const userOf = (account: DemoAccountRecord, clinicId: string): SessionUser => {
   const { id, role, name, email, staffId, guardianId, roles } = account;
   return {
     id,
@@ -48,7 +48,7 @@ export const authHandlers = [
     const parsed = LoginInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
     const { email, password, clinicId } = parsed.data;
-    const matches = accountsByEmail(platform, email);
+    const matches = accountsByLogin(platform, email); // `email` holds a mobile or an email (LoginId, B11 decision 4)
     // Each failure is logged in the account it names (an unknown email has no one to log against).
     const logEach = (rows: AccountMatch[], action: AuditAction, record = "Session") =>
       rows.forEach((m) => {
@@ -59,7 +59,7 @@ export const authHandlers = [
     const opened = matches.filter((m) => passwordOpens(platform.tenants[m.clinicId]!, m.account, password));
     if (opened.length === 0) {
       logEach(matches, "sign_in_failed");
-      return new HttpResponse("That email and password don't match a demo account", { status: 401 });
+      return new HttpResponse("That mobile number or email and password don't match a demo account", { status: 401 });
     }
     // Checked after the password, so a stranger can't learn that an account is suspended. A suspended account's staff
     // are refused; its parents still sign in, read-only (decisions #26, #44).
@@ -93,25 +93,27 @@ export const authHandlers = [
   }),
 
   /**
-   * Changes the signed-in staff member's password: at first sign-in with the temporary one (decision #21), or any time
-   * after. Only for logins the Owner added: seeded demo logins keep the demo password.
+   * Changes the signed-in person's password: a staff login at first sign-in with the temporary one (decision #21) or
+   * any time after; a parent any time (B11 decision 7). Seeded demo logins keep the demo password.
    * Outside the access gate (/auth/*), which is what lets a login that must change its password reach it.
    * Returns the session again so the app drops `mustChangePassword` without a new sign-in.
    */
   http.post(url("/auth/password"), async ({ request }) => {
     const session = sessionOf(request);
-    if (!session?.staffId) return new HttpResponse("Sign in with your staff login to change its password", { status: 401 });
-    // Seeded demo logins keep the password the login screen shows; only logins the Owner added have their own.
-    if (!credentialOf(db, session.staffId)) return new HttpResponse(`Demo logins keep the demo password (${DEMO_PASSWORD})`, { status: 403 });
+    if (!session) return new HttpResponse("Sign in to change your password", { status: 401 });
+    // Seeded demo logins keep the password the login screen shows; only logins the Owner added, and parents who set
+    // one from a link, have their own.
+    const staffOwn = session.staffId ? credentialOf(db, session.staffId) : undefined;
+    const parentOwn = session.guardianId ? portalAccountOf(db, session.guardianId) : undefined;
+    if (!staffOwn && !parentOwn?.password) return new HttpResponse(`Demo logins keep the demo password (${DEMO_PASSWORD})`, { status: 403 });
     const parsed = ChangePasswordInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
     if (!passwordOpens(db, session, parsed.data.current)) {
       recordAudit(session, "denied", "Password");
       return new HttpResponse("That isn't your current password", { status: 400 });
     }
-    const own = credentialOf(db, session.staffId);
-    if (own) Object.assign(own, { password: parsed.data.next, mustChange: false });
-    else db.staffCredentials.push({ clinicId: session.clinicId, staffId: session.staffId, password: parsed.data.next, mustChange: false });
+    if (staffOwn) Object.assign(staffOwn, { password: parsed.data.next, mustChange: false });
+    else parentOwn!.password = parsed.data.next;
     persist();
     recordAudit(session, "update", "Password");
     const fresh: Session = { token: tokenFor(session.clinicId, session), user: userOf(session, session.clinicId) };

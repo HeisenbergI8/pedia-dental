@@ -44,6 +44,8 @@ describe("no contact", () => {
     expect(hasNoContact("p", [m("2026-09-05", "failed"), m("2026-09-06", "sent")])).toBe(false);
     // One send time, both outcomes: reached, whichever came first in the list (the API reads the same rule).
     expect(hasNoContact("p", [m("2026-09-05", "sent"), m("2026-09-05", "failed")])).toBe(false);
+    // B11: a failed invite to a second guardian isn't the family going unreached.
+    expect(hasNoContact("p", [m("2026-09-05", "sent"), { ...m("2026-09-06", "failed"), kind: "portal_invite" as const }])).toBe(false);
     expect(hasNoContact("p", [m("2026-09-05", "failed"), m("2026-09-05", "sent")])).toBe(false);
     expect(hasNoContact("p", [])).toBe(false);
   });

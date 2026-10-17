@@ -18,7 +18,7 @@ export const USERS = {
 export async function signIn(page: Page, email: string, password: string = DEMO_PASSWORD) {
   await page.goto("/login");
   const form = page.getByRole("region", { name: "Sign in" });
-  await form.getByLabel("Email").fill(email);
+  await form.getByLabel("Mobile number or email").fill(email);
   await form.getByLabel("Password", { exact: true }).fill(password);
   await form.getByRole("button", { name: "Sign in" }).click();
 }

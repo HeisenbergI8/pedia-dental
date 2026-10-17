@@ -1,5 +1,7 @@
+import { createHash } from "node:crypto";
 import { Injectable, type NestMiddleware } from "@nestjs/common";
 import type { NextFunction, Request, Response } from "express";
+import { RESET_TEXTS_PER_HOUR } from "@pedia/shared";
 import { Clock } from "../common/clock";
 import { PrismaService } from "../prisma/prisma.service";
 import { runInTransaction } from "../prisma/transaction";
@@ -14,6 +16,9 @@ export type RateLimit = { hits: number; windowSeconds: number };
 export const RATE_LIMITS = {
   login: { hits: 20, windowSeconds: 300 },
   auth: { hits: 120, windowSeconds: 60 },
+  // B11 decision 19: reset texts per sign-in value (a number or an email), not per address. Counted by PortalService
+  // before it looks the value up, so a refusal says nothing about whether an account exists. A rolling hour (hitRolling).
+  reset: { hits: RESET_TEXTS_PER_HOUR, windowSeconds: 3600 },
 } as const satisfies Record<string, RateLimit>;
 export type RateLimitGroup = keyof typeof RATE_LIMITS;
 
@@ -22,6 +27,11 @@ export const groupOf = (method: string, path: string): RateLimitGroup =>
   method === "POST" && (path === "/auth/login" || path === "/operator/auth/login") ? "login" : "auth";
 
 export const bucketOf = (group: RateLimitGroup, ip: string) => `${group}:${ip}`.slice(0, 191);
+/** A bucket named by what someone typed (a number, an email): only its hash is stored, never the value (B11 audit). */
+export const hashedBucketOf = (group: RateLimitGroup, typed: string) => bucketOf(group, createHash("sha256").update(typed).digest("hex"));
+
+/** The row hitRolling locks first, so parallel hits on one bucket are counted one after the other. */
+const ROLLING_LOCK_ROW = new Date(0);
 
 /** A counter whose window started this long ago has ended, in every group. */
 const LONGEST_WINDOW_MS = Math.max(...Object.values(RATE_LIMITS).map((l) => l.windowSeconds)) * 1000;
@@ -54,6 +64,24 @@ export class RateLimitService {
       return Number(row!.hits);
     });
     return { allowed: hits <= limit.hits, retryAfter: retryAfter(now, limit) };
+  }
+
+  /**
+   * A rolling window ("3 an hour" stays 3 across a window's edge: B11 decision 19): one counter per minute, summed over
+   * the last `windowSeconds`. A hit up to a minute old at the edge may be forgiven early. The bucket's lock row is taken
+   * first, so the sum is exact under concurrency.
+   */
+  async hitRolling(bucket: string, limit: RateLimit): Promise<{ allowed: boolean }> {
+    const now = this.clock.now();
+    const minute = windowStart(now, 60);
+    const since = new Date(now.getTime() - limit.windowSeconds * 1000);
+    const hits = await runInTransaction(this.prisma, async (tx) => {
+      await tx.$executeRaw`INSERT INTO RateLimitCounter (bucket, windowStart, hits) VALUES (${bucket}, ${ROLLING_LOCK_ROW}, 0) ON DUPLICATE KEY UPDATE hits = 0`;
+      await tx.$executeRaw`INSERT INTO RateLimitCounter (bucket, windowStart, hits) VALUES (${bucket}, ${minute}, 1) ON DUPLICATE KEY UPDATE hits = hits + 1`;
+      const [row] = await tx.$queryRaw<{ hits: number | bigint | null }[]>`SELECT SUM(hits) AS hits FROM RateLimitCounter WHERE bucket = ${bucket} AND windowStart > ${since}`;
+      return Number(row?.hits ?? 0);
+    });
+    return { allowed: hits <= limit.hits };
   }
 
   /** Deletes the counters of ended windows (AuthJobs). Indexed on `windowStart`. */

@@ -69,7 +69,7 @@ export async function seedDatabase(prisma: PrismaService, hasher: Hasher, env: P
         const own = a.staffId ? db.staffCredentials.find((c) => c.staffId === a.staffId) : undefined;
         const pin = a.staffId ? db.staffPins.find((p) => p.staffId === a.staffId) : undefined;
         return {
-          clinicId, accountId: a.id, email: a.email, staffId: a.staffId ?? null, guardianId: a.guardianId ?? null, name: a.name,
+          clinicId, accountId: a.id, email: a.email || null, phone: a.phone ?? null, staffId: a.staffId ?? null, guardianId: a.guardianId ?? null, name: a.name,
           passwordHash: own ? await hasher.hash(own.password) : demoHash,
           mustChange: own?.mustChange ?? false,
           pinHash: pin ? await hasher.hash(pin.pin) : null,
@@ -112,6 +112,10 @@ export async function seedDatabase(prisma: PrismaService, hasher: Hasher, env: P
       await prisma.patientConsent.createMany({ data: rows.flatMap((r) => r.consents.map((c) => ({ ...c, clinicId }))) });
       await prisma.patientPrivacyConsent.createMany({ data: rows.flatMap((r) => (r.privacyConsent ? [{ ...r.privacyConsent, clinicId }] : [])) });
       await prisma.privacyChoice.createMany({ data: rows.flatMap((r) => r.choices.map((c) => ({ ...c, clinicId }))) });
+      // B11 decision 13: every seeded guardian already uses the portal (their Credential is written above).
+      await prisma.portalAccount.createMany({
+        data: db.portalAccounts.map((a) => ({ clinicId, guardianId: a.guardianId, state: a.state, activatedAt: a.activatedAt ? new Date(a.activatedAt) : null })),
+      });
       // B5: every visit and chart entry, with the seed's ids: MSW's notes, growth records and plan items in `hybrid` name
       // these visit and entry ids. All completed: the seed leaves no visit in progress.
       await prisma.visit.createMany({ data: db.visits.map((v) => ({ ...visitRow(v), clinicId })) });

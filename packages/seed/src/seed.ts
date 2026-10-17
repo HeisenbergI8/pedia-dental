@@ -286,6 +286,7 @@ export function seed(): Db {
     staffCredentials: [], // every seeded login uses the demo password
     privacyNotices: [firstNotice(CLINIC_ID, DEMO_ACCOUNT.name, STAFF.find((s) => s.isOwner)!.fullName, DEMO_ACCOUNT.contactEmail)],
     acknowledgements: staffAcknowledged(CLINIC_ID, STAFF),
+    portalAccounts: [], // filled by seedPlatform (B11)
   };
 }
 

@@ -155,7 +155,10 @@ model Credential {
   clinicId     String
   /// The login as sessions and the audit trail name it: the staff id, or `guardian.<guardianId>` (as the mock).
   accountId    String
-  email        String
+  /// Null: a parent who signs in with their mobile only (B11 decision 14: their email is another login's).
+  email        String?
+  /// A parent's mobile sign-in, smsNumber form (639XXXXXXXXX). It follows the guardian's number (B11 decision 15).
+  phone        String? @db.VarChar(16)
   staffId      String?
   guardianId   String?
   /// A guardian's name until B4 brings guardians. A staff login's name is read from Staff.
@@ -169,7 +172,57 @@ model Credential {
   pinFailedAt  Json
 
   @@unique([clinicId, accountId])
+  /// One mobile, one sign-in per clinic (B11 decision 14): the backstop under PortalService's checks.
+  @@unique([clinicId, phone])
   @@index([email])
+  @@index([phone])
+}
+
+enum PortalAccountState {
+  invited
+  active
+  off
+}
+
+/// One guardian's portal access in one clinic (B11 E7). No row = not invited. `active`: a parent Credential exists;
+/// turning off deletes it and its sessions, so a new invite starts clean (decision 18).
+model PortalAccount {
+  clinicId    String
+  guardianId  String             @db.VarChar(64)
+  state       PortalAccountState
+  invitedAt   DateTime?
+  /// Who sent the latest invite (a staff name, as the audit trail shows it).
+  invitedBy   String?            @db.VarChar(191)
+  activatedAt DateTime?
+  turnedOffAt DateTime?
+
+  @@id([clinicId, guardianId])
+}
+
+enum PortalLinkPurpose {
+  invite
+  reset
+}
+
+/// An invite or reset link (B11 decisions 5, 6). Platform: the signed-out link routes find it by the token's hash
+/// before a clinic is known; every query names clinicId itself. The token is made when the text is sent (E5) and only
+/// its SHA-256 is kept.
+model PortalLink {
+  id          String            @id @default(cuid(2))
+  clinicId    String
+  guardianId  String            @db.VarChar(64)
+  purpose     PortalLinkPurpose
+  /// SHA-256 of the token, hex. Null until the text is sent; a resent text replaces it.
+  tokenHash   String?           @unique @db.Char(64)
+  /// Demo deployments only (DEMO_LOGINS): the token itself, for GET /auth/demo-texts (E6).
+  demoToken   String?           @db.VarChar(64)
+  createdAt   DateTime
+  expiresAt   DateTime
+  usedAt      DateTime?
+  cancelledAt DateTime?
+
+  @@index([clinicId, guardianId, purpose])
+  @@index([expiresAt])
 }
 
 /// A signed-in clinic login. Platform: the guard finds it by the cookie's token hash before it knows the clinic.
@@ -290,12 +343,12 @@ model Procedure {
 /// primary key is (clinicId, id). `fields` is TemplateField[], parsed with that schema on read; never filtered on.
 model NoteTemplate {
   clinicId  String
-  id        String  @db.VarChar(64)
+  id        String @db.VarChar(64)
   name      String
   /// A Procedure.code.
-  procedure String  @db.VarChar(64)
+  procedure String @db.VarChar(64)
   fields    Json
-  position  Int     @default(0)
+  position  Int    @default(0)
 
   @@id([clinicId, id])
 }
@@ -312,6 +365,22 @@ enum MessageKind {
   follow_up_reminder
   recall
   birthday
+}
+
+/// What the log holds (LoggedMessageKind in @pedia/shared): the template kinds above plus the account texts (B11 E4).
+enum LoggedMessageKind {
+  appointment_confirmation
+  appointment_reminder
+  post_extraction
+  post_pulpotomy
+  fluoride_instructions
+  pre_treatment
+  missed_appointment
+  follow_up_reminder
+  recall
+  birthday
+  portal_invite
+  password_reset
 }
 
 /// A parent message's wording (MessageTemplate in @pedia/shared): one per kind per clinic, edited on the Messages page.
@@ -344,24 +413,24 @@ enum MessageChannel {
 /// template edit doesn't rewrite it. Sent through one OutboxMessage ("message.send", payload { messageId }). Written
 /// only by MessageQueueService (B9 E1).
 model Message {
-  id            String         @id @default(cuid(2))
+  id            String            @id @default(cuid(2))
   clinicId      String
   patientId     String
-  kind          MessageKind
-  channel       MessageChannel @default(sms)
+  kind          LoggedMessageKind
+  channel       MessageChannel    @default(sms)
   /// The guardian's phone as stored (the contract's `to`); normalised only when sent (smsNumber).
-  to            String         @db.VarChar(32)
-  recipientName String         @db.VarChar(191)
+  to            String            @db.VarChar(32)
+  recipientName String            @db.VarChar(191)
   /// The rendered body: a 480-character template can render longer, so TEXT.
-  body          String         @db.Text
-  status        MessageStatus  @default(queued)
+  body          String            @db.Text
+  status        MessageStatus     @default(queued)
   /// When it goes out: already inside sending hours (nextSendingTime, E4).
   sendAt        DateTime
   appointmentId String?
   noteId        String?
   dueItemId     String?
   /// A FAILURE reason from @pedia/shared. Never a provider's or library's message.
-  failureReason String?        @db.VarChar(191)
+  failureReason String?           @db.VarChar(191)
   createdAt     DateTime
   /// Birthday rows only: the Manila year it greets. The unique below makes "once a year" hold under races (E9).
   greetingYear  Int?
@@ -370,9 +439,13 @@ model Message {
   sentAt        DateTime?
   /// Parts the provider billed (smsSegments), for the monthly count (E10).
   segments      Int?
-  providerRef   String?        @db.VarChar(64)
+  providerRef   String?           @db.VarChar(64)
+  /// Account texts only (B11 E5): the PortalLink whose token the sender puts in place of [link].
+  linkId        String?
 
   @@unique([clinicId, patientId, greetingYear])
+  /// B11: a resend or turn-off withdraws its texts by link, without scanning (and locking) the clinic's whole log.
+  @@index([clinicId, linkId])
   @@index([clinicId, sendAt])
   @@index([clinicId, patientId, status, sendAt])
   @@index([clinicId, appointmentId])

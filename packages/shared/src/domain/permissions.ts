@@ -63,6 +63,7 @@ export const ROLE_PERMISSIONS: Record<Role, Grants> = {
     "clinic.view",
     "settings.view",
     "session.switch",
+    "portal.manage", // B11 decision 16: they edit a family's contact details
   ),
   // Only their own children. Clinic reference data (dentist names, procedure names) is not patient data.
   parent: {

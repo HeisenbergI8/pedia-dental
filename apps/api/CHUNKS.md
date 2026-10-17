@@ -346,17 +346,24 @@ only, so a run against MinIO or the real bucket is a go-live check (B13).*
 
 ---
 
-## Chunk B11: Parent portal and real parent accounts (~18 h) · Large — feature 6
+## ✅ Chunk B11: Parent portal and real parent accounts (done, 2026-10-17) · Large — feature 6
 
 **Goal:** parents sign in as themselves and see only their own family.
 
-- Parent accounts and invitations (SMS through B9; B9 built no email, so an email provider is this chunk's open
-  decision), sign-in on the B2 sessions.
+- Parent accounts and invitations by SMS through B9 (decision 3: no email provider in B11), sign-in on the B2 sessions
+  by mobile number or email, a password set from the texted link, reset by text, changed in the portal, and turned off
+  by staff.
 - Ownership checks in the access guard: a parent reaches only their own children's records, and gets 403 otherwise.
-- Portal reads (appointments, plan, invoices, documents), appointment requests, privacy choices.
+- Portal reads (appointments, plan, invoices, their own uploads), appointment requests, privacy choices: served in
+  `hybrid` since B4–B10. Parents have no documents route: the portal's documents are their uploads (B10).
+
+**Decided** (`.claude/plans/feature-chunk-b11-parent-portal-plan/decisions.md`): any guardian with a mobile, invited by
+front desk, the Owner or an admin; SMS only; 72-hour invites and 30-minute resets, single use; one mobile per sign-in;
+3 reset texts per number per hour; a number change moves the sign-in and signs the parent out.
 
 **Done when:** a parent sees one child's data and gets 403 for another's, against the API; an invited parent signs in
-for the first time and sets a password.
+for the first time and sets a password. *Proven: `test/int/parent-ownership.int.test.ts` sweeps every route a parent
+can pass; `test/int/portal.int.test.ts` and `e2e/api-portal.spec.ts` cover the first sign-in.*
 
 **Depends on:** B10.
 
@@ -438,7 +445,7 @@ B0 Skeleton ✅
                              └─ B8 Billing, payments & dashboard ✅
                                  └─ B9 Parent messages & real sending ✅
                                      └─ B10 Photos & documents ✅
-                                         └─ B11 Parent portal & parent accounts
+                                         └─ B11 Parent portal & parent accounts ✅
                                              └─ B12 Operator console, sign-ups & subscriptions
                                                  └─ B13 Production readiness & full cut-over
 ```

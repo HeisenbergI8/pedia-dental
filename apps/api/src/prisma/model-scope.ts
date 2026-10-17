@@ -53,14 +53,16 @@ export const MODEL_SCOPE = {
   ClinicalPhoto: "clinic",
   PatientDocument: "clinic",
   StoredFile: "clinic",
+  PortalAccount: "clinic", // B11
   // Platform: Primolar's own records
   ClinicAccount: "platform",
   Agreement: "platform",
   OperatorUser: "platform",
   OperatorSession: "platform",
-  // Platform but holding a clinicId: read before any clinic is known (sign-in by email, the cookie, the login page).
+  // Platform but holding a clinicId: read before any clinic is known (sign-in by email or mobile, the cookie, the login page, a texted link).
   // Every query on these names clinicId itself (CONVENTIONS → Decisions: identity tables).
   Credential: "platform",
+  PortalLink: "platform", // B11: found by token hash before the clinic is known; every query names clinicId
   Session: "platform",
   DemoLogin: "platform",
   // Counted before sign-in, per client address, never per clinic.

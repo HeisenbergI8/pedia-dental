@@ -92,6 +92,8 @@ describe("clinic account isolation", () => {
     // Same guardian id in the demo clinic: the token names the account, so the two parents never meet.
     signIn(DEMO("staff_delacruz"));
     await api("/patients", Patient, send("POST", child));
+    // A new family's guardian signs in once invited (B11): open her portal account in the second clinic only.
+    platform.tenants.clinic_ngiti!.portalAccounts.push({ clinicId: "clinic_ngiti", guardianId: "g_mother", state: "active", links: [] });
     signIn(NGITI("guardian.g_mother"));
     expect(ids(await api("/patients", z.array(Patient)))).toEqual([created.id]);
   });

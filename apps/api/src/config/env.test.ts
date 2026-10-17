@@ -14,6 +14,7 @@ describe("loadEnv", () => {
       OUTBOX_POLL_MS: 2000,
       STORAGE_DIR: "var/storage",
       SEMAPHORE_URL: "https://api.semaphore.co/api/v4/messages",
+      WEB_URL: "http://localhost:3000",
       S3_REGION: "ap-southeast-1",
       S3_FORCE_PATH_STYLE: false,
     });

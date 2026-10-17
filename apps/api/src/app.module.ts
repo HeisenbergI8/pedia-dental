@@ -30,6 +30,7 @@ import { NotesModule } from "./notes/notes.module";
 import { OutboxModule } from "./outbox/outbox.module";
 import { StorageModule } from "./storage/storage.module";
 import { PhotosModule } from "./photos/photos.module";
+import { PortalModule } from "./portal/portal.module";
 import { DocumentsModule } from "./documents/documents.module";
 import { PrismaModule } from "./prisma/prisma.module";
 
@@ -54,6 +55,7 @@ export class AppModule implements NestModule {
         PhotosModule,
         DocumentsModule,
         AuthModule,
+        PortalModule,
         ClinicModule,
         NotesModule,
         MessagesModule,

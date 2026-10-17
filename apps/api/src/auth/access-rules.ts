@@ -1,6 +1,6 @@
 import { rolesCan, type Permission, type Role } from "@pedia/shared";
 
-/** Which patient a request is about, for own-scope (parent) callers. `record`: looked up from the row (B11). */
+/** Which patient a request is about, for own-scope (parent) callers. `record`: looked up from the row (B7's RecordOwners; every one a parent can pass registered by B11). */
 export type Owner = "filtered" | "id" | "query" | "record";
 export type Route = { method: string; path: string };
 /** `exportRead`: a copy of records is a read, so a read-only session (decision #44) may still ask for it. */
@@ -48,6 +48,10 @@ export const CLINIC_RULES: readonly ClinicRule[] = [
   { method: "PUT", path: "/patients/:id/photo", permission: "patients.write" },
   { method: "GET", path: "/patients/:id/photo", permission: "patients.view", owner: "id" },
   { method: "DELETE", path: "/patients/:id/photo", permission: "patients.write" },
+  // B11: portal invitations (decisions 2, 16–18): front desk, the Owner and admins. Parents hold nothing here.
+  { method: "GET", path: "/patients/:id/portal-access", permission: "portal.manage" },
+  { method: "POST", path: "/patients/:id/guardians/:guardianId/portal-invite", permission: "portal.manage" },
+  { method: "POST", path: "/patients/:id/guardians/:guardianId/portal-off", permission: "portal.manage" },
   { method: "GET", path: "/patients/:id/visits", permission: "clinical.view" },
   { method: "POST", path: "/patients/:id/visits", permission: "clinical.write" },
   { method: "POST", path: "/visits/:id/complete", permission: "clinical.write", owner: "record" },
@@ -144,6 +148,11 @@ export const SELF_CHECKED_RULES: readonly Route[] = [
   { method: "POST", path: "/auth/password" },
   { method: "GET", path: "/auth/acknowledgement" },
   { method: "POST", path: "/auth/acknowledgement" },
+  // B11: the link routes (signed out) and the demo's texts (E1, E6).
+  { method: "POST", path: "/auth/password-link" },
+  { method: "POST", path: "/auth/password-link/accept" },
+  { method: "POST", path: "/auth/password-reset" },
+  { method: "GET", path: "/auth/demo-texts" },
   { method: "POST", path: "/operator/auth/login" },
   { method: "GET", path: "/operator/auth/me" },
   { method: "POST", path: "/operator/auth/logout" },

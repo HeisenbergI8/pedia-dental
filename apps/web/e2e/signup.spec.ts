@@ -165,7 +165,7 @@ async function signOutOperator(page: Page) {
 /** The new Owner signs in with the temporary password, chooses their own, and passes the first-sign-in notices. */
 async function ownerFirstSignIn(page: Page, email: string, password: string) {
   const signInForm = page.getByRole("region", { name: "Sign in" });
-  await signInForm.getByLabel("Email").fill(email);
+  await signInForm.getByLabel("Mobile number or email").fill(email);
   await signInForm.getByLabel("Password", { exact: true }).fill(password);
   await signInForm.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Choose your password" })).toBeVisible({ timeout: 15_000 });
