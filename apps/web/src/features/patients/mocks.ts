@@ -2,6 +2,7 @@ import { http, HttpResponse, delay } from "msw";
 import { format } from "date-fns";
 import {
   AddConsentInput,
+  smsNumber,
   CreatePatientInput,
   EditPatientWithoutContactsInput,
   LEGAL_DOCUMENTS,
@@ -34,7 +35,7 @@ import { inScope, recordAudit, sessionOf, type MockSession } from "@/mocks/acces
 import { deleteBlob, getBlob, putBlob } from "@/mocks/blob-store";
 import { currentClinicId, db, persist } from "@/mocks/db";
 import { currentNotice } from "@/mocks/privacy";
-import { portalNumberClash } from "@/features/portal/mocks";
+import { portalNumberClash, portalNumberMoved } from "@/features/portal/mocks";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 
@@ -220,6 +221,11 @@ export const patientHandlers = [
     const clash = input.guardians.map(portalNumberClash).find(Boolean);
     if (clash) return new HttpResponse(clash, { status: 409 });
     // patientNo and photoUpdatedAt aren't in the input, so the spread keeps the server's values.
+    // Decision 15: a number changed for real (not just written another way) stops links texted to the old one.
+    for (const g of input.guardians) {
+      const old = current.guardians.find((x) => x.id === g.id);
+      if (old && smsNumber(old.phone) !== smsNumber(g.phone)) portalNumberMoved(g.id);
+    }
     const patient: Patient = { ...current, ...tidy(input) };
     db.patients[index] = patient;
     persist();
@@ -292,6 +298,7 @@ export const patientHandlers = [
       const primary = patient.guardians.find((g) => g.isPrimary) ?? patient.guardians[0];
       const clash = portalNumberClash({ id: primary.id, phone });
       if (clash) return new HttpResponse(clash, { status: 409 });
+      if (smsNumber(primary.phone) !== smsNumber(phone)) portalNumberMoved(primary.id); // decision 15, as PUT
       // One guardian, one phone: siblings share the guardian id, so they all get the new number.
       for (const g of db.patients.flatMap((p) => p.guardians)) if (g.id === primary.id) g.phone = phone;
     }

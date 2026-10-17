@@ -9,7 +9,7 @@ import { AuditService } from "../audit/audit.service";
 import { AuthService } from "../auth/auth.service";
 import { Hasher } from "../auth/hashing";
 import { IdentityService, type ClinicIdentity } from "../auth/identity.service";
-import { RATE_LIMITS, RateLimitService, bucketOf } from "../auth/rate-limit";
+import { RATE_LIMITS, RateLimitService, hashedBucketOf } from "../auth/rate-limit";
 import { SessionService, hashToken } from "../auth/session.service";
 import { lockAccount, ownClinicId } from "../clinic/account-lock";
 import { Clock } from "../common/clock";
@@ -205,8 +205,9 @@ export class PortalService implements OnModuleInit {
 
   /**
    * Decision 15, from a guardian edit (PatientWritesService, in its transaction, after its locks): the mobile sign-in
-   * follows the new number. 409 when another parent signs in with it or was invited on it (decision 14) and this
-   * guardian has portal access. Returns the login whose sessions the caller ends after its commit.
+   * follows the new number, and links already texted to the old one stop working. 409 when another parent signs in
+   * with it or was invited on it (decision 14) and this guardian has portal access. Returns the login whose sessions
+   * the caller ends after its commit.
    */
   async numberChanged(tx: Tx, g: FamilyGuardian): Promise<string | undefined> {
     const clinicId = ownClinicId();
@@ -215,6 +216,8 @@ export class PortalService implements OnModuleInit {
     const n = smsNumber(g.phone);
     const holder = n ? await this.numberHolder(tx, n, g.guardianId) : undefined;
     if (holder) throw new ConflictException(clashText(g, holder));
+    // A link already texted went to the old number (a lost phone, a typo): it stops working. Staff resend an invite.
+    await this.cancelLinks(tx, g.guardianId);
     if (a.state !== "active") return undefined; // an invite reads the number when it is accepted
     const moved = await this.identity.followPhone(tx, clinicId, g.guardianId, n ?? null, clashText(g, { fullName: "another parent" }));
     return moved ? parentId(g.guardianId) : undefined;
@@ -296,7 +299,7 @@ export class PortalService implements OnModuleInit {
    * email, so a 429 says nothing either. Parents only: staff ask their Owner.
    */
   async requestReset({ login }: PasswordResetInput): Promise<Record<string, never>> {
-    const { allowed } = await this.limits.hit(bucketOf("reset", login), RATE_LIMITS.reset);
+    const { allowed } = await this.limits.hitRolling(hashedBucketOf("reset", login), RATE_LIMITS.reset);
     if (!allowed) throw new HttpException("Too many reset texts for this number. Try again later.", HttpStatus.TOO_MANY_REQUESTS);
     for (const m of await this.identity.loginsBy(login)) {
       if (m.isStaff) continue;

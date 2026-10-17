@@ -91,6 +91,15 @@ describe("portal invitations (B11)", () => {
     expect((await invite(kid.id, "g_m_Fe")).state).toBe("invited");
   });
 
+  it("stops a link already texted to the old number when staff change the number (decision 15, B11 audit)", async () => {
+    const kid = await family("Hu", "09170000007");
+    await invite(kid.id, "g_m_Hu");
+    expect((await api("/auth/demo-texts", DemoTexts)).texts.some((t) => t.name === "Rosa Hu")).toBe(true);
+    await api(`/patients/${kid.id}`, Patient, { ...post({ phone: "09170000008", nickname: "", tags: [], alerts: [] }), method: "PATCH" });
+    expect((await api("/auth/demo-texts", DemoTexts)).texts.some((t) => t.name === "Rosa Hu")).toBe(false);
+    expect((await access(kid.id))[0]).toMatchObject({ state: "invited" });
+  });
+
   it("is front desk's, the Owner's and admins': a dentist and a parent get 403 (decision 16)", async () => {
     const kid = await family("Gi", "09170000006");
     for (const token of ["demo.clinic_demo.staff_reyes", `demo.clinic_demo.guardian.${sibling().guardians[0]!.id}`]) {

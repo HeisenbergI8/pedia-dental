@@ -444,6 +444,8 @@ model Message {
   linkId        String?
 
   @@unique([clinicId, patientId, greetingYear])
+  /// B11: a resend or turn-off withdraws its texts by link, without scanning (and locking) the clinic's whole log.
+  @@index([clinicId, linkId])
   @@index([clinicId, sendAt])
   @@index([clinicId, patientId, status, sendAt])
   @@index([clinicId, appointmentId])

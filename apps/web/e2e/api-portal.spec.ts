@@ -7,7 +7,7 @@ import { USERS, signIn } from "./support/users";
  *   DATABASE_URL=… PORT=4150 DEMO_LOGINS=true COOKIE_SECURE=false WEB_URL=http://localhost:3190 pnpm dev:api
  *   NEXT_DIST_DIR=.next-hybrid NEXT_PUBLIC_API_MOCKING=hybrid API_PROXY_TARGET=http://localhost:4150 pnpm exec next dev --port 3190
  * The API's worker sends the texts (log driver); DEMO_LOGINS lets /auth/demo-texts show their links. Re-runnable on one
- * database: each run registers its own child on its own number. 5 sign-ins a run.
+ * database: each run registers its own child on its own number. 6 sign-ins and 2 link sign-ins a run.
  */
 test.skip(!process.env.E2E_API, "Needs apps/api and a hybrid web server: E2E_API=1 E2E_BASE_URL=…");
 test.describe.configure({ mode: "serial", timeout: 180_000 });

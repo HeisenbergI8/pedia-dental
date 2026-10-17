@@ -511,9 +511,10 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   - Sign-in by mobile or email in one box (4); one mobile (or email) is one sign-in per clinic, a second guardian on a
     taken number is refused, a shared email leaves that parent on their number (14); one account per clinic, with the
     chooser (9). The staff password rule for everyone (8); parents change theirs in the portal (7).
-  - Forgot password never says whether an account exists; 3 reset texts per number per hour (19).
+  - Forgot password never says whether an account exists; 3 reset texts per number in any rolling hour, counted under
+    a hash of what was typed (19; `RateLimitService.hitRolling`).
   - A guardian removed from their last child stops being a login at once (10); a number changed by staff moves the
-    sign-in and ends the parent's sessions (15); staff can turn one guardian off, which signs them out (18). A suspended
+    sign-in, ends the parent's sessions and cancels links already texted to the old number (15); staff can turn one guardian off, which signs them out (18). A suspended
     clinic's parents still sign in, read-only (11). After setting a password, the privacy notice, then the portal (22).
   - The seeded parents are active on the demo password, in development and tests only (13).
 - **Photos and documents** (B10, decisions in the B10 plan's `decisions.md`, settled with the user before planning):

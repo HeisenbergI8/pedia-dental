@@ -1,12 +1,12 @@
 import type { INestApplication } from "@nestjs/common";
 import { DEMO_PASSWORD, seedPlatform } from "@pedia/seed";
-import { DemoTexts, Message, PasswordLink, Patient, PortalAccess, Session, type RegisterPatientInput } from "@pedia/shared";
+import { DemoTexts, Message, PasswordLink, Patient, PatientPage, PortalAccess, Session, type RegisterPatientInput } from "@pedia/shared";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hasher } from "../../src/auth/hashing";
 import { FixedClock } from "../../src/common/clock";
 import { MESSAGE_SEND } from "../../src/message-queue/message.rows";
-import { SMS_PROVIDER, SmsUnavailable, type SmsProvider, type SmsSend } from "../../src/message-queue/sms-provider";
+import { SMS_PROVIDER, SmsRejected, SmsUnavailable, type SmsProvider, type SmsSend } from "../../src/message-queue/sms-provider";
 import { OutboxWorker } from "../../src/outbox/outbox.worker";
 import { PrismaService } from "../../src/prisma/prisma.service";
 import { seedDatabase } from "../../src/seed/seed-database";
@@ -41,6 +41,7 @@ beforeAll(async () => {
 }, 60_000);
 afterAll(() => app.close());
 beforeEach(async () => {
+  clock.set(NIGHT);
   calls.length = 0;
   outcomes = [];
   await prisma.rateLimitCounter.deleteMany();
@@ -60,11 +61,11 @@ const login = (email: string, password: string) => http().post("/api/auth/login"
 
 let desk = "";
 /** A new child with two guardians: a mother on `phone` and a father on a landline. */
-async function family(name: string, phone: string, reminders = true) {
+async function family(name: string, phone: string, reminders = true, email?: string) {
   const input: RegisterPatientInput = {
     firstName: name, lastName: "Portal", birthDate: "2019-03-14", sex: "female", address: "",
     guardians: [
-      { id: `g_m_${name}`, fullName: `Rosa ${name}`, relationship: "Mother", phone, isPrimary: true },
+      { id: `g_m_${name}`, fullName: `Rosa ${name}`, relationship: "Mother", phone, email, isPrimary: true },
       { id: `g_f_${name}`, fullName: `Jun ${name}`, relationship: "Father", phone: "(046) 471 2580", isPrimary: false },
     ],
     emergencyContact: { name: "", phone: "" }, allergies: [], medicalConditions: [], medications: [], alerts: [],
@@ -178,6 +179,69 @@ describe("portal invitations on MySQL (B11)", () => {
     expect(PortalAccess.parse((await invite(kid.id, "g_m_Ha")).body).state).toBe("invited");
   });
 
+  it("stops a link already texted to the old number when staff change the number (decision 15, B11 audit)", async () => {
+    const kid = await family("Ku", "09170000010");
+    await invite(kid.id, "g_m_Ku");
+    await drain();
+    const stale = lastToken("639170000010");
+    const quick = (phone: string) => http().patch(`/api/patients/${kid.id}`).set("Cookie", desk).send({ phone, nickname: "", tags: [], alerts: [] });
+    expect((await quick("09170000011")).status).toBe(200); // a typo fixed: the text went to someone else
+    expect((await check(stale)).status).toBe(410);
+    const [status] = await access(kid.id);
+    expect([status!.state, status!.blocked, status!.inviteExpiresAt]).toEqual(["invited", undefined, undefined]); // staff resend it
+    await invite(kid.id, "g_m_Ku");
+    await drain();
+    const parent = cookieOf(await accept(lastToken("639170000011"), pw(10)));
+    // A reset link texted before a number change stops too.
+    expect((await http().post("/api/auth/password-reset").send({ login: "09170000011" })).status).toBe(202);
+    await drain();
+    const reset = lastToken("639170000011");
+    expect((await quick("09170000012")).status).toBe(200);
+    expect([(await check(reset)).status, (await http().get("/api/auth/me").set("Cookie", parent)).status]).toEqual([410, 401]);
+  });
+
+  it("lets an invite lapse after 72 hours and a reset after 30 minutes (decisions 5, 6)", async () => {
+    const kid = await family("La", "09170000013");
+    await invite(kid.id, "g_m_La");
+    await drain();
+    const token = lastToken("639170000013");
+    clock.set(new Date(NIGHT.getTime() + 72 * 3_600_000 + 1000));
+    desk = await signIn("frontdesk@gmail.com"); // three days on, the morning's session has ended
+    expect((await check(token)).status).toBe(410);
+    expect((await access(kid.id))[0]).toMatchObject({ state: "invited" });
+    await invite(kid.id, "g_m_La"); // resend after it lapsed
+    await drain();
+    await accept(lastToken("639170000013"), pw(11));
+    expect((await http().post("/api/auth/password-reset").send({ login: "09170000013" })).status).toBe(202);
+    await drain();
+    const reset = lastToken("639170000013");
+    clock.set(new Date(clock.now().getTime() + 30 * 60_000 + 1000));
+    expect((await check(reset)).status).toBe(410);
+    clock.set(NIGHT);
+    desk = await signIn("frontdesk@gmail.com");
+  });
+
+  it("leaves a parent whose email is another login's on their number only (decision 14)", async () => {
+    const kid = await family("Ma", "09170000014", true, "parent@gmail.com"); // the seeded sibling family's address
+    await invite(kid.id, "g_m_Ma");
+    await drain();
+    const res = await accept(lastToken("639170000014"), pw(12));
+    expect(Session.parse(res.body).user.email).toBe("");
+    expect((await login("09170000014", pw(12))).status).toBe(200);
+    expect((await login("parent@gmail.com", pw(12))).status).toBe(401); // the email still opens only its own login
+  });
+
+  it("never marks a child 'no contact' for a failed invite (E4)", async () => {
+    const kid = await family("Na", "09170000015");
+    outcomes = [new SmsRejected("refused")];
+    await invite(kid.id, "g_m_Na");
+    await drain();
+    const [logged] = Message.array().parse((await http().get(`/api/messages?patientId=${kid.id}`).set("Cookie", desk)).body);
+    expect(logged).toMatchObject({ kind: "portal_invite", status: "failed" });
+    const page = PatientPage.parse((await http().get(`/api/patient-summaries?q=${kid.firstName}`).set("Cookie", desk)).body);
+    expect(page.rows.find((r) => r.id === kid.id)?.flags.noContact).toBe(false);
+  });
+
   it("is front desk's, the Owner's and admins': a dentist and a parent get 403 (decision 16)", async () => {
     const kid = await family("Io", "09170000008");
     for (const cookie of [await signIn("dentist@gmail.com"), await signIn("parent@gmail.com")]) {
@@ -209,8 +273,14 @@ describe("forgot password on MySQL (decisions 6, 19)", () => {
     expect([(await login("09170000009", pw(6))).status, (await login("09170000009", pw(7))).status]).toEqual([401, 200]);
   });
 
-  it("allows 3 texts per number per hour, unknown numbers too", async () => {
+  it("allows 3 texts per number in any hour, unknown numbers too, and keeps only a hash of what was typed", async () => {
+    clock.set(at("2026-10-20T22:58:00"));
     for (let i = 0; i < 3; i++) expect((await reset("09995550001")).status).toBe(202);
+    clock.set(at("2026-10-20T23:01:00")); // a new clock hour: still the same rolling hour
     expect((await reset("0999 555 0001")).status).toBe(429);
+    clock.set(at("2026-10-20T23:59:30"));
+    expect((await reset("09995550001")).status).toBe(202);
+    const buckets = (await prisma.rateLimitCounter.findMany({ select: { bucket: true } })).map((r) => r.bucket);
+    expect(buckets.some((b) => b.includes("9995550001"))).toBe(false);
   });
 });

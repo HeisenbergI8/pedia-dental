@@ -100,3 +100,14 @@
 ## Steps not implemented
 
 None skipped. Still open by decision: Semaphore account, credits and PRIMOLAR's approval (the user), `WEB_URL` in production (B13), pruning expired `PortalLink` rows (later).
+
+## Auditor fixes — 2026-10-17 (score 77/100 before fixes)
+
+1. **High: a link already texted kept working after staff changed the number.** `PortalService.numberChanged` now cancels the guardian's live links and withdraws their texts (any state but off); the mock does the same (`portalNumberMoved`, from PUT and PATCH, only when the number really changed). Tests: `portal.int` (an invite to a mistyped number and a reset link both 410 after the change; the parent is signed out) and `mocks/portal.test.ts`.
+2. **Medium: the reset limit was a fixed window (up to 6 across an hour's edge).** New `RateLimitService.hitRolling`: per-minute counters summed over the last hour, behind a per-bucket lock row. `portal.int` proves 3 at 22:58 then a 429 at 23:01, and 202 again at 23:59:30.
+3. **Low/Medium: typed numbers were stored readable in `RateLimitCounter`.** The reset bucket is now `hashedBucketOf` (SHA-256 of what was typed); `portal.int` checks no bucket holds the number.
+4. **Medium: untested rules.** Added API tests for link expiry (72 h, 30 min), the shared email (decision 14), the PUT number-change path, `demoToken` null off a demo deployment (and `/auth/demo-texts` 404), and a failed invite not marking the child "no contact". The ownership sweep's "own" check now also refuses a 5xx. Not added: decision 9 by mobile across clinics (the sign-in lookup is shared with email, tested in B2) and the accept-time 409 (reachable only by a race the invite check closes; the unique index backs it).
+5. **Low/Medium: no index on `Message.linkId`.** Added `@@index([clinicId, linkId])` (migration `20261017180000_b11_message_link_index`).
+6. **Low: the mock calls `selectTenant` in a feature handler.** Kept: the plan prescribed it for the signed-out link routes, which have no session to select a tenant from; recorded here.
+7. **Low: doc drift.** Sign-in count in the spec header and CONVENTIONS (6 sign-ins and 2 link sign-ins), the "by email" comments (`model-scope.ts`, `identity.service.ts`), `access-rules.ts`'s owner comment, apps/api CONVENTIONS for the rolling limit and link cancelling. The untracked `playwright.tmp.config.ts` is deleted before the merge.
+- Smell (shared words in `@pedia/shared`): not done; the mock and the API keep their own copies, as earlier chunks do.

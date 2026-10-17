@@ -67,7 +67,7 @@ export const toSessionUser = (who: ClinicIdentity): SessionUser => ({
 
 /**
  * Owns Credential and DemoLogin: who a session is, PIN tries, password checks and sign-in lookups. Queries about one
- * login name clinicId; sign-in's lookups (by email, the featured demo logins) are cross-clinic by design.
+ * login name clinicId; sign-in's lookups (by email or mobile, the featured demo logins) are cross-clinic by design.
  */
 @Injectable()
 export class IdentityService {

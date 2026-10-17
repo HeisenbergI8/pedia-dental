@@ -70,7 +70,9 @@ describe("a parent's ownership on every route they can pass (B11 E12)", () => {
   it.each(PARENT_ROUTES.map((r) => [`${r.method} ${r.path}`, r] as const))("%s: 403 for another family's child, never for their own", async (_, rule) => {
     const theirs = await call(rule.method, pathFor(rule, "theirs"));
     expect([theirs.status, theirs.text]).toEqual([403, "This isn't one of your children's records"]);
-    expect((await call(rule.method, pathFor(rule, "ours"))).status).not.toBe(403);
+    // Their own: past the guard (a 400 for the empty body, a 404 for a child with no profile photo), never refused or broken.
+    const own = (await call(rule.method, pathFor(rule, "ours"))).status;
+    expect([own, rule.path]).toEqual([expect.toSatisfy((s: number) => s < 500 && s !== 403), rule.path]);
   });
 
   it("refuses the message log without a child named", async () => {

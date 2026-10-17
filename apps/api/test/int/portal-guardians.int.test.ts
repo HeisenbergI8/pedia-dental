@@ -51,10 +51,20 @@ describe("a guardian's new number (B11)", () => {
     expect((await login("parent@gmail.com")).status).toBe(200); // the email sign-in stays
   });
 
-  it("leaves the sessions alone when only the way the number is written changes", async () => {
+  it("moves the sign-in on a full edit (PUT) too", async () => {
     const desk = cookieOf(await login("frontdesk@gmail.com"));
     const parent = cookieOf(await login("09170001111"));
-    expect((await patch(desk, sibling.id, "+63 917 000 1111")).status).toBe(200);
+    const record = (await http().get(`/api/patients/${sibling.id}`).set("Cookie", desk)).body as { guardians: { id: string; phone: string }[] };
+    const guardians = record.guardians.map((g) => (g.id === mother.guardianId ? { ...g, phone: "09170002222" } : g));
+    expect((await http().put(`/api/patients/${sibling.id}`).set("Cookie", desk).send({ ...record, guardians })).status).toBe(200);
+    expect((await http().get("/api/auth/me").set("Cookie", parent)).status).toBe(401);
+    expect([(await login("09170001111")).status, (await login("09170002222")).status]).toEqual([401, 200]);
+  });
+
+  it("leaves the sessions alone when only the way the number is written changes", async () => {
+    const desk = cookieOf(await login("frontdesk@gmail.com"));
+    const parent = cookieOf(await login("09170002222"));
+    expect((await patch(desk, sibling.id, "+63 917 000 2222")).status).toBe(200);
     expect((await http().get("/api/auth/me").set("Cookie", parent)).status).toBe(200);
   });
 });

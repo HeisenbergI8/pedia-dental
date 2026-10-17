@@ -51,6 +51,15 @@ export function portalNumberClash(g: Pick<Guardian, "id" | "phone">): string | u
   return holder && clashText(g, holder);
 }
 
+/** Decision 15: a guardian's number changed. Links already texted to the old one stop working (B11 audit). */
+export function portalNumberMoved(guardianId: string): void {
+  const a = portalAccountOf(db, guardianId);
+  const g = guardianOf(guardianId);
+  if (!a || !g) return;
+  withdrawTexts(g);
+  for (const l of a.links) if (liveLink(l)) l.cancelledAt = stamp();
+}
+
 function portalAccessOf(g: Guardian): PortalAccess {
   const a = portalAccountOf(db, g.id);
   const invite = a?.links.filter((l) => l.purpose === "invite" && !l.cancelledAt).at(-1);

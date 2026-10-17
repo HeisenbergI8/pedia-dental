@@ -4,6 +4,7 @@ import { LoginResult, Session } from "@pedia/shared";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Hasher } from "../../src/auth/hashing";
+import { OutboxWorker } from "../../src/outbox/outbox.worker";
 import { PrismaService } from "../../src/prisma/prisma.service";
 import { seedDatabase } from "../../src/seed/seed-database";
 import { inClinic, resetDatabase } from "./support/database";
@@ -46,6 +47,21 @@ describe("parents sign in with their mobile or their email (B11 decision 4)", ()
       const res = await login(typed, password);
       expect([res.status, res.text]).toEqual([401, "That mobile number or email and password don't match an account"]);
     }
+  });
+
+  it("keeps no usable link in the database off a demo deployment, and serves no demo texts (E5, E6)", async () => {
+    const desk = cookieOf(await login("frontdesk@gmail.com", DEMO_PASSWORD));
+    const child = (await http().post("/api/patients").set("Cookie", desk).send({
+      firstName: "Nodemo", lastName: "Portal", birthDate: "2019-03-14", sex: "female", address: "",
+      guardians: [{ id: "g_nodemo", fullName: "Rosa Nodemo", relationship: "Mother", phone: "09170009999", isPrimary: true }],
+      emergencyContact: { name: "", phone: "" }, allergies: [], medicalConditions: [], medications: [], alerts: [],
+      dentalHistory: { previousClinic: "", notes: "" }, privacyConsent: { guardianId: "g_nodemo", photos: true, reminders: true, confirmed: true },
+    })).body as { id: string };
+    expect((await http().post(`/api/patients/${child.id}/guardians/g_nodemo/portal-invite`).set("Cookie", desk)).status).toBe(200);
+    while ((await app.get(OutboxWorker).drain()) > 0);
+    const link = await prisma.portalLink.findFirstOrThrow({ where: { guardianId: "g_nodemo" } });
+    expect([link.tokenHash?.length, link.demoToken]).toEqual([64, null]);
+    expect((await http().get("/api/auth/demo-texts").set("Cookie", desk)).status).toBe(404);
   });
 
   it("lets a parent change their own password (decision 7), which signs the old sessions out", async () => {
