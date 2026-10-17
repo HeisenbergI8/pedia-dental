@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Hasher } from "../../src/auth/hashing";
 import { APPOINTMENT_COLUMNS, toAppointment } from "../../src/appointments/appointment.rows";
 import { REQUEST_COLUMNS, toRequest } from "../../src/appointments/request.rows";
+import { INVOICE_COLUMNS, LINE_COLUMNS, PAYMENT_COLUMNS, PAYMENT_ORDER, receiptCounters, toInvoice, toPayment } from "../../src/billing-records/billing.rows";
 import { CHART_COLUMNS, toChartEntry } from "../../src/chart/chart.rows";
 import { GROWTH_COLUMNS, toGrowth } from "../../src/growth/growth.rows";
 import { NOTE_COLUMNS, toNote } from "../../src/notes/note.rows";
@@ -109,6 +110,23 @@ describe("prisma db seed (seedDatabase) on MySQL", () => {
       });
     }
     expect(platform.tenants[DEMO_CLINIC_ID]!.appointments.length).toBeGreaterThan(0);
+  });
+
+  it("writes each clinic's bills, payments and receipt counters with the mock's ids and numbers (B8)", async () => {
+    for (const { id } of platform.accounts) {
+      const db = platform.tenants[id]!;
+      await inClinic(id, async () => {
+        const lines = await prisma.invoiceLine.findMany({ select: LINE_COLUMNS });
+        const invoices = (await prisma.invoice.findMany({ select: INVOICE_COLUMNS })).map((r) => toInvoice(r, lines.filter((l) => l.invoiceId === r.id)));
+        const payments = (await prisma.payment.findMany({ select: PAYMENT_COLUMNS, orderBy: PAYMENT_ORDER })).map(toPayment);
+        const counters = await prisma.receiptCounter.findMany({ select: { series: true, last: true }, orderBy: { series: "asc" } });
+        const byId = <T extends { id: string }>(xs: T[]) => new Map(xs.map((x) => [x.id, x]));
+        expect(byId(invoices)).toEqual(byId(db.invoices.map((i) => ({ ...i, clinicId: id }))));
+        expect(byId(payments)).toEqual(byId(db.payments.map((p) => ({ ...p, clinicId: id }))));
+        expect(counters).toEqual(receiptCounters(db.payments).sort((a, b) => a.series.localeCompare(b.series)));
+      });
+    }
+    expect(platform.tenants[DEMO_CLINIC_ID]!.payments.length).toBeGreaterThan(0);
   });
 
   it("gives every mock login the same email in the same clinics, opened by the demo password", async () => {

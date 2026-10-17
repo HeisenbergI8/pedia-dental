@@ -1,4 +1,4 @@
-import { AccountStatus, Acknowledgement, AgreementRecord, AuditAction, ConsentScope, HeadingFont, MessageKind, PrivacyChoice, Role, Sex, StaffRole, PlanItemStatus, Tier, ToothCondition, VisitStatus, AppointmentRequestStatus, AppointmentStatus, DueItem, TimeOfDay } from "@pedia/shared";
+import { AccountStatus, Acknowledgement, AgreementRecord, AuditAction, ConsentScope, HeadingFont, MessageKind, PrivacyChoice, Role, Sex, StaffRole, PlanItemStatus, Tier, ToothCondition, VisitStatus, AppointmentRequestStatus, AppointmentStatus, DueItem, PaymentMethod, TimeOfDay } from "@pedia/shared";
 import { describe, expect, it } from "vitest";
 import type { RequestContext } from "../common/request-context";
 import { $Enums, Prisma } from "../generated/prisma/client.ts";
@@ -45,6 +45,7 @@ describe("model registry", () => {
     expect(Object.values($Enums.TimeOfDay)).toEqual(TimeOfDay.options);
     expect(Object.values($Enums.DueKind)).toEqual(DueItem.shape.kind.options);
     expect(Object.values($Enums.ToothCondition)).toEqual(ToothCondition.options);
+    expect(Object.values($Enums.PaymentMethod)).toEqual(PaymentMethod.options);
   });
 });
 
@@ -129,5 +130,11 @@ describe("append-only", () => {
       expect(APPEND_ONLY.has(model)).toBe(false);
       expect(() => scopeArgs(model, "updateMany", { where: { id: "x" }, data: {} }, clinicA)).not.toThrow();
     }
+  });
+
+  it("keeps payments append-only, and lets a bill be voided in place (B8)", () => {
+    expect(() => scopeArgs("Payment", "update", { where: { id: "p1" }, data: { amount: 0 } }, clinicA)).toThrow(/append-only/);
+    expect(() => scopeArgs("Payment", "deleteMany", { where: {} }, clinicA)).toThrow(/append-only/);
+    expect(() => scopeArgs("Invoice", "updateMany", { where: { id: "i1" }, data: {} }, clinicA)).not.toThrow();
   });
 });

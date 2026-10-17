@@ -763,3 +763,102 @@ model DueItem {
   @@index([clinicId, closedAt, dueOn])
   @@index([clinicId, patientId, procedure])
 }
+
+enum PaymentMethod {
+  cash
+  gcash
+  maya
+  card
+  bank_transfer
+  account_credit
+}
+
+/// A bill (B8). Branch-level data read account-wide (a family's balance sums every branch): "clinic" scope, branchId
+/// a plain column (E5). Totals and balances are computed, never stored.
+model Invoice {
+  id            String    @id @default(cuid(2))
+  clinicId      String
+  branchId      String
+  patientId     String
+  visitId       String?
+  appointmentId String?
+  /// Centavos.
+  discount      Int
+  issuedAt      DateTime
+  /// Decision 2: set together, once, by POST /invoices/:id/void.
+  voidedAt      DateTime?
+  voidedBy      String?
+  voidReason    String?   @db.Text
+
+  @@index([clinicId, patientId, issuedAt])
+  /// The finance report's month and outstanding, per branch.
+  @@index([clinicId, branchId, issuedAt])
+  /// Unpaid appointments: an appointment's bills.
+  @@index([clinicId, appointmentId])
+}
+
+/// One line, in order. Names and fees copied at billing, so a catalog change never rewrites an issued bill.
+model InvoiceLine {
+  id             String  @id @default(cuid(2))
+  clinicId       String
+  invoiceId      String
+  position       Int
+  planItemId     String?
+  /// planItemId while the bill is live, null once voided: a plan item is on one live bill at most (E6).
+  livePlanItemId String?
+  procedureCode  String  @db.VarChar(64)
+  description    String  @db.Text
+  tooth          Int?
+  amount         Int
+
+  @@unique([clinicId, invoiceId, position])
+  @@unique([clinicId, livePlanItemId])
+}
+
+/// Append-only (APPEND_ONLY). Refunds are negative rows. A credit application is one bill-side row (leg 0) and one
+/// or more deposit-side rows (legs 1…) under one CR number (E3).
+model Payment {
+  id          String        @id @default(cuid(2))
+  clinicId    String
+  branchId    String
+  patientId   String
+  invoiceId   String?
+  appliedTo   String?
+  amount      Int
+  method      PaymentMethod
+  referenceNo String?       @db.VarChar(100)
+  note        String?       @db.Text
+  receiptNo   String        @db.VarChar(16)
+  receiptLeg  Int           @default(0)
+  receivedBy  String
+  receivedAt  DateTime
+
+  @@unique([clinicId, receiptNo, receiptLeg])
+  @@index([clinicId, patientId, receivedAt])
+  @@index([clinicId, invoiceId])
+  /// The day's collections and the finance sums, per branch.
+  @@index([clinicId, branchId, receivedAt])
+}
+
+/// The last receipt number given, per clinic and series (AR, CR). Gapless (E3).
+model ReceiptCounter {
+  clinicId String
+  series   String @db.VarChar(2)
+  last     Int
+
+  @@id([clinicId, series])
+}
+
+/// A money-moving POST's key and its answer (E2), kept 24 hours, swept hourly.
+model IdempotencyKey {
+  clinicId    String
+  key         String   @db.VarChar(100)
+  fingerprint String   @db.Char(64)
+  status      Int
+  response    Json?
+  createdAt   DateTime
+  expiresAt   DateTime
+
+  @@id([clinicId, key])
+  @@index([expiresAt])
+}

@@ -58,3 +58,10 @@ Engineering decisions E1–E13 as the plan records them.
 - The void dialog's field reads "Why is it voided?", as the cancel dialog's "Why is it cancelled?".
 - The admin e2e case makes its own unpaid bill (a fluoride signed through the demo's API in the page): every seeded bill has a payment, so none can be voided.
 **Gate:** `pnpm run check` exit 0 (web 355); `check -- design` exit 0; demo-mode Playwright, desktop: the two new cases and 12 existing billing cases, 14/14.
+
+## Phase 4: Tables, shapes, rules, seed — 2026-10-17
+
+**Steps completed:** 4.1–4.4
+**Files changed:** `apps/api/prisma/schema.prisma`, `apps/api/prisma/migrations/*_billing/migration.sql`, `apps/api/src/prisma/{model-scope,tenant-scope.test}.ts`, `apps/api/src/billing-records/{billing.rows,billing.rows.test}.ts`, `apps/api/src/billing/{billing.rules,billing.rules.test}.ts`, `apps/api/src/seed/seed-database.ts`, `apps/api/test/int/seed.int.test.ts`
+**Deviations from plan:** the migration is generated with `prisma migrate diff` (CONVENTIONS' route), not `migrate dev`. It has 5 tables and nothing touching earlier tables. The enum parity test gains `PaymentMethod`.
+**Gate:** `pnpm run check` exit 0; `test:int` 31 files, 296 passed + 3 todo.
