@@ -59,6 +59,10 @@ describe("note sections and services", () => {
       [150000, false],
     ]);
     expect(noteServices({ id: "other" }, [item("i1", 1)], invoices, [])).toEqual([]);
+    // A voided bill no longer prices it (B8 decision 2); billed again on a live bill, it is.
+    const voided = [{ ...invoices[0]!, voided: { at: "2026-10-02T00:00:00.000Z", by: "u", reason: "Wrong tooth" } }];
+    expect(noteServices({ id: "n1" }, [item("i1", 150000)], voided, []).map((s) => [s.amount, s.billed])).toEqual([[150000, false]]);
+    expect(noteServices({ id: "n1" }, [item("i1", 150000)], [...voided, ...invoices], []).map((s) => [s.amount, s.billed])).toEqual([[120000, true]]);
   });
 });
 

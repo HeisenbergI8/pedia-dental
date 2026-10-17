@@ -1,6 +1,6 @@
 "use client";
 import { format, parseISO } from "date-fns";
-import { accountSummary, depositBalance, formatPeso, invoiceBalance, invoiceTotal, planProgress, toothName, type Payment, type PlanItemStatus } from "@pedia/shared";
+import { accountSummary, depositBalance, formatPeso, invoiceBalance, invoiceTotal, liveInvoices, planProgress, toothName, type Payment, type PlanItemStatus } from "@pedia/shared";
 import { EmptyState } from "@/components/empty-state";
 import { SectionCard } from "@/components/section-card";
 import { Badge } from "@/components/ui/badge";
@@ -64,7 +64,7 @@ export function PortalBilling() {
   const child = useActiveChild();
   const invoices = useInvoices(child.id);
   const payments = usePayments(child.id);
-  const allInvoices = invoices.data ?? [];
+  const allInvoices = liveInvoices(invoices.data ?? []); // a bill voided by mistake isn't the family's (B8 question 3)
   const allPayments = payments.data ?? [];
   const summary = accountSummary(allInvoices, allPayments);
   const held = depositBalance(allPayments, child.id);

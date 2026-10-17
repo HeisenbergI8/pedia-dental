@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useSession } from "@/features/auth/access";
 import { useBranchStaff, useStaff } from "@/features/clinic/api";
 import { formatDate } from "@/lib/format";
+import { useIdempotencyKey } from "@/lib/idempotency";
 import { useApplyCredit } from "../api";
 
 /**
@@ -25,6 +26,7 @@ export function ApplyCreditDialog({ invoice, payments, mode, onClose }: { invoic
   const branchStaff = useBranchStaff();
   const myId = useSession()?.user.staffId;
   const apply = useApplyCredit();
+  const idem = useIdempotencyKey(); // one per attempt; kept for a retry whose outcome is unknown (B8 E2)
   const [amount, setAmount] = useState(String(most / 100));
   const [receivedBy, setReceivedBy] = useState("");
   const [error, setError] = useState<string>();
@@ -38,13 +40,17 @@ export function ApplyCreditDialog({ invoice, payments, mode, onClose }: { invoic
     if (!parsed.success) return setError(parsed.error.issues[0]?.message);
     if (centavos > most) return setError(`That's more than the ${formatPeso(most)} that can be ${mode === "apply" ? "applied" : "returned"}`);
     apply.mutate(
-      { invoiceId: invoice.id, ...parsed.data },
+      { invoiceId: invoice.id, key: idem.current, ...parsed.data },
       {
         onSuccess: () => {
+          idem.settle();
           toast.success(mode === "apply" ? `${formatPeso(centavos)} paid from the deposit` : `${formatPeso(centavos)} returned to the deposit`);
           onClose();
         },
-        onError: (err) => setError(err.message),
+        onError: (err) => {
+          idem.settle(err);
+          setError(err.message);
+        },
       },
     );
   }

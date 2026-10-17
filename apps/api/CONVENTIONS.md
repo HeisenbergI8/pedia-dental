@@ -6,7 +6,7 @@ The Primolar backend. It replaces the browser mocks (MSW) in `apps/web` **endpoi
 feature code in the web app**. The product, the users and the domain are the ones in the root `CONVENTIONS.md`
 and `ROADMAP.md`; read those first. This file covers only how the API is built.
 
-**Current phase: B1–B7 done** (2026-10-17). The runtime core (request context, `Clock`, logs, tenant scoping,
+**Current phase: B1–B8 done** (2026-10-17). The runtime core (request context, `Clock`, logs, tenant scoping,
 transactions, audit), `@pedia/seed`, the `test:int` suite on MySQL and CI, identity, sessions and the access guard,
 `/auth/*`, `/operator/auth/*` and the clinic reads, with the web signing in against them in `hybrid` mode. B1-c added
 the outbox, scheduled jobs and file storage. B3: the Owner's settings
@@ -16,7 +16,10 @@ and the clinic's privacy notice (Owner's and public), served in `hybrid`. B5: vi
 entries, corrections as new rows) and the last visit in the patient list and header, served in `hybrid`. B6: clinical notes
 (read-only once signed; signing completes plan items), growth and habits, and the treatment plan, served in `hybrid`.
 B7: appointments without double-booking, parents' requests, follow-ups and recalls, the patient list's recall and visit
-filters, and Today, served in `hybrid`. B8 (billing) is next. The
+filters, and Today, served in `hybrid`. B8: bills, payments, deposits and credit (every money POST behind an
+Idempotency-Key, gapless receipt numbers), voiding a bill made by mistake, refunds for the Owner and admins, balances
+in the patient list and header, the day's collections and the financial dashboard, served in `hybrid`. B9 (messages)
+is next. The
 build order is [CHUNKS.md](CHUNKS.md).
 
 **Stack:** NestJS 12 (ESM, Express) · Prisma 7 + MySQL 8.4 (MariaDB driver adapter) · Zod 4 schemas from
@@ -69,7 +72,9 @@ Run from the repo root.
 | Visits | `src/visits/` | B5: `VisitsService` (list, start, complete, `forPatient` for the chart; B7 seats and finishes the appointment), `visit.rows.ts` (rows ↔ `Visit`), `VisitDaysService` (the days patients were seen: completed visits and done appointments) in its own `VisitDaysModule`, imported by `PatientsModule` |
 | Appointments | `src/appointments/` | B7: `AppointmentRecordsService` in its own `AppointmentRecordsModule` (**the only reader and writer of `Appointment`**, Prisma only, so any feature can import it), `AppointmentsService` (calendar, book, move, status), `AppointmentRequestsService` (parents' requests), `appointment.rules.ts` (the mock's refusals: slot, move, status, request), `appointment.rows.ts`, `request.rows.ts` |
 | Recalls | `src/recalls/` | B7: `DueItemsService` (owns `DueItem`: the due list, `afterSign`, `takeFor`, `backfill`), `due-item.rules.ts` (`signChange`, `bookedItem`, `dueBackfill`), `due-item.rows.ts`; `prisma/backfill-due-items.ts` |
-| Reports | `src/reports/` | B7: `ReportsService` (`/reports/today`: the shared `todaySummary` over the branches' share), `report-branches.ts` (the mock's `reportBranches`; B8's finance report reuses it) |
+| Reports | `src/reports/` | B7: `ReportsService` (`/reports/today`: the shared `todaySummary` over the branches' share), `report-branches.ts` (the mock's `reportBranches`). B8: `/reports/finance` (the shared `summarizeFinance` over SQL facts) and `collections.controller.ts` (`GET /payments`, the day's collections) |
+| Billing | `src/billing/`, `src/billing-records/` | B8: `BillingRecordsService` in its own `BillingRecordsModule` (**the only reader and writer of Invoice, InvoiceLine, Payment and ReceiptCounter**; `billTotals` for balances, `financeFacts` for the dashboard, `nextReceipt`), `billing.rows.ts`, `finance-facts.ts`; `InvoicesService` (list, bill, void), `PaymentsService` (pay, deposit, apply credit, history), `billing.rules.ts` (the mock's refusals) |
+| Idempotency | `src/idempotency/` | B8: `IdempotencyService.once` (claims the key in the write's own transaction; replays, 422 on another request), `keyOf` (the header's 400), `IdempotencyJobs` (the hourly sweep) |
 | Clinic time | `src/clinic-time.ts` | Pins the process to Asia/Manila. Imported first by `main.ts`, the seed and the backfill, and a `setupFiles` of both test runners |
 | Chart | `src/chart/` | B5: `ChartService` (reads and appends only), `chart.rules.ts` (the mock's refusals as a pure function), `chart.rows.ts` (rows ↔ `ChartEntry`, `CHART_ORDER`) |
 | Legal | `src/legal/` | `PrivacyNoticeService` (owns `PrivacyNotice`: the version in force, the Owner's save, the public read) and the public `LegalController` (`GET /legal/notices/:clinicId`) |
@@ -303,8 +308,8 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   null` that must touch one row. A race test only fails when both are removed.
 - **Growth's "can't be in the future" uses the process clock** (`SaveGrowthInput`), which reads Manila time since B7
   (`clinic-time.ts`), so B6 decision 8's 00:00–08:00 window is closed.
-- **In `hybrid`, MSW's billing and documents don't see API-created notes or plan items** until B8/B10 (B6 decision 2),
-  and signing on the API queues no care message until B9 (decision 1).
+- **In `hybrid`, MSW's documents don't see API-created notes, plan items, bills or payments** until B10 (B6 decision 2,
+  B8), and signing on the API queues no care message until B9 (decision 1).
 - **Records that share a time sort by id**, not insertion order: give seeded records that must read in order distinct
   times (B6 fixed the growth examples' tie).
 - **The process runs in Asia/Manila** (`src/clinic-time.ts`, the first import of every entry point and test runner).
@@ -317,10 +322,20 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   `BranchesService`, `VisitDaysService` and `DueItemsService` share one owner without a module cycle.
 - **A database seeded before B7 has no appointments, requests or due items:** use a fresh one. On a live database,
   `pnpm --filter api db:backfill-due-items` opens the due items of notes signed before B7 (idempotent), and nothing else.
-- **In `hybrid` until B8/B9:** no booking, move or no-show texts are queued for API appointments, and Today shows no
+- **In `hybrid` until B9:** no booking, move or no-show texts are queued for API appointments, and Today shows no
   greeting ticks (B7 decisions 3, 4); MSW's `POST /due-items/:id/message` answers 404 for items created on the API
-  (seeded ones keep their ids); "No contact" stays false and balances zero on the API's patient list; MSW's billing and
-  `/reports/finance` don't see API-booked appointments.
+  (seeded ones keep their ids); "No contact" stays false on the API's patient list.
+- **Every money write locks in one order: the Idempotency-Key claim → the patient → the bill → the receipt counter**
+  (B8 E1). The key claim is a raw `INSERT`: Prisma's `create` reads the row back, a plain read that would take the
+  snapshot before `lockPatient` (the lock-before-the-first-read trap). The receipt counter is always the last lock.
+- **Raw SQL money and dates:** `SUM` of an `INT` comes back as `DECIMAL` (a string), so wrap it in `Number`; a `Date`
+  passed to raw SQL is written as UTC text (`utc()`, `manilaStartUtc`), since the process runs in Manila; a Manila day
+  in SQL is `receivedAt + 8 hours`. MySQL's JSON column reorders an object's keys, so a replayed answer equals the
+  first by value, not byte for byte.
+- **`Payment` is append-only**; a refund or a returned credit is a new row, and one credit application's rows share
+  one CR receipt number (legs 0, 1…). A bill is voided in place (`voidedAt`), never deleted, and its lines' `livePlanItemId`
+  is cleared, so a plan item is on one live bill at most (unique index).
+- **A database seeded before B8 has no bills or payments:** use a fresh one.
 - **A file import cycle reads as a Nest "can't resolve dependencies" error**, not a cycle: `patient-lock.ts` imported
   `PATIENT_NOT_FOUND` from `patients.service.ts`, and B7's `PatientsService → DueItemsService → VisitsService →
   patient-lock` made the provider undefined at decoration time. Keep shared constants in the leaf file.
@@ -377,8 +392,8 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
     for `patients.contact`), as `LIKE '%word%'` over two stored columns built by the shared `patientSearchText`. A
     leading wildcard can't use an index, so a search scans one clinic's rows; full-text when a clinic passes ~10k.
   - **No column encryption** of medical fields: the disk is encrypted (B13).
-  - **`/patient-summaries` and the header summary** are the API's; last visit and recall are filled (B5, B7), balance
-    and "no contact" stay zero and false until B8 and B9.
+  - **`/patient-summaries` and the header summary** are the API's; last visit, recall and balance are filled (B5, B7,
+    B8); "no contact" stays false until B9.
   - **Audit**: one `view` "Patient profile" per single-record read (`GET /patients/:id`, its summary) and `view`
     "Patient photo", except that the same user viewing the same record again within five minutes isn't logged twice
     (`REPEAT_WINDOW_MS`, B1, as the mock); **lists, searches and duplicate checks aren't audited**, unlike the mock's "Patient list" entries.
@@ -413,6 +428,25 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
     B13 (decision 8); an over-long `speech`, free-text note value or `sourceChartEntryId` answers 500 and writes nothing
     until `@pedia/shared` caps their lengths, together with B5's `note` and `appointmentId` (decision 9). The same for a
     plan item `fee` above MySQL's `Int` (2,147,483,647 centavos) and a path id of 192+ characters on the audited reads.
+- **Billing** (B8, decisions in the B8 plan; the user confirmed 1–4 and Questions 1–5):
+  - Receipt numbers: one sequence per clinic and series (`AR-` money received, `CR-` deposit credit), gapless under
+    parallel payments (a counter row locked to commit). Acknowledgment receipts, not BIR official receipts.
+  - A bill made by mistake is voided with a reason, by the Owner or an admin (`billing.adjust`), only while no payment
+    row ever touched it (refunded or not). It stays on record, counts in no balance or total, frees its treatments to
+    be billed again, and is hidden from parents.
+  - Refunds (on a bill or a deposit) are the Owner's and admins' (`billing.adjust`); moving deposit credit isn't a
+    refund (`billing.collect`). Payments are always dated now.
+  - Every POST that records a bill or money needs an `Idempotency-Key` (400 without); a retry replays the stored answer
+    with `Idempotent-Replayed: true`, another request with the key is 422, a refusal frees the key; keys last 24 hours.
+  - Balances are computed, never stored: the list and header sum live bills in one aggregate query (`billTotals`), the
+    dashboard from six bounded SQL sums fed to the shared `summarizeFinance` (no rule re-derived; parity tested).
+  - An appointment billed twice is judged by its first bill, as the demo (changed later everywhere at once). The
+    daily list and the dashboard aren't audited (B7 decision 6); each child's bills and payments are.
+  - Voiding takes no Idempotency-Key: a repeat answers 409 "already voided", which is safe to retry (E9).
+  - Money belongs to a branch: a payment to its bill's branch wherever it's paid, a deposit to the device's branch, and
+    a credit draws the bill's branch's deposits first (E11, `depositLegs`). The day's list and the dashboard filter by it.
+  - The demo keeps Idempotency-Keys in memory per clinic for 24 hours (E12); the API in `IdempotencyKey` rows.
+  - A payment's reference number is capped at 100 characters and a refund's or void's reason at 500 (E13).
 - **Scheduling, follow-ups and Today** (B7, decisions in the B7 plan; the user confirmed 1–4 and 6):
   - Double-booking is the demo's rule: the same chair or the same dentist at an overlapping time, at any branch; the
     same child twice is allowed (1). Bookings and moves serialise on the clinic's row (E1), tested with parallel requests.

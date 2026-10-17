@@ -4,7 +4,7 @@
 
 Primolar: pediatric dental clinic management sold as a service to many clinics. Each paying clinic is a
 **clinic account** with its own branches, staff, patients and branding (ROADMAP feature 16). **Current phase: frontend prototype.** In the demo every API call is
-answered in the browser by MSW using fake, seeded data; in `hybrid` mode the routes apps/api already serves (B2: sign-in; B3: the Owner's settings and reference data; B4: patients, consents and the privacy notice; B5: visits and the chart; B6: notes, growth and the treatment plan; B7: appointments, requests, the due list and Today) go to it. A NestJS + MySQL API
+answered in the browser by MSW using fake, seeded data; in `hybrid` mode the routes apps/api already serves (B2: sign-in; B3: the Owner's settings and reference data; B4: patients, consents and the privacy notice; B5: visits and the chart; B6: notes, growth and the treatment plan; B7: appointments, requests, the due list and Today; B8: billing, payments and the financial dashboard) go to it. A NestJS + MySQL API
 (`apps/api`, scaffolded; its own rules are in `apps/api/CONVENTIONS.md`) will replace the mocks later, endpoint by endpoint, without changing feature code. A clinic joins through
 the public **Get started** form, and Primolar approves it in the operator console (ROADMAP feature 17). Each clinic
 then pays Primolar monthly; the operator records payments by hand, and a clinic 7 days overdue pauses itself.
@@ -26,11 +26,12 @@ TanStack Query · React Hook Form + Zod 4 · Zustand (UI state, plus the demo se
 | Tests, one file | `pnpm --filter <web|@pedia/shared|@pedia/seed> exec vitest run <path>` |
 | Design guards (contrast, tokens, shell, screens) | `pnpm run check -- design` (typecheck + every `src/design/design-*.test.ts`) |
 | Run the app locally | `pnpm dev` → http://localhost:3000 |
-| Run against the real API | `NEXT_PUBLIC_API_MOCKING=hybrid API_PROXY_TARGET=http://localhost:4100 pnpm dev` with `pnpm dev:api` running (`DEMO_LOGINS=true COOKIE_SECURE=false`, seeded with `pnpm --filter api db:seed`). `enabled` = MSW answers everything (the demo); `hybrid` = MSW answers all but `API_ROUTES` (`mocks/passthrough.ts`: since B2, sign-in, `/operator/auth/*` and the clinic reads; since B3, the Owner's settings, `/clinic/usage`, the logo and the reference data; since B4, patients, consents, the patient photo and the privacy notice; since B5, visits and the dental chart; since B6, notes, growth and the treatment plan; since B7, appointments, parents' requests, the due list and Today), which go through Next's `/api` proxy to the API; `disabled`/unset = no MSW |
+| Run against the real API | `NEXT_PUBLIC_API_MOCKING=hybrid API_PROXY_TARGET=http://localhost:4100 pnpm dev` with `pnpm dev:api` running (`DEMO_LOGINS=true COOKIE_SECURE=false`, seeded with `pnpm --filter api db:seed`). `enabled` = MSW answers everything (the demo); `hybrid` = MSW answers all but `API_ROUTES` (`mocks/passthrough.ts`: since B2, sign-in, `/operator/auth/*` and the clinic reads; since B3, the Owner's settings, `/clinic/usage`, the logo and the reference data; since B4, patients, consents, the patient photo and the privacy notice; since B5, visits and the dental chart; since B6, notes, growth and the treatment plan; since B7, appointments, parents' requests, the due list and Today; since B8, bills, payments, deposits, voids, the day's collections and the financial dashboard), which go through Next's `/api` proxy to the API; `disabled`/unset = no MSW |
 | Sign-in against the API, end to end | Both servers on free ports (the web on its own `NEXT_DIST_DIR=.next-hybrid`), then in `apps/web`: `E2E_API=1 E2E_BASE_URL=… npx playwright test e2e/api-sign-in.spec.ts --project=desktop`. Start-up commands: the B2d plan, Step 4.1. It signs in 10 times; the API allows 20 sign-ins per 5 minutes per address |
 | Owner settings against the API, end to end | As sign-in, against a fresh database that has B3's rows: `E2E_API=1 E2E_BASE_URL=… npx playwright test e2e/api-owner-settings.spec.ts --project=desktop` (9 sign-ins a run). Start-up commands: the B3 plan, Step 11.1 |
 | Notes, growth and the plan against the API | Fresh database with B6's rows: `E2E_API=1 E2E_BASE_URL=… npx playwright test e2e/api-notes-plan.spec.ts --project=desktop` (4 sign-ins a run). Start-up commands: the B6 plan, Step 7.2 |
 | Scheduling against the API | Fresh database with B7's rows: `E2E_API=1 E2E_BASE_URL=… npx playwright test e2e/api-scheduling.spec.ts --project=desktop` (8 sign-ins a run; re-runnable on one database). Start-up commands: the spec's header, or the B7 plan, Step 9.2 |
+| Billing against the API | Fresh database with B8's rows: `E2E_API=1 E2E_BASE_URL=… npx playwright test e2e/api-billing.spec.ts --project=desktop` (about 8 sign-ins a run; re-runnable on one database). Start-up commands: the spec's header, or the B8 plan, Step 10.2 |
 | Reset demo data | account menu → Reset demo data (keeps you signed in). `localStorage.clear()` then reload also works, but signs you out |
 
 ---
@@ -96,6 +97,11 @@ MSW handler (now) or NestJS (later).
 - Chart entries and payments are append-only. Corrections are new rows (`supersedes`), never edits.
 - Money is integer centavos everywhere. Format only at display time with `formatPeso`.
 - Balances are computed from payments, never stored.
+- A bill made by mistake is voided (a reason, nothing ever paid or applied on it), never deleted; a voided bill counts
+  in no balance or total (`liveInvoices`, `isVoided`) and is hidden from parents. Refunds and voids need
+  `billing.adjust` (the Owner and admins); front desk records payments, deposits and deposit credit.
+- Every POST that records a bill or money sends an `Idempotency-Key` (`lib/idempotency.ts`: one key per form attempt,
+  kept for a retry whose answer was lost). The mock and the API record it once.
 - Follow-up and recall intervals are data (`DEFAULT_FOLLOW_UP_RULES`), not `if` statements.
 - Every record belongs to one clinic account (`clinicId`), and branch-level records (appointments, chairs,
   invoices, payments) also to one branch (`branchId`). Mock handlers scope every read and write to the
@@ -165,14 +171,15 @@ MSW handler (now) or NestJS (later).
   doesn't change messages MSW composes until B9. The subscription (B12) stays on MSW. Since B4, patients, their
   consents and photo, and the privacy notice are the API's: a child registered in `hybrid` exists only on the API, so
   MSW's visits, chart, billing and appointments answer `Patient not found` for them; MSW's parent gate still uses MSW's
-  families; the patient list shows no balances or "no contact" flag until B8/B9; and a reminders "no" doesn't cancel
+  families; the patient list shows no "no contact" flag until B9; and a reminders "no" doesn't cancel
   MSW's queued messages. Since B5, visits and the chart are the API's: photos
   on a visit the API started answer 404 from MSW until B10. Since B6, notes, growth and the plan are the API's: MSW's
-  billing and documents don't see notes or plan items created on the API until B8/B10, and signing there queues no care
-  message until B9. Since B7, appointments, requests, due items and Today are the API's: no booking, move or no-show
+  documents don't see notes or plan items created on the API until B10, and signing there queues no care message until
+  B9. Since B7, appointments, requests, due items and Today are the API's: no booking, move or no-show
   texts are queued and Today shows no greeting ticks until B9; MSW's "Send reminder" on the due list answers 404 for
-  items created on the API (seeded items keep their ids); MSW's billing and finance report don't see API-booked
-  appointments until B8.
+  items created on the API (seeded items keep their ids). Since B8, bills, payments, deposits, voids, the day's
+  collections and the financial dashboard are the API's: MSW's documents (statements, receipts as documents) don't see
+  API bills or payments until B10.
   Resetting one store doesn't reset the other. MSW passes a request through by fetching it from its worker, so in
   Playwright `fromServiceWorker()` is true either way: tell an API answer by its `x-request-id` header.
 - `next dev` with a custom `NEXT_DIST_DIR` rewrites `apps/web/tsconfig.json` (adds that dir's types). Revert it

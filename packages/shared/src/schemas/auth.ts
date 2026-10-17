@@ -22,6 +22,7 @@ export const Permission = z.enum([
   "plan.write",
   "billing.view",
   "billing.collect",
+  "billing.adjust", // refunds (on a bill or a deposit) and voiding a bill: the Owner and admins (B8 decisions 2, 3)
   "recalls.manage",
   "messages.view",
   "messages.manage",

@@ -3,12 +3,13 @@ import { useState } from "react";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
 import { ReceiptIcon } from "lucide-react";
-import { accountSummary, appliedCredit, depositBalance, formatPeso, invoiceBalance, invoiceTotal, isMoneyIn, type Invoice, type Payment } from "@pedia/shared";
+import { accountSummary, appliedCredit, depositBalance, formatPeso, invoiceBalance, invoiceTotal, isMoneyIn, isVoided, type Invoice, type Payment } from "@pedia/shared";
 import { EmptyState } from "@/components/empty-state";
 import { MetaLine } from "@/components/meta-line";
 import { SectionCard } from "@/components/section-card";
 import { Button } from "@/components/ui/button";
 import { useCan } from "@/features/auth/access";
+import { useStaff } from "@/features/clinic/api";
 import { usePlan } from "@/features/plan/api";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -16,6 +17,7 @@ import { paymentLabel, useInvoices, usePayments } from "../api";
 import { ApplyCreditDialog } from "./apply-credit-dialog";
 import { CreateInvoice } from "./create-invoice";
 import { PaymentDialog, type PaymentTarget } from "./payment-dialog";
+import { VoidInvoiceDialog } from "./void-invoice-dialog";
 import { Loading } from "@/components/brand";
 import { ErrorState } from "@/components/error-state";
 
@@ -25,7 +27,11 @@ export function BillingTab({ patientId }: { patientId: string }) {
   const plan = usePlan(patientId);
   const [paying, setPaying] = useState<PaymentTarget | null>(null);
   const [crediting, setCrediting] = useState<{ invoice: Invoice; mode: "apply" | "return" } | null>(null);
-  const canCollect = useCan()("billing.collect");
+  const [voiding, setVoiding] = useState<Invoice | null>(null);
+  const can = useCan();
+  const canCollect = can("billing.collect");
+  const canAdjust = can("billing.adjust"); // refunds and voids: the Owner and admins (B8 decisions 2, 3)
+  const staff = useStaff().data ?? [];
 
   if (invoices.isLoading || payments.isLoading || plan.isLoading) return <Loading label="Loading billing" />;
   if (invoices.error || payments.error || plan.error) return <ErrorState what="this patient's billing" onRetry={() => [invoices, payments, plan].forEach((q) => q.refetch())} />;
@@ -46,7 +52,7 @@ export function BillingTab({ patientId }: { patientId: string }) {
         action={
           canCollect && (
             <>
-              {held > 0 && (
+              {held > 0 && canAdjust && (
                 <Button variant="ghost" size="sm" className="text-ink-muted" onClick={() => setPaying({ deposit: true, patientId, held, refund: true })}>Refund deposit</Button>
               )}
               <Button variant="outline" size="sm" onClick={() => setPaying({ deposit: true, patientId, held, refund: false })}>Take deposit</Button>
@@ -73,6 +79,7 @@ export function BillingTab({ patientId }: { patientId: string }) {
       ) : (
         [...allInvoices].reverse().map((inv) => {
           const own = allPayments.filter((p) => p.invoiceId === inv.id);
+          if (isVoided(inv)) return <VoidedInvoice key={inv.id} invoice={inv} by={staff.find((s) => s.id === inv.voided!.by)?.fullName ?? "staff"} />;
           const balance = invoiceBalance(inv, allPayments);
           const paid = invoiceTotal(inv) - balance;
           return (
@@ -88,11 +95,14 @@ export function BillingTab({ patientId }: { patientId: string }) {
                     {appliedCredit(inv.id, allPayments) > 0 && (
                       <Button variant="ghost" size="sm" className="text-ink-muted" onClick={() => setCrediting({ invoice: inv, mode: "return" })}>Return to deposit</Button>
                     )}
-                    {paid - appliedCredit(inv.id, allPayments) > 0 && (
+                    {canAdjust && paid - appliedCredit(inv.id, allPayments) > 0 && (
                       <Button variant="ghost" size="sm" className="text-ink-muted" onClick={() => setPaying({ invoice: inv, refund: true })}>Refund</Button>
                     )}
                     {balance > 0 && held > 0 && (
                       <Button variant="outline" size="sm" onClick={() => setCrediting({ invoice: inv, mode: "apply" })}>Pay from deposit</Button>
+                    )}
+                    {canAdjust && own.length === 0 && (
+                      <Button variant="ghost" size="sm" className="text-ink-muted" onClick={() => setVoiding(inv)}>Void</Button>
                     )}
                     {balance > 0 && <Button size="sm" onClick={() => setPaying({ invoice: inv, refund: false })}>Record payment</Button>}
                   </>
@@ -137,7 +147,31 @@ export function BillingTab({ patientId }: { patientId: string }) {
       {crediting && (
         <ApplyCreditDialog key={`${crediting.invoice.id}-${crediting.mode}`} invoice={crediting.invoice} payments={allPayments} mode={crediting.mode} onClose={() => setCrediting(null)} />
       )}
+      {voiding && <VoidInvoiceDialog key={voiding.id} invoice={voiding} onClose={() => setVoiding(null)} />}
     </div>
+  );
+}
+
+/** A bill voided by mistake (decision 2): kept on record, demoted, with who, when and why. No actions, no total owed. */
+function VoidedInvoice({ invoice, by }: { invoice: Invoice; by: string }) {
+  return (
+    <SectionCard
+      as="article"
+      headingLevel={3}
+      title={`Invoice of ${formatDate(invoice.issuedAt)} · Voided`}
+      description={`Voided by ${by} on ${formatDate(invoice.voided!.at)}: ${invoice.voided!.reason}`}
+    >
+      <table className="w-full text-sm text-ink-muted">
+        <tbody className="divide-y divide-line">
+          {invoice.lines.map((l, idx) => (
+            <tr key={l.planItemId ?? idx}>
+              <td className="py-1.5">{l.description}{l.tooth ? ` · tooth ${l.tooth}` : ""}</td>
+              <td className="py-1.5 text-right tabular-nums line-through">{formatPeso(l.amount)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </SectionCard>
   );
 }
 

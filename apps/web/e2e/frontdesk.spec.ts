@@ -472,6 +472,16 @@ test.describe("happy paths", () => {
     await expect(page.getByRole("button", { name: /^Withdrawn/ })).toHaveText(`Withdrawn (${withdrawnBefore + 1})`);
   });
 
+  test("front desk takes payments but sees no Refund or Void, which are the Owner's and admins' (B8)", async ({ page }) => {
+    await signInFrontDesk(page);
+    await findPatient(page, "Balistreri", /Balistreri, Damien/);
+    await page.getByRole("tab", { name: "Billing" }).click();
+    const tab = page.getByRole("tabpanel");
+    await expect(tab.getByRole("button", { name: "Record payment" }).first()).toBeVisible();
+    await expect(tab.getByText(/payment$/).first()).toBeVisible(); // a bill with money on it, where Refund would show
+    for (const name of ["Refund", "Refund deposit", "Void"]) await expect(tab.getByRole("button", { name, exact: true })).toHaveCount(0);
+  });
+
   test("front desk takes the Billing day view but sees no finance dashboard", async ({ page }) => {
     await signInFrontDesk(page);
     await openNav(page, "Billing");

@@ -266,7 +266,20 @@ due in 7 days and booking it removes it; Today matches the mock for both demo cl
 
 ---
 
-## Chunk B8: Billing, payments and the financial dashboard (~22 h) · Large — features 7 and 8
+## ✅ Chunk B8: Billing, payments and the financial dashboard (done, 2026-10-17) · Large — features 7 and 8
+
+**Status (2026-10-17): done**, in five parts. **B8a**: `@pedia/shared` gains `billing.adjust`, voided bills that count
+nowhere, Idempotency-Key helpers, and `financeSummary` split into facts and a summary; the demo and the web follow
+(Void with a reason, Refund for the Owner and admins only, a key per money form). **B8b**: the five money tables,
+row mappers, the mock's refusals as pure functions, the seed, the key claim and gapless receipt counters.
+**B8c**: the billing routes and their races. **B8d**: balances in the patient list and header, and
+`/reports/finance` from SQL sums. **B8e**: the 9 routes in `API_ROUTES` and `e2e/api-billing.spec.ts`. Done-when
+proofs: `billing.int.test.ts` (the ₱8,500 / ₱5,000 / ₱3,500 example; one key twice records once),
+`billing-races.int.test.ts` (no overpayment, over-refund or overdraft; receipts never repeat or skip; ten parallel
+retries record one row), `idempotency.int.test.ts`, `finance.int.test.ts` (parity with `financeSummary` for every branch
+choice and the bucket-edge days; totals equal SQL sums), and the e2e. **Deferred by design:** receipts and statements as
+documents in `hybrid` (B10), the operator's payment keys (B12), BIR official receipts (Later).
+
 
 **Goal:** money that is never wrong.
 
@@ -414,7 +427,7 @@ B0 Skeleton ✅
                  └─ B5 Visits & dental chart ✅
                      └─ B6 Notes, growth, behavior & plan ✅
                          └─ B7 Scheduling, follow-ups & Today ✅
-                             └─ B8 Billing, payments & dashboard
+                             └─ B8 Billing, payments & dashboard ✅
                                  └─ B9 Parent messages & real sending
                                      └─ B10 Photos & documents
                                          └─ B11 Parent portal & parent accounts

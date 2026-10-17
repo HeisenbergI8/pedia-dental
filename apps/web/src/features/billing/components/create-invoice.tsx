@@ -8,12 +8,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useProcedures } from "@/features/clinic/api";
+import { useIdempotencyKey } from "@/lib/idempotency";
 import { useCreateInvoice } from "../api";
 
 /** Done, unbilled treatments, all ticked by default, plus a discount: becomes one invoice. */
 export function CreateInvoice({ patientId, items, invoices }: { patientId: string; items: PlanItem[]; invoices: Invoice[] }) {
   const procedures = useProcedures().data ?? [];
   const create = useCreateInvoice(patientId);
+  const idem = useIdempotencyKey(); // one per attempt; kept for a retry whose outcome is unknown (B8 E2)
   const [unticked, setUnticked] = useState<Set<string>>(new Set());
   const [discount, setDiscount] = useState("");
   const ready = unbilledItems(items, invoices);
@@ -35,14 +37,18 @@ export function CreateInvoice({ patientId, items, invoices }: { patientId: strin
   }
   function submit() {
     create.mutate(
-      { planItemIds: picked.map((i) => i.id), discount: off },
+      { planItemIds: picked.map((i) => i.id), discount: off, key: idem.current },
       {
         onSuccess: () => {
+          idem.settle();
           toast.success("Invoice created");
           setDiscount("");
           setUnticked(new Set());
         },
-        onError: (e) => toast.error(e.message),
+        onError: (e) => {
+          idem.settle(e);
+          toast.error(e.message);
+        },
       },
     );
   }

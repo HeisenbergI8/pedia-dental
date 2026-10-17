@@ -7,6 +7,9 @@ import { AuthModule } from "./auth/auth.module";
 import { AppointmentsModule } from "./appointments/appointments.module";
 import { RecallsModule } from "./recalls/recalls.module";
 import { ReportsModule } from "./reports/reports.module";
+import { BillingRecordsModule } from "./billing-records/billing-records.module";
+import { IdempotencyModule } from "./idempotency/idempotency.module";
+import { BillingModule } from "./billing/billing.module";
 import { ChartModule } from "./chart/chart.module";
 import { GrowthModule } from "./growth/growth.module";
 import { PlanModule } from "./plan/plan.module";
@@ -56,6 +59,9 @@ export class AppModule implements NestModule {
         AppointmentsModule,
         RecallsModule,
         ReportsModule,
+        IdempotencyModule,
+        BillingRecordsModule,
+        BillingModule,
         LegalModule,
       ],
       controllers: [HealthController],

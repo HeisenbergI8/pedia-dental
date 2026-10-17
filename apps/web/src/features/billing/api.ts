@@ -1,9 +1,10 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
-import { Invoice, Payment, type ApplyCreditInput, type CreateInvoiceInput, type PaymentMethod, type RecordPaymentInput } from "@pedia/shared";
+import { Invoice, Payment, type ApplyCreditInput, type CreateInvoiceInput, type PaymentMethod, type RecordPaymentInput, type VoidInvoiceInput } from "@pedia/shared";
 import { branchParam } from "@/features/dashboard/api";
 import { api } from "@/lib/api-client";
+import { idempotent } from "@/lib/idempotency";
 import { patientKeys } from "@/features/patients/api";
 
 export const billingKeys = {
@@ -12,6 +13,9 @@ export const billingKeys = {
   payments: (patientId: string) => [...billingKeys.all, "payments", patientId] as const,
   day: (date: string, branch?: string) => [...billingKeys.all, "day", date, branch ?? "device"] as const,
 };
+
+/** The form's Idempotency-Key for this attempt (B8 E2): `useIdempotencyKey().current`. */
+type Keyed = { key: string };
 
 export const METHOD_LABEL: Record<PaymentMethod, string> = {
   cash: "Cash",
@@ -43,7 +47,8 @@ export function useDailyPayments(date: string, branch?: string) {
 export function useCreateInvoice(patientId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: CreateInvoiceInput) => api(`/patients/${patientId}/invoices`, Invoice, { method: "POST", body: JSON.stringify(input) }),
+    mutationFn: ({ key, ...input }: CreateInvoiceInput & Keyed) =>
+      api(`/patients/${patientId}/invoices`, Invoice, { method: "POST", body: JSON.stringify(input), headers: idempotent(key) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: billingKeys.all });
       qc.invalidateQueries({ queryKey: patientKeys.all }); // the header's balance and the list's Balance due
@@ -55,8 +60,8 @@ export function useCreateInvoice(patientId: string) {
 export function useRecordPayment() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ invoiceId, ...input }: RecordPaymentInput & { invoiceId: string }) =>
-      api(`/invoices/${invoiceId}/payments`, Payment, { method: "POST", body: JSON.stringify(input) }),
+    mutationFn: ({ invoiceId, key, ...input }: RecordPaymentInput & Keyed & { invoiceId: string }) =>
+      api(`/invoices/${invoiceId}/payments`, Payment, { method: "POST", body: JSON.stringify(input), headers: idempotent(key) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: billingKeys.all });
       qc.invalidateQueries({ queryKey: patientKeys.all }); // the header's balance and the list's Balance due
@@ -68,7 +73,8 @@ export function useRecordPayment() {
 export function useRecordDeposit(patientId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: RecordPaymentInput) => api(`/patients/${patientId}/deposits`, Payment, { method: "POST", body: JSON.stringify(input) }),
+    mutationFn: ({ key, ...input }: RecordPaymentInput & Keyed) =>
+      api(`/patients/${patientId}/deposits`, Payment, { method: "POST", body: JSON.stringify(input), headers: idempotent(key) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: billingKeys.all });
       qc.invalidateQueries({ queryKey: patientKeys.all });
@@ -80,9 +86,22 @@ export function useRecordDeposit(patientId: string) {
 export function useApplyCredit() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ invoiceId, ...input }: ApplyCreditInput & { invoiceId: string }) =>
-      api(`/invoices/${invoiceId}/apply-credit`, Payment, { method: "POST", body: JSON.stringify(input) }),
+    mutationFn: ({ invoiceId, key, ...input }: ApplyCreditInput & Keyed & { invoiceId: string }) =>
+      api(`/invoices/${invoiceId}/apply-credit`, Payment, { method: "POST", body: JSON.stringify(input), headers: idempotent(key) }),
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: billingKeys.all });
+      qc.invalidateQueries({ queryKey: patientKeys.all }); // the header's balance and the list's Balance due
+    },
+  });
+}
+
+/** Voids a bill made by mistake (decision 2). Refreshes on any answer: a 409 "already voided" means it changed. */
+export function useVoidInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ invoiceId, ...input }: VoidInvoiceInput & { invoiceId: string }) =>
+      api(`/invoices/${invoiceId}/void`, Invoice, { method: "POST", body: JSON.stringify(input) }),
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: billingKeys.all });
       qc.invalidateQueries({ queryKey: patientKeys.all }); // the header's balance and the list's Balance due
     },

@@ -10,6 +10,7 @@ import { growthRow } from "../growth/growth.rows";
 import { noteRow } from "../notes/note.rows";
 import { patientRows } from "../patients/patient.rows";
 import { planItemRow } from "../plan/plan.rows";
+import { invoiceRows, paymentRows, receiptCounters } from "../billing-records/billing.rows";
 import { dueItemData } from "../recalls/due-item.rows";
 import { visitRow } from "../visits/visit.rows";
 
@@ -105,8 +106,7 @@ export async function seedDatabase(prisma: PrismaService, hasher: Hasher, env: P
       // these visit and entry ids. All completed: the seed leaves no visit in progress.
       await prisma.visit.createMany({ data: db.visits.map((v) => ({ ...visitRow(v), clinicId })) });
       await prisma.chartEntry.createMany({ data: db.chartEntries.map((e) => ({ ...chartEntryRow(e), clinicId })) });
-      // B6: with the seed's ids. MSW's invoices (planItemId) and documents (sourceId) name them in `hybrid`
-      // until B8/B10. Every seeded note is signed; the example plan is 3 of 6 done.
+      // B6: with the seed's ids. MSW's documents (sourceId) name them in `hybrid` until B10. Every seeded note is signed; the example plan is 3 of 6 done.
       await prisma.clinicalNote.createMany({ data: db.notes.map((n) => ({ ...noteRow(n), clinicId })) });
       await prisma.growthRecord.createMany({ data: db.growth.map((g) => ({ ...growthRow(g), clinicId })) });
       await prisma.planItem.createMany({ data: db.planItems.map((i) => ({ ...planItemRow(i), clinicId })) });
@@ -116,6 +116,13 @@ export async function seedDatabase(prisma: PrismaService, hasher: Hasher, env: P
       await prisma.appointmentRequest.createMany({ data: db.appointmentRequests.map((q) => ({ ...requestData(q), clinicId })) });
       const visitOf = new Map(db.notes.map((n) => [n.id, n.visitId]));
       await prisma.dueItem.createMany({ data: db.dueItems.map((i) => ({ ...dueItemData(i, visitOf.get(i.sourceNoteId)!), clinicId })) });
+      // B8: bills and payments with the seed's ids and receipt numbers (MSW's records and the API's agree in `hybrid`),
+      // and each series' counter at its last number, so the next receipt follows the seed's (E3).
+      const bills = db.invoices.map(invoiceRows);
+      await prisma.invoice.createMany({ data: bills.map((b) => ({ ...b.invoice, clinicId })) });
+      await prisma.invoiceLine.createMany({ data: bills.flatMap((b) => b.lines.map((l) => ({ ...l, clinicId }))) });
+      await prisma.payment.createMany({ data: paymentRows(db.payments).map((p) => ({ ...p, clinicId })) });
+      await prisma.receiptCounter.createMany({ data: receiptCounters(db.payments).map((c) => ({ ...c, clinicId })) });
     });
   }
 }

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupServer } from "msw/node";
 import { z } from "zod";
 import { addDays, startOfDay } from "date-fns";
-import { Appointment, ClinicContext, FinanceSummary, Patient, Payment, Session, SessionUser, StaffMember, TodaySummary, depositBalance, invoiceBalance, type RegisterPatientInput } from "@pedia/shared";
+import { Appointment, ClinicContext, FinanceSummary, Patient, Payment, Session, SessionUser, StaffMember, TodaySummary, depositBalance, invoiceBalance, type RegisterPatientInput, IDEMPOTENCY_HEADER } from "@pedia/shared";
 import { api } from "@/lib/api-client";
 import { platform } from "./db";
 import { handle } from "./demo-accounts";
@@ -14,7 +14,9 @@ const signIn = (token: string | null, branch?: string) =>
   vi.stubGlobal("document", { cookie: [token && `pd_session=${token}`, branch && `pd_branch=${branch}`].filter(Boolean).join("; ") });
 const DEMO = (id: string) => `demo.clinic_demo.${id}`;
 const NGITI = (id: string) => `demo.clinic_ngiti.${id}`;
-const send = (method: string, body: unknown) => ({ method, body: JSON.stringify(body) });
+/** Every POST carries a fresh Idempotency-Key (B8 E2); routes without one ignore it. `key` to send a chosen one. */
+const send = (method: string, body: unknown, key: string = crypto.randomUUID()) =>
+  ({ method, body: JSON.stringify(body), headers: { [IDEMPOTENCY_HEADER]: key } });
 const ids = (rows: { id: string }[]) => rows.map((r) => r.id);
 const weeks = (n: number) => `from=${startOfDay(new Date()).toISOString()}&to=${addDays(new Date(), 7 * n).toISOString()}`;
 
@@ -58,6 +60,19 @@ describe("clinic account isolation", () => {
     await expect(api("/patients/patient_sibling/deposits", Payment, send("POST", deposit))).rejects.toMatchObject({ status: 404 });
     signIn(DEMO("staff_delacruz"));
     await expect(api("/patients/ngiti_patient_1", Patient)).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("voids no other account's bill, and keeps Idempotency-Keys per account (B8)", async () => {
+    const bill = platform.tenants.clinic_demo!.invoices[0]!;
+    signIn(NGITI("ngiti_staff_lim")); // Ngiti's Owner: holds billing.adjust
+    await expect(api(`/invoices/${bill.id}/void`, Payment, send("POST", { reason: "Not ours" }))).rejects.toMatchObject({ status: 404 });
+    const key = crypto.randomUUID();
+    const deposit = (patientId: string, receivedBy: string) =>
+      api(`/patients/${patientId}/deposits`, Payment, send("POST", { amount: 10_000, method: "cash", receivedBy }, key));
+    const ngiti = await deposit("ngiti_patient_1", "ngiti_staff_lim");
+    signIn(DEMO("staff_delacruz"));
+    const demo = await deposit("patient_sibling", "staff_delacruz"); // the same key in another account runs fresh
+    expect(demo.id).not.toBe(ngiti.id);
   });
 
   it("ignores a branch cookie that names another account's branch", async () => {

@@ -1,6 +1,7 @@
 import { PatientFilter, PatientListQuery, type Appointment, type DueItem } from "@pedia/shared";
 import { describe, expect, it } from "vitest";
 import type { VisitFacts } from "../visits/visit-days.service";
+import type { BillTotalsOf } from "../billing-records/billing-records.service";
 import { standingPage, type Named } from "./patient-standing";
 
 const TODAY = "2026-10-16";
@@ -15,8 +16,9 @@ const due = (patientId: string, dueOn: string): DueItem => ({
   id: `due_${patientId}_${dueOn}`, clinicId: "c", patientId, ruleId: "routine", kind: "recall", procedure: "oral_exam", dueOn,
   sourceNoteId: "n", createdAt: "2026-04-01T00:00:00.000Z",
 });
-const page = (matched: Named[], facts: Partial<VisitFacts>, items: DueItem[] = [], q: object = {}, money = false) =>
-  standingPage(matched, { visits: [], done: [], ...facts }, items, query(q), TODAY, money);
+const NO_BILLS = { invoices: [], payments: [] };
+const page = (matched: Named[], facts: Partial<VisitFacts>, items: DueItem[] = [], q: object = {}, money = false, bills: BillTotalsOf = NO_BILLS) =>
+  standingPage(matched, { visits: [], done: [], ...facts }, items, bills, query(q), TODAY, money);
 
 describe("standingPage (patients/mocks.ts:114–151)", () => {
   it("flags a recall overdue or due this week, not one due this month", () => {
@@ -47,7 +49,7 @@ describe("standingPage (patients/mocks.ts:114–151)", () => {
   it("falls back to name order for a balance sort without billing.view, and ties on name with it", () => {
     const matched = [kid("p1", "Cruz"), kid("p2", "Abad")];
     expect(page(matched, {}, [], { sort: "balance" }).rows.map((r) => r.id)).toEqual(["p2", "p1"]);
-    expect(page(matched, {}, [], { sort: "balance" }, true).rows.map((r) => r.id)).toEqual(["p2", "p1"]); // all 0 until B8
+    expect(page(matched, {}, [], { sort: "balance" }, true).rows.map((r) => r.id)).toEqual(["p2", "p1"]); // no bills here: every balance is 0, so name order
   });
 
   it("counts each chip as its filter's rows, and totals the filtered rows", () => {
@@ -60,5 +62,20 @@ describe("standingPage (patients/mocks.ts:114–151)", () => {
       expect([f, counts[f]]).toEqual([f, res.total]);
     }
     expect(counts).toEqual({ all: 3, needs_attention: 1, balance_due: 0, recall_due: 1, recent_visit: 1 });
+  });
+
+  it("flags a balance due from live bills, counts it, and sorts by it only with billing.view (B8)", () => {
+    const bills: BillTotalsOf = {
+      invoices: [
+        { id: "b1", patientId: "p1", discount: 0, lines: [{ amount: 50000 }] },
+        { id: "b2", patientId: "p2", discount: 0, lines: [{ amount: 30000 }] },
+      ],
+      payments: [{ invoiceId: "b2", amount: 30000 }],
+    };
+    const matched = [kid("p2", "Abad"), kid("p1", "Cruz")];
+    const res = page(matched, {}, [], { sort: "balance" }, true, bills);
+    expect(res.rows.map((r) => [r.id, r.balance, r.flags.balanceDue])).toEqual([["p1", 50000, true], ["p2", 0, false]]);
+    expect([res.counts.balance_due, res.counts.needs_attention]).toEqual([1, 1]);
+    expect(page(matched, {}, [], { sort: "balance" }, false, bills).rows.map((r) => r.id)).toEqual(["p2", "p1"]); // the leak guard
   });
 });

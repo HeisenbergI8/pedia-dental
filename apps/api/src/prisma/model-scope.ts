@@ -40,6 +40,13 @@ export const MODEL_SCOPE = {
   Appointment: "clinic",
   AppointmentRequest: "clinic",
   DueItem: "clinic",
+  // B8: money. Invoice and Payment are branch-level data read account-wide (a family's balance, a child's history,
+  // branch=all reports), so "clinic" with branchId a plain column, as Appointment (E5). Keys and counters are per clinic.
+  Invoice: "clinic",
+  InvoiceLine: "clinic",
+  Payment: "clinic",
+  ReceiptCounter: "clinic",
+  IdempotencyKey: "clinic",
   // Platform: Primolar's own records
   ClinicAccount: "platform",
   Agreement: "platform",
@@ -59,7 +66,7 @@ export const MODEL_SCOPE = {
 
 /**
  * Insert-only tables: no update, upsert or delete reaches them (CONVENTIONS → Domain rules → Append-only).
- * A correction is a new row. Payments join this list in B8.
+ * A correction is a new row. B8: payments (a refund is a negative row).
  */
 export const APPEND_ONLY: ReadonlySet<string> = new Set<Prisma.ModelName>([
   "AuditEvent", "Agreement", "Acknowledgement", "PrivacyNotice",
@@ -67,4 +74,6 @@ export const APPEND_ONLY: ReadonlySet<string> = new Set<Prisma.ModelName>([
   "PatientConsent", "PatientPrivacyConsent", "PrivacyChoice",
   // B5: chart entries (CHUNKS B5). A correction is a new row with `supersedes`.
   "ChartEntry",
+  // B8: payments. A refund or a returned credit is a new row.
+  "Payment",
 ]);

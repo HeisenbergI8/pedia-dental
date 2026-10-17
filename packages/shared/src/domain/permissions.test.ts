@@ -71,4 +71,14 @@ describe("ROLE_PERMISSIONS", () => {
   it("grants every permission to at least one role", () => {
     for (const p of Permission.options) expect(Role.options.some((r) => roleCan(r, p)), p).toBe(true);
   });
+
+  it("lets only the Owner and admins refund or void (B8 decisions 2, 3)", () => {
+    expect(rolesCan(["owner"], "billing.adjust")).toBe(true);
+    expect(rolesCan(["admin"], "billing.adjust")).toBe(true);
+    expect(rolesCan(["front_desk"], "billing.adjust")).toBe(false);
+    expect(rolesCan(["dentist"], "billing.adjust")).toBe(false);
+    expect(rolesCan(["front_desk", "dentist"], "billing.adjust")).toBe(false); // two roles, neither holds it
+    expect(permissionScope("parent", "billing.adjust")).toBeUndefined();
+    expect(rolesCan(["front_desk"], "billing.collect")).toBe(true); // payments and deposits stay front desk's
+  });
 });
