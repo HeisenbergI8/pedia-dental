@@ -253,8 +253,12 @@ account in", "no payments" and "font on Big only".
     designed brands.
   - *Owner:* Settings → Plan gains the next due date and amount, payment history and invoices; an overdue
     banner during the grace period. Other staff see no billing.
-- **Prototype vs backend:** every payment is marked paid by hand in the prototype. PayMongo checkout (cards,
-  GCash, Maya), automatic monthly charging, emails and BIR official receipts come with the backend.
+- **Paying by QR (decided 2026-10-17):** until there are paying clinics, sign-up and monthly fees are paid to
+  Primolar's QR (GCash, Maya or bank), which the operator uploads and can replace. The thank-you page and the Owner's
+  Settings → Plan show it with the amount due; the clinic uploads the receipt screenshot and the reference number, and
+  the operator checks it and records the payment by hand. Built with the backend's subscriptions (B12).
+- **Later:** PayMongo checkout (cards, GCash, Maya), automatic monthly charging, emails and BIR official receipts, in
+  their own chunk once clinics are paying.
 
 ---
 
