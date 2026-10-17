@@ -1,10 +1,11 @@
 import { Injectable } from "@nestjs/common";
-import { receiptNo, type BillTotals, type Invoice, type PaidRow, type Payment, type ReceiptSeries } from "@pedia/shared";
+import { receiptNo, type Appointment, type BillTotals, type FinanceFacts, type Invoice, type PaidRow, type Payment, type ReceiptSeries } from "@pedia/shared";
 import { requireContext } from "../common/request-context";
 import { Prisma } from "../generated/prisma/client.ts";
 import { PrismaService } from "../prisma/prisma.service";
 import { clinicData } from "../prisma/tenant-scope";
 import type { Tx } from "../prisma/transaction";
+import { financeBounds, toCollected } from "./finance-facts";
 import { INVOICE_COLUMNS, LINE_COLUMNS, PAYMENT_COLUMNS, PAYMENT_ORDER, invoiceRows, toInvoice, toPayment } from "./billing.rows";
 
 /** Some patients' live bills as the shared money rules read them (E8). */
@@ -56,6 +57,73 @@ export class BillingRecordsService {
     return {
       invoices: rows.map((r) => ({ id: r.id, patientId: r.patientId, discount: Number(r.discount), lines: [{ amount: Number(r.billed) }] })),
       payments: rows.map((r) => ({ invoiceId: r.id, amount: Number(r.paid) })),
+    };
+  }
+
+  /**
+   * The dashboard's sums for these branches (B8 E7): six bounded aggregate queries, none returning a row per payment.
+   * `done` is the branches' done appointments from unpaidSince(today) to today; summarizeFinance turns it all into
+   * the report, so no dashboard rule is re-derived here. A bill's payments carry its branch (E11).
+   */
+  async financeFacts(branchIds: readonly string[], today: string, done: Pick<Appointment, "id" | "patientId" | "startsAt" | "reason">[]): Promise<FinanceFacts> {
+    const clinicId = requireContext().clinicId!;
+    const branches = Prisma.join([...branchIds]);
+    const b = financeBounds(today);
+    const [collected, revenue, discounts, balances, deposits, bills] = await Promise.all([
+      // 1. Real money per Manila day and method. Manila is fixed UTC+8 (E7).
+      this.prisma.$queryRaw<{ day: string; method: string; amount: unknown }[]>`
+        SELECT DATE_FORMAT(DATE_ADD(receivedAt, INTERVAL 8 HOUR), '%Y-%m-%d') AS day, method, SUM(amount) AS amount
+        FROM Payment
+        WHERE clinicId = ${clinicId} AND branchId IN (${branches}) AND method <> 'account_credit'
+          AND receivedAt >= ${b.collectedFrom} AND receivedAt < ${b.collectedEnd}
+        GROUP BY day, method`,
+      // 2. This month's live bills' lines, per procedure.
+      this.prisma.$queryRaw<{ procedureCode: string; amount: unknown; count: unknown }[]>`
+        SELECT l.procedureCode, SUM(l.amount) AS amount, COUNT(*) AS count
+        FROM InvoiceLine l JOIN Invoice i ON i.clinicId = l.clinicId AND i.id = l.invoiceId
+        WHERE i.clinicId = ${clinicId} AND i.branchId IN (${branches}) AND i.voidedAt IS NULL
+          AND i.issuedAt >= ${b.monthFrom} AND i.issuedAt < ${b.end}
+        GROUP BY l.procedureCode`,
+      // 3. This month's discounts.
+      this.prisma.$queryRaw<{ total: unknown }[]>`
+        SELECT COALESCE(SUM(discount), 0) AS total FROM Invoice
+        WHERE clinicId = ${clinicId} AND branchId IN (${branches}) AND voidedAt IS NULL AND issuedAt >= ${b.monthFrom} AND issuedAt < ${b.end}`,
+      // 4. Balance per patient over live bills, all time.
+      this.prisma.$queryRaw<{ patientId: string; balance: unknown }[]>`
+        SELECT x.patientId, SUM(x.billed - x.discount - x.paid) AS balance FROM (
+          SELECT i.patientId, i.discount,
+            (SELECT COALESCE(SUM(l.amount), 0) FROM InvoiceLine l WHERE l.clinicId = i.clinicId AND l.invoiceId = i.id) AS billed,
+            (SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.clinicId = i.clinicId AND p.invoiceId = i.id) AS paid
+          FROM Invoice i WHERE i.clinicId = ${clinicId} AND i.branchId IN (${branches}) AND i.voidedAt IS NULL) x
+        GROUP BY x.patientId`,
+      // 5. Deposit rows per patient at these branches.
+      this.prisma.$queryRaw<{ patientId: string; held: unknown }[]>`
+        SELECT patientId, SUM(amount) AS held FROM Payment
+        WHERE clinicId = ${clinicId} AND branchId IN (${branches}) AND invoiceId IS NULL GROUP BY patientId`,
+      // 6. The done appointments' live bills, earliest first, with their balances.
+      done.length
+        ? this.prisma.$queryRaw<{ id: string; appointmentId: string; balance: unknown }[]>`
+          SELECT i.id, i.appointmentId,
+            (SELECT COALESCE(SUM(l.amount), 0) FROM InvoiceLine l WHERE l.clinicId = i.clinicId AND l.invoiceId = i.id) - i.discount
+            - (SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.clinicId = i.clinicId AND p.invoiceId = i.id) AS balance
+          FROM Invoice i
+          WHERE i.clinicId = ${clinicId} AND i.branchId IN (${branches}) AND i.voidedAt IS NULL AND i.appointmentId IN (${Prisma.join(done.map((a) => a.id))})
+          ORDER BY i.issuedAt, i.id`
+        : Promise.resolve([]),
+    ]);
+    const first = new Map<string, { id: string; balance: number }>();
+    for (const r of bills) if (!first.has(r.appointmentId)) first.set(r.appointmentId, { id: r.id, balance: Number(r.balance) });
+    return {
+      collected: toCollected(collected),
+      revenue: revenue.map((r) => ({ procedureCode: r.procedureCode, amount: Number(r.amount), count: Number(r.count) })),
+      discounts: Number(discounts[0]?.total ?? 0),
+      balances: balances.map((r) => ({ patientId: r.patientId, balance: Number(r.balance) })),
+      deposits: deposits.map((r) => ({ patientId: r.patientId, held: Number(r.held) })),
+      done: done.map((a) => {
+        const row = { appointmentId: a.id, patientId: a.patientId, startsAt: a.startsAt, reason: a.reason };
+        const bill = first.get(a.id);
+        return bill ? { ...row, invoiceId: bill.id, balance: bill.balance } : row;
+      }),
     };
   }
 

@@ -53,6 +53,7 @@ const B8_ROUTES: [Method, string][] = [
   ["post", "/invoices/i1/void"],
   ["get", "/patients/p1/payments"],
   ["get", "/payments"],
+  ["get", "/reports/finance"],
   ["post", "/invoices/i1/payments"],
   ["post", "/patients/p1/deposits"],
   ["post", "/invoices/i1/apply-credit"],

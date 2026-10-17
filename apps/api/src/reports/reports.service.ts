@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
-import { TodaySummary, todaySummary, type Payment } from "@pedia/shared";
+import { FinanceSummary, TodaySummary, summarizeFinance, todaySummary, unpaidSince, type Payment } from "@pedia/shared";
 import { addDays, format, isValid, parseISO, startOfWeek } from "date-fns";
 import { AppointmentRecordsService } from "../appointments/appointment-records.service";
 import { AppointmentRequestsService } from "../appointments/appointment-requests.service";
@@ -18,6 +18,7 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/; // dashboard/mocks.ts:12
 /** The clinic day's start as an instant: Manila midnight (E3), whatever the process zone. */
 const manilaMidnight = (day: string) => new Date(`${day}T00:00:00+08:00`);
 /** The shape, and a real calendar day: 2026-02-30 would throw in date-fns (a 500) where a 400 is meant. */
+const BAD_DAY = "today must be YYYY-MM-DD";
 const isDay = (day: string) => DAY.test(day) && isValid(parseISO(day)) && format(parseISO(day), "yyyy-MM-dd") === day;
 
 /**
@@ -38,6 +39,18 @@ export class ReportsService {
   ) {}
 
   /**
+   * GET /reports/finance (dashboard/mocks.ts:29–36): 400 day → 403 branches → summarizeFinance over SQL facts (E7).
+   * Not audited (B8 question 4).
+   */
+  async finance(who: ClinicIdentity, day: string | undefined, branch: string | undefined): Promise<FinanceSummary> {
+    const today = day ?? this.clock.today();
+    if (!isDay(today)) throw new BadRequestException(BAD_DAY);
+    const branchIds = await this.branchesFor(who, branch);
+    const done = (await this.records.inWindow(branchIds, manilaMidnight(unpaidSince(today)), addDays(manilaMidnight(today), 1))).filter((a) => a.status === "done");
+    return FinanceSummary.parse(summarizeFinance(await this.billing.financeFacts(branchIds, today, done), today));
+  }
+
+  /**
    * GET /payments: the day's collections (billing/mocks.ts:97–106), payments and refunds received on the clinic's day
    * at the device's branch or the ?branch= one. Branches first, as the mock; an unparsable date lists nothing (its
    * string compare). Not audited (B8 question 4).
@@ -52,7 +65,7 @@ export class ReportsService {
   /** GET /reports/today: 400 day → 403 branches → the summary. */
   async today(who: ClinicIdentity, day: string | undefined, branch: string | undefined): Promise<TodaySummary> {
     const today = day ?? this.clock.today();
-    if (!isDay(today)) throw new BadRequestException("today must be YYYY-MM-DD");
+    if (!isDay(today)) throw new BadRequestException(BAD_DAY);
     const branchIds = await this.branchesFor(who, branch);
     const monday = format(startOfWeek(parseISO(today), { weekStartsOn: 1 }), "yyyy-MM-dd");
     const [from, to] = [manilaMidnight(today), addDays(manilaMidnight(today), 1)];

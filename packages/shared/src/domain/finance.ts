@@ -20,11 +20,16 @@ type Inputs = {
 /** "Unpaid appointments" covers done appointments from this day to today. */
 export const unpaidSince = (today: string) => ymd(subDays(parseISO(today), 30));
 
-/** The days a summary for `today` reads collections from: the earliest bucket's start (6 months, 8 weeks, 14 days). */
+/**
+ * The days a summary for `today` reads collections from: the earliest bucket's start (6 months, 8 weeks, 14 days) to
+ * the latest bucket's end (this month's or this week's last day). Asked about a past day, the current month's and
+ * week's bars still count their whole span, as the series always have.
+ */
 export function financeWindow(today: string): { from: string; to: string } {
   const t = parseISO(today);
   const starts = [addMonths(startOfMonth(t), -5), addWeeks(startOfWeek(t, WEEK), -7), subDays(t, 13)];
-  return { from: ymd(new Date(Math.min(...starts.map(Number)))), to: today };
+  const ends = [subDays(addMonths(startOfMonth(t), 1), 1), subDays(addWeeks(startOfWeek(t, WEEK), 1), 1), t];
+  return { from: ymd(new Date(Math.min(...starts.map(Number)))), to: ymd(new Date(Math.max(...ends.map(Number)))) };
 }
 
 /**

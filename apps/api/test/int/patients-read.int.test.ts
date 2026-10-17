@@ -1,7 +1,7 @@
 import type { INestApplication } from "@nestjs/common";
 import { DEMO_CLINIC_ID, childrenOf, seedPlatform } from "@pedia/seed";
 import {
-  DueItem, DuplicateMatch, PatientFilter, PatientHeaderSummary, PatientPage, PatientView, RECALL_DUE_BUCKETS, dueBucket, matchesFilter, patientStanding, type Patient,
+  DueItem, DuplicateMatch, FinanceSummary, PatientFilter, PatientHeaderSummary, PatientPage, PatientView, RECALL_DUE_BUCKETS, dueBucket, matchesFilter, patientStanding, type Patient,
 } from "@pedia/shared";
 import { format } from "date-fns";
 import request from "supertest";
@@ -175,7 +175,15 @@ describe("the list (decision 3)", () => {
     expect(header.lastVisitOn).toBe(apptOnly[0]!.lastVisitOn);
   });
 
-  it.todo("balances agree with the financial dashboard (B8)");
+  it("balances agree with the financial dashboard (B8)", async () => {
+    const owner = await as([DEMO_CLINIC_ID, "staff_villanueva"]);
+    const list = await ok(get("/patient-summaries?filter=balance_due&sort=balance&pageSize=100", owner), PatientPage);
+    const report = await ok(get(`/reports/finance?today=${today()}&branch=all`, owner), FinanceSummary);
+    expect(list.rows.length).toBeGreaterThan(0); // not vacuous
+    expect(new Map(list.rows.map((r) => [r.id, r.balance]))).toEqual(new Map(report.outstanding.map((o) => [o.patientId, o.balance])));
+    expect(list.total).toBe(report.outstanding.length);
+    expect(list.rows.map((r) => r.balance)).toEqual(report.outstanding.map((o) => o.balance)); // both by balance, largest first
+  });
 });
 
 describe("parents (decision 5)", () => {

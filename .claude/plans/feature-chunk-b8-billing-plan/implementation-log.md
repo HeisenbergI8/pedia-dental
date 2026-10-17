@@ -108,3 +108,13 @@ Engineering decisions E1–E13 as the plan records them.
 - `patient.views.test.ts` unchanged: `toSummary` already passes the standing's balance through with `billing.view` (B7's test covers it).
 - The parity case now compares each row's balance with the mock's `patientStanding` over the seed's real bills and payments. `needs_attention` is checked as recall or balance due.
 **Gate:** `pnpm run check` exit 0; `patients-read.int.test.ts` 14 passed + 1 todo (the dashboard case, after Phase 9).
+
+## Phase 9: The financial dashboard — 2026-10-17
+
+**Steps completed:** 9.1–9.3, and Phase 8's dashboard case
+**Files changed:** `apps/api/src/billing-records/{finance-facts,finance-facts.test,billing-records.service}.ts`, `apps/api/src/reports/{reports.service,reports.controller,reports.module}.ts`, `apps/api/test/clinical-routes.test.ts`, `apps/api/test/int/{finance,patients-read}.int.test.ts`, `packages/shared/src/domain/{finance,finance.test}.ts`
+**Deviations from plan:**
+- **`financeWindow`'s end moved, in shared.** For a past day the mock's month and week bars count their whole span, including payments after that day. The plan's SQL stopped at the asked day, so the parity on the 1st of the month failed (October's bar was 0 against 8,025,000). `financeWindow` now ends at the latest bucket's last day, and query 1 reads to there. The summary's own `collected.today/week/month` still stop at the asked day. This changes no mock behaviour: the window was used only by the API.
+- Ipin isn't a refusal case: Ngiti (Small) gives the upgrade words.
+- Mutation: dropping the `+8 hours` from query 1 turns the midnight case red. The seed-parity cases stay green, because seeded payments are in clinic hours.
+**Gate:** `pnpm run check` exit 0; `test:int` 35 files, 380 passed + 2 todo (B9).

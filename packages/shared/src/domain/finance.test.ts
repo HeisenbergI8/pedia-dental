@@ -106,8 +106,9 @@ describe("facts and summary (B8 E7)", () => {
       .toEqual([["a", "z"], ["a", "z"], ["a", "z"]]);
   });
 
-  it("reads collections from six months back", () => {
-    expect(financeWindow("2026-10-03")).toEqual({ from: "2026-05-01", to: "2026-10-03" });
+  it("reads collections from six months back to the last day of the latest bucket", () => {
+    expect(financeWindow("2026-10-03")).toEqual({ from: "2026-05-01", to: "2026-10-31" }); // the month outlasts the week
+    expect(financeWindow("2026-09-29")).toEqual({ from: "2026-04-01", to: "2026-10-04" }); // the week (Mon 28th) outlasts September
   });
 
   it("judge an appointment billed twice by its earlier bill", () => {

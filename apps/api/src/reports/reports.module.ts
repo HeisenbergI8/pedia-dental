@@ -9,6 +9,6 @@ import { CollectionsController } from "./collections.controller";
 import { ReportsController } from "./reports.controller";
 import { ReportsService } from "./reports.service";
 
-/** The dashboard's reports (features/dashboard), under the route's name. B8 adds the day's collections and /reports/finance here. */
+/** The dashboard's reports (features/dashboard), under the route's name. Today, the financial report and the day's collections. */
 @Module({ imports: [AppointmentRecordsModule, VisitDaysModule, PatientsModule, ClinicModule, AppointmentsModule, BillingRecordsModule], controllers: [ReportsController, CollectionsController], providers: [ReportsService] })
 export class ReportsModule {}
