@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { INestApplication } from "@nestjs/common";
@@ -7,6 +7,8 @@ import { Patient, PatientView } from "@pedia/shared";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Hasher } from "../../src/auth/hashing";
+import { FixedClock } from "../../src/common/clock";
+import { LINK_GONE } from "../../src/storage/local-files.controller";
 import { SessionService } from "../../src/auth/session.service";
 import { OutboxWorker } from "../../src/outbox/outbox.worker";
 import { PrismaService } from "../../src/prisma/prisma.service";
@@ -21,6 +23,7 @@ const db = platform.tenants[DEMO_CLINIC_ID]!;
 let app: INestApplication;
 let prisma: PrismaService;
 let sessions: SessionService;
+const clock = new FixedClock(new Date());
 
 type Login = readonly [clinicId: string, accountId: string];
 const FRONT_DESK: Login = [DEMO_CLINIC_ID, "staff_cruz"];
@@ -32,7 +35,7 @@ const own = childrenOf(db, parentGuardianId)[0]!;
 const another = db.patients.find((p) => !p.guardians.some((g) => g.id === parentGuardianId))!;
 
 beforeAll(async () => {
-  app = await createIntApp({ env: { STORAGE_DIR: mkdtempSync(join(tmpdir(), "b4-photo-")) } });
+  app = await createIntApp({ clock, env: { STORAGE_DIR: mkdtempSync(join(tmpdir(), "b4-photo-")) } });
   prisma = app.get(PrismaService);
   sessions = app.get(SessionService);
   await resetDatabase(prisma);
@@ -51,6 +54,21 @@ const del = (cookie: string, id: string) => http().delete(`/api/patients/${id}/p
 const photoRef = (id: string) => inClinic(DEMO_CLINIC_ID, async () => (await prisma.patient.findUniqueOrThrow({ where: { id }, select: { photoRef: true } })).photoRef);
 const deletions = () => prisma.outboxMessage.findMany({ where: { kind: "storage.delete", status: "pending" }, select: { payload: true } });
 const stored = (key: string) => inClinic(DEMO_CLINIC_ID, () => app.get(StorageService).get(key));
+const binary = (res: request.Response, done: (err: Error | null, body: Buffer) => void) => {
+  const chunks: Buffer[] = [];
+  res.on("data", (c: Buffer) => chunks.push(c)).on("end", () => done(null, Buffer.concat(chunks)));
+};
+/** GET and follow the 302 once (the local driver's /api/files/<token>), as a browser does (B10 E2). */
+async function open(cookie: string, id: string) {
+  const first = await get(cookie, id);
+  if (first.status !== 302) return { first, file: undefined };
+  expect(first.headers["cache-control"]).toBe("no-store");
+  expect(first.headers.location).toMatch(/^\/api\/files\//);
+  const file = await http().get(first.headers.location!).buffer(true).parse(binary);
+  return { first, file };
+}
+const UPLOADS = join(tmpdir(), "primolar-uploads");
+const spooled = () => readdirSync(UPLOADS, { withFileTypes: true }).map((d) => d.name);
 
 describe("the child's photo", () => {
   it("stores, serves and removes the child's photo", async () => {
@@ -58,10 +76,11 @@ describe("the child's photo", () => {
     const p = db.patients[0]!;
     const withPhoto = Patient.parse((await put(cookie, p.id, JPEG)).body);
     expect(withPhoto.photoUpdatedAt).toBeDefined();
-    const res = await get(cookie, p.id);
-    expect(res.status).toBe(200);
-    expect(res.headers["content-disposition"]).toContain(`${p.lastName}-${p.firstName}-photo.jpg`.replace(/[^\w.-]+/g, "-").toLowerCase());
-    expect([res.headers["content-type"], res.headers["x-content-type-options"]]).toEqual(["image/jpeg", "nosniff"]);
+    const { file: res } = await open(cookie, p.id);
+    expect(res!.status).toBe(200);
+    expect(res!.headers["content-disposition"]).toContain(`${p.lastName}-${p.firstName}-photo.jpg`.replace(/[^\w.-]+/g, "-").toLowerCase());
+    expect([res!.headers["content-type"], res!.headers["x-content-type-options"], res!.headers["content-security-policy"]]).toEqual(["image/jpeg", "nosniff", "sandbox"]);
+    expect((res!.body as Buffer).equals(JPEG)).toBe(true);
     const removed = Patient.parse((await del(cookie, p.id)).body);
     expect(removed.photoUpdatedAt).toBeUndefined();
     const gone = await get(cookie, p.id);
@@ -79,7 +98,7 @@ describe("the child's photo", () => {
     await app.get(OutboxWorker).drain();
     expect(await stored(first)).toBeUndefined();
     expect((await stored(second))?.contentType).toBe("image/png");
-    expect((await get(cookie, id)).headers["content-type"]).toBe("image/png");
+    expect((await open(cookie, id)).file!.headers["content-type"]).toBe("image/png");
     await del(cookie, id);
     expect((await deletions()).map((d) => d.payload)).toContainEqual({ key: second });
   });
@@ -121,7 +140,8 @@ describe("audit, access and tenancy", () => {
     await put(desk, own.id, JPEG);
     await put(desk, another.id, JPEG);
     const parent = await as(PARENT);
-    expect((await get(parent, own.id)).status).toBe(200);
+    const mine = await open(parent, own.id);
+    expect([mine.first.status, mine.file?.status]).toEqual([302, 200]);
     const theirs = await get(parent, another.id);
     expect([theirs.status, theirs.text]).toEqual([403, "This isn't one of your children's records"]);
     const upload = await put(parent, own.id, JPEG);
@@ -136,5 +156,43 @@ describe("audit, access and tenancy", () => {
     // Even a key read inside another clinic is refused by StorageService.
     const key = (await photoRef(own.id))!;
     expect(await inClinic("clinic_ngiti", () => app.get(StorageService).get(key))).toBeUndefined();
+    expect(await inClinic("clinic_ngiti", () => app.get(StorageService).link(key, { fileName: "x.jpg" }))).toBeUndefined();
+  });
+});
+
+describe("streaming uploads and 5-minute links (B10)", () => {
+  it("streams a 9.9 MB photo to storage, counts its bytes, and leaves no temp file", async () => {
+    const cookie = await as(FRONT_DESK);
+    const id = db.patients[4]!.id;
+    const before = spooled();
+    const big = Buffer.concat([JPEG, Buffer.alloc(Math.floor(9.9 * 1024 * 1024) - JPEG.length, 1)]);
+    expect((await put(cookie, id, big)).status).toBe(200);
+    const key = (await photoRef(id))!;
+    expect((await inClinic(DEMO_CLINIC_ID, () => prisma.storedFile.findUniqueOrThrow({ where: { key } }))).bytes).toBe(big.length);
+    expect((await put(cookie, id, Buffer.concat([JPEG, Buffer.alloc(10 * 1024 * 1024 + 1 - JPEG.length)]))).status).toBe(413);
+    expect((await put(cookie, id, Buffer.from("fake-jpeg"))).status).toBe(400);
+    expect(spooled()).toEqual(before);
+  });
+
+  it("refuses a body over 20 MB before reading it", async () => {
+    const cookie = await as(FRONT_DESK);
+    const res = await http().put(`/api/patients/${db.patients[4]!.id}/photo`).set("Cookie", cookie).set("Content-Type", "multipart/form-data; boundary=x").set("Content-Length", String(21 * 1024 * 1024)).send("");
+    expect([res.status, res.text]).toEqual([413, "Images must be under 10 MB"]);
+  });
+
+  it("lets a link expire after five minutes; opening again gives a fresh one", async () => {
+    const cookie = await as(FRONT_DESK);
+    const id = db.patients[5]!.id;
+    await put(cookie, id, JPEG);
+    const { first } = await open(cookie, id);
+    clock.set(new Date(clock.now().getTime() + 301_000));
+    try {
+      const old = await http().get(first.headers.location!);
+      expect([old.status, old.text]).toEqual([404, LINK_GONE]);
+      const again = await open(await as(FRONT_DESK), id);
+      expect(again.file?.status).toBe(200);
+    } finally {
+      clock.set(new Date());
+    }
   });
 });

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { cleanPhoto, MAX_PHOTO_BYTES, photoFileName, type PhotoUpload } from "./patient-photo";
+import type { SpooledFile } from "../storage/multipart";
+import { cleanPhoto, photoFileName } from "./patient-photo";
 
-const upload = (bytes: number[] | string, mimetype = "image/jpeg", size?: number): PhotoUpload => {
-  const buffer = typeof bytes === "string" ? Buffer.from(bytes) : Buffer.from(bytes);
-  return { buffer, mimetype, size: size ?? buffer.length };
+/** What readUpload hands over: the claimed type, the first 16 bytes, and whether it went past the limit. */
+const upload = (bytes: number[] | string, claimedType = "image/jpeg", tooLarge = false): SpooledFile => {
+  const head = Buffer.from(typeof bytes === "string" ? Buffer.from(bytes) : bytes).subarray(0, 16);
+  return { path: "/tmp/x", bytes: head.length, claimedType, head, tooLarge };
 };
 const JPEG = [0xff, 0xd8, 0xff, 0xe0, 0, 0x10];
 const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0];
@@ -14,6 +16,7 @@ describe("cleanPhoto", () => {
     expect(cleanPhoto(upload(JPEG))).toMatchObject({ ext: "jpg" });
     expect(cleanPhoto(upload(PNG, "image/png"))).toMatchObject({ ext: "png" });
     expect(cleanPhoto(upload(WEBP, "image/webp"))).toMatchObject({ ext: "webp" });
+    expect(cleanPhoto(upload(JPEG, "image/png"))).toMatchObject({ ext: "jpg" }); // the bytes decide
   });
 
   it("refuses what isn't one of them, with the mock's words", () => {
@@ -22,10 +25,12 @@ describe("cleanPhoto", () => {
     expect(cleanPhoto(upload('<svg xmlns="http://www.w3.org/2000/svg"><script/></svg>', "image/svg+xml"))).toEqual(refused);
     expect(cleanPhoto(undefined)).toEqual(refused);
     expect(cleanPhoto(upload(JPEG, "text/plain"))).toEqual(refused);
+    expect(cleanPhoto(upload("GIF89a", "image/gif"))).toEqual(refused);
+    expect(cleanPhoto(upload("%PDF-1.4", "image/png"))).toEqual(refused); // a PDF is never a child's photo
   });
 
   it("refuses over 10 MB with 413", () => {
-    expect(cleanPhoto(upload(JPEG, "image/jpeg", MAX_PHOTO_BYTES + 1))).toEqual({ problem: "Images must be under 10 MB", status: 413 });
+    expect(cleanPhoto(upload(JPEG, "image/jpeg", true))).toEqual({ problem: "Images must be under 10 MB", status: 413 });
   });
 });
 

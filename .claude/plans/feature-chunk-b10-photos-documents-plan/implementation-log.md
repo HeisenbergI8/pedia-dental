@@ -92,3 +92,14 @@ before go-live to confirm a cross-origin 302 renders.
 **Deviations from plan:** versions written as `^3` like the repo's other majors. The env defaults test lists `S3_REGION`
 and `S3_FORCE_PATH_STYLE`.
 **Gate:** `pnpm run check` exit 0.
+
+## Phase 5: readUpload, sniffing, the patient photo off multer — 2026-10-17
+
+**Steps completed:** 5.1, 5.2, 5.3.
+**Files changed:** `apps/api/src/storage/{sniff,multipart,multipart.test}.ts` (new), `src/patients/{patient-photo,patient-photo.test,patients.controller,patient-writes.service,patients.service}.ts`,
+`test/int/patient-photo.int.test.ts`.
+**Deviations from plan:** busboy flags a part that *reaches* `fileSize`, so `readUpload` reads up to `maxBytes + 1` and
+decides `tooLarge` from its own count (a file of exactly the limit passes, as the mock); `files: 3` so a stray file field
+can't crowd out `file`. The patient photo GET uses `@Res()` without passthrough for the redirect. Mutation: no
+`dispose()` → the no-temp-file case red.
+**Gate:** `pnpm run check` exit 0 · `test:int test/int/patient-photo.int.test.ts` 9 passed.
