@@ -79,3 +79,19 @@
 **Notes:**
 - The `image` and `audit` CI jobs are proven only by CI on the pushed branch.
 - The slim image's `apt-get install openssl` is proven only by CI (the sandbox blocks the Debian mirror).
+
+## Tester fixes — 2026-10-18
+
+**Draining was unobservable (tester, medium-low):** `Readiness.draining` was set in `onModuleDestroy`, and Nest closed the listener milliseconds later, so no probe ever saw `503 Shutting down.`
+- **Fix:** `main.ts` keeps `enableShutdownHooks(["SIGINT"])` for local Ctrl-C. On SIGTERM it calls `drainThenClose(app, SHUTDOWN_GRACE_MS)` (`health/readiness.ts`): mark draining, keep serving for 12 s, then `app.close()`. 12 s is two ALB checks at a 5 s interval, inside ECS's 30 s stop timeout; B13b sets both.
+- **Proof:**
+  - `test/health.test.ts` has a new case.
+  - On the real bundle: SIGTERM, then `/ready` 503 "Shutting down." and `/live` 200 while draining. After 13 s the port was closed and the process had exited.
+
+**X-Frame-Options (tester, low):** helmet's default `SAMEORIGIN` disagreed with CSP `frame-ancestors 'none'`. It is now `frameguard: { action: "deny" }`, asserted in `http-hardening.test.ts`.
+
+**Left as is (tester, low):**
+- The fingerprint differs between runs with and without `--enable-source-maps`, because frame names come from the map. Production always sets the flag.
+- `Access-Control-Allow-Credentials` is sent to denied origins; it is harmless without an allow-origin header.
+
+**Gate:** `pnpm run check`: exit 0.

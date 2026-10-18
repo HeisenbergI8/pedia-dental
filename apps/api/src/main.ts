@@ -8,6 +8,7 @@ import { z } from "zod";
 import { AppModule } from "./app.module";
 import { loadEnv } from "./config/env";
 import { installProcessHandlers } from "./common/process-errors";
+import { SHUTDOWN_GRACE_MS, drainThenClose } from "./health/readiness";
 import { configureHttp } from "./http-setup";
 import { MetricsService } from "./metrics/metrics.service";
 
@@ -21,6 +22,8 @@ const pino = app.get(Logger);
 installProcessHandlers((fields, message) => pino.fatal(fields, message), () => app.get(MetricsService).countUnhandled());
 configureHttp(app, env);
 app.get(MetricsService).start(env.METRICS_INTERVAL_S);
-app.enableShutdownHooks();
+// Ctrl-C closes at once (local); SIGTERM (ECS) drains first so the load balancer stops routing here.
+app.enableShutdownHooks(["SIGINT"]);
+process.once("SIGTERM", () => void drainThenClose(app, SHUTDOWN_GRACE_MS));
 await app.listen(env.PORT);
 app.get(Logger).log(`API listening on http://localhost:${env.PORT}/api`);

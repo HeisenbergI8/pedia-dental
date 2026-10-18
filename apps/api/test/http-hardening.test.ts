@@ -23,7 +23,7 @@ describe("HTTP hardening (B13a Phase 2)", () => {
     expect(res.headers["x-content-type-options"]).toBe("nosniff");
     expect(res.headers["strict-transport-security"]).toBeDefined();
     expect(res.headers["content-security-policy"]).toContain("default-src 'none'");
-    expect(res.headers["x-frame-options"]).toBeDefined();
+    expect(res.headers["x-frame-options"]).toBe("DENY");
     expect(res.headers["x-powered-by"]).toBeUndefined();
   });
 

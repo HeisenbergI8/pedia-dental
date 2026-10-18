@@ -17,6 +17,7 @@ export function configureHttp(app: INestApplication, env: Pick<Env, "CORS_ORIGIN
     helmet({
       contentSecurityPolicy: { useDefaults: false, directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] } },
       crossOriginResourcePolicy: { policy: "same-site" },
+      frameguard: { action: "deny" }, // agrees with frame-ancestors 'none'
     }),
   );
   app.setGlobalPrefix("api");

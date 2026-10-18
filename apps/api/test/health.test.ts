@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppModule } from "../src/app.module";
 import { loadEnv } from "../src/config/env";
 import { READY_TIMEOUT_MS } from "../src/health/health.controller";
-import { Readiness } from "../src/health/readiness";
+import { Readiness, drainThenClose } from "../src/health/readiness";
 import { configureHttp } from "../src/http-setup";
 import { PrismaService } from "../src/prisma/prisma.service";
 
@@ -50,5 +50,16 @@ describe("the liveness and readiness probes (B13a Phase 3)", () => {
     expect([ready.status, ready.text]).toEqual([503, "Shutting down."]);
     expect((await get("/api/health/live")).status).toBe(200);
     app.get(Readiness).draining = false;
+  });
+
+  it("on SIGTERM keeps serving while ready answers 503, then closes (the load balancer must see it)", async () => {
+    prisma.$queryRaw.mockResolvedValue([{ 1: 1 }]);
+    const server = app.getHttpServer();
+    const closed = drainThenClose(app, 300);
+    const ready = await request(server).get("/api/health/ready");
+    expect([ready.status, ready.text]).toEqual([503, "Shutting down."]);
+    expect((await request(server).get("/api/health/live")).status).toBe(200);
+    await closed;
+    expect(server.listening).toBe(false);
   });
 });
