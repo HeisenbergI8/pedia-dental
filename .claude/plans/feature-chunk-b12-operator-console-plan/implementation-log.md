@@ -34,3 +34,15 @@
 - Older e2e fixed on the way: the downgrade stories (now refused; the waiting downgrade is shown on Ngiti), Ipin's hard-coded October dates (now from the seed's "3 days overdue"), a race in signup.spec's first-sign-in helper, and a keyboard test that pressed keys before the tabs were ready.
 - The console nav's `<ul>` is `relative`: the badge's sr-only words had widened the page on a phone (operator.mobile.spec caught it).
 **Gate:** `pnpm run check`: green. Playwright on MSW (production build, 2026-10-18, a Sunday): 461 passed, 61 skipped (E2E_API), 11 failed; 8 of them fail the same way on master (dentist, front desk and parent specs, not touched by B12), 2 were timing flakes that pass alone, 1 was ours (the nav width above), fixed.
+
+## Phase 4: Tables, migration and the API seed — 2026-10-18
+
+**Steps completed:** 4.1, 4.2
+**Files changed:** `apps/api/prisma/schema.prisma`, `prisma/migrations/20261018090000_b12_operator_billing/migration.sql` (new), `src/prisma/{model-scope,tenant-scope.test}.ts`, `src/storage/storage.ts` (`platformKey`, `parsePlatformKey`, `PLATFORM_AREAS`), `src/signups/signup.rows.ts` (new, both directions), `src/subscriptions/subscription.rows.ts` (new), `src/seed/seed-database.ts` (`seedBilling`), `test/int/seed.int.test.ts`
+**Deviations from plan:**
+- `platformKey`/`parsePlatformKey` moved into this phase (the plan's preferred option); the service stays for 5.1.
+- `signup.rows.ts` has both directions now (`toSignupRow`, `toSignup`); `subscription.rows.ts` (contract → rows) added for the seed.
+- The seed test compares sign-ups as rows: the seed writes instants with +08:00 and the database answers in UTC.
+- Enum drift checks for the six new enums added to `tenant-scope.test.ts`.
+- Note for Phase 5+: `resetDatabase` truncates the two singletons; services must not assume them in tests that reset without seeding.
+**Gate:** `pnpm run check`: green. `test:int`: 45 files, 505 tests green.

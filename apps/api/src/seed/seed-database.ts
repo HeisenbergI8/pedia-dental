@@ -18,7 +18,9 @@ import { manilaDate } from "../common/clock";
 import { visitRow } from "../visits/visit.rows";
 import { photoData } from "../photos/photo.rows";
 import { documentData } from "../documents/document.rows";
-import { CONTENT_TYPES, clinicKey, type FileExtension, type FileStorage } from "../storage/storage";
+import { CONTENT_TYPES, clinicKey, platformKey, type FileExtension, type FileStorage } from "../storage/storage";
+import { toSignupRow } from "../signups/signup.rows";
+import { subscriptionRows } from "../subscriptions/subscription.rows";
 
 export class SeedRefused extends Error {
   override name = "SeedRefused";
@@ -61,6 +63,7 @@ export async function seedDatabase(prisma: PrismaService, hasher: Hasher, env: P
     data: platform.agreements.map(({ signedOn, at, ...a }) => ({ ...a, at: new Date(at), signedOn: signedOn ? dateOnly(signedOn) : null })),
   });
   await prisma.operatorUser.createMany({ data: OPERATORS.map((o) => ({ ...o, passwordHash: demoHash })) });
+  await seedBilling(prisma, platform, files);
 
   for (const { id: clinicId } of platform.accounts) {
     const db = platform.tenants[clinicId]!;
@@ -174,6 +177,42 @@ export async function seedDatabase(prisma: PrismaService, hasher: Hasher, env: P
       await prisma.patientDocument.createMany({
         data: db.documents.map((d) => ({ ...documentData(d), id: d.id, clinicId, patientId: d.patientId, title: d.title, createdAt: new Date(d.createdAt) })),
       });
+    });
+  }
+}
+
+/**
+ * B12: Primolar's billing. The price list (the migration's row, overwritten), the sign-ups, each clinic's subscription
+ * with its payments and invoice lines, the invoice counter after the last seeded number, and the receipts with their
+ * files under platform keys (no ledger row: platform files aren't a clinic's storage, E2).
+ */
+async function seedBilling(prisma: PrismaService, platform: Platform, files?: FileStorage): Promise<void> {
+  const { plans, designAddOn } = platform.prices;
+  const fees = {
+    smallSetupFee: plans.small.setupFee, smallMonthlyFee: plans.small.monthlyFee, midSetupFee: plans.mid.setupFee,
+    midMonthlyFee: plans.mid.monthlyFee, bigSetupFee: plans.big.setupFee, bigMonthlyFee: plans.big.monthlyFee, designAddOn,
+  };
+  const qr = { paymentQrKey: null, paymentQrCaption: null, paymentQrUpdatedAt: null }; // decision 23: none seeded
+  await prisma.platformSettings.upsert({ where: { id: "primolar" }, create: { id: "primolar", ...fees, ...qr }, update: { ...fees, ...qr } });
+  for (const s of platform.signups) await prisma.signup.create({ data: toSignupRow(s) });
+  const subs = platform.subscriptions.map(subscriptionRows);
+  await prisma.subscription.createMany({ data: subs.map((r) => r.subscription) });
+  await prisma.subscriptionPayment.createMany({ data: subs.flatMap((r) => r.payments) });
+  await prisma.subscriptionLine.createMany({ data: subs.flatMap((r) => r.lines) });
+  const next = subs.reduce((n, r) => n + r.payments.length, 0) + 1;
+  await prisma.invoiceCounter.upsert({ where: { id: "primolar" }, create: { id: "primolar", next }, update: { next } });
+
+  const png = SEED_FILES["image/png"];
+  for (const r of platform.receipts) {
+    const key = r.fileRef && platformKey("receipts", r.id, "png");
+    if (key && files) await files.put(key, Buffer.from(png), { contentType: CONTENT_TYPES.png, bytes: png.length });
+    await prisma.paymentReceipt.create({
+      data: {
+        id: r.id, purpose: r.payer.kind, signupId: r.payer.kind === "signup" ? r.payer.signupId : null,
+        clinicId: r.payer.kind === "subscription" ? r.payer.clinicId : null, periodStart: r.periodStart ? dateOnly(r.periodStart) : null,
+        amountDue: r.amountDue, reference: r.reference, fileKey: key, bytes: key ? png.length : 0, uploadedAt: new Date(r.uploadedAt),
+        status: r.status, decidedAt: r.decidedAt ? new Date(r.decidedAt) : null, rejectionReason: r.rejectionReason,
+      },
     });
   }
 }
