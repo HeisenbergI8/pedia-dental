@@ -4,6 +4,7 @@ import { Test } from "@nestjs/testing";
 import { AppModule } from "../../../src/app.module";
 import { Clock, type FixedClock } from "../../../src/common/clock";
 import { loadEnv } from "../../../src/config/env";
+import { configureHttp } from "../../../src/http-setup";
 
 type Options = { controllers?: Type[]; clock?: FixedClock; env?: NodeJS.ProcessEnv; background?: boolean };
 
@@ -16,7 +17,7 @@ export async function createIntApp({ controllers = [], clock, env = {}, backgrou
   let builder = Test.createTestingModule({ imports: [AppModule.forRoot(config, { background })], controllers });
   if (clock) builder = builder.overrideProvider(Clock).useValue(clock);
   const app = (await builder.compile()).createNestApplication({ logger: false });
-  app.setGlobalPrefix("api");
+  configureHttp(app, config);
   await app.init();
   return app;
 }

@@ -6,7 +6,16 @@ const flag = () => z.stringbool({ truthy: ["true", "1"], falsy: ["false", "0"] }
 const Env = z.object({
   DATABASE_URL: z.string().startsWith("mysql://", "DATABASE_URL must be a mysql:// URL"),
   PORT: z.coerce.number().int().positive().default(4100),
-  CORS_ORIGIN: z.string().default("http://localhost:3000"),
+  // B13a: which kind of deployment this is. `demo` and `production` are hosted: they need https origins, secure cookies,
+  // a real WEB_URL and shared storage. Only `production` refuses DEMO_LOGINS (real clinics' data).
+  APP_ENV: z.enum(["local", "demo", "production"]).default("local"),
+  // The web app's origins, allowed by CORS (comma-separated, each scheme://host[:port], no path, never "*").
+  CORS_ORIGIN: z.string().default("http://localhost:3000").transform(originsOf),
+  // B13a: how many proxies sit in front of the API (ALB = 1). Express then reads the client's address from
+  // X-Forwarded-For, which the rate limits key on. 0 = trust nobody (local, tests).
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(3).default(0),
+  // B13a: seconds between the metrics lines (CloudWatch EMF). 0 = no metrics lines (local default, tests).
+  METRICS_INTERVAL_S: z.coerce.number().int().min(0).default(0),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   // A demo deployment: `prisma db seed` may run, and the sign-in page's one-click logins (DemoLogin) are served (B2c).
   DEMO_LOGINS: flag().default(false),
@@ -38,7 +47,28 @@ const Env = z.object({
   SEMAPHORE_URL: z.url().default("https://api.semaphore.co/api/v4/messages"),
   // B11: the web app's address, which texted invite and reset links open. Set it in production (the default is dev's).
   WEB_URL: z.url().default("http://localhost:3000"),
+}).superRefine((env, ctx) => {
+  if (env.APP_ENV === "local") return;
+  const problem = (path: string, message: string) => ctx.addIssue({ code: "custom", path: [path], message });
+  // A hosted API must be told its web's address: the localhost defaults would let any local page call it.
+  if (env.CORS_ORIGIN.some((origin) => !origin.startsWith("https://"))) problem("CORS_ORIGIN", "CORS_ORIGIN must list only https:// origins outside APP_ENV=local");
+  if (!env.WEB_URL.startsWith("https://")) problem("WEB_URL", "WEB_URL must be the web app's https:// address outside APP_ENV=local");
+  if (!env.COOKIE_SECURE) problem("COOKIE_SECURE", "COOKIE_SECURE can't be false outside APP_ENV=local");
+  // The local-disk driver is per instance and its links die with the process (CONVENTIONS → Traps).
+  if (!env.S3_BUCKET) problem("S3_BUCKET", "S3_BUCKET is required outside APP_ENV=local");
+  if (env.APP_ENV === "production" && env.DEMO_LOGINS) problem("DEMO_LOGINS", "DEMO_LOGINS can't be true with APP_ENV=production");
 });
+
+/** "a, b" → ["a", "b"], each a bare origin. A path, a trailing slash or "*" is refused: CORS compares exact strings. */
+function originsOf(value: string, ctx: z.RefinementCtx): string[] {
+  const origins = value.split(",").map((part) => part.trim()).filter(Boolean);
+  for (const origin of origins) {
+    const parsed = URL.canParse(origin) ? new URL(origin) : undefined;
+    if (!parsed || parsed.origin !== origin) ctx.addIssue({ code: "custom", message: `"${origin}" is not an origin (scheme://host[:port], no path or trailing slash)` });
+  }
+  if (!origins.length) ctx.addIssue({ code: "custom", message: "CORS_ORIGIN needs at least one origin" });
+  return origins;
+}
 
 export type Env = z.infer<typeof Env>;
 

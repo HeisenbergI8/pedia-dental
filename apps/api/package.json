@@ -49,6 +49,7 @@
     "busboy": "^1.6.0",
     "date-fns": "^4.4.0",
     "dompurify": "3.4.16",
+    "helmet": "^8",
     "jsdom": "29.1.1",
     "nestjs-pino": "^5.3.1",
     "pino": "^10.4.0",
