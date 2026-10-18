@@ -4,7 +4,7 @@
 
 Primolar: pediatric dental clinic management sold as a service to many clinics. Each paying clinic is a
 **clinic account** with its own branches, staff, patients and branding (ROADMAP feature 16). **Current phase: frontend prototype.** In the demo every API call is
-answered in the browser by MSW using fake, seeded data; in `hybrid` mode the routes apps/api already serves (B2: sign-in; B3: the Owner's settings and reference data; B4: patients, consents and the privacy notice; B5: visits and the chart; B6: notes, growth and the treatment plan; B7: appointments, requests, the due list and Today; B8: billing, payments and the financial dashboard; B9: the message log, recall texts and birthday greetings; B10: photos, the documents log and file links; B11: parents' portal accounts, invite and reset links) go to it. A NestJS + MySQL API
+answered in the browser by MSW using fake, seeded data; in `hybrid` mode the routes apps/api already serves (B2: sign-in; B3: the Owner's settings and reference data; B4: patients, consents and the privacy notice; B5: visits and the chart; B6: notes, growth and the treatment plan; B7: appointments, requests, the due list and Today; B8: billing, payments and the financial dashboard; B9: the message log, recall texts and birthday greetings; B10: photos, the documents log and file links; B11: parents' portal accounts, invite and reset links; B12: the operator console, sign-ups, subscriptions, receipts and the payment QR) go to it. A NestJS + MySQL API
 (`apps/api`, scaffolded; its own rules are in `apps/api/CONVENTIONS.md`) will replace the mocks later, endpoint by endpoint, without changing feature code. A clinic joins through
 the public **Get started** form, and Primolar approves it in the operator console (ROADMAP feature 17). Each clinic
 then pays Primolar monthly; the operator records payments by hand, and a clinic 7 days overdue pauses itself.
@@ -26,13 +26,14 @@ TanStack Query · React Hook Form + Zod 4 · Zustand (UI state, plus the demo se
 | Tests, one file | `pnpm --filter <web|@pedia/shared|@pedia/seed> exec vitest run <path>` |
 | Design guards (contrast, tokens, shell, screens) | `pnpm run check -- design` (typecheck + every `src/design/design-*.test.ts`) |
 | Run the app locally | `pnpm dev` → http://localhost:3000 |
-| Run against the real API | `NEXT_PUBLIC_API_MOCKING=hybrid API_PROXY_TARGET=http://localhost:4100 pnpm dev` with `pnpm dev:api` running (`DEMO_LOGINS=true COOKIE_SECURE=false`, seeded with `pnpm --filter api db:seed`). `enabled` = MSW answers everything (the demo); `hybrid` = MSW answers all but `API_ROUTES` (`mocks/passthrough.ts`: since B2, sign-in, `/operator/auth/*` and the clinic reads; since B3, the Owner's settings, `/clinic/usage`, the logo and the reference data; since B4, patients, consents, the patient photo and the privacy notice; since B5, visits and the dental chart; since B6, notes, growth and the treatment plan; since B7, appointments, parents' requests, the due list and Today; since B8, bills, payments, deposits, voids, the day's collections and the financial dashboard; since B9, the message log, recall texts and birthday greetings; since B10, clinical photos, the issued-documents log and the API's `/files/<token>` links; since B11, portal access, invites, the set-password and reset links and `/auth/demo-texts`), which go through Next's `/api` proxy to the API; `disabled`/unset = no MSW |
+| Run against the real API | `NEXT_PUBLIC_API_MOCKING=hybrid API_PROXY_TARGET=http://localhost:4100 pnpm dev` with `pnpm dev:api` running (`DEMO_LOGINS=true COOKIE_SECURE=false`, seeded with `pnpm --filter api db:seed`). `enabled` = MSW answers everything (the demo); `hybrid` = MSW answers all but `API_ROUTES` (`mocks/passthrough.ts`: since B2, sign-in, `/operator/auth/*` and the clinic reads; since B3, the Owner's settings, `/clinic/usage`, the logo and the reference data; since B4, patients, consents, the patient photo and the privacy notice; since B5, visits and the dental chart; since B6, notes, growth and the treatment plan; since B7, appointments, parents' requests, the due list and Today; since B8, bills, payments, deposits, voids, the day's collections and the financial dashboard; since B9, the message log, recall texts and birthday greetings; since B10, clinical photos, the issued-documents log and the API's `/files/<token>` links; since B11, portal access, invites, the set-password and reset links and `/auth/demo-texts`; since B12, every `/operator/*` route, the public `/signups*` routes and `/clinic/subscription*`), which go through Next's `/api` proxy to the API; `disabled`/unset = no MSW |
 | Sign-in against the API, end to end | Both servers on free ports (the web on its own `NEXT_DIST_DIR=.next-hybrid`), then in `apps/web`: `E2E_API=1 E2E_BASE_URL=… npx playwright test e2e/api-sign-in.spec.ts --project=desktop`. Start-up commands: the B2d plan, Step 4.1. It signs in 10 times; the API allows 20 sign-ins per 5 minutes per address |
 | Owner settings against the API, end to end | As sign-in, against a fresh database that has B3's rows: `E2E_API=1 E2E_BASE_URL=… npx playwright test e2e/api-owner-settings.spec.ts --project=desktop` (9 sign-ins a run). Start-up commands: the B3 plan, Step 11.1 |
 | Notes, growth and the plan against the API | Fresh database with B6's rows: `E2E_API=1 E2E_BASE_URL=… npx playwright test e2e/api-notes-plan.spec.ts --project=desktop` (4 sign-ins a run). Start-up commands: the B6 plan, Step 7.2 |
 | Scheduling against the API | Fresh database with B7's rows: `E2E_API=1 E2E_BASE_URL=… npx playwright test e2e/api-scheduling.spec.ts --project=desktop` (8 sign-ins a run; re-runnable on one database). Start-up commands: the spec's header, or the B7 plan, Step 9.2 |
 | Billing against the API | Fresh database with B8's rows: `E2E_API=1 E2E_BASE_URL=… npx playwright test e2e/api-billing.spec.ts --project=desktop` (about 8 sign-ins a run; re-runnable on one database). Start-up commands: the spec's header, or the B8 plan, Step 10.2 |
 | Messages against the API | Fresh database with B9's rows: `E2E_API=1 E2E_BASE_URL=… npx playwright test e2e/api-messages.spec.ts --project=desktop` (7 sign-ins a run; re-runnable on one database; texts outside 8 AM–8 PM Manila stay Queued). Start-up commands: the spec's header, or the B9 plan, Step 9.3. Running it with the B7 and B8 specs in one go can trip the sign-in limit: clear `RateLimitCounter` between them |
+| Operator console, sign-ups and receipts against the API | Fresh database with B12's rows: `E2E_API=1 E2E_BASE_URL=… npx playwright test e2e/api-operator.spec.ts --project=desktop` (one sign-up a run, so it re-runs on one database; clear `RateLimitCounter` between specs). The API needs `DEMO_LOGINS=true`, `STORAGE_DIR` and `STORAGE_LINK_SECRET`: the spec's header |
 | Parent portal accounts against the API | Fresh database: `E2E_API=1 E2E_BASE_URL=… npx playwright test e2e/api-portal.spec.ts --project=desktop` (6 sign-ins and 2 link sign-ins a run; re-runnable on one database). The API needs `DEMO_LOGINS=true` (the texted links come from `/auth/demo-texts`) and `WEB_URL`: the spec's header |
 | Photos and documents against the API | Fresh database with B10's rows and files: `E2E_API=1 E2E_BASE_URL=… npx playwright test e2e/api-photos-documents.spec.ts --project=desktop` (6 sign-ins a run; re-runnable on one database). Start-up commands, with `STORAGE_DIR` and `STORAGE_LINK_SECRET`: the spec's header |
 | Reset demo data | account menu → Reset demo data (keeps you signed in). `localStorage.clear()` then reload also works, but signs you out |
@@ -132,6 +133,15 @@ MSW handler (now) or NestJS (later).
   Each month is billed at the plan in force when it began: a plan change made while overdue keeps the running
   month's price (`priceTier`) and a downgrade waits for the next due date after today. Billing is the Owner's (`GET /clinic/subscription`,
   `clinic.manage`). Primolar invoices are `DocContent` with Primolar's letterhead (`features/clinic/primolar-invoice.ts`).
+  The API settles in a nightly job (00:05 Manila) and at sign-in, not per request.
+- B12: a month is billed at the price list in force when it began (`priceOn`, `PriceChange`): a change applies to
+  months that start after it. A downgrade the clinic doesn't fit is refused (`downgradeProblem`); while one waits,
+  additions are checked against the smaller plan (`limitTier`). Clinics pay by Primolar's one QR and send a receipt
+  (one waiting at a time); the operator confirms only the full amount due or rejects with a reason; receipts are the
+  Owner's and the operator's only. The Owner of a clinic paused for non-payment signs in to a billing-only session
+  (`SessionUser.billingOnly`, `BILLING_ONLY_ROUTES`). Plans carry storage and text allowances (`TIER_LIMITS`):
+  storage is refused at upload (the API checks at its ledger), and a template text past the month's parts fails and is
+  never sent later (the mock checks when it queues, the API when it sends); account texts always go.
 - Privacy (feature 18): the templates and their versions are `LEGAL_DOCUMENTS` (`domain/legal.ts`), labelled
   `PENDING_REVIEW` until a lawyer reviews them. A clinic's agreements are append-only in `Platform.agreements`;
   `termsOutdated` decides when the Owner must accept again. The gate blocks the Owner (terms) and a staff login
@@ -160,9 +170,9 @@ MSW handler (now) or NestJS (later).
   and only import `@/mocks/browser` dynamically from `app/providers.tsx`.
 - `NEXT_PUBLIC_*` env vars are inlined at build time. Changing `.env.local` needs a dev-server restart.
 - Mock data lives in `localStorage`. After changing `seed()` or `Db`, bump the key in `mocks/db.ts`
-  or clear storage, or you'll keep seeing old data. The key is `pedia-dental:mock-db:v30`; each bump gets a
+  or clear storage, or you'll keep seeing old data. The key is `pedia-dental:mock-db:v31`; each bump gets a
   one-line comment above it saying why.
-- The mock store is partitioned by clinic account: `Platform = { accounts, tenants, signups, prices, subscriptions, agreements }`
+- The mock store is partitioned by clinic account: `Platform = { accounts, tenants, signups, prices, subscriptions, agreements, priceChanges, paymentQr, receipts }`
   in `mocks/db.ts`. Sign-ups, prices, subscriptions and agreements are Primolar's, never inside a tenant. `db` is a
   live binding to the signed-in account's `Db`, repointed by `sessionOf()` (`selectTenant`). Never cache `db` in a
   module-level variable, and never call `selectTenant` from a feature handler. Stamp new records with
@@ -177,7 +187,7 @@ MSW handler (now) or NestJS (later).
 - In `hybrid`, the clinic, its branches, staff logins and reference data live in MySQL (B3) while every other record is
   MSW's localStorage. Both are seeded from the same `@pedia/seed`, with the same ids, and never synced: a staff login or
   branch added in `hybrid` exists only on the API, so that login's MSW screens answer 401 (the app signs it out) and MSW
-  lists fall back to its own first branch. The subscription (B12) stays on MSW. Since B4, patients, their
+  lists fall back to its own first branch. Since B4, patients, their
   consents and photo, and the privacy notice are the API's: a child registered in `hybrid` exists only on the API, so
   MSW's visits, chart, billing and appointments answer `Patient not found` for them; MSW's parent gate still uses MSW's
   families. Since B5, visits and the chart are the API's. Since B6, notes, growth and the plan are the API's. Since B7,
@@ -191,6 +201,8 @@ MSW handler (now) or NestJS (later).
   is set.
   Since B11, parents' portal accounts are the API's: staff invite and turn off from the Overview, the signed-out
   link routes set and reset passwords, and only a demo deployment (`DEMO_LOGINS`) lists the texted links.
+  Since B12, the operator console, sign-ups, prices, the payment QR, subscriptions and receipts are the API's: a clinic
+  approved in `hybrid` exists only on the API (its MSW screens answer as for a login added there).
   Resetting one store doesn't reset the other. MSW passes a request through by fetching it from its worker, so in
   Playwright `fromServiceWorker()` is true either way: tell an API answer by its `x-request-id` header.
 - `next dev` with a custom `NEXT_DIST_DIR` rewrites `apps/web/tsconfig.json` (adds that dir's types). Revert it
@@ -215,7 +227,8 @@ MSW handler (now) or NestJS (later).
   clinic route). Operator query keys start with `"operator"`: the global 401 handler in `app/providers.tsx` signs out
   the operator, not the clinic user, on that prefix. Operator tests live in `mocks/operator.test.ts`, cross-branch
   report tests in `mocks/cross-branch.test.ts`. The same guard reads `features/operator/signup-mocks.ts`,
-  `features/signup/mocks.ts`, `features/legal/mocks.ts`, `mocks/signups.ts` and `mocks/subscriptions.ts`: public,
+  `features/signup/mocks.ts`, `features/legal/mocks.ts`, `mocks/signups.ts`, `mocks/subscriptions.ts` and (B12)
+  `features/operator/payment-mocks.ts`, `mocks/receipts.ts` and `mocks/allowances.ts`: public,
   sign-up, legal and subscription code works on `platform` alone. Tests that move the clock (`setToday`) live only in `mocks/subscriptions.test.ts`: a moved
   clock pauses seeded clinics for every later test in that file. To show grace or the pause in the browser, set
   `localStorage["pedia-dental:demo-today"]` to a `yyyy-MM-dd` date and reload; remove it to go back. Sign-up

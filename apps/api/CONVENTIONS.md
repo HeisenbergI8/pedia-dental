@@ -6,7 +6,7 @@ The Primolar backend. It replaces the browser mocks (MSW) in `apps/web` **endpoi
 feature code in the web app**. The product, the users and the domain are the ones in the root `CONVENTIONS.md`
 and `ROADMAP.md`; read those first. This file covers only how the API is built.
 
-**Current phase: B1–B11 done** (2026-10-17). The runtime core (request context, `Clock`, logs, tenant scoping,
+**Current phase: B1–B12 done** (2026-10-18). The runtime core (request context, `Clock`, logs, tenant scoping,
 transactions, audit), `@pedia/seed`, the `test:int` suite on MySQL and CI, identity, sessions and the access guard,
 `/auth/*`, `/operator/auth/*` and the clinic reads, with the web signing in against them in `hybrid` mode. B1-c added
 the outbox, scheduled jobs and file storage. B3: the Owner's settings
@@ -28,8 +28,11 @@ issued-documents log with the mock's checks, S3 storage (local disk without `S3_
 multer, and each clinic's stored bytes, served in `hybrid`. B11: parents' portal accounts (staff invite a guardian by
 SMS, the parent sets a password from the texted link, signs in with their mobile or email, resets it by text, and staff
 can turn it off), sign-in by mobile, parents' own password change, a number change moving the sign-in, and every route a
-parent can pass proven owner-checked, served in `hybrid`. B12 (operator console, sign-ups, subscriptions) is next. The
-build order is [CHUNKS.md](CHUNKS.md).
+parent can pass proven owner-checked, served in `hybrid`. B12: Primolar's console (accounts, plans, Owners, pauses,
+the delivered look), public sign-ups and approve → a working clinic in one transaction, prices and the payment QR,
+subscriptions with Primolar invoices, receipts sent after paying by QR and checked by the operator, the nightly settle
+and the check at sign-in, the billing-only session of a paused Owner, and the plans' storage and text allowances, served
+in `hybrid`. B13 (production readiness) is next. The build order is [CHUNKS.md](CHUNKS.md).
 
 **Stack:** NestJS 12 (ESM, Express) · Prisma 7 + MySQL 8.4 (MariaDB driver adapter) · Zod 4 schemas from
 `@pedia/shared` · SWC at runtime (`@swc-node/register`) · Vitest + Supertest · Docker Compose for local MySQL.
@@ -95,8 +98,16 @@ Run from the repo root.
 | Outbox | `src/outbox/` | `OutboxService.enqueue(tx, …)` (the write side, inside the caller's transaction), `OutboxWorker` (claim, run, settle), `OutboxHandlers` (features register a handler per kind), `NoopHandler` |
 | Scheduled jobs | `src/jobs/`, `src/<feature>/<feature>.jobs.ts` | `JobRunner.run(job, fn)` (the `JobLock` lease). Each `@Cron` lives in the module that owns its tables: `auth.jobs.ts` (session and rate-limit sweeps), `outbox.jobs.ts` (prune), `messages.jobs.ts` (birthday greetings and the dead-letter repair, B9) |
 | File storage | `src/storage/` | `StorageService` (clinic-scoped keys), `FileStorage` (the driver), `LocalDiskStorage`, and the `storage.delete` outbox handler (`delete-file.handler.ts`). Import `StorageModule` where files are kept |
+| Platform files (B12) | `src/storage/` | `PlatformFilesService` (Primolar's files under `platform/<area>/`: sign-up files, receipts, the QR; no ledger, no clinic), `platformKey`/`parsePlatformKey`, `readUploads` (several named file parts), `image-form.ts` (`readImageForm`: a `data` part and one sniffed image) |
 | File storage (B10) | `src/storage/` | `S3FileStorage`, `fileStorageOf` (picks the driver), `readUpload` (busboy → temp file, `multipart.ts`), `sniff`, `LocalFilesController` (`GET /files/:token`, the local driver's signed links), the `StoredFile` ledger and `StorageService.link`/`putFile`/`usedBytes` |
 | Portal | `src/portal/` | B11: `PortalService` (the only reader and writer of `PortalAccount` and `PortalLink`: invite, turn off, link check, accept, reset, the demo's texts, the link minter, a number change), `PortalAccessController` (`/patients/:id/portal-access`, `…/portal-invite`, `…/portal-off`), `PasswordLinksController` (`/auth/password-link`, `…/accept`, `/auth/password-reset`, `/auth/demo-texts`) |
+| Platform settings | `src/platform-settings/` | B12: `PlatformSettingsService` (the only reader and writer of `PlatformSettings` and `PriceChange`: the price list, one `PriceChange` per day, `monthlyFee` by the list in force when a month began, the payment QR; `lockPlatform`, E6's first lock), `PricesController` (`/signups/prices`, `/operator/prices`), `PaymentQrController` (`/operator/payment-qr`, the public `/signups/payment-qr/image`) |
+| Sign-ups | `src/signups/` | B12: `SignupsService` (the only reader and writer of `Signup`: submit with its rate limit, status by reference, the console's list, files, fix, payment, reject, approve and the direct creation, the sign-up's receipts, the purge), `ClinicFactory` (a new clinic's rows in one transaction), `signup-form.ts` (`readSignupForm`, `brandingRefusal`), `signup.rows.ts`, `signups.jobs.ts` (the 03:15 purge of rejected sign-ups' files) |
+| Subscription records | `src/subscription-records/` | B12: `SubscriptionRecordsService` (the only reader and writer of `Subscription`, `SubscriptionPayment`, `SubscriptionLine` and `InvoiceCounter`: the view, settle and `settleAll`, payments, plan changes, cancel, the Owner's receipts and their decisions, `waitingDowngrade`, `pausedForPayment`), `subscription.rows.ts`, `subscriptions.jobs.ts` (the 00:05 settle) |
+| Receipt records | `src/receipt-records/` | B12: `ReceiptRecordsService` (the only reader and writer of `PaymentReceipt`: add, lock, decide, Payments to check with names, image links for the clinic or the operator, the purge's keys), `receipt.rows.ts` |
+| Usage | `src/usage/` | B12: `UsageService` (branches, logins, patients, stored bytes and the month's billed parts per clinic: raw `GROUP BY clinicId`, one query per measure) |
+| Operator console | `src/operator/` | B12: `AccountOverviewService` (the console's rows, counts only), `OperatorAccountsService` (status, ownership, the delivered look) and the accounts, sign-ups and receipts controllers |
+| Clinic billing | `src/clinic-billing/` | B12: the Owner's `/clinic/subscription`, receipt upload and receipt image |
 | Photos | `src/photos/` | B10: `PhotosService` (the only reader and writer of `ClinicalPhoto`: list, upload, open), `photo-file.ts` (the file rule), `photo.rows.ts` |
 | Documents | `src/documents/` | B10: `DocumentsService` (the issued-documents log), `documents.rules.ts` (the mock's checks, in order), `document.rows.ts` |
 | Demo seed | `src/seed/seed-database.ts`, `prisma/seed.ts` | Maps `@pedia/seed`'s `seedPlatform()` to rows |
@@ -394,6 +405,26 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **A patient edit takes the clinic's lock first since B11** (`update`, `quickUpdate`): a guardian's new number is
   checked against other parents' numbers under the same lock as an invite.
 - **A database seeded before B11 has no portal accounts or mobile sign-ins:** use a fresh one.
+- **B12's lock order (E6): the platform row (`lockPlatform`) → a sign-up → a clinic's account → its subscription → a
+  receipt → the invoice counter**, always the last. Sign-ups and approvals take the platform lock first (the duplicate
+  check reads every account name under it); a receipt is never locked before its payer; a receipt's payer is read before
+  the transaction (it never changes).
+- **The send claim locks the clinic's account row first** (B12 E9), so one clinic's claims run one at a time and the
+  month's billed parts (`segments` by `dispatchedAt`) are exact. A text past the plan's parts fails at once and is
+  never sent later; account texts (invites, resets) always go. A released claim clears `segments`.
+- **The ledger row now comes before the file** (B12 E8): `StorageService.store` checks the plan's storage under the
+  account lock and inserts the `StoredFile` row, then stores the file and removes the row if that fails. A crash between
+  leaves an over-count, never an uncounted file.
+- **The S3 role must allow `platform/*` as well as `clinics/*`** before go-live: the QR, sign-up files and receipts live
+  there (local disk works without it).
+- **B12's jobs:** `subscriptions.settle` at 00:05 Manila (also run at every successful sign-in, before the active check)
+  and `signups.purge-rejected-files` at 03:15 Manila, 30-minute leases.
+- **Sign-ups (5) and sign-up receipts (10) are limited per address per rolling hour** (`RATE_LIMITS.signup`,
+  `.receipt`), counted by the service before the form is read. Behind a proxy this needs `trust proxy` (B13).
+- **Operator actions are logged with the operator's id, not written to the audit trail**: `AuditEvent` is a clinic's
+  and names clinic roles. A new clinic's first event (the Terms accepted at sign-up) goes in through `AuditService.recordFor`.
+- **A database seeded before B12 has no billing rows** (prices, sign-ups, subscriptions, receipts): use a fresh one.
+  The migration writes the two singletons (`PlatformSettings`, `InvoiceCounter`), so a live database works without the seed.
 
 ---
 
@@ -558,6 +589,17 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
     open items per request, three indexed queries. A clinic past ~10k patients needs stored columns.
   - Today runs the shared `todaySummary` unchanged over a narrowed input (today's appointments, the week's patients'
     visit days, the pending requests, every patient's name and birthday); parity is tested against the mock.
+- **Operator console, sign-ups and subscriptions** (B12, 26 decisions in the B12 plan; E1–E13 in its plan):
+  - Manual payments by one QR (5, 23); one receipt waits at a time (21); only the full amount due is confirmed (22);
+    receipts are the Owner's and the operator's only (24); a rejected sign-up's files go after 30 days, its record stays (15).
+  - Allowances per plan: storage 2/10/50 GB, refused at upload (1, 16); texts 300/1,000/3,000 billed parts a Manila
+    month, template texts stop at the limit, account texts never (2, 3, 18, 19); the Owner is warned at 80% (3).
+  - A price change applies to months that start after it (11: one `PriceChange` per day); no downgrade below what the
+    clinic uses, and additions are held to the smaller plan while one waits (12, E13).
+  - Settling is a nightly job plus a check at sign-in (4). The Owner of a clinic paused for non-payment signs in to a
+    billing-only session (25); a pause made by hand or a cancellation keeps everyone but parents out.
+  - Platform files have no ledger and no clinic (E2); new ids are UUIDs (no cuid2 library); approve writes every row
+    in one transaction in the new clinic's context and copies the logo after commit (E7).
 - **Seed** (B1): `packages/seed` (`@pedia/seed`), so MSW and `prisma db seed` run the same `seedPlatform()`. Not
   `@pedia/shared`: the seed needs faker and is built from `new Date()`, which don't belong in the contract package.
 

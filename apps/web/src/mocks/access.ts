@@ -252,7 +252,7 @@ export const ACCESS_RULES: readonly Pick<Rule, "method" | "path" | "permission" 
  * Every operator route. One question only, "is this a Primolar operator?": the operator holds no clinic Permission
  * and no role (decision #25). Deny by default, as RULES: a route missing here is refused with its name.
  */
-const OPERATOR_RULES: Pick<Rule, "method" | "path">[] = [
+export const OPERATOR_RULES: Pick<Rule, "method" | "path">[] = [
   { method: "GET", path: "/operator/accounts" },
   { method: "POST", path: "/operator/accounts" },
   { method: "PUT", path: "/operator/accounts/:id/tier" },
@@ -285,7 +285,7 @@ const OPERATOR_RULES: Pick<Rule, "method" | "path">[] = [
  * The public sign-up (billing #4): no session of any kind. Deny by default, as RULES. Branches off before sessionOf,
  * so a sign-up never selects a tenant, and a clinic or operator token changes nothing here.
  */
-const PUBLIC_RULES: Pick<Rule, "method" | "path">[] = [
+export const PUBLIC_RULES: Pick<Rule, "method" | "path">[] = [
   { method: "GET", path: "/signups/prices" },
   { method: "POST", path: "/signups" },
   { method: "GET", path: "/signups/:reference" },

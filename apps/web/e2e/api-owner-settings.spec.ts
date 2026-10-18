@@ -37,13 +37,13 @@ const fromApi = async (response: Response) => !!(await response.allHeaders())["x
 const staffRow = (page: Page, name: string) => page.getByRole("table", { name: "Staff logins" }).getByRole("row").filter({ hasText: name });
 const branchRow = (page: Page, name: string) => page.getByRole("table", { name: "Branches" }).getByRole("row").filter({ hasText: name });
 
-test("Settings reads B3's routes from the API and the subscription from MSW", async ({ page }) => {
+test("Settings reads B3's routes and, since B12, the subscription from the API", async ({ page }) => {
   await signInAs(page, USERS.owner);
   expect(await fromApi(await openTab(page, "reference", "/procedures"))).toBe(true);
   await expect(page.getByText("Oral examination").first()).toBeVisible();
   const usage = openTab(page, "plan", "/clinic/usage");
   const subscription = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/clinic/subscription");
-  expect([await fromApi(await usage), await fromApi(await subscription)]).toEqual([true, false]);
+  expect([await fromApi(await usage), await fromApi(await subscription)]).toEqual([true, true]);
 });
 
 test("Ngiti's Owner at 1 of 1 and 5 of 5: Add is off, and the API refuses on its own", async ({ page }) => {

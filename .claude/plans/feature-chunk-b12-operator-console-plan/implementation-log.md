@@ -98,3 +98,12 @@
 - No `message-send.handler.test.ts` unit test: the rule is proven on MySQL (`allowances.int.test.ts`: two reminders at 299/300 parts, an invite past the limit, last month's parts not counted), where a faked Prisma couldn't catch a wrong query.
 - `/clinic/usage`'s expectations in `owner-settings.int.test.ts` already use `toMatchObject` (Phase 1).
 **Gate:** `pnpm run check`: green. `test:int`: 51 files, 558 tests green.
+
+## Phase 9: `API_ROUTES`, the e2e spec, docs — 2026-10-18
+
+**Steps completed:** 9.1, 9.2, 9.3
+**Files changed:** `apps/web/src/mocks/{passthrough,passthrough.test,access}.ts` (OPERATOR_RULES and PUBLIC_RULES exported for the sweep); `apps/web/e2e/api-operator.spec.ts` (new); `apps/web/e2e/{api-owner-settings,api-sign-in}.spec.ts` (the subscription and the console now come from the API); `CONVENTIONS.md`; `apps/api/CONVENTIONS.md`; `apps/api/CHUNKS.md`
+**Deviations from plan:**
+- `.env.example`: unchanged (B12 needs no new variable; `STORAGE_DIR`/`STORAGE_LINK_SECRET` exist since B10).
+- Two B2/B3 API specs asserted the subscription and the console were MSW's; they now assert the API's.
+**Gate:** `pnpm run check`: green. `e2e/api-operator.spec.ts`: 5/5 against apps/api in `hybrid`, twice on one database. `api-sign-in`, `api-owner-settings`, `api-photos-documents`, `api-messages`, `api-portal` re-run on the same server: green (after clearing `RateLimitCounter`, as their headers say).
