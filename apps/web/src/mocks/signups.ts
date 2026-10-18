@@ -11,6 +11,8 @@ import {
   sameClinicName,
   suggestBrandColor,
   LOGO_RULES,
+  SIGNUPS_PER_HOUR,
+  filesDueForDeletion,
   type AgreementRecord,
   type BrandingInput,
   type Branch,
@@ -24,6 +26,8 @@ import { deleteBlob, getBlob, putBlob } from "./blob-store";
 import { emptyDb, persist, platform } from "./db";
 import { newPin, temporaryPassword } from "./demo-accounts";
 import { NOTE_TEMPLATES, PROCEDURES, defaultMessageTemplates, firstNotice } from "@pedia/seed";
+import { recordStored } from "./allowances";
+import { forgetReceiptFiles, latestReceipt, paymentQrView } from "./receipts";
 import { startSubscription } from "./subscriptions";
 
 /*
@@ -152,8 +156,8 @@ export const statusView = (s: Signup): SignupStatusView => ({
   status: s.status,
   paid: !!s.payment,
   rejectionReason: s.rejection?.reason ?? null,
-  receipt: null, // B12 Step 1.3 stopgap: Step 2.2 fills these
-  paymentQr: null,
+  receipt: latestReceipt({ kind: "signup", signupId: s.id }),
+  paymentQr: paymentQrView(),
 });
 
 /** The sign-up a clinic was made from; undefined for the two seeded clinics, which predate sign-ups. */
@@ -218,8 +222,49 @@ export async function createClinic(signup: Signup): Promise<{ clinicId: string; 
     account.brandColor = branding.brandColor;
     if (branding.headingFont) account.headingFont = branding.headingFont;
     const logo = signup.logoRef ? await getBlob(signup.logoRef) : undefined;
-    if (logo) account.logoRef = await keepFile(`logo_${clinicId}`, logo);
+    if (logo) {
+      account.logoRef = await keepFile(`logo_${clinicId}`, logo);
+      recordStored(platform.tenants[clinicId]!, account.logoRef, "branding", logo.size); // B12: counts toward its storage
+    }
   }
   persist();
   return { clinicId, temporaryPassword: password, pin };
 }
+
+/**
+ * B12 decision 14: sign-ups in the last hour from this connection (the demo browser is one connection; reset on
+ * reload). Every attempt counts, refused ones too, as the API's rolling counter does.
+ */
+let signupHits: number[] = [];
+export function signupHitAllowed(now = Date.now()): boolean {
+  signupHits = [...signupHits.filter((t) => t > now - 3_600_000), now];
+  return signupHits.length <= SIGNUPS_PER_HOUR;
+}
+export const resetSignupHits = () => {
+  signupHits = [];
+};
+
+/**
+ * B12 decision 15: once a day, a sign-up rejected at least 30 days ago loses its logo, reference images and receipt
+ * images; its record and words stay.
+ */
+let purgedOn = "";
+export function purgeRejectedFiles(day: string): void {
+  if (purgedOn === day) return;
+  purgedOn = day;
+  const keys: string[] = [];
+  for (const s of platform.signups.filter((x) => filesDueForDeletion(x, day))) {
+    keys.push(...[s.logoRef, ...s.referenceRefs].filter((k): k is string => !!k), ...forgetReceiptFiles(s.id));
+    delete s.logoRef;
+    s.referenceRefs = [];
+    s.filesDeletedAt = new Date().toISOString();
+  }
+  if (!keys.length) return;
+  persist(); // the records first; the blobs after (the request needn't wait for them)
+  for (const key of keys) void deleteBlob(key);
+}
+
+/** Tests: run the purge again on the same mock day. */
+export const resetPurge = () => {
+  purgedOn = "";
+};

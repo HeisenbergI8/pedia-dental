@@ -173,3 +173,35 @@ describe("plan changes and pauses around a running month (review fixes)", () => 
     expect(await status(setTier("clinic_ngiti", "mid"))).toBe(409);
   });
 });
+
+describe("B12: prices by the month's start, and downgrades within the smaller plan (decisions 11, 12)", () => {
+  it("keeps an overdue month at the old fee after a price rise, and bills the next month at the new one", async () => {
+    const ngiti = platform.subscriptions.find((s) => s.clinicId === "clinic_ngiti")!;
+    Object.assign(ngiti, { anchor: "2026-01-15", paidMonths: 9 });
+    for (const k of ["downgrade", "priceTier", "cancelledAt", "pause"] as const) delete ngiti[k];
+    Object.assign(accountById("clinic_ngiti")!, { tier: "small", status: "active" });
+    setToday("2026-10-18"); // Ngiti's month from 15 October is unpaid
+    asOperator();
+    const old = platform.prices.plans.small.monthlyFee;
+    const raised = structuredClone(platform.prices);
+    raised.plans.small.monthlyFee = old + 50_000;
+    await api("/operator/prices", z.unknown(), send("PUT", raised));
+    expect((await subscription("clinic_ngiti")).nextAmount).toBe(old);
+    expect((await pay("clinic_ngiti", "2026-10-18")).nextAmount).toBe(old + 50_000); // the month from 15 November began after
+  });
+
+  it("refuses a downgrade the clinic is over, and checks additions against the smaller plan while one waits", async () => {
+    setToday("2026-10-18");
+    asOperator();
+    const bulilit = platform.tenants.clinic_demo!;
+    expect(await status(setTier("clinic_demo", "small"))).toBe(409);
+    const extra = bulilit.branches.filter((b) => !b.archived).slice(1);
+    for (const b of extra) b.archived = true; // the Owner archives down to one
+    const staff = bulilit.staff.filter((m) => !m.deactivatedAt).slice(5);
+    for (const m of staff) m.deactivatedAt = "2026-10-18T00:00:00.000Z";
+    expect((await setTier("clinic_demo", "small")).account.tier).toBe("mid"); // waits for the next due date
+    asStaff("demo.clinic_demo.staff_villanueva");
+    const added = { name: "Kawit", address: "1 Kawit Road", phone: "(046) 400 0000", openingHours: bulilit.branches[0]!.openingHours };
+    expect(await status(api("/branches", z.unknown(), send("POST", added)))).toBe(409);
+  });
+});

@@ -11,6 +11,7 @@ import { messageHandlers } from "@/features/messages/mocks";
 import { noteHandlers } from "@/features/notes/mocks";
 import { operatorHandlers } from "@/features/operator/mocks";
 import { operatorSignupHandlers } from "@/features/operator/signup-mocks";
+import { operatorPaymentHandlers } from "@/features/operator/payment-mocks";
 import { patientHandlers } from "@/features/patients/mocks";
 import { photoHandlers } from "@/features/photos/mocks";
 import { planHandlers } from "@/features/plan/mocks";
@@ -30,6 +31,7 @@ export const handlers = [
   ...portalHandlers,
   ...operatorHandlers,
   ...operatorSignupHandlers,
+  ...operatorPaymentHandlers,
   ...signupHandlers,
   ...legalHandlers,
   ...patientHandlers,

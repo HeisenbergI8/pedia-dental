@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { setupServer } from "msw/node";
 import { z } from "zod";
 import {
@@ -23,6 +23,7 @@ import { env } from "@/lib/env";
 import { ApiError, api } from "@/lib/api-client";
 import { platform } from "./db";
 import { handlers } from "./handlers";
+import { resetSignupHits } from "./signups";
 
 const server = setupServer(...handlers);
 const cookies = (...c: string[]) => vi.stubGlobal("document", { cookie: c.join("; ") });
@@ -63,6 +64,7 @@ async function ownerOpens(made: CreateAccountResult): Promise<ClinicContext> {
   return api("/clinic", ClinicContext);
 }
 
+beforeEach(resetSignupHits); // B12 decision 14: each test starts under the hourly sign-up limit
 beforeAll(() => server.listen({ onUnhandledFrame: "error" }));
 afterAll(() => {
   server.close();

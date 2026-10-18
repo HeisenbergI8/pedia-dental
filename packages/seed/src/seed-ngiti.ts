@@ -104,5 +104,6 @@ export function seedNgiti(): Db {
     privacyNotices: [firstNotice(NGITI_ID, NGITI_ACCOUNT.name, "Dr. Bea Lim", NGITI_ACCOUNT.contactEmail)],
     acknowledgements: staffAcknowledged(NGITI_ID, STAFF),
     portalAccounts: [], // filled by seedPlatform (B11)
+    storedFiles: [], // filled by seedPlatform (B12)
   };
 }

@@ -1,8 +1,10 @@
 import { http, HttpResponse } from "msw";
 import { PriceList, RecordUpfrontPaymentInput, RejectSignupInput, SignupInput, amountDue, type CreateAccountResult } from "@pedia/shared";
 import { env } from "@/lib/env";
+import { today } from "@/mocks/clock";
 import { persist, platform } from "@/mocks/db";
 import { brandingRefusal, createClinic, duplicateOf, fileResponse, readSignupForm, replaceFile, keepFile } from "@/mocks/signups";
+import { rejectSignupReceipts } from "@/mocks/receipts";
 import { overviewOf } from "./mocks";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
@@ -83,6 +85,7 @@ export const operatorSignupHandlers = [
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
     signup.status = "rejected";
     signup.rejection = { reason: parsed.data.reason, at: new Date().toISOString() };
+    rejectSignupReceipts(signup.id); // B12: its waiting receipt is answered too
     persist();
     return HttpResponse.json(signup);
   }),
@@ -107,6 +110,8 @@ export const operatorSignupHandlers = [
   http.put(url("/operator/prices"), async ({ request }) => {
     const parsed = PriceList.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
+    // B12 decision 11: keep the list in force before today, so months that began before it keep their price.
+    if (JSON.stringify(parsed.data) !== JSON.stringify(platform.prices)) platform.priceChanges.push({ on: today(), before: platform.prices });
     platform.prices = parsed.data;
     persist();
     return HttpResponse.json(platform.prices);

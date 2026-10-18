@@ -20,6 +20,9 @@ export const CLINIC_RULES: readonly ClinicRule[] = [
   { method: "GET", path: "/note-templates", permission: "clinic.view" },
   { method: "GET", path: "/clinic/usage", permission: "clinic.manage" },
   { method: "GET", path: "/clinic/subscription", permission: "clinic.manage" },
+  // B12 decisions 6, 24: the Owner's receipts; staff and parents never see them.
+  { method: "POST", path: "/clinic/subscription/receipts", permission: "clinic.manage" },
+  { method: "GET", path: "/clinic/subscription/receipts/:id/image", permission: "clinic.manage" },
   { method: "GET", path: "/clinic/privacy-notice", permission: "clinic.view" },
   { method: "PUT", path: "/clinic/privacy-notice", permission: "clinic.manage" },
   { method: "PUT", path: "/clinic", permission: "clinic.manage" },
@@ -122,6 +125,13 @@ export const OPERATOR_RULES: readonly Route[] = [
   { method: "POST", path: "/operator/signups/:id/approve" },
   { method: "GET", path: "/operator/prices" },
   { method: "PUT", path: "/operator/prices" },
+  // B12: the payment QR and Payments to check (decisions 5–8).
+  { method: "GET", path: "/operator/payment-qr" },
+  { method: "PUT", path: "/operator/payment-qr" },
+  { method: "GET", path: "/operator/receipts" },
+  { method: "GET", path: "/operator/receipts/:id/image" },
+  { method: "POST", path: "/operator/receipts/:id/confirm" },
+  { method: "POST", path: "/operator/receipts/:id/reject" },
 ];
 
 /** PUBLIC_RULES in the mock (no session of any kind), plus the API's own: the health check and B10's local file links. */
@@ -129,6 +139,8 @@ export const PUBLIC_RULES: readonly Route[] = [
   { method: "GET", path: "/signups/prices" },
   { method: "POST", path: "/signups" },
   { method: "GET", path: "/signups/:reference" },
+  { method: "GET", path: "/signups/payment-qr/image" }, // B12 decision 5
+  { method: "POST", path: "/signups/:reference/receipts" }, // B12 decision 7
   { method: "GET", path: "/legal/notices/:clinicId" },
   { method: "GET", path: "/health" },
   { method: "GET", path: "/files/:token" },

@@ -1,6 +1,6 @@
 import { http, HttpResponse } from "msw";
 import {
-  TIER_LIMITS,
+  manilaMonth,
   ChangeTierInput,
   CreateAccountInput,
   OperatorLoginInput,
@@ -24,6 +24,8 @@ import { env } from "@/lib/env";
 import { operatorOf } from "@/mocks/access";
 import { accountById, persist, platform } from "@/mocks/db";
 import { staffEmail } from "@/mocks/demo-accounts";
+import { forgetStored, recordStored, storageRefused, usageOf } from "@/mocks/allowances";
+import { today } from "@/mocks/clock";
 import { OPERATORS, operatorPasswordOpens, operatorToken } from "@/mocks/operator";
 import { agreementView, latestAgreement } from "@/mocks/privacy";
 import { onFileAgreement } from "@pedia/seed";
@@ -45,16 +47,12 @@ export function overviewOf(clinicId: string): AccountOverview {
   const tenant = platform.tenants[clinicId]!;
   const owner = tenant.staff.find((s) => s.isOwner);
   const { branches, staffLogins } = accountUsage(tenant);
+  const { storage, texts } = usageOf(tenant, account, manilaMonth(today())); // B12 decision 17
   const agreement = latestAgreement(clinicId);
   return {
     account: { id, name, contactEmail, tier, status },
     owner: owner ? { staffId: owner.id, name: owner.fullName, email: staffEmail(owner) } : null,
-    usage: {
-      branches, staffLogins, patients: tenant.patients.length,
-      // B12 Step 1.3 stopgap: the real counts come with Step 2.5 (mocks/allowances.ts).
-      storage: { inUse: 0, limit: TIER_LIMITS[tier].storageBytes },
-      texts: { inUse: 0, limit: TIER_LIMITS[tier].textParts },
-    },
+    usage: { branches, staffLogins, patients: tenant.patients.length, storage, texts },
     design: design ?? null,
     look: design ? { brandColor: account.brandColor, headingFont: account.headingFont ?? null, hasLogo: !!account.logoRef } : null,
     // Privacy #10: the agreement in force and a count of patients without consent. Never a name (#25).
@@ -238,7 +236,14 @@ export const operatorHandlers = [
     if (problem) return refuse(400, `${problem} Try ${suggestBrandColor(brandColor)}.`);
     const delivered = signup.design.status === "delivered" && !!account.logoRef;
     if (!form.logo && !delivered) return refuse(400, "Add the finished logo");
-    if (form.logo) account.logoRef = await replaceFile(account.logoRef, `logo_${account.id}`, form.logo);
+    if (form.logo) {
+      const tenant = platform.tenants[account.id]!;
+      const full = storageRefused(tenant, account.tier, form.logo.size); // B12 decision 1: the clinic's own storage
+      if (full) return refuse(409, full);
+      forgetStored(tenant, account.logoRef);
+      account.logoRef = await replaceFile(account.logoRef, `logo_${account.id}`, form.logo);
+      recordStored(tenant, account.logoRef, "branding", form.logo.size);
+    }
     account.brandColor = brandColor;
     account.headingFont = headingFont;
     signup.design = { status: "delivered", deliveredAt: new Date().toISOString() };

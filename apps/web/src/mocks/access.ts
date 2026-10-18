@@ -6,6 +6,8 @@ import { accountById, credentialOf, currentAccount, currentClinicId, db, persist
 import { accountForToken, childrenOf, type DemoAccountRecord } from "./demo-accounts";
 import { operatorForToken } from "./operator";
 import { pendingAcknowledgement } from "./privacy";
+import { today } from "./clock";
+import { purgeRejectedFiles } from "./signups";
 import { settleSubscriptions } from "./subscriptions";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
@@ -137,6 +139,9 @@ const RULES: Rule[] = [
   // Owner settings (decision #11): the account, its branding, branches and staff logins
   { method: "GET", path: "/clinic/usage", permission: "clinic.manage" },
   { method: "GET", path: "/clinic/subscription", permission: "clinic.manage" }, // billing #31: the Owner's alone
+  // B12 decisions 6, 24: the Owner's receipts; staff and parents never see them.
+  { method: "POST", path: "/clinic/subscription/receipts", permission: "clinic.manage", audit: "Primolar payment receipt" },
+  { method: "GET", path: "/clinic/subscription/receipts/:id/image", permission: "clinic.manage" },
   // Privacy #19, #22: the clinic's notice (public anyway, so reading it isn't audited) and the Owner's new version
   { method: "GET", path: "/clinic/privacy-notice", permission: "clinic.view" },
   { method: "PUT", path: "/clinic/privacy-notice", permission: "clinic.manage", audit: "Privacy notice", action: "update" },
@@ -264,6 +269,13 @@ const OPERATOR_RULES: Pick<Rule, "method" | "path">[] = [
   { method: "POST", path: "/operator/signups/:id/approve" },
   { method: "GET", path: "/operator/prices" },
   { method: "PUT", path: "/operator/prices" },
+  // B12: the payment QR and Payments to check (decisions 5–8).
+  { method: "GET", path: "/operator/payment-qr" },
+  { method: "PUT", path: "/operator/payment-qr" },
+  { method: "GET", path: "/operator/receipts" },
+  { method: "GET", path: "/operator/receipts/:id/image" },
+  { method: "POST", path: "/operator/receipts/:id/confirm" },
+  { method: "POST", path: "/operator/receipts/:id/reject" },
 ];
 
 /**
@@ -274,6 +286,8 @@ const PUBLIC_RULES: Pick<Rule, "method" | "path">[] = [
   { method: "GET", path: "/signups/prices" },
   { method: "POST", path: "/signups" },
   { method: "GET", path: "/signups/:reference" },
+  { method: "GET", path: "/signups/payment-qr/image" }, // B12 decision 5: the QR is meant to be shared
+  { method: "POST", path: "/signups/:reference/receipts" }, // B12 decision 7
   { method: "GET", path: "/legal/notices/:clinicId" }, // privacy #3: each clinic's notice, before sign-in
 ];
 
@@ -362,6 +376,7 @@ function refusal(session: MockSession, rule: Rule, params: Record<string, string
 export const accessGate = http.all(url("/*"), ({ request }) => {
   // S2: due dates are checked lazily, here, before anything reads an account's status or tier.
   settleSubscriptions();
+  purgeRejectedFiles(today()); // B12 decision 15: at most once a mock day
   const u = new URL(request.url);
   const path = u.pathname.slice(new URL(env.apiUrl, u.origin).pathname.length);
   // The operator is not a clinic user (decision #25). Its requests branch off here, before sessionOf, so they never

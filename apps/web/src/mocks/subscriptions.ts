@@ -1,5 +1,13 @@
 import {
+  accountUsage,
+  billedTier as billedTierOf,
+  downgradeProblem,
   isTierUpgrade,
+  keptPrice,
+  monthlyFeeOn,
+  nextBoundary,
+  settleStep,
+  unpaidFrom,
   primolarInvoiceNo,
   subscriptionDueOn,
   subscriptionMonthLine,
@@ -14,6 +22,7 @@ import {
 } from "@pedia/shared";
 import { today } from "./clock";
 import { accountById, persist, platform } from "./db";
+import { paymentQrView, receiptsOfClinic } from "./receipts";
 
 /**
  * Billing #25–#30: one subscription per clinic, in `Platform.subscriptions`. Everything here reads the platform, never
@@ -23,30 +32,14 @@ export const subscriptionOf = (clinicId: string): Subscription | undefined => pl
 
 const nextInvoiceNo = () => primolarInvoiceNo(platform.subscriptions.reduce((n, s) => n + s.payments.length, 0) + 1);
 
-const monthlyFee = (tier: Tier) => platform.prices.plans[tier].monthlyFee;
-/** The first unpaid month's start: the next due date. */
-const unpaidFrom = (sub: Subscription) => subscriptionDueOn(sub.anchor, sub.paidMonths);
-
-/**
- * Billing #27, S5: the plan the month starting `periodStart` is billed at: the plan in force when it began. An old
- * plan kept for months already running (`priceTier`), else a waiting downgrade once its date has come, else today's.
- */
-function billedTier(sub: Subscription, periodStart = unpaidFrom(sub)): Tier {
-  if (sub.priceTier && periodStart < sub.priceTier.until) return sub.priceTier.tier;
-  if (sub.downgrade && periodStart >= sub.downgrade.on) return sub.downgrade.tier;
-  return accountById(sub.clinicId)!.tier;
-}
-
-/** The first due date on or after `day`: where a plan change takes effect (billing #27). */
-function nextBoundary(sub: Subscription, day: string): string {
-  let n = sub.paidMonths;
-  while (subscriptionDueOn(sub.anchor, n) < day) n += 1;
-  return subscriptionDueOn(sub.anchor, n);
-}
+/** B12 decision 11: a month is billed at the price list in force when it began (`priceOn`). */
+const monthlyFee = (tier: Tier, periodStart: string) => monthlyFeeOn(platform.priceChanges, platform.prices, tier, periodStart);
+const billedTier = (sub: Subscription, periodStart?: string) => billedTierOf(sub, accountById(sub.clinicId)!.tier, periodStart);
 
 /** Months that began before `until` and aren't paid yet keep `tier`'s price (billing #27: no repricing a running month). */
 function keepPriceFor(sub: Subscription, tier: Tier, until: string) {
-  if (unpaidFrom(sub) < until && !sub.priceTier) sub.priceTier = { tier, until };
+  const kept = keptPrice(sub, tier, until);
+  if (kept) sub.priceTier = kept;
 }
 
 /** A real timestamp on the mock's day, so dates shown from it follow the demo clock (S1). */
@@ -64,27 +57,16 @@ export function settleSubscriptions(day = today()): void {
   for (const sub of platform.subscriptions) {
     const account = accountById(sub.clinicId);
     if (!account) continue;
-    if (sub.downgrade && day >= sub.downgrade.on) {
-      keepPriceFor(sub, account.tier, sub.downgrade.on); // months still unpaid from before the change stay at the old price
-      account.tier = sub.downgrade.tier;
-      delete sub.downgrade;
-      changed = true;
-    }
-    if (sub.priceTier && unpaidFrom(sub) >= sub.priceTier.until) {
-      delete sub.priceTier;
-      changed = true;
-    }
-    const { state } = subscriptionStatus(sub, day);
-    if ((state === "lapsed" || state === "ended") && account.status === "active") {
-      account.status = "suspended";
-      sub.pause = state === "lapsed" ? "overdue" : "cancelled";
-      changed = true;
-    } else if (sub.pause && state !== "lapsed" && state !== "ended" && account.status === "suspended") {
-      // Its own pause no longer applies (the demo clock moved back): lift it. A manual pause has no `pause` and stays.
-      account.status = "active";
-      delete sub.pause;
-      changed = true;
-    }
+    // The shared rule (B12 E5): the API applies the same patch in its nightly job and at sign-in.
+    const { tier, status, pause, downgrade, priceTier } = settleStep(sub, account, day);
+    if (tier) account.tier = tier;
+    if (status) account.status = status;
+    if (pause === null) delete sub.pause;
+    else if (pause) sub.pause = pause;
+    if (downgrade === null) delete sub.downgrade;
+    if (priceTier === null) delete sub.priceTier;
+    else if (priceTier) sub.priceTier = priceTier;
+    changed ||= [tier, status, pause, downgrade, priceTier].some((v) => v !== undefined);
   }
   if (changed) persist();
 }
@@ -119,7 +101,7 @@ export function recordSubscriptionPayment(clinicId: string, input: RecordUpfront
   if (sub.cancelledAt) return "This subscription is cancelled, so Primolar records no more payments for it.";
   const periodStart = unpaidFrom(sub);
   const tier = billedTier(sub, periodStart);
-  const amount = monthlyFee(tier);
+  const amount = monthlyFee(tier, periodStart);
   sub.payments.push({
     ...input,
     id: `subpay_${crypto.randomUUID()}`,
@@ -149,6 +131,9 @@ export function changePlan(clinicId: string, tier: Tier): string | undefined {
   const account = accountById(clinicId)!;
   if (sub.cancelledAt) return "This subscription is cancelled, so its plan no longer changes.";
   const boundary = nextBoundary(sub, today());
+  // B12 decision 12: never down to a plan the clinic is already over (accountUsage: open branches, active logins).
+  const over = !isTierUpgrade(account.tier, tier) && tier !== account.tier && downgradeProblem(tier, accountUsage(platform.tenants[clinicId]!));
+  if (over) return over;
   if (isTierUpgrade(account.tier, tier)) {
     keepPriceFor(sub, account.tier, boundary);
     account.tier = tier;
@@ -191,7 +176,7 @@ export function subscriptionView(clinicId: string): SubscriptionView {
   const account = accountById(clinicId)!;
   const { state, nextDue, payBy, daysUntilDue } = subscriptionStatus(sub, today());
   const nextTier = billedTier(sub);
-  const nextAmount = monthlyFee(nextTier);
+  const nextAmount = monthlyFee(nextTier, nextDue);
   return {
     clinicId,
     billedTo: { name: account.name, tin: account.tin, contactEmail: account.contactEmail },
@@ -207,8 +192,8 @@ export function subscriptionView(clinicId: string): SubscriptionView {
     cancelledAt: sub.cancelledAt ?? null,
     pausedFor: sub.pause ?? null,
     payments: [...sub.payments].reverse(),
-    receipts: [], // B12 Step 1.3 stopgap: Step 2.2 fills these
-    paymentQr: null,
+    receipts: receiptsOfClinic(clinicId),
+    paymentQr: paymentQrView(),
     today: today(),
   };
 }
