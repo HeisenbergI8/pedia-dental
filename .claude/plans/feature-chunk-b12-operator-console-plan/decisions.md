@@ -26,6 +26,8 @@ Settled with the user on 2026-10-18. The architect plans against these and does 
 22. **Partial payments**: none; the operator confirms only the full amount due, else rejects with the reason.
 23. **No QR yet**: clinics see "Primolar will send you payment details" until the operator uploads one.
 24. **Who sees receipts**: the clinic's Owner and the operator only.
+25. **A paused clinic paying** (settled after planning): the Owner of a paused clinic can still sign in, but sees only Settings → Plan, to pay and upload a receipt; when the operator confirms the payment the clinic resumes. Other staff stay refused; parents read only (decision 4).
+26. **Defaults accepted with 25**: while a downgrade waits, new branches and logins are checked against the smaller plan; at the text limit every automatic clinic text stops, never invites or resets; rejected monthly receipts are kept (decision 15 is sign-ups only); the QR image is at most 2 MB.
 
 ## Out of scope
 
