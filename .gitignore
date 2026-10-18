@@ -1,6 +1,7 @@
 node_modules
 .next
 out
+cdk.out
 dist
 coverage
 .env*.local
