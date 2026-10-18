@@ -65,7 +65,8 @@ export function OperatorShell({ children }: { children: ReactNode }) {
         </div>
       </header>
       <nav aria-label="Console" className="border-b border-line bg-surface">
-        <ul className="mx-auto flex max-w-5xl gap-1 overflow-x-auto px-4 sm:px-6">
+        {/* `relative` keeps the badge's sr-only words inside the scroll box; otherwise they widen the page on a phone. */}
+        <ul className="relative mx-auto flex max-w-5xl gap-1 overflow-x-auto px-4 sm:px-6">
           {NAV.map((n) => {
             const here = n.match(pathname);
             return (

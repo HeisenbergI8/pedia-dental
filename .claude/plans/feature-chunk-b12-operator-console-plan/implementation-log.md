@@ -32,4 +32,5 @@
 - The console's Plan card shows `downgradeProblem` before saving and disables Save (decision 12); `overLimits` was removed (unused).
 - The billing-only screen uses the clinic's logo, not Primolar's (decision #32's guard), and a "Primolar confirmed it? Open the clinic" link that re-reads /auth/me; the gate also re-reads it on focus.
 - Older e2e fixed on the way: the downgrade stories (now refused; the waiting downgrade is shown on Ngiti), Ipin's hard-coded October dates (now from the seed's "3 days overdue"), a race in signup.spec's first-sign-in helper, and a keyboard test that pressed keys before the tabs were ready.
-**Gate:** `pnpm run check`: green. Playwright on MSW (production build): see the run below.
+- The console nav's `<ul>` is `relative`: the badge's sr-only words had widened the page on a phone (operator.mobile.spec caught it).
+**Gate:** `pnpm run check`: green. Playwright on MSW (production build, 2026-10-18, a Sunday): 461 passed, 61 skipped (E2E_API), 11 failed; 8 of them fail the same way on master (dentist, front desk and parent specs, not touched by B12), 2 were timing flakes that pass alone, 1 was ours (the nav width above), fixed.
