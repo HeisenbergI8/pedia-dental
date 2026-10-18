@@ -13,6 +13,7 @@ import { Hasher } from "./hashing";
 import { type Actor, type ClinicIdentity, IdentityService, type LoginCandidate, toSessionUser } from "./identity.service";
 import { SessionService } from "./session.service";
 import { SubscriptionRecordsService } from "../subscription-records/subscription-records.service";
+import { OperatorAuditService } from "../operator-audit/operator-audit.service";
 
 /** The body's token (decision 1). The real one is set only as the httpOnly cookie; the shared schema still wants a string. */
 export const COOKIE_TOKEN = "cookie";
@@ -46,6 +47,7 @@ export class AuthService {
     private readonly clock: Clock,
     @Inject(ENV) private readonly env: Env,
     private readonly subscriptions: SubscriptionRecordsService,
+    private readonly operatorAudit: OperatorAuditService,
   ) {}
 
   /** An entry in the account it names, signed in or not (the mock's `logEach`: selectTenant, then recordAudit). */
@@ -193,8 +195,14 @@ export class AuthService {
   async operatorLogin({ email, password }: OperatorLoginInput): Promise<{ token: string; session: OperatorSession }> {
     const op = await this.identity.operatorByEmail(email);
     const ok = await this.hasher.matches(op?.passwordHash ?? (await (this.decoy ??= this.hasher.hash("no such login"))), password);
-    if (!op || !ok) throw new UnauthorizedException("That email and password don't match a Primolar operator");
+    if (!op || !ok) {
+      // A wrong password for a known operator is recorded; an unknown email has no one to record it against. Not
+      // awaited: both answers must take the same time (the decoy hash's point), or the insert tells emails apart.
+      if (op) void this.operatorAudit.tryRecordFor(op, "sign_in_failed", "Console", "Wrong password");
+      throw new UnauthorizedException("That email and password don't match a Primolar operator");
+    }
     const token = await this.sessions.openOperator(op.id);
+    await this.operatorAudit.tryRecordFor(op, "sign_in", "Console", "Signed in");
     return { token, session: { token: OPERATOR_COOKIE_TOKEN, operator: { id: op.id, name: op.name, email: op.email } } };
   }
 

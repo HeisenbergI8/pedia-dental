@@ -4,6 +4,7 @@ import type { Request, Response } from "express";
 import { requireContext } from "../common/request-context";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { ENV, type Env } from "../config/env";
+import { OperatorAuditService } from "../operator-audit/operator-audit.service";
 import { AuthService } from "./auth.service";
 import { OPERATOR_COOKIE, readCookie, sessionCookieOptions } from "./cookies";
 import { IdentityService } from "./identity.service";
@@ -18,6 +19,7 @@ export class OperatorAuthController {
     private readonly auth: AuthService,
     private readonly identity: IdentityService,
     @Inject(ENV) private readonly env: Env,
+    private readonly operatorAudit: OperatorAuditService,
   ) {}
 
   @Post("login")
@@ -40,6 +42,8 @@ export class OperatorAuthController {
   @HttpCode(200)
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const token = readCookie(req.headers.cookie, OPERATOR_COOKIE);
+    // The guard set operatorId from a live pd_operator; a stale cookie records nothing.
+    if (requireContext().operatorId) await this.operatorAudit.tryRecord("sign_out", "Console", "Signed out");
     if (token) await this.auth.operatorLogout(token);
     res.clearCookie(OPERATOR_COOKIE, sessionCookieOptions(this.env));
     return {};

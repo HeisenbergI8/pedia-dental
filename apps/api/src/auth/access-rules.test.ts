@@ -23,9 +23,9 @@ describe("the API's route map mirrors the mock's gate", () => {
     const api = CLINIC_RULES.map(({ method, path, permission }) => ({ method, path, permission: [permission].flat() }));
     expect(sorted(api)).toEqual(sorted(webRules("RULES")));
   });
-  it("has every operator and public route, and no other (plus the API's own GET /health and GET /files/:token)", () => {
+  it("has every operator and public route, and no other (plus the API's own health probes and GET /files/:token)", () => {
     expect(sorted([...OPERATOR_RULES])).toEqual(sorted(webRules("OPERATOR_RULES")));
-    const apiOnly = new Set(["/health", "/files/:token"]);
+    const apiOnly = new Set(["/health", "/health/live", "/health/ready", "/files/:token"]);
     expect(sorted(PUBLIC_RULES.filter((r) => !apiOnly.has(r.path)))).toEqual(sorted(webRules("PUBLIC_RULES")));
   });
 });

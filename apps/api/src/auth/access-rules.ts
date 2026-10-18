@@ -143,6 +143,8 @@ export const PUBLIC_RULES: readonly Route[] = [
   { method: "POST", path: "/signups/:reference/receipts" }, // B12 decision 7
   { method: "GET", path: "/legal/notices/:clinicId" },
   { method: "GET", path: "/health" },
+  { method: "GET", path: "/health/live" }, // B13a: the container's probe
+  { method: "GET", path: "/health/ready" }, // B13a: the load balancer's probe
   { method: "GET", path: "/files/:token" },
 ];
 

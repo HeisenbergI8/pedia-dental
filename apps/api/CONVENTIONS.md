@@ -6,7 +6,9 @@ The Primolar backend. It replaces the browser mocks (MSW) in `apps/web` **endpoi
 feature code in the web app**. The product, the users and the domain are the ones in the root `CONVENTIONS.md`
 and `ROADMAP.md`; read those first. This file covers only how the API is built.
 
-**Current phase: B1–B12 done** (2026-10-18). The runtime core (request context, `Clock`, logs, tenant scoping,
+**Current phase: B1–B12 and B13a done** (2026-10-18); B13b (AWS infrastructure) is next. B13a added the production
+build (`build.mjs`), the image (`Dockerfile`), `APP_ENV`, helmet and `trust proxy`, liveness and readiness probes,
+EMF metrics, error fingerprints and the operator's audit trail. The runtime core (request context, `Clock`, logs, tenant scoping,
 transactions, audit), `@pedia/seed`, the `test:int` suite on MySQL and CI, identity, sessions and the access guard,
 `/auth/*`, `/operator/auth/*` and the clinic reads, with the web signing in against them in `hybrid` mode. B1-c added
 the outbox, scheduled jobs and file storage. B3: the Owner's settings
@@ -53,6 +55,10 @@ Run from the repo root.
 | Run the API (restarts on change) | `pnpm dev:api` → http://localhost:4100/api |
 | New migration after editing the schema | `pnpm --filter api db:migrate --name <what>` |
 | Apply migrations (CI, prod) | `pnpm --filter api db:deploy` |
+| Schema drift: migrations vs `schema.prisma` (needs `SHADOW_DATABASE_URL`) | `pnpm --filter api db:drift` |
+| Production bundle, and run it | `pnpm --filter api build` / `start:prod` (from `apps/api`: the bundle resolves its packages there) |
+| Image, and its release step | `docker build -f apps/api/Dockerfile -t primolar-api .` / `docker run … primolar-api node_modules/.bin/prisma migrate deploy` |
+| Production dependency audit | `pnpm run audit:deps` |
 | Load the demo clinics (demo deployments only) | `DEMO_LOGINS=true pnpm --filter api db:seed`. Refuses without the flag, and on a database that already has clinic accounts (`prisma migrate reset --force` first) |
 | Regenerate the Prisma client | `pnpm --filter api db:generate` (also runs on install) |
 | Browse the database | `pnpm --filter api db:studio` |
@@ -66,7 +72,10 @@ Run from the repo root.
 | Contract | `packages/shared/src/schemas/` | Zod schemas and types. **The only definition** of a request or response shape |
 | Domain logic | `packages/shared/src/domain/` | Pure rules (permissions, chart derivation, money, tenancy, subscription dates). Call them, never re-implement them |
 | The spec for each endpoint | `apps/web/src/features/<name>/mocks.ts`, `apps/web/src/mocks/` | Paths, shapes, status codes and rules the API must reproduce |
-| Bootstrap | `src/main.ts` | Env, `/api` prefix, CORS, shutdown hooks. Nothing feature-specific |
+| Bootstrap | `src/main.ts` | Env, process error handlers, metrics timer, shutdown (SIGTERM drains first). Nothing feature-specific |
+| HTTP setup | `src/http-setup.ts` | `configureHttp`: `/api` prefix, helmet, `trust proxy`, CORS. Called by `main.ts` and both test apps |
+| Metrics | `src/metrics/` | `MetricsService` (EMF lines), the timing middleware |
+| Operator audit | `src/operator-audit/` | `OperatorAuditService`, `@OperatorAudited` and its interceptor |
 | Root module | `src/app.module.ts` | `AppModule.forRoot(env)`: provides `ENV`, `Clock`, the logger, the global error filter and the request-context middleware; imports feature modules |
 | Config | `src/config/env.ts` | Zod-validated environment, injected with `@Inject(ENV)`. The only reader of `process.env` |
 | Database | `src/prisma/` | `PrismaService`, the only database client (global module), always tenant-scoped |
@@ -232,10 +241,12 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 
 ## Traps
 
-- **Runtime is SWC, not `nest build`.** `@pedia/shared` ships TypeScript source with extensionless imports, which
-  `tsc` output can't run. `node --import @swc-node/register/esm-register` compiles on load and emits decorator
-  metadata. `tsc` only type-checks (`noEmit`). Don't add a build step to `@pedia/shared`. A production build
-  (bundling) is still open.
+- **Dev runs on SWC; production runs the bundle.** `@pedia/shared` ships TypeScript source with extensionless imports,
+  which `tsc` output can't run. Dev uses `node --import @swc-node/register/esm-register`. Production uses `build.mjs`
+  (B13a): esbuild bundles, `@swc/core` compiles each file so decorator metadata survives, and `keepNames` keeps class
+  names. Only Node built-ins and the API's own `dependencies` stay external; `@pedia/*` and their npm dependencies are
+  inlined. The bundle resolves its externals from the `node_modules` above it, so it runs from `apps/api` (or the image),
+  never from a copy elsewhere. `tsc` only type-checks (`noEmit`). Don't add a build step to `@pedia/shared`.
 - **Constructor injection relies on decorator metadata.** Inject classes by type. Tokens (`ENV`) need `@Inject(...)`.
   `import type` on an injected class erases it and breaks DI.
 - **Nest 12 wraps arrays and objects** passed to an `HttpException` inside `{ message: [...] }`. That's why Zod issues
@@ -243,8 +254,9 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **Prisma 7:** the connection URL is in `prisma.config.ts`, not the schema. MySQL needs the
   `@prisma/adapter-mariadb` adapter (`PrismaService`). The client is generated as `.ts` files, so it's imported with
   a `.ts` extension (`allowImportingTsExtensions`).
-- **`PrismaService` connects lazily**, so the API starts while MySQL is down. `/api/health` then waits about 30 s for the
-  driver's timeout before it answers 503.
+- **`PrismaService` connects lazily**, so the API starts while MySQL is down. `/api/health/live` never touches the
+  database (the container's check). `/api/health/ready` (and `/api/health`) answers 503 within 2 s when the database
+  doesn't answer, and while the process shuts down (the load balancer's check).
 - **The shadow database** (`pedia_dental_shadow`, for `migrate dev`) is created by `docker/mysql-init.sql`, which runs
   only when the volume is first created. If it's missing, `docker compose down -v && pnpm --filter api db:up` (this
   wipes local data).
@@ -276,7 +288,13 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **`identityOf(req)`** is set only where the guard loaded a clinic session (clinic routes, and `/auth/*` when a cookie
   was presented).
 - **Integration tests that sign in repeatedly** clear `RateLimitCounter` in `beforeEach`: the limit counts per address.
-- **Behind a proxy, set `trust proxy`** in `main.ts` (B13), or every client shares one rate-limit bucket.
+- **Behind a proxy, set `TRUST_PROXY_HOPS`** (1 behind the ALB; the real count behind Vercel → ALB is B13b's), or every
+  client shares one rate-limit bucket. `configureHttp` (`http-setup.ts`) applies it with helmet and CORS, in `main.ts`
+  and both test apps.
+- **`APP_ENV` other than `local` refuses dev defaults:** https `CORS_ORIGIN` and `WEB_URL`, secure cookies and
+  `S3_BUCKET` are required; `production` also refuses `DEMO_LOGINS`. `CORS_ORIGIN` entries must be exact origins.
+- **Every operator route that changes something carries `@OperatorAudited`** (`test/operator-audit-coverage.test.ts`
+  fails otherwise). The row is written after the handler succeeds (B13a E9).
 - **Prisma 7's `migrate dev` doesn't regenerate the client.** Run `pnpm --filter api db:generate` after it.
 - **Lists keep the clinic's order:** `Branch.position` and `Staff.position` (the mock's array order). New rows go last.
 - **Background work starts only from `main.ts`** (`AppModule.forRoot(env, { background })`). Tests call
@@ -420,9 +438,14 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **B12's jobs:** `subscriptions.settle` at 00:05 Manila (also run at every successful sign-in, before the active check)
   and `signups.purge-rejected-files` at 03:15 Manila, 30-minute leases.
 - **Sign-ups (5) and sign-up receipts (10) are limited per address per rolling hour** (`RATE_LIMITS.signup`,
-  `.receipt`), counted by the service before the form is read. Behind a proxy this needs `trust proxy` (B13).
-- **Operator actions are logged with the operator's id, not written to the audit trail**: `AuditEvent` is a clinic's
-  and names clinic roles. A new clinic's first event (the Terms accepted at sign-up) goes in through `AuditService.recordFor`.
+  `.receipt`), counted by the service before the form is read. Behind a proxy this needs `TRUST_PROXY_HOPS`.
+- **Operator actions go to `OperatorAuditEvent`** (B13a, platform-scoped, append-only), not `AuditEvent`, which is a
+  clinic's and names clinic roles. Sign-in, a wrong password for a known operator and sign-out are recorded too; a
+  failed insert is logged and counted, never failing the request (`tryRecord`). A new clinic's first event (the Terms
+  accepted at sign-up) goes in through `AuditService.recordFor`.
+- **Metrics are CloudWatch EMF lines on stdout** (`MetricsService`, namespace `Primolar/API`, every
+  `METRICS_INTERVAL_S`): request and 5xx counts, `UnhandledErrors`, latency for `TRACKED_ROUTES`, and the outbox backlog
+  on the background instance. Unexpected errors log a `fingerprint` (name + first three frames, never the message).
 - **A database seeded before B12 has no billing rows** (prices, sign-ups, subscriptions, receipts): use a fresh one.
   The migration writes the two singletons (`PlatformSettings`, `InvoiceCounter`), so a live database works without the seed.
 

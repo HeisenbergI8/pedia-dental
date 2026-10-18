@@ -5,6 +5,7 @@ import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { RECEIPT_NOT_FOUND, ReceiptRecordsService } from "../receipt-records/receipt-records.service";
 import { SignupsService } from "../signups/signups.service";
 import { SubscriptionRecordsService } from "../subscription-records/subscription-records.service";
+import { OperatorAudited } from "../operator-audit/operator-audited";
 
 /**
  * Payments to check (B12 decisions 6–8, 22). A receipt's payer never changes, so it is read before the transaction;
@@ -33,6 +34,7 @@ export class OperatorReceiptsController {
 
   /** Decision 22: only for the full amount due; a subscription's records the month, a sign-up's its setup fee. */
   @Post(":id/confirm")
+  @OperatorAudited({ action: "update", record: "Payment receipt", detail: "Receipt confirmed" })
   @HttpCode(200)
   async confirm(@Param("id") id: string, @Body(new ZodValidationPipe(ConfirmReceiptInput)) input: ConfirmReceiptInput): Promise<ReceiptToCheck> {
     const payer = await this.receipts.payer(id);
@@ -42,6 +44,7 @@ export class OperatorReceiptsController {
   }
 
   @Post(":id/reject")
+  @OperatorAudited({ action: "update", record: "Payment receipt", detail: "Receipt rejected" })
   @HttpCode(200)
   async reject(@Param("id") id: string, @Body(new ZodValidationPipe(RejectReceiptInput)) { reason }: RejectReceiptInput): Promise<ReceiptToCheck> {
     const payer = await this.receipts.payer(id);

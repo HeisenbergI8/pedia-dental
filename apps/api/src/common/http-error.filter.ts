@@ -1,5 +1,7 @@
 import { type ArgumentsHost, Catch, type ExceptionFilter, HttpException, Logger } from "@nestjs/common";
 import type { Response } from "express";
+import { MetricsService } from "../metrics/metrics.service";
+import { errorFingerprint, loggable } from "./process-errors";
 import { ZodIssuesException } from "./zod-validation.pipe";
 
 /**
@@ -10,11 +12,14 @@ import { ZodIssuesException } from "./zod-validation.pipe";
 export class HttpErrorFilter implements ExceptionFilter {
   private readonly logger = new Logger(HttpErrorFilter.name);
 
+  constructor(private readonly metrics: MetricsService) {}
+
   catch(exception: unknown, host: ArgumentsHost) {
     const res = host.switchToHttp().getResponse<Response>();
 
     if (!(exception instanceof HttpException)) {
-      this.logger.error(loggable(exception));
+      this.metrics.countUnhandled();
+      this.logger.error({ fingerprint: errorFingerprint(exception), err: loggable(exception) }, "Unhandled error");
       res.status(500).type("text/plain").send("Something went wrong. Try again.");
       return;
     }
@@ -25,17 +30,6 @@ export class HttpErrorFilter implements ExceptionFilter {
     }
     res.status(exception.getStatus()).type("text/plain").send(messageOf(exception.getResponse()) ?? exception.message);
   }
-}
-
-/**
- * Prisma errors quote the query's arguments (patient data) in their message, so only their kind, code and stack
- * frames are logged. Everything else is logged as is.
- */
-function loggable(exception: unknown): unknown {
-  if (!(exception instanceof Error) || !exception.name.startsWith("PrismaClient")) return exception;
-  const code = (exception as { code?: unknown }).code;
-  const frames = exception.stack?.split("\n").filter((line) => line.trimStart().startsWith("at ")).join("\n");
-  return `${exception.name}${typeof code === "string" ? ` ${code}` : ""} (message withheld: may hold patient data)\n${frames ?? ""}`;
 }
 
 function messageOf(body: string | object): string | undefined {

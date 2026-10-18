@@ -52,6 +52,28 @@ model AuditEvent {
   @@index([clinicId, patientId, at])
 }
 
+/// B13a (F1): what the Primolar operator did in the console. Platform-scoped, append-only (model-scope.ts). Never a
+/// patient field: the operator never reads one.
+model OperatorAuditEvent {
+  id           String      @id @default(cuid(2))
+  at           DateTime
+  /// The operator; the sign-in's operator for sign_in_failed (a wrong password for a known email).
+  operatorId   String
+  operatorName String
+  action       AuditAction
+  /// What was touched, in console words: "Clinic account", "Sign-up", "Price list".
+  record       String
+  /// What happened, in console words: "Account paused".
+  detail       String      @db.VarChar(191)
+  /// The route's :id (a clinic account, sign-up or receipt), or the created clinic's id. Null for the price list,
+  /// the QR and sign-in events.
+  targetId     String?
+
+  @@index([at])
+  @@index([targetId, at])
+  @@index([operatorId, at])
+}
+
 /// Mirrors StaffRole in packages/shared/src/schemas/common.ts (tenant-scope.test.ts checks they match).
 enum StaffRole {
   admin

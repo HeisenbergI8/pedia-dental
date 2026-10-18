@@ -2,6 +2,7 @@ import { Body, Controller, Get, Put } from "@nestjs/common";
 import { PriceList } from "@pedia/shared";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { PlatformSettingsService } from "./platform-settings.service";
+import { OperatorAudited } from "../operator-audit/operator-audited";
 
 /** The price list (billing #22, #23): public for the Get started form's running total, the operator's to change. */
 @Controller()
@@ -19,6 +20,7 @@ export class PricesController {
   }
 
   @Put("operator/prices")
+  @OperatorAudited({ action: "update", record: "Price list", detail: "Price list saved" })
   save(@Body(new ZodValidationPipe(PriceList)) list: PriceList): Promise<PriceList> {
     return this.settings.savePrices(list);
   }
