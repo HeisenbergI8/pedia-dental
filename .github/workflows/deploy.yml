@@ -71,10 +71,21 @@ jobs:
         if: steps.tag.outputs.build == 'false'
         run: aws ecr describe-images --repository-name "$REPOSITORY" --image-ids imageTag=${{ steps.tag.outputs.tag }} > /dev/null
 
+      # ECR tags are immutable: a re-run for the same commit (after a later step failed) reuses its image, migrations included.
+      - name: Image already pushed for this commit?
+        id: pushed
+        if: steps.tag.outputs.build == 'true'
+        run: |
+          if aws ecr describe-images --repository-name "$REPOSITORY" --image-ids imageTag=${{ steps.tag.outputs.tag }} > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: docker/setup-buildx-action@v3
-        if: steps.tag.outputs.build == 'true'
+        if: steps.tag.outputs.build == 'true' && steps.pushed.outputs.exists != 'true'
       - name: Build and push the image
-        if: steps.tag.outputs.build == 'true'
+        if: steps.tag.outputs.build == 'true' && steps.pushed.outputs.exists != 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -92,6 +103,8 @@ jobs:
         run: |
           if out=$(aws cloudformation describe-stacks --stack-name "$SERVICE_STACK" \
               --query "Stacks[0].Outputs[?OutputKey=='ImageTagInUse'].OutputValue" --output text 2>&1); then
+            # A first deploy that failed leaves the stack in ROLLBACK_COMPLETE, with no outputs.
+            echo "$out" | grep -Eq '^[0-9a-f]{7,40}$' || { echo "::error::$SERVICE_STACK has no ImageTagInUse ('$out'): a failed first deploy? See runbooks/deploy.md, 'A first deploy that failed'."; exit 1; }
             echo "tag=$out" >> "$GITHUB_OUTPUT"
           elif echo "$out" | grep -q "does not exist"; then
             echo "::notice::First deploy: $SERVICE_STACK is created with $TAG before its first migration (runbooks/deploy.md)."

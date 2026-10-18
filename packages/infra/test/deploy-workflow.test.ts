@@ -67,4 +67,13 @@ describe("deploy.yml", () => {
       expect(outputs).toContain(used);
     }
   });
+
+  it("re-runs a commit by reusing its pushed image, and stops on a stack left without outputs", () => {
+    const check = stepIndex("Image already pushed for this commit?");
+    expect(check).toBeGreaterThan(-1);
+    expect(check).toBeLessThan(stepIndex("Build and push the image"));
+    expect(steps[stepIndex("Build and push the image")]!.if).toContain("steps.pushed.outputs.exists != 'true'");
+    expect(steps[stepIndex("Run the release task (prisma migrate deploy)")]!.if).toBe("steps.tag.outputs.build == 'true'");
+    expect(steps[stepIndex("Read the tag the services run now")]!.run).toMatch(/grep -Eq '\^\[0-9a-f\]\{7,40\}\$'/);
+  });
 });

@@ -31,3 +31,11 @@
 
 **First deploy only:** the stack is created on the new image about a minute before the first migration. One
 "unhandled errors" alarm email may arrive.
+
+**A first deploy that failed** leaves `PrimolarService` in `ROLLBACK_COMPLETE`, which CloudFormation can't update.
+The workflow stops at "Read the tag the services run now" and says so. Delete the empty stack, then run deploy again:
+`aws cloudformation delete-stack --stack-name PrimolarService && aws cloudformation wait stack-delete-complete --stack-name PrimolarService`.
+
+**Running deploy again for the same commit** (after a later step failed) reuses the image already in ECR and runs the
+migrations again; ECR's tags are immutable, so it never rebuilds.
+

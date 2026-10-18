@@ -23,9 +23,16 @@ export const DRAIN = {
 const LIVE_CHECK = `fetch('http://127.0.0.1:${API_PORT}/api/health/live').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))`;
 
 /** I4: DATABASE_URL built from its parts inside the container, so the password stays in Secrets Manager. */
-export const withDatabaseUrl = (command: string) => [
-  "sh", "-c", `export DATABASE_URL="mysql://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME" && exec ${command}`,
+export const withDatabaseUrl = (command: string, query = "") => [
+  "sh", "-c", `export DATABASE_URL="mysql://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME${query}" && exec ${command}`,
 ];
+
+/**
+ * The API's driver (mariadb) without TLS (I5) can't sign in to MySQL 8.4's caching_sha2_password once the server's auth
+ * cache is cold (after any reboot, failover or minor upgrade) unless it may fetch the server's RSA key. The schema
+ * engine (release task) fetches it itself. Goes away with TLS to RDS (the I5 follow-up).
+ */
+export const API_DATABASE_QUERY = "?allowPublicKeyRetrieval=true";
 
 export interface ServiceProps extends StackProps {
   settings: Settings;
@@ -96,7 +103,7 @@ export class ServiceStack extends Stack {
       const task = new ecs.FargateTaskDefinition(this, id, { family, cpu: 512, memoryLimitMiB: 1024, runtimePlatform: platform, taskRole, executionRole });
       task.addContainer("api", {
         image: ecs.ContainerImage.fromEcrRepository(repository, imageTag.valueAsString),
-        command: withDatabaseUrl("node --enable-source-maps dist/main.mjs"),
+        command: withDatabaseUrl("node --enable-source-maps dist/main.mjs", API_DATABASE_QUERY),
         environment: { ...apiEnvironment, BACKGROUND_WORK: String(backgroundWork) },
         secrets: { ...databaseSecrets, ...smsSecrets },
         portMappings: [{ containerPort: API_PORT }],

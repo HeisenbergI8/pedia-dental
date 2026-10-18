@@ -25,3 +25,24 @@
 **Notes:**
 - `deploy.yml`, the runbooks' AWS CLI commands and the deploy role's rights are unproven until the owner's first real run (Q6). This is inherent to an offline plan.
 - CHUNKS marks B13b done in the sense its own line states: code and runbooks merged; AWS is the owner's.
+
+## Tester fixes — 2026-10-18
+
+**1. Cold auth cache with no TLS (tester, high)**
+- **Problem:** with no TLS (I5) and `caching_sha2_password`, the mariadb driver can't sign in after a server restart until something warms the cache. The tester reproduced this on MySQL 8.0, and it would follow any RDS reboot, failover or minor upgrade.
+- **Fix:** the service tasks' `DATABASE_URL` now ends in `?allowPublicKeyRetrieval=true` (`API_DATABASE_QUERY`, `withDatabaseUrl(command, query)`). The release task's URL is unchanged, because the schema engine fetches the key itself.
+- **Checked:** PrismaMariaDb with that URL connected to the local MySQL and ran a raw and a model query.
+- **Real fix:** TLS with the RDS CA in the image, which stays the I5 follow-up.
+
+**2. Same-commit re-run (tester, medium):** a re-run would have failed pushing an immutable tag. A new step, "Image already pushed for this commit?", skips the build when ECR has the tag; the migrations still run.
+
+**3. Failed first deploy (tester, low–medium):** a failed first deploy leaves `ROLLBACK_COMPLETE` with no outputs. "Read the tag" now refuses anything that isn't a SHA, with a pointer to a new `runbooks/deploy.md` section (delete the empty stack, run again). That replaces passing `ImageTag=None`.
+
+**4. Coverage gap:** `service-stack.test.ts` now runs the API's own `loadEnv` against each task's synthesized environment (`APP_ENV=production`).
+
+**Left as is (low):**
+- Actions are pinned by tag, not SHA.
+- Fixed names collide on a delete-and-recreate of the foundation, which never happens by design.
+- The `None` exit code when the release task can't start: the workflow still fails.
+
+**Gate:** `pnpm run check` (exit code above). `@pedia/infra`: 40 tests.

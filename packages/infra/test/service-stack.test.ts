@@ -51,7 +51,7 @@ describe("PrimolarService", () => {
 
   it("builds DATABASE_URL in the container; the password only ever comes from Secrets Manager (I4)", () => {
     const api = containerOf(template, "primolar-api");
-    expect(api.Command).toEqual(["sh", "-c", 'export DATABASE_URL="mysql://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME" && exec node --enable-source-maps dist/main.mjs']);
+    expect(api.Command).toEqual(["sh", "-c", 'export DATABASE_URL="mysql://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME?allowPublicKeyRetrieval=true" && exec node --enable-source-maps dist/main.mjs']);
     expect(api.Secrets!.map((s) => s.Name).sort()).toEqual(["DB_PASSWORD", "DB_USER"]);
     expect(Object.keys(envOf(api))).not.toEqual(expect.arrayContaining(["DATABASE_URL"]));
     expect(JSON.stringify(api.Environment)).not.toMatch(/PASSWORD|S3_ACCESS_KEY_ID|S3_SECRET_ACCESS_KEY|SEMAPHORE_API_KEY/);
@@ -130,5 +130,16 @@ describe("PrimolarService", () => {
     });
     template.hasResourceProperties("AWS::CloudWatch::Alarm", { MetricName: "HealthyHostCount", Threshold: 1, ComparisonOperator: "LessThanThreshold", EvaluationPeriods: 3 });
     template.hasResourceProperties("AWS::Logs::LogGroup", { LogGroupName: "/primolar/api", RetentionInDays: 90 });
+  });
+
+  it("gives each task an environment the API's own loadEnv accepts at start-up (APP_ENV=production)", async () => {
+    const { loadEnv } = await import("../../../apps/api/src/config/env");
+    for (const family of ["primolar-api", "primolar-api-web"]) {
+      const container = containerOf(template, family);
+      const env = Object.fromEntries(Object.entries(envOf(container)).map(([name, value]) => [name, typeof value === "string" ? value : "resolved-at-deploy"]));
+      const url = /DATABASE_URL="([^"]+)"/.exec(container.Command[2]!)![1]!.replace("$DB_USER", "primolar").replace("$DB_PASSWORD", "x").replace("$DB_HOST", "db.internal").replace("$DB_PORT", "3306").replace("$DB_NAME", "primolar");
+      const parsed = loadEnv({ ...env, DATABASE_URL: url });
+      expect([parsed.APP_ENV, parsed.COOKIE_SECURE, parsed.BACKGROUND_WORK]).toEqual(["production", true, family === "primolar-api"]);
+    }
   });
 });
