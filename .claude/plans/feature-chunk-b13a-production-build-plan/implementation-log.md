@@ -41,3 +41,24 @@
 - The "Zod pipe answers 400" case moved from the unit bundle test to the integration one. The plan's own caveat applied: the operator sign-in's rate limit reads the database before validation, so with no database it answers 500.
 **Gate:** `pnpm run check`: exit 0 (`test/bundle.test.ts` ran, 3 passed). `vitest --config vitest.int.config.ts test/int/bundle.int.test.ts`: 3 passed on MySQL.
 **Notes:** a manual run of `dist/main.mjs` with `METRICS_INTERVAL_S=2` printed EMF lines with `_aws` at the JSON root (pino merges the object), confirming Phase 4's open check. The bundle is ~1.0 MB plus its map.
+
+## Phase 7: Container image and release step — 2026-10-18
+
+**Steps completed:** 7.1, 7.2
+**Files changed:** `apps/api/Dockerfile` (new), `.dockerignore` (new), `apps/api/README.md`
+**Deviations from plan:**
+- **OpenSSL:** `node:22-bookworm-slim` has no libssl. Prisma's schema engine then guessed `openssl-1.1.x` and the release step failed, so the base stage now `apt-get install`s `openssl`, and the runtime stage is `FROM base` so it inherits it.
+- **Schema engine:** `pnpm deploy --ignore-scripts` (Q7: accepted by pnpm 9.15) also skipped `@prisma/engines`' download, so `migrate deploy` tried to fetch the engine at run time.
+  - Without `--ignore-scripts`, the api's own postinstall fails in `/out` (`tsconfig.base.json` not found).
+  - `pnpm rebuild` in `/out` needs a lockfile.
+  - So the build runs `@prisma/engines`' `scripts/postinstall.js` directly after the deploy.
+**Gate:** `dockerd` started here.
+- The sandbox's proxy needs its CA in the build, and the Debian mirror is blocked by the network policy. So the local build used a sandbox-only copy of the Dockerfile with two changes: it adds the CA, and its base image is `node:22-bookworm` (same Debian release, OpenSSL included) in place of slim plus `apt-get`.
+- With that copy:
+  - The image runs as uid 1000.
+  - The release step applied all migrations to a fresh `pedia_dental_release`.
+  - `/api/health/live` and `/api/health/ready` both answered 200, and a model query answered 401.
+  - Docker's own health check reported `healthy`, with no error-level log lines.
+- **Not proven here:** the real slim + `apt-get install openssl` path. Phase 8's CI `image` job is its proof.
+**Notes:**
+- Image size: 899 MB for the first slim build, 2.24 GB with the sandbox's full base. `node_modules` holds jsdom, the AWS SDK and SWC; trimming it is a later optimisation, not done here.

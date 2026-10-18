@@ -1,0 +1,15 @@
+**/node_modules
+**/.next
+**/.next-*
+**/dist
+**/var
+**/coverage
+**/test-results
+**/playwright-report
+**/.env
+**/.env.*
+!**/.env.example
+.git
+.claude
+apps/web
+!apps/web/package.json
