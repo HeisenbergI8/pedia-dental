@@ -20,6 +20,7 @@ export * from "./schemas/auth";
 export * from "./schemas/operator";
 export * from "./schemas/signup";
 export * from "./schemas/subscription";
+export * from "./schemas/payments";
 export * from "./schemas/audit";
 export * from "./schemas/legal";
 export * from "./schemas/portal";

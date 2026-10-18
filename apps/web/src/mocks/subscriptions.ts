@@ -207,6 +207,8 @@ export function subscriptionView(clinicId: string): SubscriptionView {
     cancelledAt: sub.cancelledAt ?? null,
     pausedFor: sub.pause ?? null,
     payments: [...sub.payments].reverse(),
+    receipts: [], // B12 Step 1.3 stopgap: Step 2.2 fills these
+    paymentQr: null,
     today: today(),
   };
 }

@@ -3,6 +3,7 @@ import { PaymentMethod } from "./billing";
 import { AddStaffInput } from "./clinic";
 import { Centavos, Id, IsoDateTime, isoDate } from "./common";
 import { AgreementRecord } from "./legal";
+import { PaymentQrView, ReceiptView } from "./payments";
 import { BranchInput, ClinicAccount, HeadingFont, HexColor, Tier } from "./tenancy";
 
 /** Billing #6: how the clinic will look on day one. */
@@ -62,6 +63,10 @@ export const PriceList = z.object({
 });
 export type PriceList = z.infer<typeof PriceList>;
 
+/** B12 decision 11: each saved change keeps the list in force before its day, so a month is billed at its start's list. */
+export const PriceChange = z.object({ on: isoDate(), before: PriceList });
+export type PriceChange = z.infer<typeof PriceChange>;
+
 /** What a sign-up pays upfront (billing #24), quoted when it is submitted (A2). `vat` is the part of `total` that is VAT. */
 export const AmountDue = z.object({
   setupFee: Centavos,
@@ -115,6 +120,7 @@ export const Signup = SignupInput.extend({
   approval: z.object({ clinicId: Id, at: IsoDateTime }).optional(),
   design: z.object({ status: DesignStatus, deliveredAt: IsoDateTime.optional() }).optional(), // `designed` only
   agreement: AgreementRecord, // privacy #7, #8: carried to the clinic on approval (Platform.agreements)
+  filesDeletedAt: IsoDateTime.optional(), // B12 decision 15: the logo and images deleted 30 days after a rejection
 });
 export type Signup = z.infer<typeof Signup>;
 
@@ -131,6 +137,8 @@ export const SignupStatusView = z.strictObject({
   status: SignupStatus,
   paid: z.boolean(),
   rejectionReason: z.string().nullable(),
+  receipt: ReceiptView.nullable(), // B12 decision 7: the latest receipt sent from this page
+  paymentQr: PaymentQrView.nullable(), // B12 decision 23
 });
 export type SignupStatusView = z.infer<typeof SignupStatusView>;
 

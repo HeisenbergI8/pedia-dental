@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Centavos, Id, IsoDate, IsoDateTime } from "./common";
+import { PaymentQrView, ReceiptView } from "./payments";
 import { UpfrontPayment } from "./signup";
 import { Tier } from "./tenancy";
 
@@ -68,6 +69,8 @@ export const SubscriptionView = z.strictObject({
   cancelledAt: IsoDateTime.nullable(),
   pausedFor: SubscriptionPause.nullable(),
   payments: z.array(SubscriptionPayment), // newest first
+  receipts: z.array(ReceiptView), // B12: this clinic's receipts, newest first (decisions 6, 21)
+  paymentQr: PaymentQrView.nullable(), // B12 decision 23: null until the operator adds one
   today: IsoDate, // the server's date, so a form's "paid on" default follows the demo clock
 });
 export type SubscriptionView = z.infer<typeof SubscriptionView>;

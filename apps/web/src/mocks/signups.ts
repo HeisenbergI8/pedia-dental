@@ -152,6 +152,8 @@ export const statusView = (s: Signup): SignupStatusView => ({
   status: s.status,
   paid: !!s.payment,
   rejectionReason: s.rejection?.reason ?? null,
+  receipt: null, // B12 Step 1.3 stopgap: Step 2.2 fills these
+  paymentQr: null,
 });
 
 /** The sign-up a clinic was made from; undefined for the two seeded clinics, which predate sign-ups. */

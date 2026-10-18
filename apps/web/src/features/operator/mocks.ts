@@ -1,5 +1,6 @@
 import { http, HttpResponse } from "msw";
 import {
+  TIER_LIMITS,
   ChangeTierInput,
   CreateAccountInput,
   OperatorLoginInput,
@@ -48,7 +49,12 @@ export function overviewOf(clinicId: string): AccountOverview {
   return {
     account: { id, name, contactEmail, tier, status },
     owner: owner ? { staffId: owner.id, name: owner.fullName, email: staffEmail(owner) } : null,
-    usage: { branches, staffLogins, patients: tenant.patients.length },
+    usage: {
+      branches, staffLogins, patients: tenant.patients.length,
+      // B12 Step 1.3 stopgap: the real counts come with Step 2.5 (mocks/allowances.ts).
+      storage: { inUse: 0, limit: TIER_LIMITS[tier].storageBytes },
+      texts: { inUse: 0, limit: TIER_LIMITS[tier].textParts },
+    },
     design: design ?? null,
     look: design ? { brandColor: account.brandColor, headingFont: account.headingFont ?? null, hasLogo: !!account.logoRef } : null,
     // Privacy #10: the agreement in force and a count of patients without consent. Never a name (#25).
