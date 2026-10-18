@@ -102,7 +102,7 @@ export class FoundationStack extends Stack {
       databaseName: NAMES.databaseName,
       // I4: the password goes into a URL inside sh double quotes, so it must never hold these.
       credentials: rds.Credentials.fromGeneratedSecret(NAMES.databaseUser, {
-        secretName: "primolar/database",
+        secretName: NAMES.databaseSecret,
         excludeCharacters: " %+~`#$&*()|[]{}:;<>?!'/@\"\\",
       }),
       storageType: rds.StorageType.GP3,
@@ -140,7 +140,7 @@ export class FoundationStack extends Stack {
     });
     new budgets.CfnBudget(this, "Budget", {
       budget: {
-        budgetName: "primolar-monthly",
+        budgetName: NAMES.budget,
         budgetType: "COST",
         timeUnit: "MONTHLY",
         budgetLimit: { amount: settings.monthlyBudgetUsd, unit: "USD" },

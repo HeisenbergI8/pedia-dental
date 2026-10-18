@@ -16,6 +16,8 @@ export const NAMES = {
   githubEnvironment: "production",
   databaseName: "primolar",
   databaseUser: "primolar",
+  databaseSecret: "primolar/database",
+  budget: "primolar-monthly",
 } as const;
 
 export const REGION = "ap-southeast-1";

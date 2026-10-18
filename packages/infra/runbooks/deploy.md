@@ -26,7 +26,10 @@
 **Infrastructure changes:**
 - Changes to `PrimolarService` (in `packages/infra/src/service-stack.ts` or `cdk.json`) go out with the next deploy
   run.
-- Changes to `PrimolarFoundation` are never deployed by the workflow. Run `cdk diff PrimolarFoundation` first. Any
+- Changes to `PrimolarFoundation` are never deployed by the workflow. While `PrimolarService` exists, CloudFormation
+  refuses a foundation change that alters a value the service imports (the certificate, the database endpoint and its
+  secret, the bucket, the task security group, the public subnets): `cdk diff` shows it as an export in use. To change
+  one, first deploy `PrimolarService` without the import (or delete it in a maintenance window), then the foundation. Run `cdk diff PrimolarFoundation` first. Any
   line that says the database will be **replaced** means stop and ask. Then run `cdk deploy PrimolarFoundation`.
 
 **First deploy only:** the stack is created on the new image about a minute before the first migration. One

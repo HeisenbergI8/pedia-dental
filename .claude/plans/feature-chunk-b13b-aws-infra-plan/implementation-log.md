@@ -5,7 +5,7 @@
 **Steps completed:** 1.1, 1.2, 2.1, 2.2, 3.1, 3.2, 3.3
 **Files changed:** `packages/infra/{package.json,tsconfig.json,vitest.config.mts,cdk.json}`, `src/{config,foundation-stack,service-stack,primolar}.ts`, `bin/app.ts`, `test/{config,foundation-stack,service-stack,app}.test.ts`, `test/support/{settings,stacks}.ts`, `.gitignore` (`cdk.out`), `pnpm-lock.yaml`
 **Deviations from plan:**
-- **Q4 answered:** CloudFormation's own validation refuses `EngineVersion: "8.4"`; it lists 8.4.3–8.4.11. The engine is pinned to `MysqlEngineVersion.VER_8_4_10`, the newest this aws-cdk-lib knows, and `autoMinorVersionUpgrade` stays on. The test expects `"8.4.10"`.
+- **Q4 answered:** CloudFormation's own validation warns that `EngineVersion: "8.4"` is not a valid value (E9006: synth still succeeds, RDS would reject it); it lists 8.4.3–8.4.11. The engine is pinned to `MysqlEngineVersion.VER_8_4_10`, the newest this aws-cdk-lib knows, and `autoMinorVersionUpgrade` stays on. The test expects `"8.4.10"`.
 - **Deploy role and `"*"`:** `grantPullPush` adds `ecr:GetAuthorizationToken` on `"*"`, which AWS requires because that action has no resource-level permissions. The test now pins that this one statement, and only it, uses `"*"`, then applies the plan's no-wildcard rule to the rest.
 - **Cross-stack cycle:** the plan's Phase 3 issue happened. Passing the foundation's `AppSg` to the services put the ALB → task rule in PrimolarFoundation, pointing at PrimolarService's ALB group (`DependencyCycle`). The services now use `ec2.SecurityGroup.fromSecurityGroupId(this, "TaskSg", …)`, so the rule is created in PrimolarService; the plan's ingress assertion holds as written.
 - **Typing:** `smsSecrets` is typed `Record<string, ecs.Secret>`, because the conditional spread didn't typecheck.
@@ -46,3 +46,16 @@
 - The `None` exit code when the release task can't start: the workflow still fails.
 
 **Gate:** `pnpm run check` (exit code above). `@pedia/infra`: 40 tests.
+
+## Auditor fixes — 2026-10-18
+
+The auditor scored 73/100.
+- **High (database connection without TLS):** the same finding as the tester's, fixed above (`API_DATABASE_QUERY`).
+- **"Uncommitted changes" during the audit:** those were the tester fixes, committed as `0111aad`. The scratch `apps/api/zz.ts` was deleted before that commit and never committed.
+- **Q4 wording:** corrected above; "warns" replaces "refuses". 8.4.11 has no aws-cdk-lib constant, and `VER_8_4_10` with `autoMinorVersionUpgrade` stays.
+- **Strong exports:** `runbooks/deploy.md` now says which foundation values the service imports, and what to do before changing one.
+- **Vacuous negative assertion:** the foundation test now checks every inline and standalone ingress rule for a CIDR on 3306, instead of a JSON substring CDK never emits.
+- **Smells:**
+  - `primolar/database` and `primolar-monthly` moved into `NAMES`.
+  - `deploy.yml`'s image tag keeps the literal `primolar-api`; the workflow test pins it against `NAMES.repository`.
+  - The runbooks' repeated describe-stacks helper is left, so each runbook section stays copy-pasteable on its own.

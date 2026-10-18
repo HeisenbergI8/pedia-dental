@@ -34,7 +34,10 @@ describe("PrimolarFoundation", () => {
       IpProtocol: "tcp", FromPort: 3306, ToPort: 3306,
       SourceSecurityGroupId: { "Fn::GetAtt": [Match.stringLikeRegexp("^AppSg"), "GroupId"] },
     });
-    expect(JSON.stringify(template.findResources("AWS::EC2::SecurityGroup"))).not.toContain("0.0.0.0/0\",\"FromPort\":3306");
+    // No group, inline or standalone, opens 3306 to an address range.
+    const inline = Object.values(template.findResources("AWS::EC2::SecurityGroup")).flatMap((g) => (g.Properties.SecurityGroupIngress ?? []) as Record<string, unknown>[]);
+    const standalone = Object.values(template.findResources("AWS::EC2::SecurityGroupIngress")).map((r) => r.Properties as Record<string, unknown>);
+    expect([...inline, ...standalone].filter((rule) => rule.FromPort === 3306 && (rule.CidrIp || rule.CidrIpv6))).toEqual([]);
   });
 
   it("generates a password that is safe in a URL and inside sh double quotes (I4)", () => {
