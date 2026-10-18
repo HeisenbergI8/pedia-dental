@@ -13,6 +13,7 @@ import {
   isStaffRole,
   limitMessage,
   LOGO_RULES,
+  manilaMonth,
   logoProblem,
   rolesCan,
   suggestBrandColor,
@@ -31,6 +32,7 @@ import { currentAccount, currentClinicId, db, persist } from "@/mocks/db";
 import { emailTaken, newPin, staffEmail, temporaryPassword } from "@/mocks/demo-accounts";
 import { currentNotice, noticeView } from "@/mocks/privacy";
 import { subscriptionView } from "@/mocks/subscriptions";
+import { today } from "@/mocks/clock";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 const refuse = (status: 400 | 403 | 404 | 409 | 413, message: string) => new HttpResponse(message, { status });
@@ -49,6 +51,10 @@ function usage(): ClinicUsage {
     tier,
     branches: { inUse: inUse.branches, limit: TIER_LIMITS[tier].branches },
     staffLogins: { inUse: inUse.staffLogins, limit: TIER_LIMITS[tier].staffLogins },
+    // B12 Step 1.1 stopgap: the real counts come with Step 2.5 (mocks/allowances.ts).
+    storage: { inUse: 0, limit: TIER_LIMITS[tier].storageBytes },
+    texts: { inUse: 0, limit: TIER_LIMITS[tier].textParts },
+    month: manilaMonth(today()),
   };
 }
 

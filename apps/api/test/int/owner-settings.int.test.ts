@@ -53,7 +53,7 @@ const newcomer = (email: string): AddStaffInput => ({ fullName: "Nora Ramos", em
 describe("Small tier at its limits (done-when)", () => {
   it("shows Ngiti at 1 of 1 branches and 5 of 5 logins", async () => {
     const usage = await ok(call("get", "/clinic/usage", await as(NGITI_OWNER)), ClinicUsage);
-    expect(usage).toEqual({ tier: "small", branches: { inUse: 1, limit: 1 }, staffLogins: { inUse: 5, limit: 5 } });
+    expect(usage).toMatchObject({ tier: "small", branches: { inUse: 1, limit: 1 }, staffLogins: { inUse: 5, limit: 5 } });
   });
 
   it("refuses a second branch and a sixth login, naming the limit and how to lift it", async () => {

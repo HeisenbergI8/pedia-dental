@@ -48,3 +48,4 @@ export * from "./domain/signup";
 export * from "./domain/subscription";
 export * from "./domain/legal";
 export * from "./domain/portal";
+export * from "./domain/allowance";

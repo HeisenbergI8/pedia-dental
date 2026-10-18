@@ -1,5 +1,8 @@
 import { ConflictException } from "@nestjs/common";
 import { TIER_LIMITS, accountUsage, canAddUnder, limitMessage, type ClinicUsage, type Tier } from "@pedia/shared";
+
+/** What the plan's storage and text allowances count (B12 decisions 1, 2, 17, 18): bytes stored, billed parts in `month`. */
+export type AllowanceUse = { storageBytes: number; textParts: number; month: string };
 import type { Tx } from "../prisma/transaction";
 
 /** The two limits a tier sets (decisions #5, #6). Cross-branch views are a report rule, not a count. */
@@ -16,10 +19,13 @@ export async function countUsage(db: Pick<Tx, "branch" | "staff">): Promise<Reco
 }
 
 /** GET /clinic/usage: the mock's usage(). `null` limit = unlimited. */
-export const usageOf = (tier: Tier, inUse: Record<Limit, number>): ClinicUsage => ({
+export const usageOf = (tier: Tier, inUse: Record<Limit, number>, use: AllowanceUse): ClinicUsage => ({
   tier,
   branches: { inUse: inUse.branches, limit: TIER_LIMITS[tier].branches },
   staffLogins: { inUse: inUse.staffLogins, limit: TIER_LIMITS[tier].staffLogins },
+  storage: { inUse: use.storageBytes, limit: TIER_LIMITS[tier].storageBytes },
+  texts: { inUse: use.textParts, limit: TIER_LIMITS[tier].textParts },
+  month: use.month,
 });
 
 /** The refusal when one more would go over the limit, else undefined. Only ever blocks the next one (decision #9). */

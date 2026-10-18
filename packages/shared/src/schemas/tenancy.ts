@@ -88,7 +88,18 @@ export type UpdateBrandingInput = z.infer<typeof UpdateBrandingInput>;
 export const BranchInput = Branch.pick({ name: true, address: true, phone: true, openingHours: true });
 export type BranchInput = z.infer<typeof BranchInput>;
 
-const Allowance = z.object({ inUse: z.number().int().nonnegative(), limit: z.number().int().positive().nullable() });
-/** GET /clinic/usage: what counts toward the tier's limits now (decisions #10, #37), beside the limits. null = unlimited. */
-export const ClinicUsage = z.object({ tier: Tier, branches: Allowance, staffLogins: Allowance });
+export const Allowance = z.object({ inUse: z.number().int().nonnegative(), limit: z.number().int().positive().nullable() });
+export type Allowance = z.infer<typeof Allowance>;
+/**
+ * GET /clinic/usage: what counts toward the tier's limits now (decisions #10, #37), beside the limits. null = unlimited.
+ * B12: storage in bytes and texts in billed parts for `month` (the Manila calendar month, decisions 17, 18).
+ */
+export const ClinicUsage = z.object({
+  tier: Tier,
+  branches: Allowance,
+  staffLogins: Allowance,
+  storage: Allowance,
+  texts: Allowance,
+  month: z.string().regex(/^\d{4}-\d{2}$/),
+});
 export type ClinicUsage = z.infer<typeof ClinicUsage>;

@@ -37,4 +37,5 @@ export const FAILURE = {
   rejected: "The SMS provider refused this number",
   gaveUp: "Couldn't be sent after 4 tries",
   notConfirmed: "Not confirmed by the SMS provider",
+  textLimit: "Monthly text limit reached", // B12 decision 19: logged, never sent later
 } as const;
