@@ -6,7 +6,7 @@ import { USERS, signIn } from "./support/users";
  * database (`db:seed` refuses a seeded one):
  *   CREATE DATABASE pedia_dental_e2e_b9; then in apps/api: DATABASE_URL=… pnpm db:deploy && DEMO_LOGINS=true pnpm db:seed
  *   DATABASE_URL=… PORT=4130 DEMO_LOGINS=true COOKIE_SECURE=false BACKGROUND_WORK=true OUTBOX_POLL_MS=500 pnpm dev:api
- *   NEXT_DIST_DIR=.next-hybrid NEXT_PUBLIC_API_MOCKING=hybrid API_PROXY_TARGET=http://localhost:4130 pnpm exec next dev --port 3180
+ *   NEXT_DIST_DIR=.next-hybrid NEXT_PUBLIC_API_MOCKING=disabled API_PROXY_TARGET=http://localhost:4130 pnpm exec next dev --port 3180
  * No SEMAPHORE_API_KEY: the log driver sends. Texts outside 8 AM–8 PM Manila stay "Queued", so checks accept either.
  * Re-runnable against one database: every run registers its own children. 7 sign-ins a run.
  */

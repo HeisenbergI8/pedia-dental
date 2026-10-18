@@ -2,9 +2,9 @@ import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { USERS, signIn, signInOperator } from "./support/users";
 
 /**
- * B2d: sign-in against apps/api through a `hybrid` web server; every other route stays on MSW, which learns who is
- * signed in from the pd_mock_session / pd_mock_operator bridge (lib/session-cookies.ts). Skipped unless E2E_API=1, so
- * the usual run against the MSW demo is unchanged. Both servers are started by hand: the command block in
+ * B2d: sign-in against apps/api. Since B13c1 the gate runs against a `disabled` web (no MSW, no bridge cookie); run it
+ * once more with E2E_MOCKING=hybrid against a `hybrid` web to check the pd_mock_session / pd_mock_operator bridge
+ * (lib/session-cookies.ts). Skipped unless E2E_API=1, so the usual run against the MSW demo is unchanged. Both servers are started by hand: the command block in
  * .claude/plans/feature-chunk-b2d-web-cutover-plan/ (Step 4.1). The Ipin owner is left out: its grace period and
  * pause are the mock's alone until B12.
  */
@@ -13,11 +13,16 @@ test.describe.configure({ timeout: 120_000 });
 
 const accountMenu = (page: Page) => page.getByRole("button", { name: /Account menu/ }).first();
 
-/** The API's session cookie (httpOnly: no script wrote it) and the bridge naming the same login, for MSW. */
+/** The web's NEXT_PUBLIC_API_MOCKING for this run (B13c1): `disabled` by default, `hybrid` to test the bridge. */
+const MODE = process.env.E2E_MOCKING === "hybrid" ? "hybrid" : "disabled";
+
+/** The API's session cookie (httpOnly: no script wrote it); in hybrid, the bridge naming the same login, for MSW. */
 async function expectApiSession(context: BrowserContext, bridge: RegExp, real = "pd_session", mock = "pd_mock_session") {
   const jar = await context.cookies();
   expect(jar.find((c) => c.name === real), real).toMatchObject({ httpOnly: true });
-  expect(jar.find((c) => c.name === mock)?.value, mock).toMatch(bridge);
+  const mine = jar.find((c) => c.name === mock);
+  if (MODE === "hybrid") expect(mine?.value, mock).toMatch(bridge);
+  else expect(mine, `${mock} is written only in hybrid`).toBeUndefined();
 }
 
 /** Past sign-in, and still there after a reload: one 401 from MSW (no bridge) would sign the user out to /login. */

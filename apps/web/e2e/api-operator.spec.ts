@@ -6,7 +6,7 @@ import { USERS, signIn, signInOperator } from "./support/users";
  * Start-up (B12 plan Step 9.2), on a fresh database with B12's rows:
  *   CREATE DATABASE pedia_dental_e2e_b12; then in apps/api: DATABASE_URL=… pnpm db:deploy && DEMO_LOGINS=true pnpm db:seed
  *   DATABASE_URL=… PORT=4150 DEMO_LOGINS=true COOKIE_SECURE=false STORAGE_DIR=… STORAGE_LINK_SECRET=… WEB_URL=http://localhost:3190 pnpm dev:api
- *   NEXT_DIST_DIR=.next-hybrid NEXT_PUBLIC_API_MOCKING=hybrid API_PROXY_TARGET=http://localhost:4150 pnpm exec next dev --port 3190
+ *   NEXT_DIST_DIR=.next-hybrid NEXT_PUBLIC_API_MOCKING=disabled API_PROXY_TARGET=http://localhost:4150 pnpm exec next dev --port 3190
  * Re-runnable on one database: each run signs up its own clinic name. Clear `RateLimitCounter` between specs (sign-ups
  * are 5 an hour per address; sign-ins 20 in 5 minutes). No test moves the clock.
  */

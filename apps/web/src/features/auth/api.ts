@@ -10,9 +10,9 @@ import { ROLE_HOME } from "./access";
 
 export const authKeys = { demo: ["auth", "demo-accounts"] as const, signIn: ["auth", "sign-in"] as const };
 
-/** Prototype only: the one-click accounts. Derived from the data, so refetched like any other query. */
+/** The one-click accounts: MSW, or an API with DEMO_LOGINS (else 404, B13c1 E4). Derived from the data, so refetched like any other query. */
 export function useDemoAccounts() {
-  return useQuery({ queryKey: authKeys.demo, queryFn: () => api("/auth/demo-accounts", DemoAccounts) });
+  return useQuery({ queryKey: authKeys.demo, queryFn: () => api("/auth/demo-accounts", DemoAccounts), retry: false });
 }
 
 /**

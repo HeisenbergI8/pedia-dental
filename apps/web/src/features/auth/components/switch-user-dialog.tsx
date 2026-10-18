@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useActiveBranch, useStaff } from "@/features/clinic/api";
-import { env } from "@/lib/env";
 import { ROLE_LABEL, useSession } from "../access";
 import { useDemoAccounts, useSwitchUser } from "../api";
 
@@ -28,7 +27,8 @@ export function SwitchUserDialog({ open, onOpenChange }: { open: boolean; onOpen
   // Only people who work at this device's branch (decision #24). The Owner works at every branch.
   const others = (staff.data ?? []).filter((s) => s.id !== session?.user.staffId && !!branch && worksAt(s, branch));
   const chosen = others.find((s) => s.id === form.watch("accountId"));
-  const demoPins = env.apiMocking ? (demo.data?.accounts ?? []).filter((a) => a.pin && others.some((s) => s.id === a.id)) : [];
+  // B13c1 E4: present whenever the backend is a demo (MSW, or an API with DEMO_LOGINS).
+  const demoPins = (demo.data?.accounts ?? []).filter((a) => a.pin && others.some((s) => s.id === a.id));
 
   const close = (next: boolean) => {
     if (!next) form.reset();

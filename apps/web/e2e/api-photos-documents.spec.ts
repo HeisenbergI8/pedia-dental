@@ -5,7 +5,7 @@ import { USERS, signIn } from "./support/users";
  * B10: photos and documents against apps/api in `hybrid`. Skipped unless E2E_API=1. Start-up (B10 plan Step 9.2), fresh database:
  *   CREATE DATABASE pedia_dental_e2e_b10; then in apps/api: DATABASE_URL=… pnpm db:deploy && DEMO_LOGINS=true STORAGE_DIR=var/e2e-b10 pnpm db:seed
  *   DATABASE_URL=… PORT=4150 DEMO_LOGINS=true COOKIE_SECURE=false STORAGE_DIR=var/e2e-b10 STORAGE_LINK_SECRET=<32+ chars> pnpm dev:api
- *   NEXT_DIST_DIR=.next-hybrid NEXT_PUBLIC_API_MOCKING=hybrid API_PROXY_TARGET=http://localhost:4150 pnpm exec next dev --port 3190
+ *   NEXT_DIST_DIR=.next-hybrid NEXT_PUBLIC_API_MOCKING=disabled API_PROXY_TARGET=http://localhost:4150 pnpm exec next dev --port 3190
  * Local-disk driver (no S3_BUCKET): links are /api/files/<token> through Next's proxy. Re-runnable on one database: each
  * run registers its own children. 6 sign-ins a run.
  */

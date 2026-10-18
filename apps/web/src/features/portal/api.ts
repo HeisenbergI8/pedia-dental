@@ -6,7 +6,6 @@ import { DemoTexts, PasswordLink, PortalAccess, Session, type PasswordResetInput
 import { ROLE_HOME } from "@/features/auth/access";
 import { messageKeys } from "@/features/messages/api";
 import { api } from "@/lib/api-client";
-import { env } from "@/lib/env";
 import { useSessionStore } from "@/stores/session-store";
 
 export const portalKeys = { access: (patientId: string) => ["portal-access", patientId] as const, demoTexts: ["auth", "demo-texts"] as const };
@@ -61,7 +60,7 @@ export function useRequestReset() {
   });
 }
 
-/** Prototype and demo deployments only (E6): the links the demo would have texted. */
-export function useDemoTexts() {
-  return useQuery({ queryKey: portalKeys.demoTexts, queryFn: () => api("/auth/demo-texts", DemoTexts), enabled: env.apiMocking });
+/** Demo deployments only (B11 E6): the links the demo would have texted. `enabled` once the backend is known to be a demo. */
+export function useDemoTexts(enabled: boolean) {
+  return useQuery({ queryKey: portalKeys.demoTexts, queryFn: () => api("/auth/demo-texts", DemoTexts), enabled });
 }

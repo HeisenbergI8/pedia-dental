@@ -7,6 +7,8 @@ import { PrimolarLogo } from "@/components/brand";
 import { FormField } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useDemoAccounts } from "@/features/auth/api";
+import { demoHelp } from "@/features/auth/demo";
 import { env } from "@/lib/env";
 import { useOperatorSignIn } from "../api";
 
@@ -14,6 +16,7 @@ import { useOperatorSignIn } from "../api";
 export function OperatorLogin() {
   const router = useRouter();
   const signIn = useOperatorSignIn();
+  const demo = useDemoAccounts();
   const form = useForm<OperatorLoginInput>({ resolver: zodResolver(OperatorLoginInput), defaultValues: { email: "", password: "" } });
   const submit = form.handleSubmit((input) => signIn.mutate(input, { onSuccess: () => router.replace("/operator") }));
 
@@ -41,7 +44,7 @@ export function OperatorLogin() {
             </form>
           </FormProvider>
         </div>
-        {env.apiMocking && (
+        {demoHelp(env.apiMockingMode, demo) === "show" && (
           <p className="text-center text-sm text-ink-muted">
             Demo sign-in: <span className="font-mono">operator@primolar.demo</span> · <span className="font-mono">pass123</span>
           </p>

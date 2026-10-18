@@ -5,7 +5,7 @@ import { USERS, signIn } from "./support/users";
  * B11: parent portal accounts against apps/api in `hybrid`. Skipped unless E2E_API=1. Start-up (B11 plan Step 9.2), fresh database:
  *   CREATE DATABASE pedia_dental_e2e_b11; then in apps/api: DATABASE_URL=… pnpm db:deploy && DEMO_LOGINS=true pnpm db:seed
  *   DATABASE_URL=… PORT=4150 DEMO_LOGINS=true COOKIE_SECURE=false WEB_URL=http://localhost:3190 pnpm dev:api
- *   NEXT_DIST_DIR=.next-hybrid NEXT_PUBLIC_API_MOCKING=hybrid API_PROXY_TARGET=http://localhost:4150 pnpm exec next dev --port 3190
+ *   NEXT_DIST_DIR=.next-hybrid NEXT_PUBLIC_API_MOCKING=disabled API_PROXY_TARGET=http://localhost:4150 pnpm exec next dev --port 3190
  * The API's worker sends the texts (log driver); DEMO_LOGINS lets /auth/demo-texts show their links. Re-runnable on one
  * database: each run registers its own child on its own number. 6 sign-ins and 2 link sign-ins a run.
  */
