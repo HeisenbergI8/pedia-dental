@@ -10,3 +10,13 @@
 - `test/app.test.ts` passed `CORS_ORIGIN: ""`, which the new rule refuses; dropped it (the default applies).
 **Gate:** `pnpm run check`: exit 0.
 **Notes:** the trust-proxy test pins Express's rightmost-hop behaviour; the real hop count is B13b's Q3.
+
+## Phases 3–4: Liveness and readiness; metrics and error tracking — 2026-10-18
+
+**Steps completed:** 3.1, 3.2, 4.1, 4.2
+**Files changed:** `apps/api/src/health/{health.controller,readiness}.ts`, `src/app.module.ts`, `src/auth/access-rules{,.test}.ts`, `test/health.test.ts` (new), `test/int/health.int.test.ts`, `src/metrics/{metrics.service,metrics.middleware,metrics.module,metrics.service.test}.ts` (new), `src/common/{process-errors,process-errors.test}.ts` (new), `src/common/http-error.filter.ts`, `src/main.ts`
+**Deviations from plan:**
+- `loggable` moved from `http-error.filter.ts` into `common/process-errors.ts` beside `errorFingerprint` (the plan's no-cycle option), so the filter imports both and nothing imports the filter.
+- `MetricsMiddleware` is applied in the same `consumer.apply(...)` call as `RequestContextMiddleware` (same routes, runs after it).
+**Gate:** `pnpm run check`: exit 0. `vitest --config vitest.int.config.ts test/int/health.int.test.ts`: 3 passed on MySQL 3307.
+**Notes:** the route template includes the `/api` prefix under Nest 12 (`GET /api/patients/:id` pinned in `metrics.service.test.ts`). `logging.test.ts` needed no change. EMF's `_aws` at the root of a real pino line is still to be eyeballed with `METRICS_INTERVAL_S=5` (Phase 6's bundle run).

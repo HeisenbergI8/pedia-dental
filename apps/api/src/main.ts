@@ -7,7 +7,9 @@ import { Logger } from "nestjs-pino";
 import { z } from "zod";
 import { AppModule } from "./app.module";
 import { loadEnv } from "./config/env";
+import { installProcessHandlers } from "./common/process-errors";
 import { configureHttp } from "./http-setup";
+import { MetricsService } from "./metrics/metrics.service";
 
 if (existsSync(".env")) process.loadEnvFile(".env"); // real env vars win over the file
 z.config({ customError: plainLanguageError });
@@ -15,7 +17,10 @@ z.config({ customError: plainLanguageError });
 const env = loadEnv();
 const app = await NestFactory.create(AppModule.forRoot(env, { background: env.BACKGROUND_WORK }), { bufferLogs: true });
 app.useLogger(app.get(Logger)); // Nest's own Logger (HttpErrorFilter, bootstrap) now writes pino JSON
+const pino = app.get(Logger);
+installProcessHandlers((fields, message) => pino.fatal(fields, message), () => app.get(MetricsService).countUnhandled());
 configureHttp(app, env);
+app.get(MetricsService).start(env.METRICS_INTERVAL_S);
 app.enableShutdownHooks();
 await app.listen(env.PORT);
 app.get(Logger).log(`API listening on http://localhost:${env.PORT}/api`);

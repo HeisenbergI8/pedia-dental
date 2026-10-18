@@ -19,6 +19,7 @@ import { Clock, SystemClock } from "./common/clock";
 import { HttpErrorFilter } from "./common/http-error.filter";
 import { RequestContextMiddleware } from "./common/request-context.middleware";
 import { HealthController } from "./health/health.controller";
+import { Readiness } from "./health/readiness";
 import { BACKGROUND } from "./jobs/job-runner";
 import { JobsModule } from "./jobs/jobs.module";
 import { loggerParams } from "./logging/logger";
@@ -32,6 +33,8 @@ import { StorageModule } from "./storage/storage.module";
 import { PhotosModule } from "./photos/photos.module";
 import { PortalModule } from "./portal/portal.module";
 import { DocumentsModule } from "./documents/documents.module";
+import { MetricsMiddleware } from "./metrics/metrics.middleware";
+import { MetricsModule } from "./metrics/metrics.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { PlatformSettingsModule } from "./platform-settings/platform-settings.module";
 import { SignupsModule } from "./signups/signups.module";
@@ -51,6 +54,7 @@ export class AppModule implements NestModule {
       imports: [
         LoggerModule.forRoot(loggerParams(env, logStream)),
         PrismaModule,
+        MetricsModule,
         JobsModule,
         // Without ScheduleModule, `@Cron` methods are inert: they still run when called (test/int/jobs.int.test.ts).
         ...(background ? [ScheduleModule.forRoot()] : []),
@@ -87,13 +91,14 @@ export class AppModule implements NestModule {
         { provide: BACKGROUND, useValue: background },
         { provide: Clock, useClass: SystemClock },
         { provide: APP_FILTER, useClass: HttpErrorFilter },
+        Readiness,
       ],
       exports: [ENV, Clock, BACKGROUND],
     };
   }
 
-  /** Every route runs inside a request context (CONVENTIONS → Stateless instances). */
+  /** Every route runs inside a request context (CONVENTIONS → Stateless instances), and is timed (B13a metrics). */
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(RequestContextMiddleware).forRoutes({ path: "{*splat}", method: RequestMethod.ALL });
+    consumer.apply(RequestContextMiddleware, MetricsMiddleware).forRoutes({ path: "{*splat}", method: RequestMethod.ALL });
   }
 }
