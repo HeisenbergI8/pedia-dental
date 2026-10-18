@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { addDays, addMonths, format, parseISO } from "date-fns";
 import { USERS, expectSignedIn, signIn, signInOperator } from "./support/users";
 
 /**
@@ -17,6 +18,12 @@ test.describe.configure({ timeout: 180_000 });
 const SLOW = { timeout: 30_000 };
 
 // ---------- helpers (UI only) ----------
+
+/** Ipin's seed is 3 days overdue whatever the date (seed-subscriptions.ts): its due dates, as the screens write them. */
+const manilaToday = parseISO(new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" }));
+const IPIN_DUE = addDays(manilaToday, -3);
+const billingDate = (d: Date) => format(d, "d MMMM yyyy");
+const IPIN = { due: billingDate(IPIN_DUE), payBy: billingDate(addDays(IPIN_DUE, 7)), next: billingDate(addMonths(IPIN_DUE, 1)), after: billingDate(addMonths(IPIN_DUE, 2)) };
 
 async function signInAs(page: Page, email: string) {
   await signIn(page, email);
@@ -214,15 +221,15 @@ test.describe("happy paths", () => {
   test("Primolar records Ipin's overdue payment and the Owner's banner is gone at next sign-in", async ({ page }) => {
     await operatorOpenClinic(page, "Ipin Kids Dental");
     await expect(page.getByText("Overdue, in grace").first()).toBeVisible();
-    await expect(page.getByText(/11 October 2026 · pay by 18 October 2026/)).toBeVisible();
+    await expect(page.getByText(`${IPIN.due} · pay by ${IPIN.payBy}`)).toBeVisible();
     await page.getByRole("button", { name: "Record payment" }).click();
     const dialog = page.getByRole("dialog", { name: "Record payment" });
-    await expect(dialog.getByText(/₱2,500\.00 for the month from 11 October 2026/)).toBeVisible();
+    await expect(dialog.getByText(`₱2,500.00 for the month from ${IPIN.due}`, { exact: false })).toBeVisible();
     await dialog.getByLabel("Reference (optional)").fill("GC-2026-1014");
     await dialog.getByRole("button", { name: "Record payment" }).click();
     await expect(page.getByText("Payment recorded for Ipin Kids Dental")).toBeVisible();
     // The due date stays on the same day of the month.
-    await expect(page.getByText("11 November 2026").first()).toBeVisible();
+    await expect(page.getByText(IPIN.next).first()).toBeVisible();
     await expect(page.getByText("Paid up").first()).toBeVisible();
     await signOutOperator(page);
 
@@ -231,7 +238,7 @@ test.describe("happy paths", () => {
     await openSettings(page, "Plan");
     const panel = planPanel(page);
     await expect(panel.getByText("Paid up", { exact: true })).toBeVisible();
-    await expect(panel.getByText("11 November 2026")).toBeVisible();
+    await expect(panel.getByText(IPIN.next, { exact: true })).toBeVisible();
     await expect(panel.getByRole("table", { name: "Payments to Primolar" }).getByRole("row")).toHaveCount(4);
   });
 
@@ -254,22 +261,31 @@ test.describe("happy paths", () => {
     await expect(planPanel(page).getByText("You're on the Mid plan")).toBeVisible();
   });
 
-  test("Primolar downgrades Bulilit to Small and the Owner sees it waits for the next due date", async ({ page }) => {
+  test("Primolar can't downgrade Bulilit below what it uses (B12 decision 12)", async ({ page }) => {
     await operatorOpenClinic(page, "Bulilit Smiles Pediatric Dental");
     await page.getByRole("combobox", { name: "Plan" }).click();
     await page.getByRole("option", { name: "Small" }).click();
-    await expect(page.getByText(/this clinic is over the limit for/)).toBeVisible();
+    await expect(page.getByText(/the Owner must archive branches or deactivate logins before the plan can go down/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save plan" })).toBeDisabled();
+  });
+
+  test("Primolar moves Ngiti up to Mid and back down, and the Owner sees the downgrade wait for the next due date", async ({ page }) => {
+    await operatorOpenClinic(page, "Ngiti Kids Dental");
+    await page.getByRole("combobox", { name: "Plan" }).click();
+    await page.getByRole("option", { name: "Mid" }).click();
     await page.getByRole("button", { name: "Save plan" }).click();
-    await expect(page.getByText("Bulilit Smiles Pediatric Dental moves to the Small plan on its next due date")).toBeVisible();
+    await expect(page.getByText("Ngiti Kids Dental is on the Mid plan")).toBeVisible();
+    await page.getByRole("combobox", { name: "Plan" }).click();
+    await page.getByRole("option", { name: "Small" }).click();
+    await page.getByRole("button", { name: "Save plan" }).click();
+    await expect(page.getByText("Ngiti Kids Dental moves to the Small plan on its next due date")).toBeVisible();
     await signOutOperator(page);
 
-    await signInAs(page, USERS.owner);
+    await signInAs(page, USERS.ngitiOwner);
     await openSettings(page, "Plan");
     const panel = planPanel(page);
     await expect(panel.getByText("You're on the Mid plan")).toBeVisible();
     await expect(panel.getByText(/Moves to Small on \d{1,2} \w+ \d{4}\. Nothing you have now is turned off\./)).toBeVisible();
-    await page.getByRole("tab", { name: "Staff" }).click();
-    await expect(staffCard(page).getByRole("button", { name: "Add staff" })).toBeEnabled();
   });
 
   test("Bulilit's Owner, paid up on Mid, sees its allowances and no billing banner", async ({ page }) => {
@@ -490,8 +506,8 @@ test.describe("edge cases", () => {
     await page.getByRole("button", { name: "Record payment" }).click();
     await page.getByRole("dialog", { name: "Record payment" }).getByRole("button", { name: "Record payment" }).dblclick();
     await expect(page.getByText("Payment recorded for Ipin Kids Dental").first()).toBeVisible();
-    await expect(page.getByText("11 November 2026").first()).toBeVisible();
-    await expect(page.getByText("11 December 2026")).toHaveCount(0);
+    await expect(page.getByText(IPIN.next).first()).toBeVisible();
+    await expect(page.getByText(IPIN.after)).toHaveCount(0);
   });
 
   test("Escape closes the deactivate dialog without freeing a seat", async ({ page }) => {
@@ -514,7 +530,9 @@ test.describe("edge cases", () => {
     await signInAs(page, USERS.ngitiOwner);
     await openSettings(page);
     await page.getByRole("tab", { name: "Clinic" }).focus();
+    await expect(page.getByRole("tab", { name: "Clinic" })).toBeFocused();
     await page.keyboard.press("ArrowRight");
+    await expect(page.getByRole("tab", { name: "Branches" })).toHaveAttribute("aria-selected", "true");
     await page.keyboard.press("ArrowRight");
     await expect(page.getByRole("tab", { name: "Staff" })).toHaveAttribute("aria-selected", "true");
     const btn = staffRow(page, "Mae Dizon").getByRole("button", { name: "Deactivate" });

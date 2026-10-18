@@ -21,3 +21,15 @@
 - The old "downgrade at the boundary" test was rewritten for decision 12 (refused with `downgradeProblem`), and the overdue-pause test for decision 25 (the Owner keeps a billing-only session; other routes 403).
 - `beforeEach(resetSignupHits)` added to the sign-up test files: the new 5-an-hour limit would otherwise trip across tests.
 **Gate:** `pnpm run check`: green.
+
+## Phase 3: Screens — 2026-10-18
+
+**Steps completed:** 3.1, 3.2, 3.3, 3.4, 3.5 (amendment, decision 25)
+**Files changed:** `apps/web/src/features/payments/{form-data.ts,components/{pay-by-qr,receipt-upload,receipt-list}.tsx}` (new); `features/clinic/{api.ts,components/{plan-panel,usage-banner,billing-only-screen}.tsx}`; `features/signup/{api.ts,components/signup-status-screen.tsx}`; `features/operator/{api.ts,components/{payments-screen,payment-qr-card,operator-shell,price-list-screen,account-detail,subscription-card,signup-detail,allowance}.tsx}`; `app/operator/(console)/payments/page.tsx`; `features/auth/components/access-gate.tsx`; `components/app-shell.tsx`; e2e `payments.spec.ts` (new), `operator.spec.ts`, `plan-limits.spec.ts`, `signup.spec.ts`
+**Deviations from plan:**
+- The MSW e2e for 3.4 is one new file, `e2e/payments.spec.ts` (QR + confirm with the badge, reject + resend from Plan, sign-up receipt, usage tiles, the billing-only screen), not spread over operator/signup/owner specs.
+- `ReceiptList` is shared (`features/payments/components/receipt-list.tsx`) by the Plan panel and the console's subscription card.
+- The console's Plan card shows `downgradeProblem` before saving and disables Save (decision 12); `overLimits` was removed (unused).
+- The billing-only screen uses the clinic's logo, not Primolar's (decision #32's guard), and a "Primolar confirmed it? Open the clinic" link that re-reads /auth/me; the gate also re-reads it on focus.
+- Older e2e fixed on the way: the downgrade stories (now refused; the waiting downgrade is shown on Ngiti), Ipin's hard-coded October dates (now from the seed's "3 days overdue"), a race in signup.spec's first-sign-in helper, and a keyboard test that pressed keys before the tabs were ready.
+**Gate:** `pnpm run check`: green. Playwright on MSW (production build): see the run below.

@@ -172,14 +172,15 @@ async function ownerFirstSignIn(page: Page, email: string, password: string) {
   await page.getByLabel("Temporary password").fill(password);
   await page.getByLabel("New password").fill("masaya-2026!");
   await page.getByRole("button", { name: "Save and continue" }).click();
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 5; i++) {
     const ack = page.getByRole("main").getByRole("button", { name: /^(I understand|Continue|Accept|I agree|Got it)/ });
     const shell = page.getByRole("button", { name: /Account menu$/ }).first();
     await expect(ack.or(shell).first()).toBeVisible({ timeout: 15_000 });
     if (await shell.isVisible()) return;
     const box = page.getByRole("main").getByRole("checkbox").first();
     if (await box.isVisible().catch(() => false)) await box.check();
-    await ack.first().click();
+    // The step just answered can still be on screen for a moment: a button that goes away is not an error, look again.
+    await ack.first().click({ timeout: 5_000 }).catch(() => undefined);
   }
 }
 
@@ -308,7 +309,7 @@ test.describe("happy paths", () => {
     await expect(page).toHaveURL(new RegExp(`/get-started/${HAGIKGIK.reference}$`));
     await expect(page.getByRole("heading", { level: 1, name: `Thank you. ${HAGIKGIK.name} is signed up` })).toBeVisible();
     await expect(page.getByText("Waiting for setup fee")).toBeVisible();
-    await expect(page.getByText("Primolar will send you a payment link.")).toBeVisible();
+    await expect(page.getByText("Primolar will send you payment details.")).toBeVisible(); // B12 decision 23: no QR yet
     await expect(page.getByText(`${HAGIKGIK.name} · Mid plan · Design it for me`)).toBeVisible();
     // A bookmarked status page still opens after a reload.
     await page.reload();
@@ -330,7 +331,7 @@ test.describe("happy paths", () => {
     await page.goto(`/get-started/${HAGIKGIK.reference}`);
     await expect(page.getByRole("heading", { level: 1, name: "Payment received" })).toBeVisible();
     await expect(page.getByText("Paid, ready to approve")).toBeVisible();
-    await expect(page.getByText("Primolar is reviewing your sign-up.")).toBeVisible();
+    await expect(page.getByText(/^Payment confirmed\. Primolar will set up your clinic\./)).toBeVisible();
     await expect(page.getByRole("region", { name: "Paid" })).toBeVisible();
   });
 

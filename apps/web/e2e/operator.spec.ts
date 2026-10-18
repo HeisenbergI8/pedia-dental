@@ -281,16 +281,12 @@ test.describe("happy paths", () => {
     await expect(rowOf(page, "Ngiti Kids Dental")).toContainText("5 of 20");
   });
 
-  test("operator downgrades Bulilit and it waits for the next due date with an over-the-limit note", async ({ page }) => {
+  test("operator can't downgrade Bulilit to Small while it uses more than Small includes (B12 decision 12)", async ({ page }) => {
     await openConsole(page);
     await openClinic(page, "Bulilit Smiles Pediatric Dental");
     await choose(page, page, "Plan", "Small");
-    await expect(page.getByText(/this clinic is over the limit for/)).toBeVisible();
-    await page.getByRole("button", { name: "Save plan" }).click();
-    await expect(page.getByText("Bulilit Smiles Pediatric Dental moves to the Small plan on its next due date")).toBeVisible();
-    await expect(page.getByText(/To Small on/)).toBeVisible();
-    await page.reload();
-    await expect(page.getByText(/To Small on/)).toBeVisible();
+    await expect(page.getByText(/the Owner must archive branches or deactivate logins before the plan can go down/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save plan" })).toBeDisabled();
   });
 
   test("operator pauses Ipin so its Owner can't sign in, then reactivates it", async ({ page }) => {

@@ -9,7 +9,9 @@ import { ErrorState } from "@/components/error-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api-client";
-import { useSignupStatus } from "../api";
+import { PayByQr } from "@/features/payments/components/pay-by-qr";
+import { ReceiptUpload } from "@/features/payments/components/receipt-upload";
+import { useSignupStatus, useUploadSignupReceipt } from "../api";
 import { AmountDueSummary } from "./signup-fields";
 import { SignupFrame } from "./signup-frame";
 
@@ -47,9 +49,9 @@ function Outcome({ view }: { view: SignupStatusView }) {
         <Badge variant="secondary">{signupStatusLabel(view)}</Badge>
         <h1 className="text-3xl font-semibold tracking-tight">{HEADLINE(view)}</h1>
         {view.status === "waiting" && !view.paid && (
-          <p className="text-ink-muted">Primolar will send you a payment link. Once it is paid and Primolar approves your sign-up, your clinic is set up.</p>
+          <p className="text-ink-muted">Pay the amount due below. Once Primolar confirms your payment and approves your sign-up, your clinic is set up.</p>
         )}
-        {view.status === "waiting" && view.paid && <p className="text-ink-muted">Primolar is reviewing your sign-up. Check back here for the result.</p>}
+        {view.status === "waiting" && view.paid && <p className="text-ink-muted">Payment confirmed. Primolar will set up your clinic. Check back here for the result.</p>}
         {view.status === "approved" && (
           <p className="text-ink-muted">
             Primolar gives your Owner a temporary password. They{" "}
@@ -85,6 +87,21 @@ function Outcome({ view }: { view: SignupStatusView }) {
         {view.clinicName} · {TIER_LABEL[view.tier]} plan · {BRANDING_CHOICE_LABEL[view.branding]}
       </p>
       <AmountDueSummary quote={view.quote} title={view.paid ? "Paid" : "Amount due"} />
+      {view.status === "waiting" && !view.paid && <PayNow view={view} />}
     </div>
+  );
+}
+
+/** B12 decisions 5, 7: pay the whole quote by QR, then send the receipt from here. */
+function PayNow({ view }: { view: SignupStatusView }) {
+  const upload = useUploadSignupReceipt(view.reference);
+  return (
+    <section aria-labelledby="pay-heading" className="space-y-3">
+      <h2 id="pay-heading" className="text-lg font-semibold">Pay</h2>
+      {view.receipt?.status !== "pending" && <PayByQr qr={view.paymentQr} amount={view.quote.total} vat={view.quote.vat} />}
+      {(view.paymentQr || view.receipt) && (
+        <ReceiptUpload latest={view.receipt} pending={upload.isPending} error={upload.error?.message} onSubmit={(input, file) => upload.mutate({ input, file })} />
+      )}
+    </section>
   );
 }

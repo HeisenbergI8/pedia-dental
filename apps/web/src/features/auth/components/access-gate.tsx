@@ -12,6 +12,7 @@ import { api } from "@/lib/api-client";
 import { useSessionStore } from "@/stores/session-store";
 import { ROLE_HOME, ROLE_LABEL, useSession } from "../access";
 import { useSignOut } from "../api";
+import { BillingOnlyScreen } from "@/features/clinic/components/billing-only-screen";
 import { AcknowledgeScreen } from "./acknowledge-screen";
 import { ChangePasswordScreen } from "./change-password-screen";
 
@@ -65,7 +66,7 @@ export function RequireSession({ area, children }: { area: "clinic" | "portal"; 
   const refreshUser = useSessionStore((s) => s.refreshUser);
   const me = useQuery({ queryKey: ["session-user", user?.id], queryFn: () => api("/auth/me", SessionUser), enabled: hydrated && !!role, refetchOnWindowFocus: true });
   useEffect(() => {
-    if (me.data && user && me.data.id === user.id && (me.data.mustAcknowledge !== user.mustAcknowledge || me.data.mustChangePassword !== user.mustChangePassword)) refreshUser(me.data);
+    if (me.data && user && me.data.id === user.id && (me.data.mustAcknowledge !== user.mustAcknowledge || me.data.mustChangePassword !== user.mustChangePassword || me.data.billingOnly !== user.billingOnly)) refreshUser(me.data);
   }, [me.data, user, refreshUser]);
 
   if (!hydrated || !role) return <LoadingScreen />;
@@ -81,6 +82,8 @@ export function RequireSession({ area, children }: { area: "clinic" | "portal"; 
   if (user?.mustChangePassword) return <ChangePasswordScreen />;
   // Privacy #9, #20, #21: the Owner's updated terms, a login's confidentiality, a parent's notice: read first (P10).
   if (user?.mustAcknowledge) return <AcknowledgeScreen />;
+  // B12 decision 25: a clinic paused for non-payment; its Owner may only pay.
+  if (user?.billingOnly) return <BillingOnlyScreen />;
   return <>{children}</>;
 }
 

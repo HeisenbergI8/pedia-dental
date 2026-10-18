@@ -12,6 +12,7 @@ import { SectionCard } from "@/components/section-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useOperatorPrices, useSavePrices } from "../api";
+import { PaymentQrCard } from "./payment-qr-card";
 
 /** Pesos as typed: whole or to the centavo, never negative. Blank is refused, never read as ₱0 (a free plan is a typed 0). */
 const Peso = z.coerce
@@ -41,6 +42,7 @@ export function PriceListScreen() {
       {prices.isLoading && <Loading label="Loading the price list" />}
       {prices.error && <ErrorState what="the price list" onRetry={() => void prices.refetch()} />}
       {prices.data && <PriceFields key={JSON.stringify(prices.data)} prices={prices.data} />}
+      <PaymentQrCard />
     </div>
   );
 }

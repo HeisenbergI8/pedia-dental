@@ -6,7 +6,7 @@ import { LoadingScreen, PrimolarLogo } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useOperatorSessionStore } from "@/stores/operator-session-store";
-import { useOperatorSignOut } from "../api";
+import { useOperatorSignOut, useReceiptsToCheck } from "../api";
 
 /** True once the persisted operator session has been read, so a signed-in operator is never bounced to sign-in. */
 function useHydrated() {
@@ -32,14 +32,16 @@ export function RequireOperator({ children }: { children: ReactNode }) {
 const NAV = [
   { href: "/operator", label: "Clinic accounts", match: (p: string) => p === "/operator" || p.startsWith("/operator/accounts") },
   { href: "/operator/signups", label: "Sign-ups", match: (p: string) => p.startsWith("/operator/signups") },
+  { href: "/operator/payments", label: "Payments to check", match: (p: string) => p.startsWith("/operator/payments") },
   { href: "/operator/prices", label: "Price list", match: (p: string) => p.startsWith("/operator/prices") },
 ];
 
-/** Primolar's console frame (decision #32): its own wordmark and colours, never a clinic's. Three areas in the header. */
+/** Primolar's console frame (decision #32): its own wordmark and colours, never a clinic's. Four areas in the header. */
 export function OperatorShell({ children }: { children: ReactNode }) {
   const operator = useOperatorSessionStore((s) => s.session?.operator);
   const signOut = useOperatorSignOut();
   const pathname = usePathname();
+  const waiting = useReceiptsToCheck().data?.length ?? 0;
   return (
     <div className="min-h-screen bg-ground">
       <a
@@ -74,6 +76,13 @@ export function OperatorShell({ children }: { children: ReactNode }) {
                   className={cn("inline-flex h-11 items-center border-b-2 px-3 text-sm font-semibold whitespace-nowrap", here ? "border-brand text-ink" : "border-transparent text-ink-muted hover:text-ink")}
                 >
                   {n.label}
+                  {/* B12 decision 8: how many wait, as a number beside the words; hidden at 0. */}
+                  {n.href === "/operator/payments" && waiting > 0 && (
+                    <span className="ml-1.5 rounded-full bg-brand px-1.5 text-xs text-brand-ink tabular-nums">
+                      {waiting}
+                      <span className="sr-only"> waiting</span>
+                    </span>
+                  )}
                 </Link>
               </li>
             );

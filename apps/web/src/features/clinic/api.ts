@@ -16,11 +16,14 @@ import {
   worksAt,
   type AddStaffInput,
   type BranchInput,
+  type ReceiptUploadInput,
   type SavePrivacyNoticeInput,
   type UpdateBrandingInput,
   type UpdateClinicProfileInput,
 } from "@pedia/shared";
+import { imageFormData } from "@/features/payments/form-data";
 import { api } from "@/lib/api-client";
+import { env } from "@/lib/env";
 import { useSessionStore } from "@/stores/session-store";
 
 /** Reference data changes rarely, so it is cached for the whole session. */
@@ -99,8 +102,8 @@ export function useSwitchBranch() {
 }
 
 /** Seats and open branches against the tier. Owner only. Not cached forever: it changes with every add or archive. */
-export function useClinicUsage() {
-  return useQuery({ queryKey: clinicKeys.usage, queryFn: () => api("/clinic/usage", ClinicUsage) });
+export function useClinicUsage(enabled = true) {
+  return useQuery({ queryKey: clinicKeys.usage, queryFn: () => api("/clinic/usage", ClinicUsage), enabled });
 }
 
 /**
@@ -110,6 +113,18 @@ export function useClinicUsage() {
 export function useSubscription(enabled = true) {
   return useQuery({ queryKey: clinicKeys.subscription, queryFn: () => api("/clinic/subscription", SubscriptionView), enabled });
 }
+
+/** B12 decisions 6, 21: the Owner's receipt for the first unpaid month. The answer is the refreshed subscription. */
+export function useUploadReceipt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ input, file }: { input: ReceiptUploadInput; file: File }) =>
+      api("/clinic/subscription/receipts", SubscriptionView, { method: "POST", body: imageFormData(input, file) }),
+    onSuccess: (view) => qc.setQueryData(clinicKeys.subscription, view),
+  });
+}
+/** For <img> and a "view" link: the browser sends the clinic cookie with it, as with the logo. */
+export const clinicReceiptImageUrl = (id: string) => `${env.apiUrl}/clinic/subscription/receipts/${id}/image`;
 
 const json = (method: string, body: unknown) => ({ method, body: JSON.stringify(body) });
 
