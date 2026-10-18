@@ -35,6 +35,7 @@ import { PortalModule } from "./portal/portal.module";
 import { DocumentsModule } from "./documents/documents.module";
 import { MetricsMiddleware } from "./metrics/metrics.middleware";
 import { MetricsModule } from "./metrics/metrics.module";
+import { OperatorAuditModule } from "./operator-audit/operator-audit.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { PlatformSettingsModule } from "./platform-settings/platform-settings.module";
 import { SignupsModule } from "./signups/signups.module";
@@ -55,6 +56,7 @@ export class AppModule implements NestModule {
         LoggerModule.forRoot(loggerParams(env, logStream)),
         PrismaModule,
         MetricsModule,
+        OperatorAuditModule,
         JobsModule,
         // Without ScheduleModule, `@Cron` methods are inert: they still run when called (test/int/jobs.int.test.ts).
         ...(background ? [ScheduleModule.forRoot()] : []),

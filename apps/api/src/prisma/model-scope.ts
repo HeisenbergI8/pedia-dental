@@ -80,6 +80,7 @@ export const MODEL_SCOPE = {
   SubscriptionLine: "platform",
   InvoiceCounter: "platform",
   PaymentReceipt: "platform",
+  OperatorAuditEvent: "platform",
 } as const satisfies Record<Prisma.ModelName, ModelScope>;
 
 /**
@@ -88,6 +89,8 @@ export const MODEL_SCOPE = {
  */
 export const APPEND_ONLY: ReadonlySet<string> = new Set<Prisma.ModelName>([
   "AuditEvent", "Agreement", "Acknowledgement", "PrivacyNotice",
+  // B13a (F1): the operator's trail.
+  "OperatorAuditEvent",
   // B4: consents are never edited (privacy #12–#17). A change of mind is a new PrivacyChoice row.
   "PatientConsent", "PatientPrivacyConsent", "PrivacyChoice",
   // B5: chart entries (CHUNKS B5). A correction is a new row with `supersedes`.

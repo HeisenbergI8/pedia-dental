@@ -2,6 +2,7 @@ import { Controller, Get, HttpCode, NotFoundException, Put, Req, Res } from "@ne
 import type { PaymentQrView } from "@pedia/shared";
 import type { Request, Response } from "express";
 import { NO_QR_IMAGE, PlatformSettingsService } from "./platform-settings.service";
+import { OperatorAudited } from "../operator-audit/operator-audited";
 
 /** Primolar's payment QR (B12 decisions 5, 23). The image is public: a payment QR is meant to be shared. */
 @Controller()
@@ -16,6 +17,7 @@ export class PaymentQrController {
 
   /** Multipart `data` (PaymentQrInput) and an optional `file`. */
   @Put("operator/payment-qr")
+  @OperatorAudited({ action: "update", record: "Payment QR", detail: "Payment QR saved" })
   @HttpCode(200)
   save(@Req() req: Request): Promise<PaymentQrView> {
     return this.settings.saveQr(req);
