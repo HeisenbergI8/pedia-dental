@@ -451,6 +451,8 @@ model Message {
   @@index([clinicId, appointmentId])
   @@index([clinicId, dueItemId])
   @@index([clinicId, sentAt])
+  /// B12 E9: the month's billed parts are summed by when each text was handed to the provider.
+  @@index([clinicId, dispatchedAt])
 }
 
 /// Demo deployments only (DEMO_LOGINS=true): the sign-in page's one-click accounts, with the PIN shown in the clear,

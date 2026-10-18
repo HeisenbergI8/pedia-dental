@@ -86,3 +86,15 @@
 - Settle isn't written to the audit trail (logged with the clinic id and the patch's keys): the trail holds clinic users, and the mock audits no settle.
 - Billing-only (decision 25): `ClinicIdentity.billingOnly` from the account's status and `Subscription.pause = overdue` and `clinic.manage`; `readOnly` false for it; the guard answers `BILLING_ONLY_MESSAGE` outside `BILLING_ONLY_ROUTES`. Sign-in settles each opened match's clinic, then reads the logins again before the active check.
 **Gate:** `pnpm run check`: green. `test:int`: 50 files, 553 tests green.
+
+## Phase 8: Storage and text allowances, usage — 2026-10-18
+
+**Steps completed:** 8.1, 8.2, 8.3, 8.4
+**Files changed:** `apps/api/src/storage/{storage.service,storage.test}.ts`; `src/message-queue/message-send.handler.ts`; `src/clinic/{clinic.service,clinic.module}.ts`; `prisma/schema.prisma` + `prisma/migrations/20261018120000_b12_message_dispatch_index/` (new: `Message(clinicId, dispatchedAt)`); `test/int/allowances.int.test.ts` (new)
+**Deviations from plan:**
+- The text check's month count (`partsIn`) lives in `message-send.handler.ts` (the handler already writes `Message` in the queue module) rather than on `MessageQueueService`.
+- A refused text answers `OutboxPermanent` (fails at once, no retries), like "no usable number" (decision 19).
+- A new index `Message(clinicId, dispatchedAt)`: the claim sums the month's parts by dispatch time under the account lock.
+- No `message-send.handler.test.ts` unit test: the rule is proven on MySQL (`allowances.int.test.ts`: two reminders at 299/300 parts, an invite past the limit, last month's parts not counted), where a faked Prisma couldn't catch a wrong query.
+- `/clinic/usage`'s expectations in `owner-settings.int.test.ts` already use `toMatchObject` (Phase 1).
+**Gate:** `pnpm run check`: green. `test:int`: 51 files, 558 tests green.
