@@ -422,7 +422,8 @@ BIR-registered invoices and a second step for the operator's sign-in stay later 
 **Split (2026-10-18):** three plans, in order.
 - ✅ **B13a: production build, hardening and in-code operations** (done 2026-10-18,
   `.claude/plans/feature-chunk-b13a-production-build-plan/`).
-- **B13b:** AWS infrastructure as code (AWS CDK in TypeScript, `packages/infra`), deploy and runbooks.
+- ✅ **B13b: AWS infrastructure as code, deploy and runbooks** (done 2026-10-18,
+  `.claude/plans/feature-chunk-b13b-aws-infra-plan/`). The deploy to AWS is the owner's: `packages/infra/runbooks/`.
 - **B13c:** mocks off, Data Privacy Act operations, the load test. This closes B13's "Done when".
 
 **Decided (2026-10-18):**

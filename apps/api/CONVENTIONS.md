@@ -6,7 +6,8 @@ The Primolar backend. It replaces the browser mocks (MSW) in `apps/web` **endpoi
 feature code in the web app**. The product, the users and the domain are the ones in the root `CONVENTIONS.md`
 and `ROADMAP.md`; read those first. This file covers only how the API is built.
 
-**Current phase: B1–B12 and B13a done** (2026-10-18); B13b (AWS infrastructure) is next. B13a added the production
+**Current phase: B1–B12, B13a and B13b done** (B13b: AWS CDK in `packages/infra`, the deploy workflow and runbooks;
+the AWS deploy itself is the owner's). B13c (mocks off, privacy, load test) is next. B13a added the production
 build (`build.mjs`), the image (`Dockerfile`), `APP_ENV`, helmet and `trust proxy`, liveness and readiness probes,
 EMF metrics, error fingerprints and the operator's audit trail. The runtime core (request context, `Clock`, logs, tenant scoping,
 transactions, audit), `@pedia/seed`, the `test:int` suite on MySQL and CI, identity, sessions and the access guard,
@@ -288,8 +289,9 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **`identityOf(req)`** is set only where the guard loaded a clinic session (clinic routes, and `/auth/*` when a cookie
   was presented).
 - **Integration tests that sign in repeatedly** clear `RateLimitCounter` in `beforeEach`: the limit counts per address.
-- **Behind a proxy, set `TRUST_PROXY_HOPS`** (1 behind the ALB; the real count behind Vercel → ALB is B13b's), or every
-  client shares one rate-limit bucket. `configureHttp` (`http-setup.ts`) applies it with helmet and CORS, in `main.ts`
+- **Behind a proxy, set `TRUST_PROXY_HOPS`** (1 behind the ALB alone; behind Vercel → ALB it defaults to 2 and is
+  measured at go-live: `packages/infra/runbooks/first-time-setup.md` step 10), or every client shares one rate-limit
+  bucket. `configureHttp` (`http-setup.ts`) applies it with helmet and CORS, in `main.ts`
   and both test apps.
 - **`APP_ENV` other than `local` refuses dev defaults:** https `CORS_ORIGIN` and `WEB_URL`, secure cookies and
   `S3_BUCKET` are required; `production` also refuses `DEMO_LOGINS`. `CORS_ORIGIN` entries must be exact origins.
@@ -357,8 +359,9 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **`StorageService` writes the `StoredFile` ledger** (every put and delete), so unit tests that build `StorageModule`
   must provide `PrismaService` and `Clock`. Logos and patient photos stored before B10 have no ledger row.
 - **The S3 bucket stays private** (Block Public Access, SSE-S3, no CORS: the browser only follows links), with
-  versioning on and no lifecycle expiry (nothing is deleted on purpose), and the API's IAM role limited to
-  `s3:PutObject`/`GetObject`/`DeleteObject` on `clinics/*`. A presigned link names the download file (the child's name)
+  versioning on and no expiry of current files (nothing is deleted on purpose; old versions go after 35 days), and
+  the API's IAM role limited to `s3:PutObject`/`GetObject`/`DeleteObject` on `clinics/*` and `platform/*`, plus
+  `s3:ListBucket` so a missing key answers `NoSuchKey`, not 403 (B13b, `packages/infra/src/service-stack.ts`). A presigned link names the download file (the child's name)
   in `response-content-disposition`; it goes only to the signed-in browser, never to our logs. Presigned
   URLs need the host clock NTP-synced. Credentials: both `S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY` or neither (the
   SDK's default chain, an IAM role in production).
@@ -433,8 +436,9 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **The ledger row now comes before the file** (B12 E8): `StorageService.store` checks the plan's storage under the
   account lock and inserts the `StoredFile` row, then stores the file and removes the row if that fails. A crash between
   leaves an over-count, never an uncounted file.
-- **The S3 role must allow `platform/*` as well as `clinics/*`** before go-live: the QR, sign-up files and receipts live
-  there (local disk works without it).
+- **The S3 role allows `platform/*` as well as `clinics/*`** (B13b): the QR, sign-up files and receipts live there.
+  A new key prefix needs the same grant in `packages/infra/src/service-stack.ts`, or S3 answers 403 in production
+  while local disk works.
 - **B12's jobs:** `subscriptions.settle` at 00:05 Manila (also run at every successful sign-in, before the active check)
   and `signups.purge-rejected-files` at 03:15 Manila, 30-minute leases.
 - **Sign-ups (5) and sign-up receipts (10) are limited per address per rolling hour** (`RATE_LIMITS.signup`,
