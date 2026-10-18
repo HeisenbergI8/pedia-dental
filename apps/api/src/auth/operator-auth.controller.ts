@@ -43,7 +43,7 @@ export class OperatorAuthController {
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const token = readCookie(req.headers.cookie, OPERATOR_COOKIE);
     // The guard set operatorId from a live pd_operator; a stale cookie records nothing.
-    if (requireContext().operatorId) await this.operatorAudit.record("sign_out", "Console", "Signed out");
+    if (requireContext().operatorId) await this.operatorAudit.tryRecord("sign_out", "Console", "Signed out");
     if (token) await this.auth.operatorLogout(token);
     res.clearCookie(OPERATOR_COOKIE, sessionCookieOptions(this.env));
     return {};

@@ -95,3 +95,28 @@
 - `Access-Control-Allow-Credentials` is sent to denied origins; it is harmless without an allow-origin header.
 
 **Gate:** `pnpm run check`: exit 0.
+
+## Auditor fixes — 2026-10-18
+
+The auditor scored 77/100. Each finding and what was done:
+- **"Uncommitted edits appeared during the audit":** these were the tester fixes above, committed as `11e198a`.
+- **Draining unobservable, X-Frame-Options:** fixed in `11e198a` (Tester fixes).
+- **Image and CI jobs never run (high):** `api.yml` runs on pull requests and on pushes to `master`, not on branch pushes. The merge to `master` is their first run. A red `image` or `audit` job is then fixed on `master`.
+- **Failed operator sign-in timing (low):**
+  - The `sign_in_failed` insert is no longer awaited, so a known and an unknown email answer in the same time. That is the decoy hash's purpose.
+  - It goes through `OperatorAuditService.tryRecordFor`, which never rejects.
+- **Audit failures on sign-in and sign-out not caught (low):**
+  - `tryRecord` and `tryRecordFor` log with a fingerprint and count `UnhandledErrors`, and never fail the request. This is E9 extended to sign-in and sign-out.
+  - The interceptor now uses `tryRecord` too, so its own try/catch moved into the service.
+- **Narrower clinic-row check (low, was unlogged):** `operator-audit.int.test.ts` now asserts in `afterEach` that no test changes the `AuditEvent` count.
+- **Docs (low):**
+  - The stray `AuditService.recordFor` sentence is back on the operator-audit bullet.
+  - "Where things live" gets rows for `http-setup.ts`, `metrics/` and `operator-audit/`; the bootstrap row no longer claims the prefix and CORS.
+- **Smells:**
+  - `useBundle(env)` in `test/support/bundle.ts` replaces the duplicated set-up and tear-down.
+  - The unused `output()` accessor is gone.
+  - The `(action, record, detail, targetId)` data clump is left as is (three call shapes, no fourth coming).
+
+**Gate:**
+- `pnpm run check`: exit 0.
+- `bundle.int`, `operator-audit.int`, `operator-auth.int`, `operator-console.int`: 17 passed on MySQL.

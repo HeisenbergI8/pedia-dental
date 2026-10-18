@@ -1,9 +1,7 @@
-import { type CallHandler, type ExecutionContext, Injectable, Logger, type NestInterceptor, SetMetadata } from "@nestjs/common";
+import { type CallHandler, type ExecutionContext, Injectable, type NestInterceptor, SetMetadata } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import type { Request } from "express";
 import { type Observable, mergeMap } from "rxjs";
-import { errorFingerprint } from "../common/process-errors";
-import { MetricsService } from "../metrics/metrics.service";
 import { OperatorAuditService } from "./operator-audit.service";
 
 export const OPERATOR_AUDIT = "pedia:operator-audit";
@@ -24,11 +22,9 @@ export const OperatorAudited = (spec: OperatorAuditSpec) => SetMetadata(OPERATOR
  */
 @Injectable()
 export class OperatorAuditInterceptor implements NestInterceptor {
-  private readonly log = new Logger(OperatorAuditInterceptor.name);
   constructor(
     private readonly reflector: Reflector,
     private readonly audit: OperatorAuditService,
-    private readonly metrics: MetricsService,
   ) {}
 
   intercept(ctx: ExecutionContext, next: CallHandler): Observable<unknown> {
@@ -39,12 +35,7 @@ export class OperatorAuditInterceptor implements NestInterceptor {
     return next.handle().pipe(
       mergeMap(async (body) => {
         const targetId = spec.target ? spec.target(body, req) : (req.params.id as string | undefined);
-        try {
-          await this.audit.record(spec.action, spec.record, spec.detail, targetId);
-        } catch (error) {
-          this.metrics.countUnhandled();
-          this.log.error({ fingerprint: errorFingerprint(error) }, `Operator audit row not written (${spec.detail})`);
-        }
+        await this.audit.tryRecord(spec.action, spec.record, spec.detail, targetId);
         return body;
       }),
     );

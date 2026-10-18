@@ -4,6 +4,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { afterAll, beforeAll } from "vitest";
 
 const API_DIR = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -33,7 +34,7 @@ const freePort = () =>
  * Starts the bundle as production would (`node dist/main.mjs`), from an empty working directory so apps/api/.env and its
  * demo settings are never loaded. Resolves once it prints "API listening".
  */
-export async function startBundle(dir: string, env: Record<string, string>): Promise<{ url: string; stop: () => void; output: () => string }> {
+export async function startBundle(dir: string, env: Record<string, string>): Promise<{ url: string; stop: () => void }> {
   const port = await freePort();
   const cwd = mkdtempSync(join(tmpdir(), "bundle-cwd-"));
   const child: ChildProcess = spawn(process.execPath, ["--enable-source-maps", join(dir, "main.mjs")], {
@@ -48,5 +49,20 @@ export async function startBundle(dir: string, env: Record<string, string>): Pro
     child.stdout?.on("data", () => output.includes("API listening") && (clearTimeout(timer), resolve()));
     child.on("exit", (code) => (clearTimeout(timer), reject(new Error(`The bundle exited (${code}):\n${output}`))));
   });
-  return { url: `http://127.0.0.1:${port}`, stop: () => child.kill(), output: () => output };
+  return { url: `http://127.0.0.1:${port}`, stop: () => child.kill() };
+}
+
+/** Builds and starts the bundle for a test file, and stops and removes it afterwards. Read `api.url` inside tests. */
+export function useBundle(env: Record<string, string>): { url: string; dir: string } {
+  const api = { url: "", dir: "" };
+  let stop = () => {};
+  beforeAll(async () => {
+    api.dir = buildBundle();
+    ({ url: api.url, stop } = await startBundle(api.dir, env));
+  }, 90_000);
+  afterAll(() => {
+    stop();
+    removeBundle(api.dir);
+  });
+  return api;
 }

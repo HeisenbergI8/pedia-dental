@@ -72,7 +72,10 @@ Run from the repo root.
 | Contract | `packages/shared/src/schemas/` | Zod schemas and types. **The only definition** of a request or response shape |
 | Domain logic | `packages/shared/src/domain/` | Pure rules (permissions, chart derivation, money, tenancy, subscription dates). Call them, never re-implement them |
 | The spec for each endpoint | `apps/web/src/features/<name>/mocks.ts`, `apps/web/src/mocks/` | Paths, shapes, status codes and rules the API must reproduce |
-| Bootstrap | `src/main.ts` | Env, `/api` prefix, CORS, shutdown hooks. Nothing feature-specific |
+| Bootstrap | `src/main.ts` | Env, process error handlers, metrics timer, shutdown (SIGTERM drains first). Nothing feature-specific |
+| HTTP setup | `src/http-setup.ts` | `configureHttp`: `/api` prefix, helmet, `trust proxy`, CORS. Called by `main.ts` and both test apps |
+| Metrics | `src/metrics/` | `MetricsService` (EMF lines), the timing middleware |
+| Operator audit | `src/operator-audit/` | `OperatorAuditService`, `@OperatorAudited` and its interceptor |
 | Root module | `src/app.module.ts` | `AppModule.forRoot(env)`: provides `ENV`, `Clock`, the logger, the global error filter and the request-context middleware; imports feature modules |
 | Config | `src/config/env.ts` | Zod-validated environment, injected with `@Inject(ENV)`. The only reader of `process.env` |
 | Database | `src/prisma/` | `PrismaService`, the only database client (global module), always tenant-scoped |
@@ -437,10 +440,12 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **Sign-ups (5) and sign-up receipts (10) are limited per address per rolling hour** (`RATE_LIMITS.signup`,
   `.receipt`), counted by the service before the form is read. Behind a proxy this needs `TRUST_PROXY_HOPS`.
 - **Operator actions go to `OperatorAuditEvent`** (B13a, platform-scoped, append-only), not `AuditEvent`, which is a
-  clinic's and names clinic roles. Sign-in, a wrong password for a known operator and sign-out are recorded too.
+  clinic's and names clinic roles. Sign-in, a wrong password for a known operator and sign-out are recorded too; a
+  failed insert is logged and counted, never failing the request (`tryRecord`). A new clinic's first event (the Terms
+  accepted at sign-up) goes in through `AuditService.recordFor`.
 - **Metrics are CloudWatch EMF lines on stdout** (`MetricsService`, namespace `Primolar/API`, every
   `METRICS_INTERVAL_S`): request and 5xx counts, `UnhandledErrors`, latency for `TRACKED_ROUTES`, and the outbox backlog
-  on the background instance. Unexpected errors log a `fingerprint` (name + first three frames, never the message). A new clinic's first event (the Terms accepted at sign-up) goes in through `AuditService.recordFor`.
+  on the background instance. Unexpected errors log a `fingerprint` (name + first three frames, never the message).
 - **A database seeded before B12 has no billing rows** (prices, sign-ups, subscriptions, receipts): use a fresh one.
   The migration writes the two singletons (`PlatformSettings`, `InvoiceCounter`), so a live database works without the seed.
 

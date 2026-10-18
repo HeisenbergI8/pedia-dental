@@ -196,12 +196,13 @@ export class AuthService {
     const op = await this.identity.operatorByEmail(email);
     const ok = await this.hasher.matches(op?.passwordHash ?? (await (this.decoy ??= this.hasher.hash("no such login"))), password);
     if (!op || !ok) {
-      // A wrong password for a known operator is recorded; an unknown email has no one to record it against.
-      if (op) await this.operatorAudit.recordFor(op, "sign_in_failed", "Console", "Wrong password");
+      // A wrong password for a known operator is recorded; an unknown email has no one to record it against. Not
+      // awaited: both answers must take the same time (the decoy hash's point), or the insert tells emails apart.
+      if (op) void this.operatorAudit.tryRecordFor(op, "sign_in_failed", "Console", "Wrong password");
       throw new UnauthorizedException("That email and password don't match a Primolar operator");
     }
     const token = await this.sessions.openOperator(op.id);
-    await this.operatorAudit.recordFor(op, "sign_in", "Console", "Signed in");
+    await this.operatorAudit.tryRecordFor(op, "sign_in", "Console", "Signed in");
     return { token, session: { token: OPERATOR_COOKIE_TOKEN, operator: { id: op.id, name: op.name, email: op.email } } };
   }
 

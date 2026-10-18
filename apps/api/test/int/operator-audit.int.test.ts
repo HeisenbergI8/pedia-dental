@@ -1,7 +1,7 @@
 import type { INestApplication } from "@nestjs/common";
 import { DEMO_PASSWORD, OPERATORS, seedPlatform } from "@pedia/seed";
 import request from "supertest";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hasher } from "../../src/auth/hashing";
 import { PrismaService } from "../../src/prisma/prisma.service";
 import { seedDatabase } from "../../src/seed/seed-database";
@@ -20,25 +20,27 @@ beforeAll(async () => {
   prisma = app.get(PrismaService);
 }, 60_000);
 afterAll(() => app.close());
-beforeEach(async () => {
-  await resetDatabase(prisma);
-  await seedDatabase(prisma, new Hasher(), { DEMO_LOGINS: true }, seedPlatform());
-  op = await asOperator(app);
-}, 60_000);
-
 const http = () => request(app.getHttpServer());
 const rows = () => prisma.operatorAuditEvent.findMany({ orderBy: { at: "asc" }, select: { operatorId: true, operatorName: true, action: true, record: true, detail: true, targetId: true } });
 const clinicRows = async () => Number((await prisma.$queryRaw<{ n: bigint }[]>`SELECT COUNT(*) AS n FROM AuditEvent`)[0]!.n);
 
+let seededClinicRows = 0;
+beforeEach(async () => {
+  await resetDatabase(prisma);
+  await seedDatabase(prisma, new Hasher(), { DEMO_LOGINS: true }, seedPlatform());
+  op = await asOperator(app);
+  seededClinicRows = await clinicRows();
+}, 60_000);
+// Nothing the operator does writes to a clinic's trail.
+afterEach(async () => expect(await clinicRows()).toBe(seededClinicRows));
+
 describe("the operator's audit trail", () => {
-  it("records a change with its target, and nothing for a refused one or in the clinic's trail", async () => {
-    const before = await clinicRows();
+  it("records a change with its target, and nothing for a refused one", async () => {
     expect((await http().post("/api/operator/accounts/clinic_ngiti/suspend").set("Cookie", op)).status).toBe(200);
     expect((await http().post("/api/operator/accounts/no_such_clinic/suspend").set("Cookie", op)).status).toBe(404);
     expect(await rows()).toEqual([
       { operatorId: OPERATOR.id, operatorName: OPERATOR.name, action: "update", record: "Clinic account", detail: "Account paused", targetId: "clinic_ngiti" },
     ]);
-    expect(await clinicRows()).toBe(before);
   });
 
   it("records the price list with no target", async () => {
@@ -56,6 +58,7 @@ describe("the operator's audit trail", () => {
     expect((await login("nobody@primolar.demo", DEMO_PASSWORD)).status).toBe(401);
     const cookie = ([] as string[]).concat(ok.headers["set-cookie"] ?? []).find((c) => c.startsWith("pd_operator="))!.split(";")[0]!;
     expect((await http().post("/api/operator/auth/logout").set("Cookie", cookie)).status).toBe(200);
+    await vi.waitFor(async () => expect(await prisma.operatorAuditEvent.count()).toBe(3)); // the failed sign-in's row isn't awaited
     expect((await rows()).map((r) => [r.action, r.detail])).toEqual([["sign_in", "Signed in"], ["sign_in_failed", "Wrong password"], ["sign_out", "Signed out"]]);
   });
 

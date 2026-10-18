@@ -1,20 +1,11 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildBundle, removeBundle, startBundle } from "./support/bundle";
+import { describe, expect, it } from "vitest";
+import { useBundle } from "./support/bundle";
 
 /** B13a Step 6.2: the shipped artifact boots without the SWC loader, with DI, the guard, validation and headers wired. */
 describe("the production bundle (no database)", { timeout: 90_000 }, () => {
-  let dir: string;
-  let api: Awaited<ReturnType<typeof startBundle>>;
-  beforeAll(async () => {
-    dir = buildBundle();
-    api = await startBundle(dir, { DATABASE_URL: "mysql://u:p@127.0.0.1:1/none" }); // connected lazily: nothing reaches it
-  }, 90_000);
-  afterAll(() => {
-    api?.stop();
-    removeBundle(dir);
-  });
+  const api = useBundle({ DATABASE_URL: "mysql://u:p@127.0.0.1:1/none" }); // connected lazily: nothing reaches it
 
   it("serves the liveness probe with helmet's headers", async () => {
     const res = await fetch(`${api.url}/api/health/live`);
@@ -27,7 +18,7 @@ describe("the production bundle (no database)", { timeout: 90_000 }, () => {
   });
 
   it("inlines the workspace packages, carries no SWC loader, and sets the clinic time zone first", () => {
-    const code = readFileSync(join(dir, "main.mjs"), "utf8");
+    const code = readFileSync(join(api.dir, "main.mjs"), "utf8");
     expect(code).not.toContain("@swc-node/register");
     expect(code).not.toMatch(/from ["']@pedia\//);
     const tz = code.indexOf("process.env.TZ =");

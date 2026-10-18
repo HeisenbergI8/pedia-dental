@@ -1,18 +1,9 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildBundle, removeBundle, startBundle } from "../support/bundle";
+import { describe, expect, it } from "vitest";
+import { useBundle } from "../support/bundle";
 
 /** B13a Step 6.2: the bundle on MySQL. A model query runs Prisma 7's query compiler, which raw SQL doesn't. */
 describe("the production bundle on MySQL", { timeout: 90_000 }, () => {
-  let dir: string;
-  let api: Awaited<ReturnType<typeof startBundle>>;
-  beforeAll(async () => {
-    dir = buildBundle();
-    api = await startBundle(dir, { DATABASE_URL: process.env.DATABASE_URL! });
-  }, 90_000);
-  afterAll(() => {
-    api?.stop();
-    removeBundle(dir);
-  });
+  const api = useBundle({ DATABASE_URL: process.env.DATABASE_URL! });
 
   it("is ready: the database answers through the adapter", async () => {
     expect((await fetch(`${api.url}/api/health/ready`)).status).toBe(200);
