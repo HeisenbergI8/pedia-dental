@@ -30,3 +30,14 @@
 - The append-only check asserts the refusal by message pattern rather than the `TenantScopeError` class (the int test doesn't import it).
 **Gate:** `pnpm run check`: exit 0. `pnpm --filter api test:int`: 52 files, 565 tests passed.
 **Notes:** "no AuditEvent row" is counted with raw SQL (the model needs a clinic context).
+
+## Phase 6: Bundled production build — 2026-10-18
+
+**Steps completed:** 6.1, 6.2
+**Files changed:** `apps/api/build.mjs` (new), `apps/api/package.json` (`build`, `start:prod`; esbuild ^0.25 resolved 0.25.12; `prisma` moved to dependencies), `pnpm-lock.yaml`, `test/support/bundle.ts` (new), `test/bundle.test.ts` (new), `test/int/bundle.int.test.ts` (new)
+**Deviations from plan:**
+- **Externals:** the plan kept every bare import except `@pedia/*` external. The bundle then failed at start with `Cannot find package '@faker-js/faker'`: `@pedia/seed`'s own dependencies aren't installed beside the API. `build.mjs` now keeps external only Node built-ins and the API's own `dependencies` (read from package.json); everything else, including the workspace packages' npm dependencies, is inlined.
+- **Where the test bundle lives:** the plan built it into the system temp directory. A bundle there can't resolve its externals (`Cannot find package 'reflect-metadata'`), because Node resolves them from the bundle's location, not the working directory. `buildBundle()` writes to `apps/api/dist/bundle-test-*` (git-ignored); the process still runs from an empty temp cwd, so `.env` is never loaded.
+- The "Zod pipe answers 400" case moved from the unit bundle test to the integration one. The plan's own caveat applied: the operator sign-in's rate limit reads the database before validation, so with no database it answers 500.
+**Gate:** `pnpm run check`: exit 0 (`test/bundle.test.ts` ran, 3 passed). `vitest --config vitest.int.config.ts test/int/bundle.int.test.ts`: 3 passed on MySQL.
+**Notes:** a manual run of `dist/main.mjs` with `METRICS_INTERVAL_S=2` printed EMF lines with `_aws` at the JSON root (pino merges the object), confirming Phase 4's open check. The bundle is ~1.0 MB plus its map.
