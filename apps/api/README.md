@@ -42,18 +42,19 @@ A hosted deployment (B13b) sets these variables:
 
 | Variable | Source | Value |
 | --- | --- | --- |
-| `DATABASE_URL` | secret store | the RDS connection |
+| `DATABASE_URL` | built in the container | from `DB_USER`/`DB_PASSWORD` (Secrets Manager, `primolar/database`) and `DB_HOST`/`DB_PORT`/`DB_NAME` (B13b decisions.md I4) |
 | `SEMAPHORE_API_KEY` | secret store | once Semaphore approves the account |
 | `APP_ENV` | plain | `production`, or `demo` for the hosted demo |
 | `CORS_ORIGIN` | plain | the web's https origins, comma-separated |
 | `WEB_URL` | plain | the web's https address |
 | `S3_BUCKET`, `S3_REGION` | plain | the files bucket, `ap-southeast-1` |
-| `TRUST_PROXY_HOPS` | plain | measured behind Vercel → ALB (B13b, Q3) |
+| `TRUST_PROXY_HOPS` | plain | 2 by default behind Vercel → ALB; measured at go-live (`packages/infra/runbooks/first-time-setup.md` step 10) |
 | `METRICS_INTERVAL_S` | plain | `60` |
 | `BACKGROUND_WORK` | plain | `true` on exactly one task, `false` on the rest |
 | `DEMO_LOGINS` | plain | only with `APP_ENV=demo` |
 
-`STORAGE_LINK_SECRET` is unused with S3.
+`STORAGE_LINK_SECRET` is unused with S3. B13b sets these in `packages/infra/src/service-stack.ts`; its settings live in
+`packages/infra/cdk.json`.
 
 ## How it's built
 

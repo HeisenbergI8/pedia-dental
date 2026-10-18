@@ -15,3 +15,13 @@
 - Offline `pnpm exec cdk synth -q -c apiDomain=… -c webOrigins=… -c webUrl=… -c alertEmail=…` with no AWS credentials: exit 0, both templates written.
 - With the committed empty `cdk.json` values, synth stops at "apiDomain is not set …", as designed.
 **Notes:** synth warns that cross-stack references default to "strong". That is CDK's current behaviour and what this design wants: the foundation's exports protect the producer. Left as a warning.
+
+## Phases 4–6: Deploy workflow, runbooks, docs — 2026-10-18
+
+**Steps completed:** 4.1, 4.2, 5.1–5.5, 6.1, 6.2
+**Files changed:** `.github/workflows/deploy.yml` (new), `packages/infra/test/deploy-workflow.test.ts` (new), `packages/infra/README.md`, `packages/infra/runbooks/{first-time-setup,deploy,rollback,restore-drill,go-live-checklist}.md` (new), `CONVENTIONS.md`, `apps/api/CONVENTIONS.md`, `apps/api/README.md`, `apps/api/CHUNKS.md`
+**Deviations from plan:** none. The workflow and runbooks are the plan's text.
+**Gate:** `pnpm run check`: exit 0. `@pedia/infra`: 5 files, 38 tests, including the 7 `deploy-workflow` invariants.
+**Notes:**
+- `deploy.yml`, the runbooks' AWS CLI commands and the deploy role's rights are unproven until the owner's first real run (Q6). This is inherent to an offline plan.
+- CHUNKS marks B13b done in the sense its own line states: code and runbooks merged; AWS is the owner's.
