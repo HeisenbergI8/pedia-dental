@@ -417,9 +417,17 @@ BIR-registered invoices and a second step for the operator's sign-in stay later 
 - **Hardening:** security headers (helmet), CORS locked to the web's origins, rate limits, a dependency audit, and a
   load test against the busiest endpoints (Today, patient list, booking).
 - **Data Privacy Act operations:** data export and deletion requests, retention, and the NPC registration notes.
-- **Deploy:** the API and MySQL on a managed host (decide which), the web pointed at it.
+- **Deploy:** the API and MySQL on AWS (decided below), the web pointed at it.
 
-**Decide first:** the hosting (managed MySQL is the default: RDS, PlanetScale, or a VPS), and the backup retention.
+**Decided (2026-10-18):**
+- **Hosting:** AWS in Singapore (`ap-southeast-1`).
+  - The API runs on ECS Fargate (one small task to start; more behind a load balancer as clinics grow).
+  - MySQL runs on RDS (one small single-AZ instance to start; Multi-AZ when downtime starts to cost).
+  - Files stay on S3 in the same region.
+  - The web stays on Vercel.
+  - The infrastructure is written as code, not set up by hand.
+  - An AWS budget alert from day one; no NAT gateway at the start.
+- **Backups:** RDS automated backups with point-in-time restore, kept for 30 days.
 
 **Done when:** the client demo script (`DEMO_SCRIPT.md`) runs end to end with the mocks off on the deployed API;
 restoring last night's backup to a fresh database works; the load test meets its targets.
