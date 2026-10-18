@@ -18,6 +18,8 @@ import {
   type Subscription,
   type SubscriptionPayment,
   type SubscriptionView,
+  rolesCan,
+  type Role,
   type Tier,
 } from "@pedia/shared";
 import { today } from "./clock";
@@ -196,4 +198,12 @@ export function subscriptionView(clinicId: string): SubscriptionView {
     paymentQr: paymentQrView(),
     today: today(),
   };
+}
+
+/**
+ * B12 decision 25: may this login use a billing-only session? The Owner (clinic.manage) of a clinic paused by its own
+ * unpaid subscription. A pause made by hand, or a cancelled subscription, keeps everyone but parents out.
+ */
+export function billingOnlyFor(account: { roles: readonly Role[] }, clinicId: string): boolean {
+  return accountById(clinicId)?.status === "suspended" && subscriptionOf(clinicId)?.pause === "overdue" && rolesCan(account.roles, "clinic.manage");
 }

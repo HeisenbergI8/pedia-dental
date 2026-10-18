@@ -1,5 +1,5 @@
 import { http, HttpResponse } from "msw";
-import { ALL_BRANCHES, TIER_LIMITS, permissionScopeFor, reportBranchFilter, usableBranches, type AcknowledgementKind, type AuditAction, type Branch, type OperatorUser, type Permission } from "@pedia/shared";
+import { ALL_BRANCHES, BILLING_ONLY_MESSAGE, BILLING_ONLY_ROUTES, TIER_LIMITS, permissionScopeFor, reportBranchFilter, usableBranches, type AcknowledgementKind, type AuditAction, type Branch, type OperatorUser, type Permission } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { BRANCH_COOKIE, clinicTokenCookie, operatorTokenCookie } from "@/lib/session-cookies";
 import { accountById, credentialOf, currentAccount, currentClinicId, db, persist, platform, selectTenant } from "./db";
@@ -8,7 +8,7 @@ import { operatorForToken } from "./operator";
 import { pendingAcknowledgement } from "./privacy";
 import { today } from "./clock";
 import { purgeRejectedFiles } from "./signups";
-import { settleSubscriptions } from "./subscriptions";
+import { billingOnlyFor, settleSubscriptions } from "./subscriptions";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 
@@ -18,6 +18,7 @@ export type MockSession = DemoAccountRecord & {
   readOnly: boolean;
   mustChangePassword: boolean;
   mustAcknowledge: AcknowledgementKind | undefined; // privacy P10
+  billingOnly: boolean; // B12 decision 25
 };
 
 const deny = (status: 401 | 403, message: string) => new HttpResponse(message, { status });
@@ -53,12 +54,14 @@ export function sessionOf(request: Request): MockSession | undefined {
   if (!found) return undefined;
   // Staff of a suspended account are signed out on their next request (#41); its parents read on (#44).
   const suspended = accountById(found.clinicId)?.status !== "active";
-  if (suspended && found.account.role !== "parent") return undefined;
+  // B12 decision 25: the Owner of a clinic paused for non-payment keeps a session to pay, and only that.
+  const billingOnly = suspended && billingOnlyFor(found.account, found.clinicId);
+  if (suspended && found.account.role !== "parent" && !billingOnly) return undefined;
   selectTenant(found.clinicId);
   const { account, clinicId } = found;
   const children = account.guardianId ? childrenOf(db, account.guardianId) : [];
   const mustChangePassword = !!credentialOf(db, account.staffId)?.mustChange;
-  return { ...account, clinicId, patientIds: new Set(children.map((p) => p.id)), readOnly: suspended, mustChangePassword, mustAcknowledge: pendingAcknowledgement(account, clinicId) };
+  return { ...account, clinicId, patientIds: new Set(children.map((p) => p.id)), readOnly: suspended && !billingOnly, mustChangePassword, mustAcknowledge: pendingAcknowledgement(account, clinicId), billingOnly };
 }
 
 /** The branches this caller may work at: the Owner every open one, staff their assignments, parents every open one. */
@@ -394,6 +397,10 @@ export const accessGate = http.all(url("/*"), ({ request }) => {
   // notice is the portal's own step (P9). /auth/* is outside this gate, so /auth/acknowledgement still answers.
   if (session.mustAcknowledge === "terms") return deny(403, "Accept Primolar's updated terms to continue");
   if (session.mustAcknowledge === "confidentiality") return deny(403, "Acknowledge patient confidentiality to continue");
+  // B12 decision 25: a billing-only session reaches Settings → Plan's routes and nothing else.
+  if (session.billingOnly && !BILLING_ONLY_ROUTES.some((r) => r.method === request.method && matchPath(r.path, path))) {
+    return deny(403, BILLING_ONLY_MESSAGE);
+  }
 
   const hit = RULES.filter((r) => r.method === request.method)
     .map((rule) => ({ rule, params: matchPath(rule.path, path) }))

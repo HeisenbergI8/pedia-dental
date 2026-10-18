@@ -149,3 +149,17 @@ export function downgradeProblem(to: Tier, usage: { branches: number; staffLogin
 /** B12 E13: while a downgrade waits, additions are checked against the smaller of the two plans. */
 export const limitTier = (current: Tier, downgrade?: { tier: Tier } | null): Tier =>
   downgrade && Tier.options.indexOf(downgrade.tier) < Tier.options.indexOf(current) ? downgrade.tier : current;
+
+/**
+ * B12 decision 25: the Owner of a clinic paused for an unpaid subscription signs in to pay, and to nothing else. The
+ * routes such a session may reach besides /auth/*; every other one answers BILLING_ONLY_MESSAGE.
+ */
+export const BILLING_ONLY_ROUTES: readonly { method: string; path: string }[] = [
+  { method: "GET", path: "/clinic" },
+  { method: "GET", path: "/clinic/logo" },
+  { method: "GET", path: "/clinic/usage" },
+  { method: "GET", path: "/clinic/subscription" },
+  { method: "POST", path: "/clinic/subscription/receipts" },
+  { method: "GET", path: "/clinic/subscription/receipts/:id/image" },
+];
+export const BILLING_ONLY_MESSAGE = "Your clinic is paused until the Primolar subscription is paid. Pay in Settings → Plan to reopen it.";

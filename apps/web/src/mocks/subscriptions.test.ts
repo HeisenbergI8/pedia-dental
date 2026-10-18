@@ -61,11 +61,13 @@ describe("subscriptions (chunk 23 done-when)", () => {
   it("then pauses the clinic with the existing pause: staff out at once and at sign-in", async () => {
     setToday("2026-10-08");
     asStaff(IPIN_OWNER);
-    expect(await status(api("/clinic", ClinicContext))).toBe(401); // platform #41: the very next request
+    // Platform #41 on the very next request; B12 decision 25: the Owner keeps a session to pay, and only that.
+    expect(await status(api("/patients", z.unknown()))).toBe(403);
+    expect(await status(api("/clinic", ClinicContext))).toBe(200);
     expect(accountById("clinic_ipin")!.status).toBe("suspended");
     expect(ipin().pause).toBe("overdue");
     cookies();
-    expect(await status(api("/auth/login", Session, send("POST", { email: "owner@ipin.demo", password: DEMO_PASSWORD })))).toBe(403);
+    expect((await api("/auth/login", Session, send("POST", { email: "owner@ipin.demo", password: DEMO_PASSWORD }))).user.billingOnly).toBe(true);
   });
 
   it("refuses Reactivate while lapsed; recording the payment reactivates at once and keeps the due date", async () => {
@@ -203,5 +205,31 @@ describe("B12: prices by the month's start, and downgrades within the smaller pl
     asStaff("demo.clinic_demo.staff_villanueva");
     const added = { name: "Kawit", address: "1 Kawit Road", phone: "(046) 400 0000", openingHours: bulilit.branches[0]!.openingHours };
     expect(await status(api("/branches", z.unknown(), send("POST", added)))).toBe(409);
+  });
+});
+
+describe("B12 decision 25: a clinic paused for non-payment", () => {
+  it("lets its Owner sign in to pay and nothing else, keeps other staff out, and reopens once the receipt is confirmed", async () => {
+    const sub = platform.subscriptions.find((x) => x.clinicId === "clinic_demo")!;
+    Object.assign(sub, { anchor: "2026-01-15", paidMonths: 8 }); // due 15 September, grace ended 22 September
+    for (const k of ["downgrade", "priceTier", "cancelledAt", "pause"] as const) delete sub[k];
+    Object.assign(accountById("clinic_demo")!, { tier: "mid", status: "active" });
+    setToday("2026-10-18");
+    cookies();
+    const login = (email: string) => api("/auth/login", Session, send("POST", { email, password: DEMO_PASSWORD }));
+    expect(await status(login("frontdesk@gmail.com"))).toBe(403);
+    const owner = await login("owner@gmail.com");
+    expect(owner.user).toMatchObject({ billingOnly: true });
+    asStaff(owner.token);
+    expect(await status(api("/patients", z.unknown()))).toBe(403);
+    expect((await api("/clinic/subscription", SubscriptionView)).state).toBe("lapsed");
+    const body = new FormData();
+    body.append("data", JSON.stringify({ reference: "GC 9090" }));
+    body.append("file", new File([new Uint8Array([137, 80, 78, 71])], "r.png", { type: "image/png" }));
+    const view = await api("/clinic/subscription/receipts", SubscriptionView, { method: "POST", body });
+    asOperator();
+    await api(`/operator/receipts/${view.receipts[0]!.id}/confirm`, z.unknown(), send("POST", { method: "gcash", paidOn: "2026-10-18" }));
+    asStaff(owner.token);
+    expect(await status(api("/patients", z.unknown()))).toBe(200); // the next request is a full session
   });
 });
