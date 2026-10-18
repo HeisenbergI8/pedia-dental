@@ -20,7 +20,7 @@ import { photoData } from "../photos/photo.rows";
 import { documentData } from "../documents/document.rows";
 import { CONTENT_TYPES, clinicKey, platformKey, type FileExtension, type FileStorage } from "../storage/storage";
 import { toSignupRow } from "../signups/signup.rows";
-import { subscriptionRows } from "../subscriptions/subscription.rows";
+import { subscriptionRows } from "../subscription-records/subscription.rows";
 
 export class SeedRefused extends Error {
   override name = "SeedRefused";
@@ -146,7 +146,8 @@ export async function seedDatabase(prisma: PrismaService, hasher: Hasher, env: P
         data: db.messages.map((m) =>
           messageData(m, {
             greetingYear: m.kind === "birthday" ? Number(manilaDate(new Date(m.createdAt)).slice(0, 4)) : null,
-            ...(m.status === "sent" ? { sentAt: new Date(m.sendAt), segments: smsSegments(m.body) } : {}),
+            // B12 E9: a sent text counts toward the month it was handed to the provider (dispatchedAt).
+            ...(m.status === "sent" ? { sentAt: new Date(m.sendAt), dispatchedAt: new Date(m.sendAt), segments: smsSegments(m.body) } : {}),
           }),
         ),
       });

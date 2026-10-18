@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { AuditAction } from "@pedia/shared";
+import type { AuditAction, Role } from "@pedia/shared";
 import { Clock } from "../common/clock";
 import { requireContext } from "../common/request-context";
 import { PrismaService } from "../prisma/prisma.service";
@@ -43,6 +43,17 @@ export class AuditService {
 
     await tx.auditEvent.create({
       data: { ...clinicData(), at, actorId: user.id, actorName: user.name, actorRole: user.role, action, record, patientId },
+      select: { id: true },
+    });
+  }
+
+  /**
+   * An entry for someone who isn't signed in, at a time that already happened: a new clinic's first event, the Owner's
+   * acceptance of the Terms and DPA when they signed up (B12, privacy #23). In the context's clinic, in the caller's `tx`.
+   */
+  async recordFor(tx: Tx, actor: { id: string; name: string; role: Role }, action: AuditAction, record: string, at: Date): Promise<void> {
+    await tx.auditEvent.create({
+      data: { ...clinicData(), at, actorId: actor.id, actorName: actor.name, actorRole: actor.role, action, record },
       select: { id: true },
     });
   }

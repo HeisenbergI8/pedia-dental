@@ -14,12 +14,21 @@ const OPERATOR_ROUTES: [Method, string][] = [
   ["put", "/operator/prices"],
   ["get", "/operator/payment-qr"],
   ["put", "/operator/payment-qr"],
+  ["get", "/operator/signups"],
+  ["get", "/operator/signups/s1/files/k1"],
+  ["put", "/operator/signups/s1"],
+  ["post", "/operator/signups/s1/payment"],
+  ["post", "/operator/signups/s1/reject"],
+  ["post", "/operator/signups/s1/approve"],
 ];
 
 /** B12's public routes: no session of any kind, so neither 401 nor 403; and served (not Nest's 404). */
 const PUBLIC_ROUTES: [Method, string][] = [
   ["get", "/signups/prices"],
   ["get", "/signups/payment-qr/image"],
+  ["post", "/signups"],
+  ["get", "/signups/PRM-AAAA-BBBB"],
+  ["post", "/signups/PRM-AAAA-BBBB/receipts"],
 ];
 
 describe("B12's routes are served and guarded (no database)", () => {

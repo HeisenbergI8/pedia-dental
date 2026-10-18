@@ -59,3 +59,18 @@
 - `GET /operator/payment-qr` answers JSON `null` explicitly (Nest sends an empty body for `null`).
 - `operator-routes.test.ts` proves "reaches a controller" by 401 (Nest's 404 comes before the guard), as `clinic-routes.test.ts`.
 **Gate:** `pnpm run check`: green. `platform-settings.int.test.ts`: 8 green.
+
+## Phase 6: Sign-ups, `createClinic`, usage reads — 2026-10-18
+
+**Steps completed:** 6.1, 6.2, 6.3, 6.4
+**Files changed:** `apps/api/src/subscription-records/{subscription-records.service,subscription-records.module,subscription.rows,subscription.rows.test}.ts` (rows moved here from `src/subscriptions/`); `src/receipt-records/{receipt-records.service,receipt-records.module,receipt.rows}.ts`; `src/usage/{usage.service,usage.module}.ts`; `src/signups/{signups.service,signups.controller,signups.module,signups.jobs,signup-form,clinic-factory,clinic-factory.test}.ts`; `src/operator/{account-overview,operator-signups.controller,operator.module}.ts`; `src/auth/{rate-limit,rate-limit.test}.ts`; `src/audit/audit.service.ts` (`recordFor`); `src/message-queue/message.rows.ts`, `src/seed/seed-database.ts` (seeded sent texts carry `dispatchedAt`); `src/app.module.ts`; `test/operator-routes.test.ts`; `test/int/signups.int.test.ts` (new)
+**Deviations from plan:**
+- `SubscriptionRecordsService` was written whole here (Step 7.1's writes included: settle, payments, plan changes, cancel, receipts): one owner of the tables, written once. Phase 7 adds its routes, jobs and the sign-in check.
+- `SignupsService.approve`/`createDirect` return `{ clinicId, temporaryPassword, pin }`; the operator controller builds the overview, so `SignupsModule` doesn't import the operator module (no cycle).
+- New ids are `randomUUID()` (no cuid2 library in the API); they fit the id columns and the storage key segments.
+- `AuditService.recordFor(tx, actor, action, record, at)`: the new clinic's first event, dated when the Terms were accepted (the mock's `createClinic`).
+- `PAID_PLAN_LOCKED` lives in `signups.service.ts` with the mock's words (the mock keeps it in `signup-mocks.ts`, not shared).
+- The purge job (Step 7.4) is `SignupsService.purgeRejectedFiles` + `signups.jobs.ts`, written here with the service.
+- A sent seeded text now has `dispatchedAt` (= its send time), so the usage count (texts handed to the provider, E9) isn't zero on the demo.
+- The forced-failure test breaks the transaction's last write (a taken invoice number) instead of a Staff email clash (a brand-new clinic can't hold one).
+**Gate:** `pnpm run check`: green. `signups.int.test.ts`: 14 green; `platform-settings.int.test.ts`: 8 green.
