@@ -74,3 +74,15 @@
 - A sent seeded text now has `dispatchedAt` (= its send time), so the usage count (texts handed to the provider, E9) isn't zero on the demo.
 - The forced-failure test breaks the transaction's last write (a taken invoice number) instead of a Staff email clash (a brand-new clinic can't hold one).
 **Gate:** `pnpm run check`: green. `signups.int.test.ts`: 14 green; `platform-settings.int.test.ts`: 8 green.
+
+## Phase 7: Subscriptions, the console, receipts and the jobs — 2026-10-18
+
+**Steps completed:** 7.1, 7.2, 7.3, 7.4 (written in Phase 6), 7.5, 7.6 (amendment, decision 25)
+**Files changed:** `apps/api/src/subscription-records/{subscriptions.jobs,subscriptions.jobs.test,subscription-records.module}.ts`; `src/auth/{auth.service,identity.service,access.guard,auth.module}.ts`; `src/clinic/{limits,branches.service,staff.service,clinic.module}.ts`; `src/operator/{operator-accounts.service,operator-accounts.controller,operator-receipts.controller,operator.module}.ts`; `src/clinic-billing/{clinic-billing.controller,clinic-billing.module}.ts` (new); `src/signups/signups.service.ts` (`designOf`, `markDesignDelivered`); `src/app.module.ts`; `test/{access-guard,operator-routes}.test.ts`; `test/int/{subscriptions,receipts,operator-console}.int.test.ts` (new), `test/int/support/clinic-login.ts` (new), `test/int/sessions.int.test.ts`
+**Deviations from plan:**
+- The receipt routes' access test is in `operator-routes.test.ts` (clinic, operator and public tables) rather than a separate `receipts-routes.test.ts`; front desk's 403 on `/clinic/subscription` is in `receipts.int.test.ts`.
+- **Five parallel by-hand payments pay five consecutive months** (each takes the first unpaid one under the locks), not "one row": the test proves no month is paid twice and invoice numbers stay gapless across two clinics. The mock's double-click guard is the UI's.
+- "Amount due has changed" is proven on Bulilit (a month that starts after a price change); an overdue month can't be repriced by a change dated today (decision 11).
+- Settle isn't written to the audit trail (logged with the clinic id and the patch's keys): the trail holds clinic users, and the mock audits no settle.
+- Billing-only (decision 25): `ClinicIdentity.billingOnly` from the account's status and `Subscription.pause = overdue` and `clinic.manage`; `readOnly` false for it; the guard answers `BILLING_ONLY_MESSAGE` outside `BILLING_ONLY_ROUTES`. Sign-in settles each opened match's clinic, then reads the logins again before the active check.
+**Gate:** `pnpm run check`: green. `test:int`: 50 files, 553 tests green.

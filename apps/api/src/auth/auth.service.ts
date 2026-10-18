@@ -12,6 +12,7 @@ import type { ZodType } from "zod";
 import { Hasher } from "./hashing";
 import { type Actor, type ClinicIdentity, IdentityService, type LoginCandidate, toSessionUser } from "./identity.service";
 import { SessionService } from "./session.service";
+import { SubscriptionRecordsService } from "../subscription-records/subscription-records.service";
 
 /** The body's token (decision 1). The real one is set only as the httpOnly cookie; the shared schema still wants a string. */
 export const COOKIE_TOKEN = "cookie";
@@ -44,6 +45,7 @@ export class AuthService {
     private readonly prisma: PrismaService, // only for runInTransaction: the rows belong to IdentityService and AuditService
     private readonly clock: Clock,
     @Inject(ENV) private readonly env: Env,
+    private readonly subscriptions: SubscriptionRecordsService,
   ) {}
 
   /** An entry in the account it names, signed in or not (the mock's `logEach`: selectTenant, then recordAudit). */
@@ -70,10 +72,15 @@ export class AuthService {
       for (const m of matches) await this.auditAs(m.clinicId, m.actor, "sign_in_failed", "Session");
       throw new UnauthorizedException("That mobile number or email and password don't match an account");
     }
-    // Checked after the password, so a stranger can't learn that an account is suspended.
-    const open = opened.filter((m) => m.active || !m.isStaff);
+    // B12 decision 4: the subscription check at sign-in, before the active check, so a lapsed clinic is paused now
+    // rather than at the nightly job. Only after a correct password. Then each match's account is read again.
+    for (const clinicId of new Set(opened.map((m) => m.clinicId))) await this.subscriptions.settle(clinicId);
+    const fresh = (await this.identity.loginsBy(email)).filter((f) => opened.some((m) => m.clinicId === f.clinicId && m.accountId === f.accountId));
+    // Checked after the password, so a stranger can't learn that an account is suspended. B12 decision 25: the Owner of
+    // a clinic paused for non-payment signs in to pay.
+    const open = fresh.filter((m) => m.active || !m.isStaff || m.billingOnly);
     if (open.length === 0) {
-      for (const m of opened) await this.auditAs(m.clinicId, m.actor, "denied", "Session (account suspended)");
+      for (const m of fresh) await this.auditAs(m.clinicId, m.actor, "denied", "Session (account suspended)");
       throw new ForbiddenException("Your clinic's Primolar account is paused. Contact your clinic.");
     }
     const match = clinicId ? open.find((m) => m.clinicId === clinicId) : open.length === 1 ? open[0] : undefined;

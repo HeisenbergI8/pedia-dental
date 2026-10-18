@@ -13,7 +13,8 @@ const prisma = testPrisma();
 const clock = new FixedClock(new Date("2026-10-16T00:00:00Z"));
 const hasher = new Hasher();
 const sessions = new SessionService(prisma, clock);
-const identity = new IdentityService(prisma, clock, hasher, new FamilyService(prisma));
+// B12: a paused account's Owner reads only the subscription's pause (decision 25); nothing here pauses one.
+const identity = new IdentityService(prisma, clock, hasher, new FamilyService(prisma), { pausedForPayment: async () => false } as never);
 const minutes = (n: number) => clock.set(new Date(clock.now().getTime() + n * 60_000));
 const asClinic = <T>(clinicId: string, fn: () => Promise<T>) =>
   requestContext.run({ requestId: "int", clinicId, operator: false }, async () => await fn());

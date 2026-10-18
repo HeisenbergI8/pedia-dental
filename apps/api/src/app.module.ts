@@ -36,6 +36,7 @@ import { PrismaModule } from "./prisma/prisma.module";
 import { PlatformSettingsModule } from "./platform-settings/platform-settings.module";
 import { SignupsModule } from "./signups/signups.module";
 import { OperatorModule } from "./operator/operator.module";
+import { ClinicBillingModule } from "./clinic-billing/clinic-billing.module";
 
 @Module({})
 export class AppModule implements NestModule {
@@ -78,6 +79,7 @@ export class AppModule implements NestModule {
         PlatformSettingsModule,
         SignupsModule,
         OperatorModule,
+        ClinicBillingModule,
       ],
       controllers: [HealthController],
       providers: [

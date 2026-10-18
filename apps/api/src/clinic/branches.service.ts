@@ -9,6 +9,7 @@ import { clinicData } from "../prisma/tenant-scope";
 import { type Tx, runInTransaction } from "../prisma/transaction";
 import { lockAccount } from "./account-lock";
 import { assertRoomFor } from "./limits";
+import { SubscriptionRecordsService } from "../subscription-records/subscription-records.service";
 
 /** The contract's columns: never `position`. */
 export const BRANCH_COLUMNS = { id: true, clinicId: true, name: true, address: true, phone: true, openingHours: true, archived: true } as const;
@@ -20,13 +21,18 @@ const Ids = z.array(z.string());
  */
 @Injectable()
 export class BranchesService {
-  constructor(private readonly prisma: PrismaService, private readonly appointments: AppointmentRecordsService, private readonly clock: Clock) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly appointments: AppointmentRecordsService,
+    private readonly clock: Clock,
+    private readonly subscriptions: SubscriptionRecordsService,
+  ) {}
 
   /** POST /branches: the limit first, so a full account says so whatever was typed; new branches go last. */
   create(body: unknown): Promise<Branch> {
     return runInTransaction(this.prisma, async (tx) => {
       const clinicId = await lockAccount(tx);
-      await assertRoomFor(tx, clinicId, "branches");
+      await assertRoomFor(tx, clinicId, "branches", await this.subscriptions.waitingDowngrade(tx, clinicId));
       const input = new ZodValidationPipe(BranchInput).transform(body);
       const last = await tx.branch.findFirst({ orderBy: { position: "desc" }, select: { position: true } });
       const row = await tx.branch.create({ data: { ...clinicData(), ...input, archived: false, position: (last?.position ?? -1) + 1 }, select: BRANCH_COLUMNS });
@@ -65,7 +71,7 @@ export class BranchesService {
       const clinicId = await lockAccount(tx);
       const branch = await this.find(tx, id);
       if (!branch.archived) return branch;
-      await assertRoomFor(tx, clinicId, "branches");
+      await assertRoomFor(tx, clinicId, "branches", await this.subscriptions.waitingDowngrade(tx, clinicId));
       await tx.branch.updateMany({ where: { id }, data: { archived: false } });
       return { ...branch, archived: false };
     });

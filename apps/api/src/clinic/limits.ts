@@ -1,5 +1,5 @@
 import { ConflictException } from "@nestjs/common";
-import { TIER_LIMITS, accountUsage, canAddUnder, limitMessage, type ClinicUsage, type Tier } from "@pedia/shared";
+import { TIER_LIMITS, accountUsage, canAddUnder, limitMessage, limitTier, type ClinicUsage, type Tier } from "@pedia/shared";
 
 /** What the plan's storage and text allowances count (B12 decisions 1, 2, 17, 18): bytes stored, billed parts in `month`. */
 export type AllowanceUse = { storageBytes: number; textParts: number; month: string };
@@ -34,10 +34,12 @@ export const limitRefusal = (tier: Tier, limit: Limit, inUse: number): string | 
 
 /**
  * 409 with the limit's words when the clinic is full. Call it inside runInTransaction, after lockAccount, right before
- * the insert or reactivation it guards: the lock makes count-then-write one step per clinic (B3, Decision 4).
+ * the insert or reactivation it guards: the lock makes count-then-write one step per clinic (B3, Decision 4). B12 E13:
+ * while a downgrade waits (`downgrade`, SubscriptionRecordsService.waitingDowngrade), the smaller plan's limit counts,
+ * so the clinic can't grow past it before the downgrade's date.
  */
-export async function assertRoomFor(tx: Tx, clinicId: string, limit: Limit): Promise<void> {
+export async function assertRoomFor(tx: Tx, clinicId: string, limit: Limit, downgrade: { tier: Tier } | null = null): Promise<void> {
   const { tier } = await tx.clinicAccount.findUniqueOrThrow({ where: { id: clinicId }, select: { tier: true } });
-  const refused = limitRefusal(tier, limit, (await countUsage(tx))[limit]);
+  const refused = limitRefusal(limitTier(tier, downgrade), limit, (await countUsage(tx))[limit]);
   if (refused) throw new ConflictException(refused);
 }

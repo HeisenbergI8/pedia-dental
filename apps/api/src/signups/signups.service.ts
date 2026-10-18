@@ -363,6 +363,17 @@ export class SignupsService {
     });
   }
 
+  /** Billing #17: whether a clinic chose Design it for me, and where that stands; undefined when it didn't. */
+  async designOf(clinicId: string, db: Tx | PrismaService = this.prisma): Promise<"in_progress" | "delivered" | undefined> {
+    const row = await db.signup.findUnique({ where: { clinicId }, select: { designStatus: true } });
+    return row?.designStatus ?? undefined;
+  }
+
+  /** Billing #17–#20: Primolar delivered (or corrected) the finished look. In the operator's branding transaction. */
+  async markDesignDelivered(tx: Tx, clinicId: string): Promise<void> {
+    await tx.signup.update({ where: { clinicId }, data: { designStatus: "delivered", designDeliveredAt: this.clock.now() }, select: { id: true } });
+  }
+
   /**
    * B12 decision 15 (the daily job): a sign-up rejected at least 30 days ago loses its logo, reference images and receipt
    * images; its record and words stay. One transaction per sign-up; the files go through the outbox after commit.
