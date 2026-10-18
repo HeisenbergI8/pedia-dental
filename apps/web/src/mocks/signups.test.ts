@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { setupServer } from "msw/node";
 import { z } from "zod";
 import {
@@ -15,6 +15,7 @@ import { ApiError, api } from "@/lib/api-client";
 import { env } from "@/lib/env";
 import { currentClinicId, platform } from "./db";
 import { handlers } from "./handlers";
+import { resetPurge, resetSignupHits } from "./signups";
 
 const server = setupServer(...handlers);
 const status = (p: Promise<unknown>) => p.then(() => 200, (e: ApiError) => e.status);
@@ -32,6 +33,7 @@ const form = (n: string, branding: GetStartedInput["branding"], tier: GetStarted
   acceptTerms: true,
 });
 
+beforeEach(resetSignupHits); // B12 decision 14: each test starts under the hourly sign-up limit
 beforeAll(() => {
   server.listen({ onUnhandledFrame: "error" });
   vi.stubGlobal("document", { cookie: "" }); // no session of any kind: the form is public (billing #4)
@@ -101,5 +103,31 @@ describe("the public Get started form (billing #4–#11)", () => {
   it("refuses a public route with no rule, and never needs a clinic session", async () => {
     expect(await status(api("/signups/prices/extra", z.unknown()))).toBe(403);
     expect(await status(api("/clinic", z.unknown()))).toBe(401); // the same browser has no clinic access
+  });
+});
+
+describe("B12: the hourly limit and rejected sign-ups' files (decisions 14, 15)", () => {
+  it("refuses a sixth sign-up from one connection within the hour, storing nothing", async () => {
+    for (let i = 0; i < 5; i++) await submit(form(`Limit${i}`, { choice: "default" }));
+    const before = platform.signups.length;
+    await expect(submit(form("Limit5", { choice: "default" }))).rejects.toMatchObject({ status: 429, message: "Too many sign-ups from this connection. Try again in an hour." });
+    expect(platform.signups).toHaveLength(before);
+  });
+
+  it("deletes a sign-up's files 30 days after its rejection, keeping its record", async () => {
+    const made = await submit(form("Purge", { choice: "designed", brief: "Pastel teeth" }), { references: [png()] });
+    const kept = await submit(form("Kept", { choice: "designed", brief: "Pastel teeth" }), { references: [png()] });
+    const old = platform.signups.find((s) => s.reference === made.reference)!;
+    const recent = platform.signups.find((s) => s.reference === kept.reference)!;
+    Object.assign(old, { status: "rejected", rejection: { reason: "Duplicate", at: new Date(Date.now() - 31 * 86_400_000).toISOString() } });
+    Object.assign(recent, { status: "rejected", rejection: { reason: "Duplicate", at: new Date(Date.now() - 29 * 86_400_000).toISOString() } });
+    const key = old.referenceRefs[0]!;
+    resetPurge();
+    await api("/signups/prices", z.unknown()); // any request runs the daily purge
+    expect(old).toMatchObject({ referenceRefs: [], filesDeletedAt: expect.any(String), rejection: { reason: "Duplicate" } });
+    expect(recent.referenceRefs).toHaveLength(1);
+    vi.stubGlobal("document", { cookie: "pd_operator=operator.operator_primolar" });
+    await expect(api(`/operator/signups/${old.id}/files/${key}`, z.unknown())).rejects.toMatchObject({ status: 404 });
+    vi.stubGlobal("document", { cookie: "" });
   });
 });

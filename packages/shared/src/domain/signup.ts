@@ -1,5 +1,6 @@
 import type { AmountDue, BrandingChoice, PriceList, Signup } from "../schemas/signup";
 import type { Tier } from "../schemas/tenancy";
+import { differenceInCalendarDays, parseISO } from "date-fns";
 
 /** Billing #22: every price includes 12% VAT. */
 export const VAT_RATE = 0.12;
@@ -52,4 +53,18 @@ export function referenceImagesProblem(files: { type: string; size: number }[]):
   if (files.some((f) => !REFERENCE_IMAGE_RULES.types.includes(f.type))) return "Reference images must be PNG or JPG files";
   if (files.some((f) => f.size > REFERENCE_IMAGE_RULES.maxBytes)) return "Each reference image must be 5 MB or smaller";
   return undefined;
+}
+
+/** B12 decision 14: sign-ups per hour from one connection, counted before the form is read. */
+export const SIGNUPS_PER_HOUR = 5;
+export const SIGNUP_LIMIT_MESSAGE = "Too many sign-ups from this connection. Try again in an hour.";
+
+/** B12 decision 15: a rejected sign-up's files are deleted this many days after the rejection; the record stays. */
+export const REJECTED_FILES_DAYS = 30;
+
+/** Is this sign-up's files' time up on `today` (a Manila date)? */
+export function filesDueForDeletion(s: Pick<Signup, "status" | "rejection" | "filesDeletedAt">, today: string): boolean {
+  if (s.status !== "rejected" || !s.rejection || s.filesDeletedAt) return false;
+  const rejectedOn = new Date(Date.parse(s.rejection.at) + 8 * 3_600_000).toISOString().slice(0, 10); // Manila: UTC+8, no DST
+  return differenceInCalendarDays(parseISO(today), parseISO(rejectedOn)) >= REJECTED_FILES_DAYS;
 }

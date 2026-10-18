@@ -57,6 +57,9 @@ export const SessionUser = z.object({
   // A parent whose clinic is suspended (decision #44): reads work, every portal change is refused. Staff of a
   // suspended clinic never get a session at all (decisions #26, #41).
   readOnly: z.boolean().optional(),
+  // B12 decision 25: the Owner of a clinic paused for an unpaid subscription. Only BILLING_ONLY_ROUTES answer; the app
+  // shows only Settings → Plan to pay. Other staff of a paused clinic still get no session.
+  billingOnly: z.boolean().optional(),
   // A login the Owner just created (decision #21): until they choose their own password, every API route but /auth/*
   // answers 403 and the app shows only "Choose your password".
   mustChangePassword: z.boolean().optional(),

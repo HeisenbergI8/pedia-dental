@@ -369,29 +369,36 @@ can pass; `test/int/portal.int.test.ts` and `e2e/api-portal.spec.ts` cover the f
 
 ---
 
-## Chunk B12: Operator console, sign-ups and subscriptions (~26 h) · Large — features 16 (console) and 17
+## ✅ Chunk B12: Operator console, sign-ups and subscriptions (done, 2026-10-18) · Large — features 16 (console) and 17
 
 **Goal:** Primolar runs its own business on the API.
 
-- Storage limits per plan read `StorageService.usedBytes()` (B10's ledger); the SMS count reads `MessageQueueService.sentIn`.
-- Operator console: accounts, tiers, Owners, suspend and reactivate, branding for "Design it for me", usage, the price
-  list.
-- Public sign-ups: multipart form with files through storage, status by reference, record payment, fix, reject,
-  approve → `createClinic` in one transaction.
-- Subscriptions: due dates only from `subscriptionDueOn`, states from `subscriptionStatus`. **Settling overdue
-  accounts becomes a daily scheduled job** (plus a check at sign-in) instead of the mock's settle-on-every-request.
-- Primolar invoices.
-- **Manual QR payments** (owner's decision, 2026-10-17: no payment gateway until there are paying clinics). The
-  operator uploads Primolar's payment QR (GCash, Maya or bank) in the console and can replace it any time. New clinics
-  see it on the sign-up thank-you page; Owners see it in Settings → Plan when the monthly fee is due. The clinic uploads
-  a screenshot of the receipt and types the reference number; the operator checks it and records the payment by hand,
-  as the prototype. Screenshots go through `StorageService` (private, the clinic's and the operator's only). The web
-  gains these screens and their MSW handlers first (the mocks are the API's spec), then the API serves them.
+- **B12a (contract, seed, mock):** the allowances (storage and texts per plan), price history, downgrades refused over
+  the smaller plan's limits, the payment QR and receipts, the billing-only session (decision 25), in `@pedia/shared`,
+  `@pedia/seed` and the mock first.
+- **B12b (web):** pay by QR and send a receipt on Settings → Plan and the sign-up status page, Payments to check with
+  its count in the console, the QR card, usage tiles and the text warning, the paused Owner's Plan-only screen.
+- **B12c (API):** Primolar's own files (`platform/*`, no ledger), several-part uploads, prices and the QR; sign-ups
+  (public and the console's) and approve → the clinic in one transaction; subscriptions, payments and invoices; the
+  console's accounts; receipts; the nightly settle (00:05 Manila) plus the check at sign-in; the rejected sign-ups'
+  file purge (03:15 Manila); the plan's storage checked at the ledger and texts at the send claim.
+- **B12d (cut-over):** every operator route, the public sign-up routes and `/clinic/subscription*` in `API_ROUTES`.
 
-**Decided (2026-10-17):** PayMongo checkout and auto-charging wait for their own chunk after B13; payments stay manual.
+**Decided** (`.claude/plans/feature-chunk-b12-operator-console-plan/decisions.md`, 26 decisions): manual payments by one
+QR (no gateway), one receipt waiting at a time, the operator confirms only the full amount; storage 2/10/50 GB and texts
+300/1,000/3,000 parts a month per plan (template texts stop at the limit, account texts never); a price change applies
+to months that start after it; no downgrade below what the clinic uses; 5 sign-ups an hour per address; a rejected
+sign-up's files deleted after 30 days; a lapsed clinic's Owner signs in to pay only.
 
 **Done when:** a sign-up submitted, paid and approved becomes a working clinic whose Owner can sign in; a clinic
-approved on the 31st is due on the 30th next month; an account 7 days overdue pauses itself after the nightly job.
+approved on the 31st is due on the 30th next month; an account past its 7 days of grace pauses itself after the nightly
+job. *Proven: `test/int/signups.int.test.ts` (approve → the Owner signs in to one branch, chair, procedures and
+templates) and `e2e/api-operator.spec.ts` (sign-up → QR receipt → confirm → approve → the Owner's Plan);
+`packages/shared/src/domain/subscription.test.ts` (the 31st); `test/int/subscriptions.int.test.ts` (8 days past due
+pauses, 7 doesn't; the check at sign-in pauses before the job).*
+
+**Deferred:** the S3 IAM policy must allow `platform/*` before go-live (B13); PayMongo checkout and auto-charging,
+BIR-registered invoices and a second step for the operator's sign-in stay later chunks.
 
 **Depends on:** B11.
 
@@ -446,7 +453,7 @@ B0 Skeleton ✅
                                  └─ B9 Parent messages & real sending ✅
                                      └─ B10 Photos & documents ✅
                                          └─ B11 Parent portal & parent accounts ✅
-                                             └─ B12 Operator console, sign-ups & subscriptions
+                                             └─ B12 Operator console, sign-ups & subscriptions ✅
                                                  └─ B13 Production readiness & full cut-over
 ```
 

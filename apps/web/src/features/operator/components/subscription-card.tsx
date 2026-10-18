@@ -1,5 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
+import Link from "next/link";
 import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -18,7 +19,8 @@ import { SectionCard } from "@/components/section-card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PaymentHistory } from "@/features/clinic/components/payment-history";
-import { useAccountSubscription, useCancelSubscription, useRecordSubscriptionPayment } from "../api";
+import { ReceiptList } from "@/features/payments/components/receipt-list";
+import { receiptImageUrl, useAccountSubscription, useCancelSubscription, useRecordSubscriptionPayment } from "../api";
 import { PaymentFields } from "./payment-fields";
 
 type Open = "payment" | "cancel" | undefined;
@@ -83,6 +85,15 @@ export function SubscriptionCard({ row }: { row: AccountOverview }) {
         <h3 className="text-sm font-semibold">Payment history</h3>
         <PaymentHistory subscription={s} />
       </div>
+      {s.receipts.length > 0 && (
+        <div className="space-y-2 border-t border-line pt-4">
+          <h3 className="text-sm font-semibold">Receipts sent</h3>
+          <ReceiptList receipts={s.receipts} imageUrl={receiptImageUrl} />
+          {s.receipts[0]!.status === "pending" && (
+            <Link href="/operator/payments" className="text-sm font-semibold text-brand underline-offset-2 hover:underline">Check it in Payments to check</Link>
+          )}
+        </div>
+      )}
       {open === "payment" && <MonthPaymentDialog name={row.account.name} s={s} onClose={close} returnFocus={() => (payButton.current ?? summary.current)?.focus()} />}
       {open === "cancel" && <CancelDialog name={row.account.name} s={s} onClose={close} returnFocus={() => summary.current?.focus()} />}
     </SectionCard>

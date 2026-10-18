@@ -2,7 +2,11 @@ import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { env } from "@/lib/env";
+import { OPERATOR_RULES, PUBLIC_RULES } from "./access";
 import { API_ROUTES, apiPassthrough, servedBy } from "./passthrough";
+
+/** B12: every operator route, the five public sign-up routes and the Owner's three bill routes (swept below). */
+const B12_ROUTES = 25 + 5 + 3;
 
 const routes = [{ method: "GET", path: "/branches" }, { method: "POST", path: "/staff/:id/deactivate" }];
 
@@ -82,12 +86,11 @@ describe("which routes the API serves", () => {
       ["POST", "/auth/password-link"], ["POST", "/auth/password-link/accept"], ["POST", "/auth/password-reset"], ["GET", "/auth/demo-texts"],
     ] as const;
     for (const [method, path] of b11) expect(api(method, path), `${method} ${path}`).toBe(true);
-    expect(API_ROUTES).toHaveLength(14 + b3.length + b4.length + b5.length + b6.length + b7.length + b8.length + b9.length + b10.length + b11.length);
-    // Same prefixes, other chunks (B12, B13): still MSW's. DELETE /notes/:id isn't a route (exact method).
-    expect([api("GET", "/clinic/subscription"), api("POST", "/patients/p1/exports"), api("DELETE", "/notes/n1")]).toEqual([false, false, false]);
-    expect(api("POST", "/operator/accounts/a1/subscription/payments")).toBe(false);
+    expect(API_ROUTES).toHaveLength(14 + b3.length + b4.length + b5.length + b6.length + b7.length + b8.length + b9.length + b10.length + b11.length + B12_ROUTES);
+    // Same prefixes, other chunks (B13): still MSW's. DELETE /notes/:id isn't a route (exact method).
+    expect([api("POST", "/patients/p1/exports"), api("DELETE", "/notes/n1")]).toEqual([false, false]);
     expect(api("DELETE", "/appointments/a1")).toBe(false);
-    expect([api("GET", "/operator/accounts"), api("DELETE", "/branches/b1")]).toEqual([false, false]);
+    expect(api("DELETE", "/branches/b1")).toBe(false); // B12 serves /operator/accounts now (swept below)
   });
 });
 
@@ -96,6 +99,14 @@ describe("the passthrough handler", () => {
   const server = setupServer(apiPassthrough(routes), http.all(`${env.apiUrl}/*`, () => HttpResponse.json("mock")));
   beforeAll(() => server.listen({ onUnhandledFrame: "error" }));
   afterAll(() => server.close());
+
+  it("serves B12 from the API: every operator rule, every public sign-up rule, and the Owner's bill (a sweep, so no route is forgotten)", () => {
+    const api = (method: string, path: string) => API_ROUTES.some((r) => r.method === method && r.path === path);
+    for (const r of [...OPERATOR_RULES, ...PUBLIC_RULES.filter((p) => p.path.startsWith("/signups"))]) expect(api(r.method, r.path), `${r.method} ${r.path}`).toBe(true);
+    for (const r of [["GET", "/clinic/subscription"], ["POST", "/clinic/subscription/receipts"], ["GET", "/clinic/subscription/receipts/:id/image"]] as const) {
+      expect(api(r[0], r[1]), r[1]).toBe(true);
+    }
+  });
 
   it("lets a listed route reach the network and keeps every other one mocked", async () => {
     await expect(fetch(`${env.apiUrl}/branches`)).rejects.toThrow();

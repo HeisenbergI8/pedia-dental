@@ -70,6 +70,16 @@ export const MODEL_SCOPE = {
   // The system's: the worker and the scheduler read across clinics. Handlers run inside the row's clinic.
   OutboxMessage: "platform",
   JobLock: "platform",
+  // B12: Primolar's billing. Sign-ups exist before any clinic; subscriptions, payments and receipts are read across
+  // clinics by the console and the jobs. Every query names clinicId itself where the row has one.
+  PlatformSettings: "platform",
+  PriceChange: "platform",
+  Signup: "platform",
+  Subscription: "platform",
+  SubscriptionPayment: "platform",
+  SubscriptionLine: "platform",
+  InvoiceCounter: "platform",
+  PaymentReceipt: "platform",
 } as const satisfies Record<Prisma.ModelName, ModelScope>;
 
 /**
@@ -86,4 +96,6 @@ export const APPEND_ONLY: ReadonlySet<string> = new Set<Prisma.ModelName>([
   "Payment",
   // B10: photos are part of the medical record (decision 5); an issued document is a fact (decision 6).
   "ClinicalPhoto", "PatientDocument",
+  // B12: a saved price list, a month paid to Primolar and its invoice lines.
+  "PriceChange", "SubscriptionPayment", "SubscriptionLine",
 ]);

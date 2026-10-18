@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Global, Module } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { TIER_LIMITS, storageFullMessage } from "@pedia/shared";
 import { Clock, SystemClock } from "../common/clock";
 import { requestContext } from "../common/request-context";
 import { ENV, loadEnv } from "../config/env";
@@ -24,7 +25,13 @@ let handlers: OutboxHandlers;
 type Row = { clinicId: string; key: string; area: string; bytes: number };
 const ledger: Row[] = [];
 const clinicOf = () => requestContext.current()?.clinicId;
-const fakePrisma = {
+/** B12: each clinic's plan, for the storage limit (decision 1). */
+const tiers: Record<string, "small" | "mid" | "big"> = {};
+const fakePrisma: Record<string, unknown> = {
+  // The transaction is the client itself (one request at a time here); the account lock is a no-op.
+  $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(fakePrisma),
+  $queryRaw: async () => [],
+  clinicAccount: { findUniqueOrThrow: async () => ({ tier: tiers[clinicOf()!] ?? "big" }) },
   storedFile: {
     create: async ({ data }: { data: Row }) => void ledger.push(data),
     deleteMany: async ({ where }: { where: { key: string } }) => {
@@ -124,6 +131,30 @@ describe("StorageService on the local disk", () => {
     expect(opened).toMatchObject({ bytes: 3, contentType: "image/png", name: "bea.png", download: true });
     opened!.stream.destroy();
     expect(await as("clinic_b", () => storage.link(key, { fileName: "x.png" }))).toBeUndefined();
+  });
+
+  it("refuses a file that would pass the plan's storage, with the shared words, storing and counting nothing (B12 decision 1, E8)", async () => {
+    tiers.clinic_full = "small";
+    const limit = TIER_LIMITS.small.storageBytes;
+    ledger.push({ clinicId: "clinic_full", key: "clinics/clinic_full/photos/seed.png", area: "photos", bytes: limit - 3 });
+    const driver = (storage as unknown as { files: LocalDiskStorage }).files;
+    const put = vi.spyOn(driver, "put");
+    await expect(as("clinic_full", () => storage.put("photos", "png", Buffer.from([1, 2, 3, 4])))).rejects.toThrow(storageFullMessage("small"));
+    expect(put).not.toHaveBeenCalled();
+    expect(ledger.filter((r) => r.clinicId === "clinic_full")).toHaveLength(1);
+    const key = await as("clinic_full", () => storage.put("photos", "png", Buffer.from([1, 2, 3]))); // exactly at the limit
+    expect(await as("clinic_full", () => storage.usedBytes())).toBe(limit);
+    expect(put).toHaveBeenCalledTimes(1);
+    put.mockRestore();
+    await as("clinic_full", () => storage.delete(key));
+  });
+
+  it("removes the ledger row when the driver fails to store the file", async () => {
+    const driver = (storage as unknown as { files: LocalDiskStorage }).files;
+    const put = vi.spyOn(driver, "put").mockRejectedValueOnce(new Error("disk full"));
+    await expect(as("clinic_a", () => storage.put("photos", "png", Buffer.from([5])))).rejects.toThrow("disk full");
+    expect(ledger.some((r) => r.bytes === 1 && r.clinicId === "clinic_a")).toBe(false);
+    put.mockRestore();
   });
 
   it("refuses to work without a clinic", async () => {

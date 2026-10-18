@@ -29,7 +29,7 @@ let lookups = 0;
 const branch = { id: "b1", clinicId: "c1", name: "Imus", address: "a", phone: "(046) 471 2580", openingHours: { opensAt: 480, closesAt: 1080, closedWeekdays: [0] }, archived: false };
 let who: ClinicIdentity | undefined;
 const as = (roles: ClinicIdentity["user"]["roles"], extra: Partial<ClinicIdentity> = {}): ClinicIdentity => ({
-  clinicId: "c1", user: { id: "u1", name: "Ana", role: roles[0]!, roles }, email: "a@x", readOnly: false, mustChangePassword: false, branches: [branch], ...extra,
+  clinicId: "c1", user: { id: "u1", name: "Ana", role: roles[0]!, roles }, email: "a@x", readOnly: false, billingOnly: false, mustChangePassword: false, branches: [branch], ...extra,
 });
 
 /** No database: the session and identity are fakes, the guard and the route map are real. */

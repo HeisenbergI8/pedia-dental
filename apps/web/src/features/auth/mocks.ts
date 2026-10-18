@@ -6,6 +6,7 @@ import { accountById, credentialOf, db, persist, platform, selectTenant } from "
 import { DEMO_PASSWORD, accountsByLogin, allAccounts, demoAccounts, demoLogins, passwordOpens, portalAccountOf, tokenFor, type AccountMatch, type DemoAccountRecord } from "@/mocks/demo-accounts";
 import { acknowledgementPrompt, expectedVersion, pendingAcknowledgement, recordAcknowledgement } from "@/mocks/privacy";
 import { DEMO_CLINIC_ID, onlineAgreement } from "@pedia/seed";
+import { billingOnlyFor } from "@/mocks/subscriptions";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 
@@ -18,7 +19,8 @@ export const userOf = (account: DemoAccountRecord, clinicId: string): SessionUse
     email,
     clinicId,
     roles,
-    readOnly: accountById(clinicId)?.status === "active" ? undefined : true,
+    readOnly: accountById(clinicId)?.status === "active" || billingOnlyFor(account, clinicId) ? undefined : true,
+    billingOnly: billingOnlyFor(account, clinicId) || undefined, // B12 decision 25
     mustChangePassword: credentialOf(platform.tenants[clinicId]!, staffId)?.mustChange || undefined,
     mustAcknowledge: pendingAcknowledgement(account, clinicId), // privacy P10
     staffId,
@@ -63,7 +65,8 @@ export const authHandlers = [
     }
     // Checked after the password, so a stranger can't learn that an account is suspended. A suspended account's staff
     // are refused; its parents still sign in, read-only (decisions #26, #44).
-    const open = opened.filter((m) => accountById(m.clinicId)?.status === "active" || m.account.role === "parent");
+    // B12 decision 25: the Owner of a clinic paused for non-payment signs in to pay.
+    const open = opened.filter((m) => accountById(m.clinicId)?.status === "active" || m.account.role === "parent" || billingOnlyFor(m.account, m.clinicId));
     if (open.length === 0) {
       logEach(opened, "denied", "Session (account suspended)");
       return new HttpResponse("Your clinic's Primolar account is paused. Contact your clinic.", { status: 403 });

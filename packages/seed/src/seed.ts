@@ -287,6 +287,7 @@ export function seed(): Db {
     privacyNotices: [firstNotice(CLINIC_ID, DEMO_ACCOUNT.name, STAFF.find((s) => s.isOwner)!.fullName, DEMO_ACCOUNT.contactEmail)],
     acknowledgements: staffAcknowledged(CLINIC_ID, STAFF),
     portalAccounts: [], // filled by seedPlatform (B11)
+    storedFiles: [], // filled by seedPlatform (B12)
   };
 }
 

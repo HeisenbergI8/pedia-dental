@@ -6,6 +6,7 @@ import { DeleteFileHandler } from "./delete-file.handler";
 import { fileStorageOf } from "./file-storage";
 import { LocalFilesController } from "./local-files.controller";
 import { FileStorage } from "./storage";
+import { PlatformFilesService } from "./platform-files.service";
 import { StorageService } from "./storage.service";
 
 /**
@@ -19,8 +20,9 @@ import { StorageService } from "./storage.service";
   providers: [
     { provide: FileStorage, inject: [ENV, Clock], useFactory: (env: Env, clock: Clock) => fileStorageOf(env, () => clock.now().getTime()) },
     StorageService,
+    PlatformFilesService,
     DeleteFileHandler,
   ],
-  exports: [StorageService],
+  exports: [StorageService, PlatformFilesService],
 })
 export class StorageModule {}

@@ -5,7 +5,7 @@ import { dirname, resolve, sep } from "node:path";
 import type { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { signLink, verifyLink } from "./local-links";
-import { CONTENT_TYPES, FileStorage, type LinkOptions, type PutInfo, parseKey } from "./storage";
+import { CONTENT_TYPES, FileStorage, type LinkOptions, type PutInfo, parseKey, parsePlatformKey } from "./storage";
 
 /** What GET /files/:token streams back (LocalFilesController). */
 export type OpenedFile = { stream: Readable; bytes: number; contentType: string; name: string; download: boolean };
@@ -65,7 +65,7 @@ export class LocalDiskStorage extends FileStorage {
   /** A live link's file, or undefined (bad or expired token, unknown key shape, no such file). */
   async open(token: string): Promise<OpenedFile | undefined> {
     const claims = verifyLink(this.secret, token, this.nowMs());
-    const parts = claims && parseKey(claims.key);
+    const parts = claims && (parseKey(claims.key) ?? parsePlatformKey(claims.key)); // a clinic's file or Primolar's (B12)
     if (!claims || !parts) return undefined;
     const path = this.pathOf(claims.key);
     const size = await stat(path).then(

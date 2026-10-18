@@ -15,6 +15,7 @@ import { Hasher, pinAttempt, type PinAttempt } from "./hashing";
 import { newPin, temporaryPassword } from "./secrets";
 import { FamilyService } from "../patients/family.service";
 import { isDuplicateKey } from "../idempotency/idempotency.service";
+import { SubscriptionRecordsService } from "../subscription-records/subscription-records.service";
 
 /** Who a live clinic session is, right now. What the guard puts in the request context and checks. */
 export type ClinicIdentity = {
@@ -25,6 +26,8 @@ export type ClinicIdentity = {
   guardianId?: string;
   /** A suspended clinic's parent: reads only (decision #44). Staff of a suspended clinic get no identity at all. */
   readOnly: boolean;
+  /** B12 decision 25: the Owner of a clinic paused for its unpaid subscription, who may only pay (BILLING_ONLY_ROUTES). */
+  billingOnly: boolean;
   mustChangePassword: boolean;
   mustAcknowledge?: AcknowledgementKind;
   /** The branches this login may work at (usableBranches): the Owner every open one, staff their assignments. */
@@ -44,6 +47,8 @@ export type LoginCandidate = {
   clinicName: string;
   /** Staff of a suspended account are refused; its parents sign in read-only (decisions #26, #44). */
   active: boolean;
+  /** B12 decision 25: the Owner of an account paused for non-payment signs in, to pay only. */
+  billingOnly: boolean;
   accountId: string;
   passwordHash: string;
   isStaff: boolean;
@@ -59,6 +64,7 @@ export const toSessionUser = (who: ClinicIdentity): SessionUser => ({
   clinicId: who.clinicId,
   roles: who.user.roles,
   readOnly: who.readOnly || undefined,
+  billingOnly: who.billingOnly || undefined,
   mustChangePassword: who.mustChangePassword || undefined,
   mustAcknowledge: who.mustAcknowledge,
   staffId: who.staffId,
@@ -76,7 +82,13 @@ export class IdentityService {
     private readonly clock: Clock,
     private readonly hasher: Hasher,
     private readonly family: FamilyService,
+    private readonly subscriptions: SubscriptionRecordsService,
   ) {}
+
+  /** B12 decision 25: a staff login that may pay for a paused clinic: the Owner (clinic.manage) of one paused by its own unpaid subscription. */
+  private async billingOnly(clinicId: string, suspended: boolean, roles: readonly Role[]): Promise<boolean> {
+    return suspended && rolesCan(roles, "clinic.manage") && (await this.subscriptions.pausedForPayment(clinicId));
+  }
 
   /**
    * The identity behind a session, or undefined when the login can't work any more: removed, a deactivated staff
@@ -98,8 +110,10 @@ export class IdentityService {
     if (children?.size === 0) return undefined;
 
     const staff = cred.staffId ? await this.prisma.staff.findUnique({ where: { id: cred.staffId } }) : null;
-    if (cred.staffId && (!staff || staff.deactivatedAt || suspended)) return undefined;
+    if (cred.staffId && (!staff || staff.deactivatedAt)) return undefined;
     const roles = staff ? rolesOf({ role: staff.role, alsoRoles: StaffRole.array().parse(staff.alsoRoles), isOwner: staff.isOwner }) : (["parent"] as Role[]);
+    const billingOnly = !!staff && (await this.billingOnly(clinicId, suspended, roles));
+    if (staff && suspended && !billingOnly) return undefined;
 
     const rows = await this.prisma.branch.findMany({ orderBy: [{ position: "asc" }, { id: "asc" }] });
     const all = rows.map((b) => BranchSchema.parse(b));
@@ -111,7 +125,8 @@ export class IdentityService {
       email: cred.email ?? "", // a parent on their mobile only (B11 decision 14)
       staffId: cred.staffId ?? undefined,
       guardianId: cred.guardianId ?? undefined,
-      readOnly: suspended,
+      readOnly: suspended && !billingOnly,
+      billingOnly,
       mustChangePassword: cred.mustChange,
       mustAcknowledge: await this.pendingAcknowledgement(clinicId, accountId, roles, !!staff, !!cred.guardianId),
       branches: usableBranches(roles, assigned, all),
@@ -184,7 +199,9 @@ export class IdentityService {
       const actor = account && (await this.actorOf(c.clinicId, c));
       if (!account || !actor) continue;
       if (c.guardianId && (await requestContext.within({ clinicId: c.clinicId }, () => this.family.childrenOf(c.guardianId!))).size === 0) continue;
-      found.push({ clinicId: c.clinicId, clinicName: account.name, active: account.status === "active", accountId: c.accountId, passwordHash: c.passwordHash, isStaff: !!c.staffId, actor });
+      const active = account.status === "active";
+      const billingOnly = !!c.staffId && (await this.billingOnly(c.clinicId, !active, actor.roles));
+      found.push({ clinicId: c.clinicId, clinicName: account.name, active, billingOnly, accountId: c.accountId, passwordHash: c.passwordHash, isStaff: !!c.staffId, actor });
     }
     return found.sort((a, b) => a.clinicName.localeCompare(b.clinicName));
   }

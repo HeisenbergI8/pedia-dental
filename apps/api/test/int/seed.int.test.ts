@@ -19,6 +19,8 @@ import { DOCUMENT_SELECT, toDocument } from "../../src/documents/document.rows";
 import { PHOTO_SELECT, toPhoto } from "../../src/photos/photo.rows";
 import { LocalDiskStorage } from "../../src/storage/local-disk.storage";
 import { VISIT_COLUMNS, toVisit } from "../../src/visits/visit.rows";
+import { toSignup, toSignupRow } from "../../src/signups/signup.rows";
+import { parsePlatformKey } from "../../src/storage/storage";
 import { inClinic, resetDatabase, testPrisma } from "./support/database";
 
 const prisma = testPrisma();
@@ -186,6 +188,32 @@ describe("prisma db seed (seedDatabase) on MySQL", () => {
       const numbers = phones.flatMap((p) => (p.phone ? [p.phone] : []));
       expect(numbers.length > 0).toBe(db.portalAccounts.length > 0); // a clinic with no patients has no parents
       expect(new Set(numbers).size).toBe(numbers.length);
+    }
+  });
+
+  it("writes Primolar's billing: prices, sign-ups, subscriptions with their invoices, the counter and the receipts (B12)", async () => {
+    const root = mkdtempSync(join(tmpdir(), "b12-seed-"));
+    const files = new LocalDiskStorage(root, "s".repeat(32));
+    await resetDatabase(prisma);
+    await seedDatabase(prisma, hasher, { DEMO_LOGINS: true }, platform, files);
+    const settings = await prisma.platformSettings.findUniqueOrThrow({ where: { id: "primolar" } });
+    expect([settings.midMonthlyFee, settings.designAddOn, settings.paymentQrKey]).toEqual([platform.prices.plans.mid.monthlyFee, platform.prices.designAddOn, null]);
+    // Compared as rows: the seed writes instants with +08:00, the database answers in UTC (the same moment).
+    expect((await prisma.signup.findMany()).map((r) => toSignupRow(toSignup(r)))).toEqual(platform.signups.map(toSignupRow));
+    expect(await prisma.subscription.count()).toBe(platform.subscriptions.length);
+    const payments = platform.subscriptions.flatMap((s) => s.payments);
+    expect(await prisma.subscriptionPayment.count()).toBe(payments.length);
+    expect(await prisma.subscriptionLine.count()).toBe(payments.reduce((n, p) => n + p.lines.length, 0));
+    expect((await prisma.invoiceCounter.findUniqueOrThrow({ where: { id: "primolar" } })).next).toBe(payments.length + 1);
+    const receipts = await prisma.paymentReceipt.findMany();
+    expect(receipts.map((r) => [r.id, r.status, r.clinicId])).toEqual(platform.receipts.map((r) => [r.id, r.status, r.payer.kind === "subscription" ? r.payer.clinicId : null]));
+    for (const r of receipts) {
+      expect(parsePlatformKey(r.fileKey!)?.area).toBe("receipts");
+      expect((await files.get(r.fileKey!))?.equals(Buffer.from(SEED_FILES["image/png"]))).toBe(true);
+    }
+    // No ledger row for a platform file: every clinic's ledger is its photos, and nothing more.
+    for (const { id } of platform.accounts) {
+      expect(await inClinic(id, async () => [await prisma.storedFile.count(), await prisma.clinicalPhoto.count()]).then(([f, p]) => f === p)).toBe(true);
     }
   });
 

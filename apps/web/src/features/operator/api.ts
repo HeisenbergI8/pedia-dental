@@ -6,16 +6,21 @@ import {
   CreateAccountResult,
   OperatorSession,
   OwnerCandidate,
+  PaymentQrView,
   PriceList,
+  ReceiptToCheck,
   Signup,
   SubscriptionView,
+  type ConfirmReceiptInput,
   type CreateAccountInput,
   type OperatorLoginInput,
+  type PaymentQrInput,
   type RecordUpfrontPaymentInput,
   type SetBrandingInput,
   type SignupInput,
   type Tier,
 } from "@pedia/shared";
+import { imageFormData } from "@/features/payments/form-data";
 import { signupFormData } from "@/features/signup/form-data";
 import { api } from "@/lib/api-client";
 import { env } from "@/lib/env";
@@ -28,6 +33,8 @@ export const operatorKeys = {
   subscription: (id: string) => [...operatorKeys.all, "accounts", id, "subscription"] as const,
   signups: () => [...operatorKeys.all, "signups"] as const,
   prices: () => [...operatorKeys.all, "prices"] as const,
+  paymentQr: () => [...operatorKeys.all, "payment-qr"] as const,
+  receipts: () => [...operatorKeys.all, "receipts"] as const,
 };
 const post = (body?: unknown) => ({ method: "POST", ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 
@@ -98,3 +105,18 @@ export const useRecordSubscriptionPayment = (id: string) =>
 /** Billing #30, S7. */
 export const useCancelSubscription = (id: string) =>
   useAccountAction(() => api(`/operator/accounts/${id}/subscription/cancel`, SubscriptionView, post()));
+
+/** B12 decision 5: Primolar's one payment QR. null until the first upload. */
+export const usePaymentQr = () => useQuery({ queryKey: operatorKeys.paymentQr(), queryFn: () => api("/operator/payment-qr", PaymentQrView.nullable()) });
+export const useSavePaymentQr = () =>
+  useAccountAction(({ input, file }: { input: PaymentQrInput; file?: File }) =>
+    api("/operator/payment-qr", PaymentQrView.nullable(), { method: "PUT", body: imageFormData(input, file) }),
+  );
+/** Decision 8: Payments to check. Refetched on focus: the console's only notice of a new receipt (no email). */
+export const useReceiptsToCheck = () =>
+  useQuery({ queryKey: operatorKeys.receipts(), queryFn: () => api("/operator/receipts", z.array(ReceiptToCheck)), refetchOnWindowFocus: true });
+export const receiptImageUrl = (id: string) => `${env.apiUrl}/operator/receipts/${id}/image`;
+/** Both refetch the whole console, so the account's subscription and the sign-up show the decision. */
+export const useConfirmReceipt = (id: string) =>
+  useAccountAction((input: ConfirmReceiptInput) => api(`/operator/receipts/${id}/confirm`, ReceiptToCheck, post(input)));
+export const useRejectReceipt = (id: string) => useAccountAction((reason: string) => api(`/operator/receipts/${id}/reject`, ReceiptToCheck, post({ reason })));

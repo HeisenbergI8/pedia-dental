@@ -33,6 +33,10 @@ import { PhotosModule } from "./photos/photos.module";
 import { PortalModule } from "./portal/portal.module";
 import { DocumentsModule } from "./documents/documents.module";
 import { PrismaModule } from "./prisma/prisma.module";
+import { PlatformSettingsModule } from "./platform-settings/platform-settings.module";
+import { SignupsModule } from "./signups/signups.module";
+import { OperatorModule } from "./operator/operator.module";
+import { ClinicBillingModule } from "./clinic-billing/clinic-billing.module";
 
 @Module({})
 export class AppModule implements NestModule {
@@ -71,6 +75,11 @@ export class AppModule implements NestModule {
         BillingRecordsModule,
         BillingModule,
         LegalModule,
+        // B12: Primolar's billing. The QR image route comes before SignupsModule's /signups/:reference.
+        PlatformSettingsModule,
+        SignupsModule,
+        OperatorModule,
+        ClinicBillingModule,
       ],
       controllers: [HealthController],
       providers: [

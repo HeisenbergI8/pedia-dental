@@ -93,13 +93,13 @@ test("signing out ends the API session and clears the bridge", async ({ page, co
   await expect.poll(async () => (await context.cookies()).map((c) => c.name).filter((n) => n === "pd_session" || n === "pd_mock_session")).toEqual([]);
 });
 
-test("the operator signs in on pd_operator, and the console's MSW routes see it", async ({ page, context }) => {
+test("the operator signs in on pd_operator, and the console's routes (the API since B12) see it", async ({ page, context }) => {
   await signInOperator(page);
   const heading = page.getByRole("heading", { name: "Clinic accounts", level: 1 });
   await expect(heading).toBeVisible({ timeout: 30_000 });
   await expectApiSession(context, /^operator\.[^.]+$/, "pd_operator", "pd_mock_operator");
   expect((await context.cookies()).some((c) => c.name === "pd_session")).toBe(false);
-  await expect(page.getByText("Bulilit Smiles Pediatric Dental").first()).toBeVisible({ timeout: 30_000 }); // MSW
+  await expect(page.getByText("Bulilit Smiles Pediatric Dental").first()).toBeVisible({ timeout: 30_000 }); // GET /operator/accounts
   await page.reload();
   await expect(heading).toBeVisible({ timeout: 30_000 });
 });

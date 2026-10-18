@@ -7,13 +7,21 @@ import { rolesCan } from "./permissions";
  * `null` is unlimited. Archived branches and deactivated staff never count toward a limit (decision #10). The heading
  * font is on every plan since billing #8 (it was Big's), so it is no longer a limit.
  */
-export type TierLimits = { branches: number | null; staffLogins: number | null; crossBranchViews: boolean };
+export type TierLimits = {
+  branches: number | null;
+  staffLogins: number | null;
+  crossBranchViews: boolean;
+  /** B12 decisions 1, 2: every plan has both. Storage in bytes; texts in billed SMS parts a Manila calendar month. */
+  storageBytes: number;
+  textParts: number;
+};
+const GIB = 1024 ** 3;
 
 /** Decisions #5, #6. Enforced in the handler and the UI by Owner settings; read here, never re-typed. */
 export const TIER_LIMITS: Record<Tier, TierLimits> = {
-  small: { branches: 1, staffLogins: 5, crossBranchViews: false },
-  mid: { branches: 3, staffLogins: 20, crossBranchViews: true },
-  big: { branches: null, staffLogins: null, crossBranchViews: true },
+  small: { branches: 1, staffLogins: 5, crossBranchViews: false, storageBytes: 2 * GIB, textParts: 300 },
+  mid: { branches: 3, staffLogins: 20, crossBranchViews: true, storageBytes: 10 * GIB, textParts: 1000 },
+  big: { branches: null, staffLogins: null, crossBranchViews: true, storageBytes: 50 * GIB, textParts: 3000 },
 };
 
 /**

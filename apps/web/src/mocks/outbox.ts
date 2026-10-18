@@ -1,6 +1,7 @@
 import { format } from "date-fns";
 import {
   FAILURE,
+  TIER_LIMITS,
   birthdayGreeting,
   choiceDeclined,
   isBirthdayOn,
@@ -8,9 +9,12 @@ import {
   preVisitMessageFor,
   reminderSendAt,
   smsNumber,
+  smsSegments,
+  textPartsRefusal,
   type Appointment,
   type Message,
 } from "@pedia/shared";
+import { manilaMonthOf, textPartsUsed } from "./allowances";
 import { currentAccount, currentClinicId, db } from "./db";
 import { composeMessage, type MessageEvent } from "@pedia/seed";
 
@@ -23,7 +27,12 @@ export function queueMessage(e: MessageEvent): Message | undefined {
   // Decision 4: inside sending hours. Decision 12: no usable number fails at once (the API's queue does the same).
   const sendAt = nextSendingTime(new Date(e.sendAt)).toISOString();
   const composed = composeMessage({ ...e, sendAt }, refs, { id: crypto.randomUUID(), clinicId: currentClinicId(), createdAt: new Date().toISOString() });
-  const message = composed && !smsNumber(composed.to) ? { ...composed, status: "failed" as const, failureReason: FAILURE.noPhone } : composed;
+  const unusable = composed && !smsNumber(composed.to) && FAILURE.noPhone;
+  // B12 decisions 2, 3, 19: past the month's parts, a template text is logged as not sent and never sent later.
+  const overLimit =
+    composed && textPartsRefusal(composed.kind, textPartsUsed(db, manilaMonthOf(sendAt)), smsSegments(composed.body), TIER_LIMITS[currentAccount().tier].textParts);
+  const failure = unusable || overLimit;
+  const message = composed && failure ? { ...composed, status: "failed" as const, failureReason: failure } : composed;
   if (message) db.messages.push(message);
   return message;
 }

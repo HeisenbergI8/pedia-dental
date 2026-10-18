@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import type { Readable } from "node:stream";
-import { Injectable } from "@nestjs/common";
-import { FILE_LINK_SECONDS } from "@pedia/shared";
+import { ConflictException, Injectable } from "@nestjs/common";
+import { FILE_LINK_SECONDS, storageRefusal } from "@pedia/shared";
 import { Clock } from "../common/clock";
 import { requireContext } from "../common/request-context";
 import { PrismaService } from "../prisma/prisma.service";
 import { TenantScopeError, clinicData } from "../prisma/tenant-scope";
+import { runInTransaction, type Tx } from "../prisma/transaction";
+import { lockAccount } from "../clinic/account-lock";
 import { CONTENT_TYPES, clinicKey, type FileExtension, FileStorage, parseKey, type StorageArea } from "./storage";
 
 export type StoredFile = { body: Buffer; contentType: string };
@@ -65,19 +67,35 @@ export class StorageService {
   async delete(key: string): Promise<void> {
     if (!this.own(key)) return;
     await this.files.delete(key);
-    await this.prisma.storedFile.deleteMany({ where: { key } }); // after the file: a crash between leaves an overcount the retry clears
+    await this.prisma.storedFile.deleteMany({ where: { key } }); // after the file: a crash between leaves an over-count the retry clears
   }
 
-  /** This clinic's stored bytes (decision 8): counted, never limited in B10. */
-  async usedBytes(): Promise<number> {
-    const { _sum } = await this.prisma.storedFile.aggregate({ _sum: { bytes: true } });
+  /** This clinic's stored bytes (decision 8; B12 decision 1 limits them). Pass the transaction's client under the lock. */
+  async usedBytes(db: Pick<Tx, "storedFile"> = this.prisma): Promise<number> {
+    const { _sum } = await db.storedFile.aggregate({ _sum: { bytes: true } });
     return _sum.bytes ?? 0;
   }
 
+  /**
+   * B12 E8: the ledger row first, under the clinic's lock, so the plan's storage (decision 1) is checked and counted in
+   * one step: parallel uploads can't both pass the last free bytes. Then the file; if storing it fails, the row goes.
+   * A crash between the two leaves an over-count, never an uncounted file.
+   */
   private async store(area: StorageArea, ext: FileExtension, body: Buffer | Readable, bytes: number): Promise<string> {
     const key = clinicKey(this.clinicId(), area, randomUUID(), ext);
-    await this.files.put(key, body, { contentType: CONTENT_TYPES[ext], bytes });
-    await this.prisma.storedFile.create({ data: { ...clinicData(), key, area, bytes, createdAt: this.clock.now() }, select: { id: true } });
+    await runInTransaction(this.prisma, async (tx) => {
+      const clinicId = await lockAccount(tx);
+      const { tier } = await tx.clinicAccount.findUniqueOrThrow({ where: { id: clinicId }, select: { tier: true } });
+      const refused = storageRefusal(tier, await this.usedBytes(tx), bytes);
+      if (refused) throw new ConflictException(refused);
+      await tx.storedFile.create({ data: { ...clinicData(), key, area, bytes, createdAt: this.clock.now() }, select: { id: true } });
+    });
+    try {
+      await this.files.put(key, body, { contentType: CONTENT_TYPES[ext], bytes });
+    } catch (error) {
+      await this.prisma.storedFile.deleteMany({ where: { key } }).catch(() => undefined);
+      throw error;
+    }
     return key;
   }
 

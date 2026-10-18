@@ -1,7 +1,9 @@
 "use client";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { PriceList, SignupStatusView, type GetStartedInput } from "@pedia/shared";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { PriceList, SignupStatusView, type GetStartedInput, type PaymentQrView, type ReceiptUploadInput } from "@pedia/shared";
+import { imageFormData } from "@/features/payments/form-data";
 import { api } from "@/lib/api-client";
+import { env } from "@/lib/env";
 import { signupFormData } from "./form-data";
 
 /** Public: never under "operator", and no session to lose, so the global 401 handler never fires for these. */
@@ -26,3 +28,16 @@ export const useSignupStatus = (reference: string) =>
     queryFn: () => api(`/signups/${encodeURIComponent(reference)}`, SignupStatusView),
     retry: false,
   });
+
+/** B12 decision 7: the receipt for the whole quote, from the status page. The answer is the refreshed status. */
+export function useUploadSignupReceipt(reference: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ input, file }: { input: ReceiptUploadInput; file: File }) =>
+      api(`/signups/${encodeURIComponent(reference)}/receipts`, SignupStatusView, { method: "POST", body: imageFormData(input, file) }),
+    onSuccess: (view) => qc.setQueryData(signupKeys.status(reference), view),
+  });
+}
+
+/** Primolar's QR, public. A new address per upload (`updatedAt`), so a replaced QR is never served from cache. */
+export const paymentQrImageUrl = (qr: PaymentQrView) => `${env.apiUrl}/signups/payment-qr/image?v=${encodeURIComponent(qr.updatedAt)}`;

@@ -31,7 +31,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from "@/components/ui/textarea";
 import { METHOD_LABEL } from "@/features/billing/api";
 import { AmountDueSummary, SignupFields, showDuplicate, type SignupFiles } from "@/features/signup/components/signup-fields";
-import { signupFileUrl, useApproveSignup, useFixSignup, useOperatorPrices, useRecordPayment, useRejectSignup, useSignups } from "../api";
+import { signupFileUrl, useApproveSignup, useFixSignup, useOperatorPrices, useReceiptsToCheck, useRecordPayment, useRejectSignup, useSignups } from "../api";
 import { OwnerPassword } from "./owner-password";
 import { PaymentFields } from "./payment-fields";
 import { SignupBadge } from "./signup-badge";
@@ -44,6 +44,7 @@ export function SignupDetail({ id }: { id: string }) {
   const [open, setOpen] = useState<Open>();
   const [created, setCreated] = useState<CreateAccountResult>();
   const approve = useApproveSignup(id);
+  const receipt = useReceiptsToCheck().data?.find((r) => r.payer.kind === "signup" && r.payer.signupId === id);
   // The dialogs mount without a Radix trigger, so focus goes back by hand: to the button that opened them, or to the
   // page when that button is gone (WCAG 2.4.3).
   const opener = useRef<HTMLElement | null>(null);
@@ -102,6 +103,12 @@ export function SignupDetail({ id }: { id: string }) {
             <Look s={s} />
           </div>
           <SectionCard title="Payment">
+            {receipt && (
+              <p role="status" className="rounded-lg border border-info-line bg-info-bg px-4 py-3 text-sm">
+                A payment receipt is waiting (ref <span className="font-mono">{receipt.reference}</span>).{" "}
+                <Link href="/operator/payments" className="font-semibold underline underline-offset-2">Check it in Payments to check</Link>
+              </p>
+            )}
             <AmountDueSummary quote={s.quote} title={s.payment ? "Paid" : "Amount due"} />
             {s.payment && (
               <p className="text-sm">

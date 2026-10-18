@@ -4,7 +4,8 @@ import { env } from "@/lib/env";
 import { inScope, sessionOf } from "@/mocks/access";
 import { seedFileOf } from "@pedia/seed";
 import { getBlob, putBlob } from "@/mocks/blob-store";
-import { currentClinicId, db, persist } from "@/mocks/db";
+import { forgetStored, recordStored, storageRefused } from "@/mocks/allowances";
+import { currentAccount, currentClinicId, db, persist } from "@/mocks/db";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 /** What a parent may upload from the portal. Clinical imaging (X-rays) is the clinic's. */
@@ -67,7 +68,10 @@ export const photoHandlers = [
       uploadedBy: fromParent ? "parent" : "staff",
       createdAt: new Date().toISOString(),
     };
+    const full = storageRefused(db, currentAccount().tier, file.size); // B12 decision 1
+    if (full) return new HttpResponse(full, { status: 409 });
     await putBlob(photo.id, file);
+    recordStored(db, photo.id, "photos", file.size);
     db.photos.push(photo);
     persist();
     return HttpResponse.json(photo, { status: 201 });

@@ -117,7 +117,7 @@ describe("the operator never reaches clinic data (decision #25)", () => {
   });
 
   it("keeps operator and sign-up handlers out of the tenant binding (decision #25, billing #4)", () => {
-    const files = ["features/operator/mocks.ts", "features/operator/signup-mocks.ts", "features/signup/mocks.ts", "mocks/signups.ts", "mocks/subscriptions.ts", "features/legal/mocks.ts"];
+    const files = ["features/operator/mocks.ts", "features/operator/signup-mocks.ts", "features/signup/mocks.ts", "mocks/signups.ts", "mocks/subscriptions.ts", "features/legal/mocks.ts", "features/operator/payment-mocks.ts", "mocks/receipts.ts", "mocks/allowances.ts"];
     for (const file of files) {
       const src = read(file);
       expect(src, file).not.toMatch(/\b(selectTenant|sessionOf|activeBranch|currentClinicId|currentAccount)\b/);
@@ -165,23 +165,26 @@ describe("operator account actions (chunk 21 done-when)", () => {
     expect(fresh.user.roles).toEqual(["owner", "dentist"]);
   });
 
-  it("downgrading to Small blocks new additions without disabling anything", async () => {
+  it("refuses a downgrade the clinic is over (B12 decision 12); once within it, the downgrade waits and blocks additions", async () => {
     asStaff(ownerToken);
     const branch = { name: "Dasmariñas", address: "9 Congressional Road, Dasmariñas", phone: "(046) 400 0301", openingHours: DEFAULT_OPENING_HOURS };
-    await api("/branches", Branch, send("POST", branch)); // Mid allows 3
+    const second = await api("/branches", Branch, send("POST", branch)); // Mid allows 3
     asOperator();
     const id = created.overview.account.id;
+    await expect(api(`/operator/accounts/${id}/tier`, AccountOverview, send("PUT", { tier: "small" }))).rejects.toMatchObject({ status: 409, message: expect.stringContaining("2 open branches") });
+    asStaff(ownerToken);
+    await api(`/branches/${second.id}/archive`, Branch, send("POST"));
+    asOperator();
     const waiting = await api(`/operator/accounts/${id}/tier`, AccountOverview, send("PUT", { tier: "small" }));
     expect(waiting.account.tier).toBe("mid"); // billing #27: a downgrade waits for the next due date
-    // Bring that date to today; subscriptions.test.ts walks the calendar itself.
-    platform.subscriptions.find((s) => s.clinicId === id)!.downgrade!.on = today();
-
     asStaff(ownerToken);
-    const open = (await api("/branches", z.array(Branch))).filter((b) => !b.archived);
-    expect(open).toHaveLength(2); // both still open
-    expect(await api("/clinic/usage", ClinicUsage)).toMatchObject({ tier: "small", branches: { inUse: 2, limit: 1 } });
+    // B12 E13: while it waits, an addition is checked against the smaller plan.
     await expect(api("/branches", Branch, send("POST", { ...branch, name: "Imus" }))).rejects.toMatchObject({ status: 409, message: limitMessage("small", "branches") });
-    // Logins are still under Small's 5, so adding staff still works: only what is over the limit is blocked.
+    // Bring the date to today; subscriptions.test.ts walks the calendar itself.
+    platform.subscriptions.find((s) => s.clinicId === id)!.downgrade!.on = today();
+    expect(await api("/clinic/usage", ClinicUsage)).toMatchObject({ tier: "small", branches: { inUse: 1, limit: 1 } });
+    // Logins are still under Small's 5, so adding staff still works.
+    const open = (await api("/branches", z.array(Branch))).filter((b) => !b.archived);
     await api("/staff", z.unknown(), send("POST", { fullName: "Lia Santos", email: "lia@tala.demo", role: "front_desk", branchIds: [open[0]!.id] }));
     // And no cross-branch views on Small (decision #6).
     expect(await status(api(`/reports/finance?branch=all`, z.unknown()))).toBe(403);
@@ -196,7 +199,7 @@ describe("operator account actions (chunk 21 done-when)", () => {
     expect(await status(api("/auth/login", Session, send("POST", { email: "owner@tala.demo", password: EXAMPLE_NEW })))).toBe(403);
     asOperator();
     const back = await api(`/operator/accounts/${created.overview.account.id}/reactivate`, AccountOverview, send("POST"));
-    expect(back.usage.branches).toBe(2); // nothing was lost (#26)
+    expect(back.usage.branches).toBe(1); // nothing was lost (#26): the one open branch (the second was archived for the downgrade)
     asStaff(ownerToken);
     expect(await status(api("/clinic", ClinicContext))).toBe(200);
   });

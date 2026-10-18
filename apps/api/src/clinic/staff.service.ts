@@ -12,6 +12,7 @@ import { type Tx, runInTransaction } from "../prisma/transaction";
 import { lockAccount, ownClinicId } from "./account-lock";
 import { toStaffMember } from "./clinic.views";
 import { assertRoomFor } from "./limits";
+import { SubscriptionRecordsService } from "../subscription-records/subscription-records.service";
 
 const STAFF = {
   id: true, clinicId: true, fullName: true, role: true, alsoRoles: true, isOwner: true, branchIds: true, licenseNo: true, email: true, deactivatedAt: true,
@@ -30,6 +31,7 @@ export class StaffService {
     private readonly sessions: SessionService,
     private readonly audit: AuditService,
     private readonly clock: Clock,
+    private readonly subscriptions: SubscriptionRecordsService,
   ) {}
 
   /** POST /staff: the login, with its temporary password and PIN returned this once and stored only as hashes. */
@@ -39,7 +41,7 @@ export class StaffService {
     const viewer = requireContext().user!.roles;
     return runInTransaction(this.prisma, async (tx) => {
       const clinicId = await lockAccount(tx);
-      await assertRoomFor(tx, clinicId, "staffLogins");
+      await assertRoomFor(tx, clinicId, "staffLogins", await this.subscriptions.waitingDowngrade(tx, clinicId));
       const { email, alsoRoles, licenseNo, ...input } = new ZodValidationPipe(AddStaffInput).transform(body);
       if (await this.emailInUse(tx, clinicId, email)) throw new ConflictException(`${email} already signs in to ${await this.clinicName(tx, clinicId)}`);
       const open = await tx.branch.findMany({ where: { id: { in: input.branchIds }, archived: false }, select: { id: true } });
@@ -89,7 +91,7 @@ export class StaffService {
       if (await this.emailInUse(tx, clinicId, row.email, row.id)) {
         throw new ConflictException(`${row.email} is now another login's email. Reactivating would give two logins one email.`);
       }
-      await assertRoomFor(tx, clinicId, "staffLogins");
+      await assertRoomFor(tx, clinicId, "staffLogins", await this.subscriptions.waitingDowngrade(tx, clinicId));
       await tx.staff.updateMany({ where: { id }, data: { deactivatedAt: null } });
       await this.audit.record("update", "Staff login (reactivated)", undefined, tx);
       return toStaffMember({ ...row, deactivatedAt: null }, viewer);

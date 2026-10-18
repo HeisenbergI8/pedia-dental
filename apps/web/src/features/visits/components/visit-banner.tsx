@@ -1,4 +1,5 @@
 "use client";
+import { useRef } from "react";
 import { format, parseISO } from "date-fns";
 import { ChevronDownIcon, StethoscopeIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -28,7 +29,13 @@ export function VisitBanner({ patientId }: { patientId: string }) {
   const canWrite = useCan()("clinical.write");
   const myId = useSession()?.user.staffId;
   const me = dentists.find((d) => d.id === myId); // only a dentist can be the one-click default
-  const startWith = (dentistId: string) => start.mutate({ dentistId }, { onSuccess: () => toast.success("Visit started"), onError });
+  // A double-click lands both clicks before isPending disables the button: one request, not a second refused one.
+  const starting = useRef(false);
+  const startWith = (dentistId: string) => {
+    if (starting.current) return;
+    starting.current = true;
+    start.mutate({ dentistId }, { onSuccess: () => toast.success("Visit started"), onError, onSettled: () => (starting.current = false) });
+  };
 
   if (isLoading) return null;
 

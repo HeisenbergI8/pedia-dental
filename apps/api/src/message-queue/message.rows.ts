@@ -25,7 +25,7 @@ export function toMessage(r: MessageRow): Message {
 }
 
 /** The internal columns a new row may start with: a birthday's year (E9); a seeded `sent` row's outcome (E10). */
-type Internal = Pick<Prisma.MessageUncheckedCreateInput, "greetingYear" | "sentAt" | "segments">;
+type Internal = Pick<Prisma.MessageUncheckedCreateInput, "greetingYear" | "sentAt" | "dispatchedAt" | "segments">;
 
 /** Contract → row data for a new message (the seed and the queue). */
 export function messageData(m: Message, extra: Internal = {}): Prisma.MessageUncheckedCreateInput {

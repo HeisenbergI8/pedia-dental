@@ -25,6 +25,13 @@ describe("rate-limit policy", () => {
     expect(groupOf("POST", "/auth/password-reset")).toBe("auth"); // the address limit still applies; the per-number one is PortalService's
   });
 
+  it("allows 5 sign-ups and 10 sign-up receipts per address per rolling hour, counted by the service (B12 decision 14)", () => {
+    expect(RATE_LIMITS.signup).toEqual({ hits: 5, windowSeconds: 3600 });
+    expect(RATE_LIMITS.receipt).toEqual({ hits: 10, windowSeconds: 3600 });
+    expect(bucketOf("signup", "203.0.113.9")).toBe("signup:203.0.113.9");
+    expect(groupOf("POST", "/signups")).toBe("auth"); // never routed: /signups isn't an /auth route
+  });
+
   it("keeps a bucket inside its column", () => {
     expect(bucketOf("login", "x".repeat(300))).toHaveLength(191);
   });

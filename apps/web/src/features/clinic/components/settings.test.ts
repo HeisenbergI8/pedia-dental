@@ -3,7 +3,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { LimitNotice } from "./limit-notice";
 
-const usage = (inUse: number, limit: number | null) => ({ tier: "small" as const, branches: { inUse, limit }, staffLogins: { inUse, limit } });
+const usage = (inUse: number, limit: number | null) => ({
+  tier: "small" as const, branches: { inUse, limit }, staffLogins: { inUse, limit },
+  storage: { inUse: 0, limit: 1 }, texts: { inUse: 0, limit: 1 }, month: "2026-10",
+});
 
 describe("LimitNotice (decision #8)", () => {
   it("says the limit and how to lift it at the limit, and after a downgrade over it", () => {

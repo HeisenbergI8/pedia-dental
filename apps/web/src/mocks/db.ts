@@ -8,7 +8,8 @@ export { emptyDb, seedPlatform, type Db, type Platform } from "@pedia/seed";
 // v28: privacy (chunk 24): Platform gains `agreements`; each Db gains `privacyNotices` and `acknowledgements`; patients gain consents.
 // v29: B10 seeds photos and issued documents (photo_seed_*, doc_seed_*).
 // v30: B11: each Db gains `portalAccounts` (every seeded guardian active); parents sign in only while active.
-const KEY = "pedia-dental:mock-db:v30";
+// v31: B12: Platform gains priceChanges, paymentQr and receipts (Ipin's pending receipt); each Db gains storedFiles.
+const KEY = "pedia-dental:mock-db:v31";
 
 function load(): Platform {
   if (typeof window === "undefined") return seedPlatform();

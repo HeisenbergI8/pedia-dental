@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { Readable } from "node:stream";
 import { describe, expect, it } from "vitest";
-import { readUpload, tooLargeToRead } from "./multipart";
+import { partsTooLargeToRead, readUpload, readUploads, tooLargeToRead } from "./multipart";
 import { sniff } from "./sniff";
 
 /** A multipart body as the browser sends it, fed in chunks of `chunk` bytes. */
@@ -82,6 +82,39 @@ describe("readUpload (B10 E1)", () => {
   it("refuses a body over twice the limit before reading it (E13)", () => {
     expect(tooLargeToRead({ "content-length": "20000" }, 10_000)).toBe(false);
     expect(tooLargeToRead({ "content-length": "20001" }, 10_000)).toBe(true);
+  });
+});
+
+describe("readUploads (B12 Step 5.2)", () => {
+  const parts = { logo: { max: 1, maxBytes: 1_000 }, reference: { max: 3, maxBytes: 2_000 } };
+
+  it("spools each named part to its own file, drops a part past its max and an unknown one, and disposes them all", async () => {
+    const req = await request([
+      ["reference", blob(jpeg(100))], ["logo", blob(jpeg(50))], ["reference", blob(jpeg(200))], ["data", "{}"],
+      ["reference", blob(jpeg(300))], ["reference", blob(jpeg(400))], ["other", blob(jpeg(10))],
+    ]);
+    const upload = await readUploads(req, { parts });
+    expect(upload.files.logo!.map((f) => f.bytes)).toEqual([50]);
+    expect(upload.files.reference!.map((f) => f.bytes)).toEqual([100, 200, 300]);
+    expect(Object.keys(upload.files).sort()).toEqual(["logo", "reference"]);
+    expect(upload.fields.get("data")).toBe("{}");
+    const paths = Object.values(upload.files).flat().map((f) => f.path);
+    expect(paths.every((p) => existsSync(p))).toBe(true);
+    await upload.dispose();
+    expect(paths.some((p) => existsSync(p))).toBe(false);
+  });
+
+  it("marks only the oversized part, by its own limit", async () => {
+    const upload = await readUploads(await request([["logo", blob(jpeg(1_500))], ["reference", blob(jpeg(1_500))]]), { parts });
+    expect([upload.files.logo![0]!.tooLarge, upload.files.reference![0]!.tooLarge]).toEqual([true, false]);
+    const { size } = await import("node:fs/promises").then((fs) => fs.stat(upload.files.logo![0]!.path));
+    expect(size).toBeLessThanOrEqual(1_001);
+    await upload.dispose();
+  });
+
+  it("refuses a body over twice what every part could hold together", () => {
+    expect(partsTooLargeToRead({ "content-length": String(2 * 7_000) }, parts)).toBe(false);
+    expect(partsTooLargeToRead({ "content-length": String(2 * 7_000 + 1) }, parts)).toBe(true);
   });
 });
 

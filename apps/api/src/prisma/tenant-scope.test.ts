@@ -1,4 +1,4 @@
-import { AccountStatus, Acknowledgement, AgreementRecord, AuditAction, ConsentScope, HeadingFont, LoggedMessageKind, MessageChannel, MessageKind, MessageStatus, PhotoStage, PhotoType, DocumentType, PrivacyChoice, Role, Sex, StaffRole, PlanItemStatus, Tier, ToothCondition, VisitStatus, AppointmentRequestStatus, AppointmentStatus, DueItem, PaymentMethod, TimeOfDay } from "@pedia/shared";
+import { AccountStatus, Acknowledgement, AgreementRecord, AuditAction, ConsentScope, HeadingFont, LoggedMessageKind, MessageChannel, MessageKind, MessageStatus, PhotoStage, PhotoType, DocumentType, PrivacyChoice, Role, Sex, StaffRole, PlanItemStatus, Tier, ToothCondition, VisitStatus, AppointmentRequestStatus, AppointmentStatus, DueItem, PaymentMethod, TimeOfDay, BrandingChoice, SignupStatus, DesignStatus, SubscriptionPause, ReceiptStatus, ReceiptPayer } from "@pedia/shared";
 import { describe, expect, it } from "vitest";
 import type { RequestContext } from "../common/request-context";
 import { $Enums, Prisma } from "../generated/prisma/client.ts";
@@ -52,6 +52,12 @@ describe("model registry", () => {
     expect(Object.values($Enums.DueKind)).toEqual(DueItem.shape.kind.options);
     expect(Object.values($Enums.ToothCondition)).toEqual(ToothCondition.options);
     expect(Object.values($Enums.PaymentMethod)).toEqual(PaymentMethod.options);
+    expect(Object.values($Enums.BrandingChoice)).toEqual(BrandingChoice.options);
+    expect(Object.values($Enums.SignupStatus)).toEqual(SignupStatus.options);
+    expect(Object.values($Enums.DesignStatus)).toEqual(DesignStatus.options);
+    expect(Object.values($Enums.SubscriptionPause)).toEqual(SubscriptionPause.options);
+    expect(Object.values($Enums.ReceiptStatus)).toEqual(ReceiptStatus.options);
+    expect(Object.values($Enums.ReceiptPurpose)).toEqual(ReceiptPayer.options.map((o) => o.shape.kind.value));
   });
 });
 
@@ -109,6 +115,11 @@ describe("tenant scoping", () => {
     expect(scoped("Price", "findMany", { where: { tier: "small" } }, operator)).toEqual({ where: { tier: "small" } });
   });
 
+  it("leaves B12's billing to the caller: a subscription is read with no clinic in context, a branch is not", () => {
+    expect(scopeArgs("Subscription", "findMany", { where: { pause: "overdue" } }, operator)).toEqual({ where: { pause: "overdue" } });
+    expect(() => scopeArgs("Branch", "findMany", {}, operator)).toThrow(TenantScopeError);
+  });
+
   it("refuses operations it doesn't know", () => {
     expect(() => scoped("Note", "findRaw", {}, clinicA)).toThrow(/isn't handled/);
   });
@@ -144,6 +155,13 @@ describe("append-only", () => {
       expect(APPEND_ONLY.has(model)).toBe(false);
       expect(() => scopeArgs(model, "updateMany", { where: { id: "x" }, data: {} }, clinicA)).not.toThrow();
     }
+  });
+
+  it("keeps Primolar's payments, invoice lines and price history append-only, and decides a receipt in place (B12)", () => {
+    for (const model of ["PriceChange", "SubscriptionPayment", "SubscriptionLine"]) {
+      expect(() => scopeArgs(model, "update", { where: { id: "x" }, data: {} }, operator)).toThrow(/append-only/);
+    }
+    expect(() => scopeArgs("PaymentReceipt", "update", { where: { id: "r1" }, data: { status: "confirmed" } }, operator)).not.toThrow();
   });
 
   it("keeps payments append-only, and lets a bill be voided in place (B8)", () => {

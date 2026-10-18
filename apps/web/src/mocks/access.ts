@@ -1,12 +1,14 @@
 import { http, HttpResponse } from "msw";
-import { ALL_BRANCHES, TIER_LIMITS, permissionScopeFor, reportBranchFilter, usableBranches, type AcknowledgementKind, type AuditAction, type Branch, type OperatorUser, type Permission } from "@pedia/shared";
+import { ALL_BRANCHES, BILLING_ONLY_MESSAGE, BILLING_ONLY_ROUTES, TIER_LIMITS, permissionScopeFor, reportBranchFilter, usableBranches, type AcknowledgementKind, type AuditAction, type Branch, type OperatorUser, type Permission } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { BRANCH_COOKIE, clinicTokenCookie, operatorTokenCookie } from "@/lib/session-cookies";
 import { accountById, credentialOf, currentAccount, currentClinicId, db, persist, platform, selectTenant } from "./db";
 import { accountForToken, childrenOf, type DemoAccountRecord } from "./demo-accounts";
 import { operatorForToken } from "./operator";
 import { pendingAcknowledgement } from "./privacy";
-import { settleSubscriptions } from "./subscriptions";
+import { today } from "./clock";
+import { purgeRejectedFiles } from "./signups";
+import { billingOnlyFor, settleSubscriptions } from "./subscriptions";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 
@@ -16,6 +18,7 @@ export type MockSession = DemoAccountRecord & {
   readOnly: boolean;
   mustChangePassword: boolean;
   mustAcknowledge: AcknowledgementKind | undefined; // privacy P10
+  billingOnly: boolean; // B12 decision 25
 };
 
 const deny = (status: 401 | 403, message: string) => new HttpResponse(message, { status });
@@ -51,12 +54,14 @@ export function sessionOf(request: Request): MockSession | undefined {
   if (!found) return undefined;
   // Staff of a suspended account are signed out on their next request (#41); its parents read on (#44).
   const suspended = accountById(found.clinicId)?.status !== "active";
-  if (suspended && found.account.role !== "parent") return undefined;
+  // B12 decision 25: the Owner of a clinic paused for non-payment keeps a session to pay, and only that.
+  const billingOnly = suspended && billingOnlyFor(found.account, found.clinicId);
+  if (suspended && found.account.role !== "parent" && !billingOnly) return undefined;
   selectTenant(found.clinicId);
   const { account, clinicId } = found;
   const children = account.guardianId ? childrenOf(db, account.guardianId) : [];
   const mustChangePassword = !!credentialOf(db, account.staffId)?.mustChange;
-  return { ...account, clinicId, patientIds: new Set(children.map((p) => p.id)), readOnly: suspended, mustChangePassword, mustAcknowledge: pendingAcknowledgement(account, clinicId) };
+  return { ...account, clinicId, patientIds: new Set(children.map((p) => p.id)), readOnly: suspended && !billingOnly, mustChangePassword, mustAcknowledge: pendingAcknowledgement(account, clinicId), billingOnly };
 }
 
 /** The branches this caller may work at: the Owner every open one, staff their assignments, parents every open one. */
@@ -137,6 +142,9 @@ const RULES: Rule[] = [
   // Owner settings (decision #11): the account, its branding, branches and staff logins
   { method: "GET", path: "/clinic/usage", permission: "clinic.manage" },
   { method: "GET", path: "/clinic/subscription", permission: "clinic.manage" }, // billing #31: the Owner's alone
+  // B12 decisions 6, 24: the Owner's receipts; staff and parents never see them.
+  { method: "POST", path: "/clinic/subscription/receipts", permission: "clinic.manage", audit: "Primolar payment receipt" },
+  { method: "GET", path: "/clinic/subscription/receipts/:id/image", permission: "clinic.manage" },
   // Privacy #19, #22: the clinic's notice (public anyway, so reading it isn't audited) and the Owner's new version
   { method: "GET", path: "/clinic/privacy-notice", permission: "clinic.view" },
   { method: "PUT", path: "/clinic/privacy-notice", permission: "clinic.manage", audit: "Privacy notice", action: "update" },
@@ -244,7 +252,7 @@ export const ACCESS_RULES: readonly Pick<Rule, "method" | "path" | "permission" 
  * Every operator route. One question only, "is this a Primolar operator?": the operator holds no clinic Permission
  * and no role (decision #25). Deny by default, as RULES: a route missing here is refused with its name.
  */
-const OPERATOR_RULES: Pick<Rule, "method" | "path">[] = [
+export const OPERATOR_RULES: Pick<Rule, "method" | "path">[] = [
   { method: "GET", path: "/operator/accounts" },
   { method: "POST", path: "/operator/accounts" },
   { method: "PUT", path: "/operator/accounts/:id/tier" },
@@ -264,16 +272,25 @@ const OPERATOR_RULES: Pick<Rule, "method" | "path">[] = [
   { method: "POST", path: "/operator/signups/:id/approve" },
   { method: "GET", path: "/operator/prices" },
   { method: "PUT", path: "/operator/prices" },
+  // B12: the payment QR and Payments to check (decisions 5–8).
+  { method: "GET", path: "/operator/payment-qr" },
+  { method: "PUT", path: "/operator/payment-qr" },
+  { method: "GET", path: "/operator/receipts" },
+  { method: "GET", path: "/operator/receipts/:id/image" },
+  { method: "POST", path: "/operator/receipts/:id/confirm" },
+  { method: "POST", path: "/operator/receipts/:id/reject" },
 ];
 
 /**
  * The public sign-up (billing #4): no session of any kind. Deny by default, as RULES. Branches off before sessionOf,
  * so a sign-up never selects a tenant, and a clinic or operator token changes nothing here.
  */
-const PUBLIC_RULES: Pick<Rule, "method" | "path">[] = [
+export const PUBLIC_RULES: Pick<Rule, "method" | "path">[] = [
   { method: "GET", path: "/signups/prices" },
   { method: "POST", path: "/signups" },
   { method: "GET", path: "/signups/:reference" },
+  { method: "GET", path: "/signups/payment-qr/image" }, // B12 decision 5: the QR is meant to be shared
+  { method: "POST", path: "/signups/:reference/receipts" }, // B12 decision 7
   { method: "GET", path: "/legal/notices/:clinicId" }, // privacy #3: each clinic's notice, before sign-in
 ];
 
@@ -362,6 +379,7 @@ function refusal(session: MockSession, rule: Rule, params: Record<string, string
 export const accessGate = http.all(url("/*"), ({ request }) => {
   // S2: due dates are checked lazily, here, before anything reads an account's status or tier.
   settleSubscriptions();
+  purgeRejectedFiles(today()); // B12 decision 15: at most once a mock day
   const u = new URL(request.url);
   const path = u.pathname.slice(new URL(env.apiUrl, u.origin).pathname.length);
   // The operator is not a clinic user (decision #25). Its requests branch off here, before sessionOf, so they never
@@ -379,6 +397,10 @@ export const accessGate = http.all(url("/*"), ({ request }) => {
   // notice is the portal's own step (P9). /auth/* is outside this gate, so /auth/acknowledgement still answers.
   if (session.mustAcknowledge === "terms") return deny(403, "Accept Primolar's updated terms to continue");
   if (session.mustAcknowledge === "confidentiality") return deny(403, "Acknowledge patient confidentiality to continue");
+  // B12 decision 25: a billing-only session reaches Settings → Plan's routes and nothing else.
+  if (session.billingOnly && !BILLING_ONLY_ROUTES.some((r) => r.method === request.method && matchPath(r.path, path))) {
+    return deny(403, BILLING_ONLY_MESSAGE);
+  }
 
   const hit = RULES.filter((r) => r.method === request.method)
     .map((rule) => ({ rule, params: matchPath(rule.path, path) }))

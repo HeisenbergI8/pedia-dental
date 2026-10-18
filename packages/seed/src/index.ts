@@ -14,3 +14,4 @@ export * from "./seed-privacy";
 export * from "./note-templates";
 export * from "./message-templates";
 export * from "./seed-files";
+export * from "./seed-receipts";

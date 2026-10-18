@@ -347,8 +347,8 @@ test.describe("happy paths", () => {
     await openPatient(page, "Avery Toy", "Toy, Avery");
     await openTab(page, "Documents");
     await expect(page.getByText("No documents issued yet")).toBeVisible();
-    // Dental certificate is the default choice; the latest completed visit is picked.
-    await expect(page.getByRole("combobox", { name: "Visit" })).toHaveText(/Jun 1, 2026/);
+    // Dental certificate is the default choice; the latest completed visit is picked (seed dates follow today).
+    await expect(page.getByRole("combobox", { name: "Visit" })).toHaveText(/^\w{3} \d{1,2}, \d{4} · Dr\. /);
     await expect(page.getByRole("combobox", { name: "Issued and signed by" })).toHaveText("Dr. Ana Reyes");
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("button", { name: "Download PDF" }).click();
@@ -393,7 +393,8 @@ test.describe("happy paths", () => {
     await openPatient(page, "Avery Toy", "Toy, Avery");
     await startVisit(page);
     await openTab(page, "Chart");
-    await choose(page, "Chart as of", /Visit of Jun 1, 2026/);
+    await page.getByRole("combobox", { name: "Chart as of" }).click();
+    await page.getByRole("option", { name: /^Visit of / }).first().click(); // an earlier visit; seed dates follow today
     await expect(page.getByRole("button", { name: "Select several" })).toHaveCount(0);
     const panel = await openTooth(page, 36);
     await expect(panel.getByRole("button", { name: "Save finding" })).toHaveCount(0);
@@ -403,7 +404,8 @@ test.describe("happy paths", () => {
   test("a certificate the dentist issues shows up in the clinic-wide Documents log", async ({ page }) => {
     await signInAt(page, BULILIT);
     await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Documents" }).click();
-    await expect(page.getByText("No documents issued yet")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Documents", level: 1 })).toBeVisible();
+    await expect(page.getByRole("main").getByText(/Avery/)).toHaveCount(0); // the seed's one certificate is Mazie's
     await openPatient(page, "Avery Toy", "Toy, Avery");
     await openTab(page, "Documents");
     const downloadPromise = page.waitForEvent("download");
@@ -722,7 +724,8 @@ test.describe("edge cases", () => {
     await signInAt(page, BULILIT);
     await openPatient(page, "Avery Toy", "Toy, Avery");
     await page.getByRole("button", { name: "Start visit as Ana Reyes" }).dblclick();
-    await expect(page.getByText("Visit in progress")).toBeVisible();
+    await expect(page.getByText("Visit in progress", { exact: true })).toBeVisible();
+    await expect(page.getByText("This patient already has a visit in progress")).toHaveCount(0); // one request, no refusal
     await expect(page.getByText("In progress", { exact: true })).toHaveCount(1);
   });
 

@@ -1,11 +1,12 @@
 import { BadRequestException, Injectable, PayloadTooLargeException } from "@nestjs/common";
 import {
-  Branch, Chair, ClinicContext, Procedure, StaffRole, holdsRole, isActiveStaff,
+  Branch, Chair, ClinicContext, Procedure, StaffRole, holdsRole, isActiveStaff, manilaMonth,
   type ClinicAccount, type ClinicUsage, type Role, type StaffMember, type Tier, type UpdateBrandingInput, type UpdateClinicProfileInput,
 } from "@pedia/shared";
 import { z } from "zod";
 import type { SlotRefs } from "../appointments/appointment.rules";
 import type { ClinicIdentity } from "../auth/identity.service";
+import { Clock } from "../common/clock";
 import { OutboxService } from "../outbox/outbox.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { runInTransaction, type Tx } from "../prisma/transaction";
@@ -14,7 +15,8 @@ import { StorageService, type StoredFile } from "../storage/storage.service";
 import { lockAccount, ownClinicId } from "./account-lock";
 import { BRANCH_COLUMNS } from "./branches.service";
 import { brandingRefusal, logoUrlOf, toClinicAccount, toStaffMember } from "./clinic.views";
-import { countUsage, usageOf } from "./limits";
+import { usageOf } from "./limits";
+import { UsageService } from "../usage/usage.service";
 import { cleanLogo, isDemoLogo, type LogoUpload } from "./logo";
 
 /** The clinic account's reads (features/clinic/mocks.ts). Tenant reads are scoped by the extension; ClinicAccount by the identity's clinic. */
@@ -24,6 +26,8 @@ export class ClinicService {
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly outbox: OutboxService,
+    private readonly clock: Clock,
+    private readonly usageCounts: UsageService,
   ) {}
 
   /** GET /clinic: the account, the branches this login may use, the device's branch (validated by the guard) and the logo. */
@@ -104,9 +108,14 @@ export class ClinicService {
     return rows.map((p) => Procedure.parse(p));
   }
 
-  /** GET /clinic/usage (Owner only): open branches and active logins against the tier. No lock: the write it informs checks again under it. */
+  /**
+   * GET /clinic/usage (Owner only): open branches, active logins, storage and this Manila month's texts against the tier
+   * (B12 decision 17), counted as the console counts them (UsageService). No lock: the write it informs checks again under it.
+   */
   async usage(): Promise<ClinicUsage> {
-    return usageOf(await this.tier(), await countUsage(this.prisma));
+    const month = manilaMonth(this.clock.today());
+    const c = await this.usageCounts.forClinic(ownClinicId(), month);
+    return usageOf(await this.tier(), { branches: c.branches, staffLogins: c.staffLogins }, { storageBytes: c.storageBytes, textParts: c.textParts, month });
   }
 
   /** PUT /clinic: name, contact email and TIN (decision #18). Tier and status are the operator's (B12). */

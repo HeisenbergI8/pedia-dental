@@ -13,6 +13,10 @@ import {
   isStaffRole,
   limitMessage,
   LOGO_RULES,
+  manilaMonth,
+  limitTier,
+  RECEIPT_RULES,
+  ReceiptUploadInput,
   logoProblem,
   rolesCan,
   suggestBrandColor,
@@ -30,7 +34,10 @@ import { deleteBlob, getBlob, putBlob } from "@/mocks/blob-store";
 import { currentAccount, currentClinicId, db, persist } from "@/mocks/db";
 import { emailTaken, newPin, staffEmail, temporaryPassword } from "@/mocks/demo-accounts";
 import { currentNotice, noticeView } from "@/mocks/privacy";
-import { subscriptionView } from "@/mocks/subscriptions";
+import { forgetStored, recordStored, storageRefused, usageOf } from "@/mocks/allowances";
+import { addClinicReceipt, findReceipt, imageResponse, readImageForm } from "@/mocks/receipts";
+import { subscriptionOf, subscriptionView } from "@/mocks/subscriptions";
+import { today } from "@/mocks/clock";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 const refuse = (status: 400 | 403 | 404 | 409 | 413, message: string) => new HttpResponse(message, { status });
@@ -42,19 +49,12 @@ const logoUrlOf = ({ logoRef }: ClinicAccount): string | null =>
   !logoRef ? null : DEMO_LOGO.test(logoRef) ? `/${logoRef}` : url(`/clinic/logo?v=${encodeURIComponent(logoRef)}`);
 
 /** Decisions #8–#10: open branches and active logins against the tier. `null` limit = unlimited. */
-function usage(): ClinicUsage {
-  const { tier } = currentAccount();
-  const inUse = accountUsage(db);
-  return {
-    tier,
-    branches: { inUse: inUse.branches, limit: TIER_LIMITS[tier].branches },
-    staffLogins: { inUse: inUse.staffLogins, limit: TIER_LIMITS[tier].staffLogins },
-  };
-}
+const usage = (): ClinicUsage => usageOf(db, currentAccount(), manilaMonth(today()));
 
 /** 409 with the limit's wording when one more would go over it. Only ever blocks the next one (decision #9). */
 function atLimit(limit: "branches" | "staffLogins") {
-  const { tier } = currentAccount();
+  // B12 E13: while a downgrade waits, additions are checked against the smaller plan.
+  const tier = limitTier(currentAccount().tier, subscriptionOf(currentClinicId())?.downgrade);
   return canAddUnder(tier, limit, accountUsage(db)[limit]) ? undefined : refuse(409, limitMessage(tier, limit));
 }
 
@@ -90,6 +90,22 @@ export const clinicHandlers = [
   http.get(url("/clinic/subscription"), async () => {
     await delay(100);
     return HttpResponse.json(subscriptionView(currentClinicId()));
+  }),
+
+  // B12 decisions 6, 21, 24: the Owner's receipt for the first unpaid month. One waits at a time; a rejected one can be
+  // followed by a new one. Only the Owner (clinic.manage) and the operator see receipts.
+  http.post(url("/clinic/subscription/receipts"), async ({ request }) => {
+    const form = await readImageForm(request, ReceiptUploadInput, RECEIPT_RULES, true);
+    if (form instanceof Response) return form;
+    const refused = await addClinicReceipt(currentClinicId(), form.data.reference, form.file!);
+    if (refused) return refuse(409, refused);
+    return HttpResponse.json(subscriptionView(currentClinicId()), { status: 201 });
+  }),
+
+  http.get(url("/clinic/subscription/receipts/:id/image"), ({ params }) => {
+    const receipt = findReceipt(params.id);
+    const mine = receipt?.payer.kind === "subscription" && receipt.payer.clinicId === currentClinicId();
+    return mine ? imageResponse(receipt.fileRef) : refuse(404, "Receipt not found");
   }),
 
   // Privacy #19, #22: the clinic's notice and privacy contact. Everyone signed in may read it; it is public anyway.
@@ -146,9 +162,13 @@ export const clinicHandlers = [
     const problem = logoProblem(file);
     if (problem) return refuse(file.size > LOGO_RULES.maxBytes ? 413 : 400, problem);
     const account = currentAccount();
+    const full = storageRefused(db, account.tier, file.size); // B12 decision 1: refused before storing
+    if (full) return refuse(409, full);
     const old = account.logoRef;
     const key = `logo_${currentClinicId()}_${crypto.randomUUID()}`;
     await putBlob(key, file);
+    recordStored(db, key, "branding", file.size);
+    forgetStored(db, old);
     account.logoRef = key;
     persist();
     if (old && !DEMO_LOGO.test(old)) await deleteBlob(old);
@@ -160,6 +180,7 @@ export const clinicHandlers = [
     const account = currentAccount();
     const old = account.logoRef;
     delete account.logoRef;
+    forgetStored(db, old);
     persist();
     if (old && !DEMO_LOGO.test(old)) await deleteBlob(old);
     return HttpResponse.json(account);

@@ -7,7 +7,7 @@ export type ApiRoute = { method: string; path: string };
 /**
  * The routes apps/api serves (CHUNKS.md: cut over chunk by chunk). In `hybrid` mode MSW lets these reach the network,
  * through the dev proxy to the API; every other route stays mocked. Same patterns as RULES in access.ts. Exact method
- * and path: `GET /clinic/subscription` (B12) stays mocked beside B3's and B4's `/clinic/*`.
+ * and path.
  */
 export const API_ROUTES: readonly ApiRoute[] = [
   // B2: sign-in and sessions (AuthController). demo-accounts answers only with DEMO_LOGINS=true.
@@ -131,6 +131,41 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "POST", path: "/auth/password-link/accept" },
   { method: "POST", path: "/auth/password-reset" },
   { method: "GET", path: "/auth/demo-texts" },
+  // B12: Primolar's console, sign-ups, prices, the payment QR, subscriptions and receipts (OperatorModule,
+  // SignupsModule, PlatformSettingsModule, ClinicBillingModule). Every operator route and every public sign-up route.
+  { method: "GET", path: "/operator/accounts" },
+  { method: "POST", path: "/operator/accounts" },
+  { method: "PUT", path: "/operator/accounts/:id/tier" },
+  { method: "POST", path: "/operator/accounts/:id/suspend" },
+  { method: "POST", path: "/operator/accounts/:id/reactivate" },
+  { method: "GET", path: "/operator/accounts/:id/staff" },
+  { method: "POST", path: "/operator/accounts/:id/owner" },
+  { method: "PUT", path: "/operator/accounts/:id/branding" },
+  { method: "GET", path: "/operator/accounts/:id/subscription" },
+  { method: "POST", path: "/operator/accounts/:id/subscription/payments" },
+  { method: "POST", path: "/operator/accounts/:id/subscription/cancel" },
+  { method: "GET", path: "/operator/signups" },
+  { method: "GET", path: "/operator/signups/:id/files/:key" },
+  { method: "PUT", path: "/operator/signups/:id" },
+  { method: "POST", path: "/operator/signups/:id/payment" },
+  { method: "POST", path: "/operator/signups/:id/reject" },
+  { method: "POST", path: "/operator/signups/:id/approve" },
+  { method: "GET", path: "/operator/prices" },
+  { method: "PUT", path: "/operator/prices" },
+  { method: "GET", path: "/operator/payment-qr" },
+  { method: "PUT", path: "/operator/payment-qr" },
+  { method: "GET", path: "/operator/receipts" },
+  { method: "GET", path: "/operator/receipts/:id/image" },
+  { method: "POST", path: "/operator/receipts/:id/confirm" },
+  { method: "POST", path: "/operator/receipts/:id/reject" },
+  { method: "GET", path: "/signups/prices" },
+  { method: "POST", path: "/signups" },
+  { method: "GET", path: "/signups/:reference" },
+  { method: "GET", path: "/signups/payment-qr/image" },
+  { method: "POST", path: "/signups/:reference/receipts" },
+  { method: "GET", path: "/clinic/subscription" },
+  { method: "POST", path: "/clinic/subscription/receipts" },
+  { method: "GET", path: "/clinic/subscription/receipts/:id/image" },
 ];
 
 export const servedBy = (routes: readonly ApiRoute[], method: string, path: string) =>

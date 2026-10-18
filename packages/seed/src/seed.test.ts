@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { differenceInYears, format, parseISO } from "date-fns";
 import {
+  subscriptionDueOn,
   ClinicalPhoto,
   PatientDocument,
   PriceList,
@@ -25,6 +26,9 @@ import {
 import { accountsByLogin, allAccounts } from "./logins";
 import { seedPlatform } from "./platform";
 import { DEMO_CLINIC_ID, seed } from "./seed";
+import { IPIN_ID } from "./seed-ipin";
+import { SEED_FILES } from "./seed-files";
+import { SEED_PRICES } from "./seed-signups";
 import { seedFileOf } from "./seed-files";
 
 const today = format(new Date(), "yyyy-MM-dd");
@@ -259,5 +263,22 @@ describe("portal accounts (B11)", () => {
     const db = structuredClone(platform.tenants[DEMO_CLINIC_ID]!);
     db.portalAccounts[0]!.state = "off";
     expect(allAccounts(db).some((a) => a.guardianId === db.portalAccounts[0]!.guardianId)).toBe(false);
+  });
+});
+
+describe("Primolar's billing (B12)", () => {
+  const platform = seedPlatform();
+  it("has no QR and no price change yet, and one receipt waiting: Ipin's first unpaid month at the Small fee", () => {
+    expect([platform.paymentQr, platform.priceChanges]).toEqual([null, []]);
+    expect(platform.receipts).toHaveLength(1);
+    const [receipt] = platform.receipts;
+    const ipin = platform.subscriptions.find((s) => s.clinicId === IPIN_ID)!;
+    expect(receipt).toMatchObject({ status: "pending", payer: { kind: "subscription", clinicId: IPIN_ID }, amountDue: SEED_PRICES.plans.small.monthlyFee, periodStart: subscriptionDueOn(ipin.anchor, ipin.paidMonths) });
+  });
+  it("counts each tenant's seeded photos toward its storage", () => {
+    for (const db of Object.values(platform.tenants)) {
+      const bytes = db.photos.reduce((n, p) => n + SEED_FILES[p.contentType as keyof typeof SEED_FILES].length, 0);
+      expect(db.storedFiles.reduce((n, f) => n + f.bytes, 0)).toBe(bytes);
+    }
   });
 });

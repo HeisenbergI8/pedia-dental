@@ -451,6 +451,8 @@ model Message {
   @@index([clinicId, appointmentId])
   @@index([clinicId, dueItemId])
   @@index([clinicId, sentAt])
+  /// B12 E9: the month's billed parts are summed by when each text was handed to the provider.
+  @@index([clinicId, dispatchedAt])
 }
 
 /// Demo deployments only (DEMO_LOGINS=true): the sign-in page's one-click accounts, with the PIN shown in the clear,
@@ -1080,4 +1082,216 @@ model StoredFile {
   createdAt DateTime
 
   @@index([clinicId])
+}
+
+// ---------- B12: Primolar's billing (platform; every query names clinicId itself where the row has one) ----------
+
+/// Mirrors BrandingChoice in packages/shared/src/schemas/signup.ts.
+enum BrandingChoice {
+  own
+  default
+  designed
+}
+
+enum SignupSource {
+  form
+  console
+}
+
+/// Mirrors SignupStatus in packages/shared/src/schemas/signup.ts.
+enum SignupStatus {
+  waiting
+  approved
+  rejected
+}
+
+/// Mirrors DesignStatus in packages/shared/src/schemas/signup.ts.
+enum DesignStatus {
+  in_progress
+  delivered
+}
+
+/// Mirrors SubscriptionPause in packages/shared/src/schemas/subscription.ts.
+enum SubscriptionPause {
+  overdue
+  cancelled
+}
+
+/// Who a receipt is from (ReceiptPayer.kind).
+enum ReceiptPurpose {
+  signup
+  subscription
+}
+
+/// Mirrors ReceiptStatus in packages/shared/src/schemas/payments.ts.
+enum ReceiptStatus {
+  pending
+  confirmed
+  rejected
+}
+
+/// The price list in force and Primolar's payment QR (B12 decisions 5, 11). One row, id "primolar": also the platform
+/// lock (E6), taken first. Centavos, VAT-inclusive.
+model PlatformSettings {
+  id                 String    @id
+  smallSetupFee      Int
+  smallMonthlyFee    Int
+  midSetupFee        Int
+  midMonthlyFee      Int
+  bigSetupFee        Int
+  bigMonthlyFee      Int
+  designAddOn        Int
+  paymentQrKey       String?   @db.VarChar(191)
+  paymentQrCaption   String?   @db.VarChar(120)
+  paymentQrUpdatedAt DateTime?
+}
+
+/// B12 decision 11: each saved price change keeps the list in force before `on` (Manila), so a month is billed at its
+/// start's list. Append-only.
+model PriceChange {
+  id              String   @id @default(cuid(2))
+  on              DateTime @db.Date
+  smallSetupFee   Int
+  smallMonthlyFee Int
+  midSetupFee     Int
+  midMonthlyFee   Int
+  bigSetupFee     Int
+  bigMonthlyFee   Int
+  designAddOn     Int
+  createdAt       DateTime
+
+  @@index([on])
+}
+
+/// One sign-up (Signup in @pedia/shared): from the Get started form or the console. Outside every tenant until
+/// approved; `clinicId` is the account it became. Mapped both ways by signups/signup.rows.ts.
+model Signup {
+  id                 String          @id @default(cuid(2))
+  reference          String          @unique @db.Char(13)
+  source             SignupSource
+  submittedAt        DateTime
+  name               String
+  /// clinicNameKey(name): the duplicate check (billing #10).
+  nameKey            String          @db.VarChar(191)
+  contactEmail       String
+  contactEmailKey    String          @db.VarChar(191)
+  tin                String
+  tier               Tier
+  branchName         String
+  branchAddress      String
+  branchPhone        String
+  /// OpeningHours (@pedia/shared), as Branch stores it.
+  branchOpeningHours Json
+  ownerName          String
+  ownerEmail         String
+  ownerRole          StaffRole
+  branding           BrandingChoice
+  brandColor         String?         @db.Char(7)
+  headingFont        HeadingFont?
+  brief              String?         @db.Text
+  logoKey            String?         @db.VarChar(191)
+  /// Up to three file keys (string[]), parsed with z.array(z.string()).max(3) on read.
+  referenceKeys      Json
+  quoteSetupFee      Int
+  quoteFirstMonth    Int
+  quoteDesignAddOn   Int
+  quoteTotal         Int
+  quoteVat           Int
+  paymentMethod      PaymentMethod?
+  paymentReference   String?         @db.VarChar(60)
+  paidOn             DateTime?       @db.Date
+  paymentAmount      Int?
+  paymentRecordedAt  DateTime?
+  status             SignupStatus
+  rejectionReason    String?         @db.Text
+  rejectedAt         DateTime?
+  clinicId           String?         @unique
+  approvedAt         DateTime?
+  designStatus       DesignStatus?
+  designDeliveredAt  DateTime?
+  termsVersion       Int
+  dpaVersion         Int
+  acceptedBy         String
+  agreedAt           DateTime
+  agreementMethod    AgreementMethod
+  signedOn           DateTime?       @db.Date
+  /// B12 decision 15: the logo and images deleted 30 days after a rejection.
+  filesDeletedAt     DateTime?
+
+  @@index([status, submittedAt])
+  @@index([nameKey])
+  @@index([contactEmailKey])
+  @@index([status, rejectedAt])
+}
+
+/// A clinic's monthly subscription (Subscription in @pedia/shared). One per clinic; the plan itself is ClinicAccount.tier.
+model Subscription {
+  clinicId       String             @id
+  anchor         DateTime           @db.Date
+  paidMonths     Int
+  downgradeTier  Tier?
+  downgradeOn    DateTime?          @db.Date
+  priceTier      Tier?
+  priceTierUntil DateTime?          @db.Date
+  cancelledAt    DateTime?
+  pause          SubscriptionPause?
+}
+
+/// One month paid to Primolar and its invoice (billing #29, #33). Append-only. One per month: the race backstop.
+model SubscriptionPayment {
+  id          String        @id @default(cuid(2))
+  clinicId    String
+  invoiceNo   String        @unique @db.VarChar(16)
+  tier        Tier
+  periodStart DateTime      @db.Date
+  periodEnd   DateTime      @db.Date
+  method      PaymentMethod
+  reference   String?       @db.VarChar(60)
+  paidOn      DateTime      @db.Date
+  amount      Int
+  recordedAt  DateTime
+  /// The receipt it was confirmed from (B12 decision 6), if any.
+  receiptId   String?       @unique
+
+  @@unique([clinicId, periodStart])
+  @@index([clinicId, recordedAt])
+}
+
+/// One line of a Primolar invoice (S15). Append-only.
+model SubscriptionLine {
+  id        String @id @default(cuid(2))
+  paymentId String
+  position  Int
+  label     String @db.VarChar(191)
+  amount    Int
+
+  @@unique([paymentId, position])
+}
+
+/// Gapless PRM-INV-##### (one row, id "primolar"): always the last lock taken (E6).
+model InvoiceCounter {
+  id   String @id
+  next Int
+}
+
+/// A receipt a sign-up or a clinic sent after paying by QR (B12 decisions 6–8, 21–24). Not append-only: its status is
+/// decided in place. `fileKey` null once the file is purged (decision 15).
+model PaymentReceipt {
+  id              String         @id @default(cuid(2))
+  purpose         ReceiptPurpose
+  signupId        String?
+  clinicId        String?
+  periodStart     DateTime?      @db.Date
+  amountDue       Int
+  reference       String         @db.VarChar(60)
+  fileKey         String?        @db.VarChar(191)
+  bytes           Int
+  uploadedAt      DateTime
+  status          ReceiptStatus
+  decidedAt       DateTime?
+  rejectionReason String?        @db.VarChar(500)
+
+  @@index([status, uploadedAt])
+  @@index([clinicId, uploadedAt])
+  @@index([signupId, uploadedAt])
 }

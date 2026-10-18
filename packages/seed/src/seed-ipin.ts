@@ -69,5 +69,6 @@ export function seedIpin(): Db {
     privacyNotices: [firstNotice(IPIN_ID, IPIN_ACCOUNT.name, OWNER.fullName, IPIN_ACCOUNT.contactEmail)],
     acknowledgements: staffAcknowledged(IPIN_ID, [OWNER]),
     portalAccounts: [], // filled by seedPlatform (B11)
+    storedFiles: [], // filled by seedPlatform (B12)
   };
 }

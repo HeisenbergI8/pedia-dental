@@ -3,7 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Building2Icon, ChevronLeftIcon } from "lucide-react";
 import { toast } from "sonner";
-import { DESIGN_STATUS_LABEL, TIER_LABEL, Tier, isTierUpgrade, type AccountOverview } from "@pedia/shared";
+import { DESIGN_STATUS_LABEL, TIER_LABEL, Tier, downgradeProblem, formatStorage, isTierUpgrade, type AccountOverview } from "@pedia/shared";
 import { Loading } from "@/components/brand";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ROLE_LABEL } from "@/features/auth/access";
 import { formatDate } from "@/lib/format";
 import { useAccounts, useChangeTier, useOwnerCandidates, useSetSuspended, useTransferOwnership } from "../api";
-import { allowance, overLimits } from "./allowance";
+import { allowance } from "./allowance";
 import { SetBrandingDialog } from "./set-branding-dialog";
 import { StatusBadge } from "./status-badge";
 import { SubscriptionCard } from "./subscription-card";
@@ -55,11 +55,15 @@ export function AccountDetail({ id }: { id: string }) {
   );
 }
 
-/** Billing #27, platform #9: an upgrade now, a downgrade on the next due date, and nothing is disabled. Reversible, so no confirm. */
+/**
+ * Billing #27: an upgrade now, a downgrade on the next due date. B12 decision 12: a downgrade the clinic doesn't fit is
+ * refused, said before saving and in the server's words if it refuses anyway. Reversible, so no confirm.
+ */
 function PlanCard({ row }: { row: AccountOverview }) {
   const [tier, setTier] = useState<Tier>(row.account.tier);
   const change = useChangeTier(row.account.id);
-  const over = overLimits(tier, row.usage);
+  const problem = isTierUpgrade(tier, row.account.tier) ? downgradeProblem(tier, row.usage) : undefined;
+  const { storage, texts } = row.usage;
 
   return (
     <SectionCard title="Plan" description="An upgrade applies at once, billed at the new price from the next due date. A downgrade waits for the next due date.">
@@ -70,6 +74,10 @@ function PlanCard({ row }: { row: AccountOverview }) {
         <dd className="tabular-nums">{allowance(row.account.tier, "staffLogins", row.usage.staffLogins).text}</dd>
         <dt className="text-ink-muted">Patients</dt>
         <dd className="tabular-nums">{row.usage.patients}</dd>
+        <dt className="text-ink-muted">Storage</dt>
+        <dd className="tabular-nums">{formatStorage(storage.inUse)} of {storage.limit === null ? "unlimited" : formatStorage(storage.limit)}</dd>
+        <dt className="text-ink-muted">Texts this month</dt>
+        <dd className="tabular-nums">{texts.inUse} of {texts.limit ?? "unlimited"}</dd>
       </dl>
       <div className="flex flex-wrap items-end gap-2 border-t border-line pt-4">
         <div className="space-y-1.5">
@@ -86,7 +94,7 @@ function PlanCard({ row }: { row: AccountOverview }) {
           </Select>
         </div>
         <Button
-          disabled={tier === row.account.tier || change.isPending}
+          disabled={tier === row.account.tier || !!problem || change.isPending}
           onClick={() =>
             change.mutate(tier, {
               onSuccess: () =>
@@ -95,17 +103,15 @@ function PlanCard({ row }: { row: AccountOverview }) {
                     ? `${row.account.name} is on the ${TIER_LABEL[tier]} plan`
                     : `${row.account.name} moves to the ${TIER_LABEL[tier]} plan on its next due date`,
                 ),
-              onError: (e) => toast.error(e.message),
             })
           }
         >
           Save plan
         </Button>
       </div>
-      {over.length > 0 && (
-        <p role="status" className="text-sm text-ink-muted">
-          On {TIER_LABEL[tier]}, this clinic is over the limit for {over.join(" and ")}. Everything keeps working; nothing new can be added until it is back
-          under.
+      {(problem ?? change.error?.message) && (
+        <p role="alert" className="text-sm text-danger">
+          {problem ?? change.error?.message}
         </p>
       )}
     </SectionCard>

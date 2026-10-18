@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { setupServer } from "msw/node";
 import { z } from "zod";
 import {
@@ -24,6 +24,7 @@ import { db, platform } from "./db";
 import { DEMO_PASSWORD } from "./demo-accounts";
 import { handlers } from "./handlers";
 import { OPERATORS, OPERATOR_COOKIE, operatorToken } from "./operator";
+import { resetSignupHits } from "./signups";
 
 const server = setupServer(...handlers);
 const cookies = (value = "") => vi.stubGlobal("document", { cookie: value });
@@ -35,6 +36,7 @@ const accounts = () => api("/operator/accounts", z.array(AccountOverview));
 const HOURS = { opensAt: 9 * 60, closesAt: 18 * 60, closedWeekdays: [0] };
 const latestFor = (clinicId: string) => platform.agreements.filter((a) => a.clinicId === clinicId).reverse()[0];
 
+beforeEach(resetSignupHits); // B12 decision 14: each test starts under the hourly sign-up limit
 beforeAll(() => server.listen({ onUnhandledFrame: "error" }));
 afterAll(() => {
   server.close();

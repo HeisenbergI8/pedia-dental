@@ -33,7 +33,8 @@ import {
 import { env } from "@/lib/env";
 import { inScope, recordAudit, sessionOf, type MockSession } from "@/mocks/access";
 import { deleteBlob, getBlob, putBlob } from "@/mocks/blob-store";
-import { currentClinicId, db, persist } from "@/mocks/db";
+import { forgetStored, recordStored, storageRefused } from "@/mocks/allowances";
+import { currentAccount, currentClinicId, db, persist } from "@/mocks/db";
 import { currentNotice } from "@/mocks/privacy";
 import { portalNumberClash, portalNumberMoved } from "@/features/portal/mocks";
 
@@ -349,7 +350,10 @@ export const patientHandlers = [
     const file = (await request.formData()).get("file");
     if (!(file instanceof Blob) || !file.type.startsWith("image/")) return new HttpResponse("Attach an image file", { status: 400 });
     if (file.size > MAX_PHOTO_BYTES) return new HttpResponse("Images must be under 10 MB", { status: 413 });
+    const full = storageRefused(db, currentAccount().tier, file.size); // B12 decision 1
+    if (full) return new HttpResponse(full, { status: 409 });
     await putBlob(photoKey(patient.id), file);
+    recordStored(db, photoKey(patient.id), "patients", file.size); // replaces the old photo's row (one key per child)
     patient.photoUpdatedAt = new Date().toISOString();
     persist();
     return HttpResponse.json(visibleTo(sessionOf(request), patient));
@@ -368,6 +372,7 @@ export const patientHandlers = [
     const patient = db.patients.find((p) => p.id === params.id);
     if (!patient) return new HttpResponse("Patient not found", { status: 404 });
     await deleteBlob(photoKey(patient.id));
+    forgetStored(db, photoKey(patient.id));
     patient.photoUpdatedAt = undefined;
     persist();
     return HttpResponse.json(visibleTo(sessionOf(request), patient));

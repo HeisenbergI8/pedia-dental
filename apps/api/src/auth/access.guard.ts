@@ -1,8 +1,8 @@
 import { type CanActivate, type ExecutionContext, ForbiddenException, Injectable, UnauthorizedException } from "@nestjs/common";
-import { rolesCan } from "@pedia/shared";
+import { BILLING_ONLY_MESSAGE, BILLING_ONLY_ROUTES, rolesCan } from "@pedia/shared";
 import type { Request } from "express";
 import { requestContext } from "../common/request-context";
-import { clinicRefusal, matchRoute } from "./access-rules";
+import { clinicRefusal, matchPath, matchRoute } from "./access-rules";
 import { BRANCH_COOKIE, OPERATOR_COOKIE, SESSION_COOKIE, readCookie } from "./cookies";
 import { type ClinicIdentity, IdentityService } from "./identity.service";
 import { RecordOwners } from "./record-owners";
@@ -56,6 +56,8 @@ export class AccessGuard implements CanActivate {
     if (who.mustChangePassword) throw new ForbiddenException("Choose your own password to continue");
     if (who.mustAcknowledge === "terms") throw new ForbiddenException("Accept Primolar's updated terms to continue");
     if (who.mustAcknowledge === "confidentiality") throw new ForbiddenException("Acknowledge patient confidentiality to continue");
+    // B12 decision 25: a billing-only session reaches Settings → Plan's routes and nothing else.
+    if (who.billingOnly && !BILLING_ONLY_ROUTES.some((r) => r.method === req.method && matchPath(r.path, path))) throw new ForbiddenException(BILLING_ONLY_MESSAGE);
     if (hit?.kind !== "clinic") throw noRule();
     if (who.readOnly && req.method !== "GET" && !hit.rule.exportRead) {
       throw new ForbiddenException("Your clinic's account is paused, so you can view records but not make changes. Contact your clinic.");
