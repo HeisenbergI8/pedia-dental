@@ -419,6 +419,12 @@ BIR-registered invoices and a second step for the operator's sign-in stay later 
 - **Data Privacy Act operations:** data export and deletion requests, retention, and the NPC registration notes.
 - **Deploy:** the API and MySQL on AWS (decided below), the web pointed at it.
 
+**Split (2026-10-18):** three plans, in order.
+- ✅ **B13a: production build, hardening and in-code operations** (done 2026-10-18,
+  `.claude/plans/feature-chunk-b13a-production-build-plan/`).
+- **B13b:** AWS infrastructure as code (AWS CDK in TypeScript, `packages/infra`), deploy and runbooks.
+- **B13c:** mocks off, Data Privacy Act operations, the load test. This closes B13's "Done when".
+
 **Decided (2026-10-18):**
 - **Hosting:** AWS in Singapore (`ap-southeast-1`).
   - The API runs on ECS Fargate (one small task to start; more behind a load balancer as clinics grow).
@@ -443,6 +449,7 @@ restoring last night's backup to a fresh database works; the load test meets its
 - Read replicas and caching (Redis) when the load test or real traffic says so, not before.
 - Per-clinic web addresses; operator impersonation with an audit trail.
 - Patient merge (after duplicate detection in B4).
+- Operator two-step sign-in (B12 decisions 10 and 36; B13a decisions.md D3).
 
 ---
 

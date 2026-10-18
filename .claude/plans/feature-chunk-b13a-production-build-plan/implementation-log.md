@@ -62,3 +62,20 @@
 - **Not proven here:** the real slim + `apt-get install openssl` path. Phase 8's CI `image` job is its proof.
 **Notes:**
 - Image size: 899 MB for the first slim build, 2.24 GB with the sandbox's full base. `node_modules` holds jsdom, the AWS SDK and SWC; trimming it is a later optimisation, not done here.
+
+## Phase 8: CI and documentation — 2026-10-18
+
+**Steps completed:** 8.1, 8.2
+**Files changed:** `.github/workflows/api.yml` (drift step; `audit` and `image` jobs), `apps/api/package.json` (`db:drift`; Prisma packages ^7.10.1), root `package.json` (`audit:deps`; `pnpm.overrides` `next>postcss`), `pnpm-lock.yaml`, `apps/api/CONVENTIONS.md`, `CONVENTIONS.md`, `apps/api/CHUNKS.md`
+**Deviations from plan:**
+- **Q8, the first audit:** it ran here through the proxy and found 8 high-severity advisories, all already on `master`. Each had a fixed version, so none is ignored:
+  - six in the API (mariadb 3.4.5, mysql2 3.15.3, deepmerge-ts 7.1.5), fixed by Prisma 7.10.1 (`prisma`, `@prisma/client` and `@prisma/adapter-mariadb` raised from ^7 to ^7.10.1);
+  - two postcss advisories in the web: Next 15.5.28 still pins postcss 8.4.31, so the override lifts it to ^8.5.23 (same major).
+  - After both, `pnpm run audit:deps`: no known vulnerabilities.
+- **Q6:** the Prisma 7 `migrate diff` flags were confirmed with `--help`. `db:drift` against the local shadow database: "No difference detected".
+- **Q7:** answered in Phase 7.
+- No "(B13)" deferral for F1 or trust proxy was in CHUNKS.md to strike; those lived in CONVENTIONS and were rewritten there.
+**Gate:** `pnpm run check`: exit 0. `pnpm --filter api test:int`: 53 files, 568 tests passed (after the Prisma upgrade).
+**Notes:**
+- The `image` and `audit` CI jobs are proven only by CI on the pushed branch.
+- The slim image's `apt-get install openssl` is proven only by CI (the sandbox blocks the Debian mirror).
