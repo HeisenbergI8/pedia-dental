@@ -104,7 +104,12 @@ export class ServiceStack extends Stack {
       task.addContainer("api", {
         image: ecs.ContainerImage.fromEcrRepository(repository, imageTag.valueAsString),
         command: withDatabaseUrl("node --enable-source-maps dist/main.mjs", API_DATABASE_QUERY),
-        environment: { ...apiEnvironment, BACKGROUND_WORK: String(backgroundWork) },
+        environment: {
+          ...apiEnvironment,
+          BACKGROUND_WORK: String(backgroundWork),
+          // B13c1 E5: the reset is a job, so only the task that runs jobs carries it.
+          ...(backgroundWork && settings.demoDailyReset && { DEMO_DAILY_RESET: "true" }),
+        },
         secrets: { ...databaseSecrets, ...smsSecrets },
         portMappings: [{ containerPort: API_PORT }],
         logging: ecs.LogDrivers.awsLogs({ logGroup, streamPrefix: family }),

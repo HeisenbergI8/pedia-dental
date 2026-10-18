@@ -1,10 +1,10 @@
 # Primolar demo script (9 minutes)
 
 A walk through the prototype for a clinic owner. It follows one clinic's day, shows what makes Primolar a product for
-many clinics, how a new clinic joins and pays, and how children's records are handled under the Data Privacy Act. Every login uses the password **pass123**. All data is fake and lives in your browser.
+many clinics, how a new clinic joins and pays, and how children's records are handled under the Data Privacy Act. Every login uses the password **pass123**. All data is fake. It lives on Primolar's demo server and resets every night at 3:40 AM (Manila), so the next walk-through starts fresh.
 
-**Before you start:** open the link in a normal (not private) browser window. If an earlier walk-through left changes
-behind, sign in as anyone, open the account menu and choose **Reset demo data**.
+**Before you start:** the demo is shared: changes you make are seen by anyone else signed in to it until the night's
+reset. To start from a clean copy now, ask Primolar for a reset.
 
 The demo has three clinics and one waiting to join:
 
@@ -53,7 +53,8 @@ record they open is written to the audit trail.
 ## 3. The parent at home (45 s) · parent@gmail.com, on a phone
 
 1. The first screen is Bulilit's **privacy notice**, with the consents on record for each child. **I've read this**
-   opens the portal; it doesn't ask again until the clinic changes the notice.
+   opens the portal; it doesn't ask again until the clinic changes the notice. (If someone already read it today, the
+   notice won't show again until the reset.)
 2. Two children at the top: switch between them.
 3. **Confirm** the next visit, **request** an appointment, see the **treatment plan** and the **bill**.
 4. Show that the portal is in Bulilit's colours with Bulilit's logo, and a small "Powered by Primolar" at the bottom.
@@ -110,8 +111,9 @@ be changed, so nobody is approved underpaid.
 3. In the console, open **Ipin Kids Dental**: **Record payment** marks the month paid, and the due date stays on the
    same day of the month. Changing the plan: an upgrade starts at once, a downgrade on the next due date.
 
-*To show the pause:* set the demo clock past Ipin's pay-by date (below) and reload. Ipin's staff can't sign in, parents
-keep read-only access, and recording the payment reactivates it at once.
+*To show the pause:* in the console, open **Ipin Kids Dental** and **Pause** it (section 6): Ipin's staff can't sign in,
+parents keep read-only access, and **Reactivate** lifts it. (A clinic is also paused when a month stays unpaid past 7
+days of grace, which a demo reset every night never reaches.)
 
 ## 9. Children's records and the Data Privacy Act (1 min) · frontdesk@gmail.com, then owner@gmail.com
 
@@ -134,16 +136,8 @@ running them all without ever seeing a child's record.
 
 ---
 
-## The demo clock
-
-Grace periods and pauses depend on today's date. To jump ahead, open the browser's developer console and run
-`localStorage.setItem("pedia-dental:demo-today", "2026-11-20")` (any `yyyy-mm-dd`), then reload. Run
-`localStorage.removeItem("pedia-dental:demo-today")` and reload to go back. If clinics look paused after moving the date
-around, **Reset demo data** (it keeps the demo clock; remove that separately).
-
 ## If something goes wrong
 
-- **"This browser can't run the demo":** the browser blocked the demo's storage (private windows, some work
-  laptops). Use a normal window of Chrome, Edge, Safari or Firefox.
-- **Data looks odd after earlier clicks:** account menu → **Reset demo data**.
-- Each visitor has their own copy of the demo data. Nothing you do is seen by anyone else.
+- **Data looks odd after earlier clicks:** changes made earlier today are still there; the demo resets every night, or
+  ask Primolar for a reset.
+- Everyone shares one copy of the demo.

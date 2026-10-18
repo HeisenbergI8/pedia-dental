@@ -20,6 +20,7 @@ import { HttpErrorFilter } from "./common/http-error.filter";
 import { RequestContextMiddleware } from "./common/request-context.middleware";
 import { HealthController } from "./health/health.controller";
 import { Readiness } from "./health/readiness";
+import { DemoModule } from "./seed/demo.module";
 import { BACKGROUND } from "./jobs/job-runner";
 import { JobsModule } from "./jobs/jobs.module";
 import { loggerParams } from "./logging/logger";
@@ -60,6 +61,8 @@ export class AppModule implements NestModule {
         JobsModule,
         // Without ScheduleModule, `@Cron` methods are inert: they still run when called (test/int/jobs.int.test.ts).
         ...(background ? [ScheduleModule.forRoot()] : []),
+        // B13c1 E5: the nightly demo reset exists only on a demo deployment's background instance.
+        ...(background && env.DEMO_DAILY_RESET ? [DemoModule] : []),
         OutboxModule,
         StorageModule,
         PhotosModule,

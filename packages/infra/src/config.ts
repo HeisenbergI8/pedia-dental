@@ -57,6 +57,8 @@ const SettingsShape = z.object({
   githubRepo: required("githubRepo").regex(/^[\w.-]+\/[\w.-]+$/, "githubRepo must be owner/name"),
   appEnv: z.enum(["demo", "production"]).default("production"),
   demoLogins: flag().default(false),
+  // B13c1 E5: wipe and reseed the demo nightly (and seed an empty database at start-up). Demo deployments only.
+  demoDailyReset: flag().default(false),
   trustProxyHops: z.coerce.number().int().min(0).max(3).default(2),
   extraWebTasks: z.coerce.number().int().min(0).max(10).default(0),
   monthlyBudgetUsd: z.coerce.number().positive().default(100),
@@ -70,6 +72,9 @@ const SettingsShape = z.object({
 export const Settings = SettingsShape.superRefine((settings, ctx) => {
   if (settings.appEnv === "production" && settings.demoLogins) {
     ctx.addIssue({ code: "custom", path: ["demoLogins"], message: "demoLogins can't be true with appEnv=production (the API refuses it too)" });
+  }
+  if (settings.demoDailyReset && (settings.appEnv !== "demo" || !settings.demoLogins)) {
+    ctx.addIssue({ code: "custom", path: ["demoDailyReset"], message: "demoDailyReset needs appEnv=demo and demoLogins=true (the API refuses it too)" });
   }
   // Texted invite and reset links open WEB_URL; the browser on that page calls the API, so its origin must pass CORS.
   if (URL.canParse(settings.webUrl) && !settings.webOrigins.includes(new URL(settings.webUrl).origin)) {

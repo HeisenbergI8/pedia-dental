@@ -14,3 +14,15 @@
 **Notes:**
 - The case mapping for all 13 web files is being proposed by five read-only agents into the scratchpad. Each line is confirmed against the test bodies before it lands.
 - The Phase 4 e2e gate (every `api-*.spec.ts` against a `disabled` web) runs with Phase 5's demo-script spec.
+
+## Phase 5 (5.1, 5.2, 5.3, 5.5) — 2026-10-18
+
+**Steps completed:** 5.1, 5.2, 5.3, 5.5. Step 5.4 (the demo-script spec) follows separately.
+**Files changed:** `apps/api/src/config/env{,.test}.ts`, `apps/api/.env.example`, `src/seed/{demo-reset,demo-reset.test,demo-reset.jobs,demo.module}.ts` (new), `src/app.module.ts`, `prisma/demo-reset.ts` (new), `package.json` (`db:demo-reset`), `tsconfig.json`, `test/int/seed.int.test.ts`, `DEMO_SCRIPT.md`, `packages/infra/{src/config.ts,src/service-stack.ts,cdk.json,test/config.test.ts,test/service-stack.test.ts,runbooks/first-time-setup.md}`
+**Deviations from plan:**
+- **The int case "resets a seeded demo database …"** changes Bulilit's account name, standing in for "adds a patient" (a patient row needs a full guardian graph). It asserts the name is restored, the patient count equals the seed's, and the `JobLock` row stays.
+- **The start-up case** builds `JobRunner(prisma, new SystemClock())` directly and uses `APP_ENV=local` with `DEMO_LOGINS=true` (allowed by `assertResetAllowed`). It reseeds at the end, so the file leaves the database as it found it.
+- **`demo-reset.test.ts`'s fake** `$executeRawUnsafe` takes a `sql` parameter, so `mock.calls[i][0]` typechecks.
+**Gate:**
+- `pnpm run check`: exit 0. `@pedia/infra`: 41 tests.
+- `vitest --config vitest.int.config.ts test/int/seed.int.test.ts`: 17 passed on MySQL.

@@ -9,6 +9,7 @@
     "githubRepo": "HeisenbergI8/pedia-dental",
     "appEnv": "production",
     "demoLogins": false,
+    "demoDailyReset": false,
     "trustProxyHops": 2,
     "extraWebTasks": 0,
     "monthlyBudgetUsd": 100,

@@ -19,6 +19,10 @@ const Env = z.object({
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   // A demo deployment: `prisma db seed` may run, and the sign-in page's one-click logins (DemoLogin) are served (B2c).
   DEMO_LOGINS: flag().default(false),
+  // B13c1 E5: empty and reseed the demo clinics every night at 03:40 Manila (the seed is relative to its day), and seed an
+  // empty database at start-up. Only with APP_ENV=demo and DEMO_LOGINS=true, and only on the instance running background
+  // work. It wipes the database.
+  DEMO_DAILY_RESET: flag().default(false),
   // `Secure` on pd_session / pd_operator / pd_branch. Off only for local http (`.env`), never in a deployment.
   COOKIE_SECURE: flag().default(true),
   // This process runs the scheduled jobs and the outbox worker (main.ts → AppModule.forRoot's `background`).
@@ -48,6 +52,10 @@ const Env = z.object({
   // B11: the web app's address, which texted invite and reset links open. Set it in production (the default is dev's).
   WEB_URL: z.url().default("http://localhost:3000"),
 }).superRefine((env, ctx) => {
+  // B13c1 E5: a nightly wipe only where the data is the demo's by definition.
+  if (env.DEMO_DAILY_RESET && (env.APP_ENV !== "demo" || !env.DEMO_LOGINS)) {
+    ctx.addIssue({ code: "custom", path: ["DEMO_DAILY_RESET"], message: "DEMO_DAILY_RESET needs APP_ENV=demo and DEMO_LOGINS=true" });
+  }
   if (env.APP_ENV === "local") return;
   const problem = (path: string, message: string) => ctx.addIssue({ code: "custom", path: [path], message });
   // A hosted API must be told its web's address: the localhost defaults would let any local page call it.

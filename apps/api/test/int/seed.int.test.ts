@@ -15,6 +15,11 @@ import { PLAN_COLUMNS, toPlanItem } from "../../src/plan/plan.rows";
 import { MESSAGE_COLUMNS, MESSAGE_SEND, toMessage } from "../../src/message-queue/message.rows";
 import { DUE_COLUMNS, toDueItem } from "../../src/recalls/due-item.rows";
 import { seedDatabase } from "../../src/seed/seed-database";
+import { resetDemo } from "../../src/seed/demo-reset";
+import { DemoResetJobs } from "../../src/seed/demo-reset.jobs";
+import { JobRunner } from "../../src/jobs/job-runner";
+import { SystemClock } from "../../src/common/clock";
+import { loadEnv } from "../../src/config/env";
 import { DOCUMENT_SELECT, toDocument } from "../../src/documents/document.rows";
 import { PHOTO_SELECT, toPhoto } from "../../src/photos/photo.rows";
 import { LocalDiskStorage } from "../../src/storage/local-disk.storage";
@@ -243,3 +248,32 @@ describe("prisma db seed (seedDatabase) on MySQL", () => {
     expect(Number(row!.n)).toBe(platform.accounts.length);
   });
 });
+
+describe("the demo reset (B13c1 E5)", () => {
+  const patients = () => inClinic(DEMO_CLINIC_ID, () => prisma.patient.count());
+
+  it("resets a seeded demo database to a fresh seed, keeping the job lease", async () => {
+    const seeded = await patients();
+    await prisma.clinicAccount.update({ where: { id: DEMO_CLINIC_ID }, data: { name: "Changed by a visitor" } });
+    await prisma.$executeRaw`DELETE FROM JobLock WHERE name = 'demo.reset'`;
+    await prisma.$executeRaw`INSERT INTO JobLock (name, lockedUntil, lockedBy) VALUES ('demo.reset', NOW(3), 'test')`;
+    await resetDemo(prisma, hasher, { APP_ENV: "local", DEMO_LOGINS: true });
+    expect((await prisma.clinicAccount.findUniqueOrThrow({ where: { id: DEMO_CLINIC_ID } })).name).not.toBe("Changed by a visitor");
+    expect(await patients()).toBe(seeded);
+    expect(Number((await prisma.$queryRaw<{ n: bigint }[]>`SELECT COUNT(*) AS n FROM JobLock WHERE name = 'demo.reset'`)[0]!.n)).toBe(1);
+  }, 60_000);
+
+  it("seeds an empty demo database at start-up, and leaves a seeded one alone", async () => {
+    const env = loadEnv({ DATABASE_URL: "mysql://unused", APP_ENV: "local", DEMO_LOGINS: "true" });
+    const jobs = new DemoResetJobs(new JobRunner(prisma, new SystemClock()), prisma, hasher, env);
+    await resetDatabase(prisma);
+    await prisma.$executeRaw`DELETE FROM JobLock`;
+    await jobs.onApplicationBootstrap();
+    expect(await prisma.clinicAccount.count()).toBe(platform.accounts.length);
+    await prisma.clinicAccount.update({ where: { id: DEMO_CLINIC_ID }, data: { name: "Kept" } });
+    await jobs.onApplicationBootstrap();
+    expect((await prisma.clinicAccount.findUniqueOrThrow({ where: { id: DEMO_CLINIC_ID } })).name).toBe("Kept");
+    await resetDemo(prisma, hasher, { APP_ENV: "local", DEMO_LOGINS: true }); // leave the seed as the file found it
+  }, 60_000);
+});
+

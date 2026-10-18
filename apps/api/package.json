@@ -15,6 +15,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:drift": "prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --exit-code",
     "db:seed": "prisma db seed",
+    "db:demo-reset": "node --import @swc-node/register/esm-register prisma/demo-reset.ts",
     "db:backfill-due-items": "node --import @swc-node/register/esm-register prisma/backfill-due-items.ts",
     "db:studio": "prisma studio",
     "postinstall": "prisma generate",

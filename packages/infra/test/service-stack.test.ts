@@ -78,6 +78,13 @@ describe("PrimolarService", () => {
     expect(env).not.toHaveProperty("COOKIE_SECURE"); // the API's default, true
   });
 
+  it("resets the demo nightly from the background task only, and only when asked (B13c1 E5)", () => {
+    expect(envOf(containerOf(template, "primolar-api"))).not.toHaveProperty("DEMO_DAILY_RESET");
+    const demo = serviceOf({ appEnv: "demo", demoLogins: true, demoDailyReset: true, extraWebTasks: 1 });
+    expect(envOf(containerOf(demo, "primolar-api")).DEMO_DAILY_RESET).toBe("true");
+    expect(envOf(containerOf(demo, "primolar-api-web"))).not.toHaveProperty("DEMO_DAILY_RESET");
+  });
+
   it("adds the Semaphore key and sender name only once they are set (I12)", () => {
     const api = containerOf(serviceOf({
       semaphoreSecretArn: "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:primolar/semaphore-AbCdEf",
