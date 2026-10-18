@@ -486,7 +486,8 @@ test.describe("happy paths", () => {
     await signInFrontDesk(page);
     await openNav(page, "Billing");
     await expect(page.getByRole("heading", { level: 1, name: "Billing" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /^Collected / })).toBeVisible();
+    // Today's takings, or none on a day the clinic is closed (Sundays): either way the day view, not a dashboard.
+    await expect(page.getByRole("heading", { name: /^Collected / }).or(page.getByText(/^Nothing collected on /))).toBeVisible();
     await openNav(page, "Dashboard");
     await expect(page.getByRole("heading", { name: /Today's appointments/ })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Finance" })).toHaveCount(0);

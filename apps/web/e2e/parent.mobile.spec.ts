@@ -42,6 +42,9 @@ async function goTo(page: Page, section: "Home" | "Appointments" | "Bills" | "Tr
 }
 
 const childSwitcher = (page: Page) => page.getByRole("group", { name: "Whose records to show" });
+/** Mazie's seeded parent upload (seed-photos.ts). */
+const SEEDED_UPLOAD = "Paediatrician's clearance";
+
 async function pickChild(page: Page, name: "Mazie" | "Mika") {
   await childSwitcher(page).getByRole("button", { name }).click();
   await expect(childSwitcher(page).getByRole("button", { name })).toHaveAttribute("aria-pressed", "true");
@@ -139,13 +142,16 @@ test.describe("happy paths", () => {
     await expect(page.getByText("Done", { exact: true })).toHaveCount(3);
   });
 
-  test("parent confirms Mazie's next visit from Home and it stays confirmed after a reload", async ({ page }) => {
+  // Mika's seeded check-up is always booked (seed.ts, appointment_sibling); Mazie's next visit may already be confirmed.
+  test("parent confirms Mika's next visit from Home and it stays confirmed after a reload", async ({ page }) => {
     await openPortal(page);
+    await pickChild(page, "Mika");
     const nextVisit = page.locator("section").filter({ has: page.getByRole("heading", { name: "Next visit" }) });
     await nextVisit.getByRole("button", { name: "Confirm visit" }).click();
-    await expect(toast(page, /Thanks! Mazie's visit on .+ is confirmed\./)).toBeVisible();
+    await expect(toast(page, /Thanks! Mika's visit on .+ is confirmed\./)).toBeVisible();
     await expect(nextVisit.getByText("Confirmed")).toBeVisible();
     await page.reload();
+    await pickChild(page, "Mika");
     await expect(page.getByRole("heading", { name: "Hello, Aliya" })).toBeVisible();
     await expect(nextVisit.getByText("Confirmed")).toBeVisible();
     await expect(nextVisit.getByRole("button", { name: "Confirm visit" })).toHaveCount(0);
@@ -188,7 +194,7 @@ test.describe("happy paths", () => {
     await openPortal(page);
     await goTo(page, "Uploads");
     await expect(page.getByRole("heading", { name: "Uploads for Mazie" })).toBeVisible();
-    await expect(page.getByText("Nothing uploaded yet")).toBeVisible();
+    await expect(page.getByRole("listitem").filter({ hasText: SEEDED_UPLOAD })).toBeVisible();
     await fileInput(page).setInputFiles({ name: "clearance.pdf", mimeType: "application/pdf", buffer: PDF });
     await captionInput(page).fill("Medical clearance from Dr. Cruz");
     await page.getByRole("button", { name: "Upload" }).click();
@@ -213,7 +219,8 @@ test.describe("happy paths", () => {
     await expect(page.getByRole("img", { name: "Front tooth looks dark" })).toBeVisible();
     // Mazie's uploads are separate.
     await pickChild(page, "Mazie");
-    await expect(page.getByText("Nothing uploaded yet")).toBeVisible();
+    await expect(page.getByRole("listitem").filter({ hasText: SEEDED_UPLOAD })).toBeVisible();
+    await expect(page.getByRole("img", { name: "Front tooth looks dark" })).toHaveCount(0);
   });
 
   test("parent switches reminder messages off for Mika only and the choice persists", async ({ page }) => {
@@ -339,7 +346,7 @@ test.describe("failed paths", () => {
     await page.getByRole("button", { name: "Upload" }).click();
     await expect(page.getByText("Choose a photo or a PDF")).toBeVisible();
     await expect(page.getByText("Say what this is, like “Medical clearance from Dr. Cruz”")).toBeVisible();
-    await expect(page.getByText("Nothing uploaded yet")).toBeVisible();
+    await expect(page.getByRole("listitem").filter({ hasText: SEEDED_UPLOAD })).toHaveCount(1); // nothing new listed
   });
 
   test("parent tries to send a PDF as a photo of teeth and is asked for an image", async ({ page }) => {
@@ -350,7 +357,7 @@ test.describe("failed paths", () => {
     await captionInput(page).fill("Teeth");
     await page.getByRole("button", { name: "Upload" }).click();
     await expect(page.getByText("Attach an image file")).toBeVisible();
-    await expect(page.getByText("Nothing uploaded yet")).toBeVisible();
+    await expect(page.getByRole("listitem").filter({ hasText: SEEDED_UPLOAD })).toHaveCount(1); // nothing new listed
   });
 
   test("parent tries to send a text file as a medical document and is refused", async ({ page }) => {
@@ -370,7 +377,7 @@ test.describe("failed paths", () => {
     await captionInput(page).fill("Big scan");
     await page.getByRole("button", { name: "Upload" }).click();
     await expect(page.getByText("Files must be under 10 MB")).toBeVisible();
-    await expect(page.getByText("Nothing uploaded yet")).toBeVisible();
+    await expect(page.getByRole("listitem").filter({ hasText: SEEDED_UPLOAD })).toHaveCount(1); // nothing new listed
   });
 
   test("parent who switched clinical photos off cannot then upload a photo of the teeth", async ({ page }) => {
@@ -385,7 +392,7 @@ test.describe("failed paths", () => {
     await captionInput(page).fill("Swollen gum");
     await page.getByRole("button", { name: "Upload" }).click();
     await expect(toast(page, /Mazie's family declined clinical photos/)).toBeVisible();
-    await expect(page.getByText("Nothing uploaded yet")).toBeVisible();
+    await expect(page.getByRole("listitem").filter({ hasText: SEEDED_UPLOAD })).toHaveCount(1); // nothing new listed
   });
 
   test("parent sends a request without saying what the visit is for and is asked to", async ({ page }) => {
@@ -623,15 +630,18 @@ test.describe("edge cases", () => {
       bottomNav(page).getByRole("button", { name: "More" }),
       childSwitcher(page).getByRole("button", { name: "Mazie" }),
       childSwitcher(page).getByRole("button", { name: "Mika" }),
-      page.getByRole("button", { name: "Confirm visit" }).first(),
       page.getByRole("button", { name: /Account menu/ }),
       page.getByRole("link", { name: "See the plan" }),
     ];
-    for (const t of targets) {
+    const tall = async (t: (typeof targets)[number]) => {
       const box = await t.boundingBox();
       expect(box, String(t)).not.toBeNull();
       expect(box!.height, String(t)).toBeGreaterThanOrEqual(44);
-    }
+    };
+    for (const t of targets) await tall(t);
+    // Mika's seeded check-up is always booked; Mazie's next visit may already be confirmed.
+    await pickChild(page, "Mika");
+    await tall(page.getByRole("button", { name: "Confirm visit" }).first());
   });
 
   test("BUG: the photo and reminder consent switches are too small to tap on a phone", async ({ page }) => {
