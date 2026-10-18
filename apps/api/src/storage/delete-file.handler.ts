@@ -1,10 +1,13 @@
 import { Injectable, type OnModuleInit } from "@nestjs/common";
 import { z } from "zod";
 import { type OutboxEnvelope, type OutboxHandler, OutboxHandlers } from "../outbox/outbox.handlers";
+import { PlatformFilesService } from "./platform-files.service";
 import { StorageService } from "./storage.service";
 
 export const DELETE_FILE = "storage.delete";
-const Payload = z.object({ key: z.string() });
+/** B12: the outbox row that deletes one of Primolar's files once the change that unlinked it commits. */
+export const deletePlatformFile = (key: string) => ({ kind: DELETE_FILE, payload: { key, platform: true }, clinicId: null });
+const Payload = z.object({ key: z.string(), platform: z.boolean().optional() });
 
 /**
  * Deletes a file nothing points at any more (a replaced or removed logo; B10's photos), after the change that unlinked
@@ -18,6 +21,7 @@ export class DeleteFileHandler implements OutboxHandler, OnModuleInit {
   constructor(
     private readonly registry: OutboxHandlers,
     private readonly storage: StorageService,
+    private readonly platformFiles: PlatformFilesService,
   ) {}
 
   onModuleInit() {
@@ -25,6 +29,8 @@ export class DeleteFileHandler implements OutboxHandler, OnModuleInit {
   }
 
   async handle({ payload }: OutboxEnvelope): Promise<void> {
-    await this.storage.delete(Payload.parse(payload).key);
+    const { key, platform } = Payload.parse(payload);
+    // B12: Primolar's files (`platform: true`) have no clinic and no ledger row.
+    await (platform ? this.platformFiles.delete(key) : this.storage.delete(key));
   }
 }

@@ -46,3 +46,16 @@
 - Enum drift checks for the six new enums added to `tenant-scope.test.ts`.
 - Note for Phase 5+: `resetDatabase` truncates the two singletons; services must not assume them in tests that reset without seeding.
 **Gate:** `pnpm run check`: green. `test:int`: 45 files, 505 tests green.
+
+## Phase 5: Platform files, multi-part uploads, prices and the QR — 2026-10-18
+
+**Steps completed:** 5.1, 5.2, 5.3, 5.4
+**Files changed:** `apps/api/src/storage/{platform-files.service,platform-files.test,image-form,multipart,multipart.test,local-disk.storage,delete-file.handler,storage.module}.ts`; `src/platform-settings/{platform-settings.service,prices.controller,payment-qr.controller,platform-settings.module}.ts` (new); `src/app.module.ts`; `test/operator-routes.test.ts` (new); `test/int/platform-settings.int.test.ts` (new), `test/int/support/operator.ts` (new)
+**Deviations from plan:**
+- `image-form.ts` (`readImageForm`): the mock's reader for the QR and receipts (`data` JSON + one sniffed image), shared by Phase 7's receipt routes.
+- `deletePlatformFile(key)` builds the outbox row (`platform: true`, no clinic).
+- **One `PriceChange` per day**: a second save on the same day keeps the first change (it already holds the list in force before that day; `priceOn` reads `before` only for earlier days). Same billing for every day as the mock's list of changes, without depending on two rows' creation order. Changes are read by `on`.
+- **Operator actions are logged with the operator's id, not written to the audit trail**: `AuditEvent` is clinic-scoped and its `actorRole` is a clinic `Role`; the mock audits no operator action either. Flagged for the auditor.
+- `GET /operator/payment-qr` answers JSON `null` explicitly (Nest sends an empty body for `null`).
+- `operator-routes.test.ts` proves "reaches a controller" by 401 (Nest's 404 comes before the guard), as `clinic-routes.test.ts`.
+**Gate:** `pnpm run check`: green. `platform-settings.int.test.ts`: 8 green.
