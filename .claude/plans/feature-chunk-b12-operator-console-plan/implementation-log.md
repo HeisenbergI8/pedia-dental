@@ -107,3 +107,24 @@
 - `.env.example`: unchanged (B12 needs no new variable; `STORAGE_DIR`/`STORAGE_LINK_SECRET` exist since B10).
 - Two B2/B3 API specs asserted the subscription and the console were MSW's; they now assert the API's.
 **Gate:** `pnpm run check`: green. `e2e/api-operator.spec.ts`: 5/5 against apps/api in `hybrid`, twice on one database. `api-sign-in`, `api-owner-settings`, `api-photos-documents`, `api-messages`, `api-portal` re-run on the same server: green (after clearing `RateLimitCounter`, as their headers say).
+
+## Audit fixes (after Phase 9)
+
+The auditor scored 70/100. What was done with each finding:
+
+- **F1, deferred.** Operator actions are logged, but not written to `AuditEvent`. That table is clinic-scoped and `actorRole` is a clinic `Role`, so an operator actor needs a schema change of its own. It goes to B13 (the platform audit trail).
+- **F2, fixed.** Added `src/signups/signups.jobs.test.ts`.
+- **F3, fixed.** `addReceipt` records `create "Primolar payment receipt"` in its transaction, as the mock's rule does.
+- **F4, fixed.** `receipts.int.test.ts` now covers these refusals:
+  - a GIF (400) and an oversized image (413)
+  - an unknown reference and a console reference (404)
+  - a paid sign-up and a decided sign-up (409)
+  - a cancelled subscription (409)
+  - It also checks the upload's audit row.
+- **F5, accepted.** `BILLING_ONLY_ROUTES` includes `GET /clinic/usage`, because the Plan panel shows usage.
+- **F6, fixed.** `setBranding` updates the Signup before it locks the account (E6 order).
+- **F7, accepted.**
+  - `ReceiptUpload` still shows the form after a receipt is confirmed, because the next month can be paid.
+  - `PayNow` shows in every state except cancelled, because paying ahead is allowed.
+- **F8, fixed.** The mock answers 413 only for an allowed image type, as the API does.
+- **F9, fixed.** A text the provider rejects clears `segments`, so it no longer counts toward the month.

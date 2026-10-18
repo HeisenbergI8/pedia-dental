@@ -44,7 +44,7 @@ export async function readImageForm<T extends z.ZodType>(request: Request, schem
   const file = part instanceof File && part.size > 0 ? part : undefined;
   if (file || required) {
     const problem = imageProblem(rules, file);
-    if (problem) return refuse(file && file.size > rules.maxBytes ? 413 : 400, problem);
+    if (problem) return refuse(file && file.size > rules.maxBytes && rules.types.includes(file.type) ? 413 : 400, problem);
   }
   return { data: parsed.data, file };
 }

@@ -132,11 +132,11 @@ export class OperatorAccountsService {
         const key = form.logo && (await this.storage.put("branding", form.logo.ext, form.logo.body));
         const write = () =>
           runInTransaction(this.prisma, async (tx) => {
+            await this.signups.markDesignDelivered(tx, clinicId); // E6: the sign-up's row before the account's
             await lockAccount(tx);
             const { logoRef: old } = await tx.clinicAccount.findUniqueOrThrow({ where: { id: clinicId }, select: { logoRef: true } });
             await tx.clinicAccount.update({ where: { id: clinicId }, data: { brandColor, headingFont, ...(key && { logoRef: key }) }, select: { id: true } });
             if (key && old && !isDemoLogo(old)) await this.outbox.enqueue(tx, { kind: DELETE_FILE, payload: { key: old } });
-            await this.signups.markDesignDelivered(tx, clinicId);
           });
         await (key ? this.storage.keepIf(key, write) : write());
       });

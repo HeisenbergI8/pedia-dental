@@ -14,6 +14,7 @@ import { isDuplicateKey } from "../idempotency/idempotency.service";
 import { PlatformSettingsService } from "../platform-settings/platform-settings.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { runInTransaction, type Tx } from "../prisma/transaction";
+import { AuditService } from "../audit/audit.service";
 import { ALREADY_CHECKED, ReceiptRecordsService } from "../receipt-records/receipt-records.service";
 import { readImageForm } from "../storage/image-form";
 import { PlatformFilesService } from "../storage/platform-files.service";
@@ -48,6 +49,7 @@ export class SubscriptionRecordsService {
     private readonly settings: PlatformSettingsService,
     private readonly receipts: ReceiptRecordsService,
     private readonly files: PlatformFilesService,
+    private readonly audit: AuditService,
   ) {}
 
   /** E6's account lock by id (the operator and the jobs name the clinic; a clinic request has it in context). */
@@ -306,6 +308,7 @@ export class SubscriptionRecordsService {
           const periodStart = unpaidFrom(sub);
           const amountDue = await this.settings.monthlyFee(billedTier(sub, account.tier), periodStart, tx);
           await this.receipts.add(tx, { payer: { kind: "subscription", clinicId }, reference: form.data.reference, amountDue, periodStart, fileKey: key, bytes: file.bytes });
+          await this.audit.record("create", "Primolar payment receipt", undefined, tx); // as the mock's rule records it
         }),
       );
       return this.view(clinicId);

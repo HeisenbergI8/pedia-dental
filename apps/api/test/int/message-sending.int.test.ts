@@ -130,7 +130,7 @@ describe("sending texts on MySQL", () => {
     clock.set(at("2026-10-20T11:00:00"));
     await drainAll(a);
     expect(calls).toHaveLength(1);
-    expect(await message(id)).toMatchObject({ status: "failed", failureReason: "The SMS provider refused this number" });
+    expect(await message(id)).toMatchObject({ status: "failed", failureReason: "The SMS provider refused this number", segments: null }); // not sent: not counted (E9)
   });
 
   it("never resends a text the provider may have taken (decision 13)", async () => {

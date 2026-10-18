@@ -101,7 +101,7 @@ export async function readSignupForm<T extends z.ZodType>(
   const logo = logoPart instanceof Blob ? logoPart : undefined;
   if (logo) {
     const problem = logoProblem(logo);
-    if (problem) return refuse(logo.size > LOGO_RULES.maxBytes ? 413 : 400, problem);
+    if (problem) return refuse(logo.size > LOGO_RULES.maxBytes && LOGO_RULES.types.includes(logo.type) ? 413 : 400, problem);
   }
   const references = form.getAll("reference").filter((f): f is File => typeof f !== "string");
   const problem = referenceImagesProblem(references);

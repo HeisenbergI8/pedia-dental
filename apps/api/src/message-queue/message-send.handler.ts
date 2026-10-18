@@ -101,7 +101,7 @@ export class MessageSendHandler implements OutboxHandler, OnModuleInit {
         return; // settled: the outbox row is done, nothing is retried (decision 13)
       }
       if (error instanceof SmsRejected) {
-        await this.prisma.message.updateMany({ where: mine, data: { status: "failed", failureReason: FAILURE.rejected } });
+        await this.prisma.message.updateMany({ where: mine, data: { status: "failed", failureReason: FAILURE.rejected, segments: null } }); // not sent: not counted (E9)
         throw new OutboxPermanent(FAILURE.rejected);
       }
       // Definitely not taken: release the claim so the retry may send (E3); it no longer counts toward the month (E9).

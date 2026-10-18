@@ -13,7 +13,7 @@ import { PrismaService } from "../../src/prisma/prisma.service";
 import { seedDatabase } from "../../src/seed/seed-database";
 import { SignupsService } from "../../src/signups/signups.service";
 import { FileStorage } from "../../src/storage/storage";
-import { resetDatabase } from "./support/database";
+import { inClinic, resetDatabase } from "./support/database";
 import { signIn } from "./support/clinic-login";
 import { createIntApp } from "./support/int-app";
 import { asOperator } from "./support/operator";
@@ -118,9 +118,40 @@ describe("the Owner's receipts (decisions 6, 21, 24)", () => {
     const desk = (await signIn(app, "frontdesk@gmail.com", DEMO_CLINIC_ID)).cookie;
     expect((await http().get("/api/clinic/subscription").set("Cookie", desk)).status).toBe(403); // clinic.manage only
   });
+  it("audits the Owner's upload, and refuses one once the subscription is cancelled", async () => {
+    const owner = (await signIn(app, "owner@gmail.com", DEMO_CLINIC_ID)).cookie;
+    expect((await upload(http().post("/api/clinic/subscription/receipts").set("Cookie", owner), "GC-AUDIT")).status).toBe(201);
+    expect(await inClinic(DEMO_CLINIC_ID, () => prisma.auditEvent.count({ where: { action: "create", record: "Primolar payment receipt" } }))).toBe(1);
+    const ipin = await ownerOfIpin();
+    // Cancelling also closes the clinic and its sessions; the service's own check is the backstop for an upload already past the guard.
+    await prisma.$executeRaw`UPDATE Subscription SET cancelledAt = NOW(3) WHERE clinicId = ${IPIN}`;
+    const res = await upload(http().post("/api/clinic/subscription/receipts").set("Cookie", ipin), "GC-LATE");
+    expect([res.status, res.text]).toEqual([409, "This subscription is cancelled, so Primolar takes no more payments for it."]);
+  });
 });
 
 describe("a sign-up's receipt (decision 7) and the purge (decision 15)", () => {
+  it("refuses what it can't take: a GIF, an oversized image, an unknown or console reference, a paid or decided sign-up", async () => {
+    const post = () => http().post(`/api/signups/${HAGIKGIK}/receipts`).field("data", JSON.stringify({ reference: "BPI-1" }));
+    expect((await post().attach("file", Buffer.from("GIF89a"), { filename: "r.gif", contentType: "image/gif" })).status).toBe(400);
+    const big = Buffer.concat([PNG, Buffer.alloc(5 * 1024 * 1024)]);
+    expect((await post().attach("file", big, { filename: "r.png", contentType: "image/png" })).status).toBe(413);
+    expect((await upload(http().post("/api/signups/PRM-NONE-NONE/receipts"), "BPI-2")).status).toBe(404);
+    const row = await prisma.signup.findUniqueOrThrow({ where: { reference: HAGIKGIK } });
+    const { id: _id, reference: _ref, clinicId: _clinic, ...rest } = row;
+    await prisma.signup.create({ data: { ...rest, id: "signup_console", reference: "PRM-CNSL-0001", source: "console", name: "Console Dental", nameKey: "console dental", contactEmail: "c@console.demo", contactEmailKey: "c@console.demo" } as never });
+    expect((await upload(http().post("/api/signups/PRM-CNSL-0001/receipts"), "BPI-3")).status).toBe(404); // a console sign-up has no public page
+
+    expect((await upload(http().post(`/api/signups/${HAGIKGIK}/receipts`), "BPI-4")).status).toBe(201);
+    const [receipt] = ReceiptToCheck.array().parse((await http().get("/api/operator/receipts").set("Cookie", op)).body).filter((r) => r.payer.kind === "signup");
+    expect((await confirm(receipt!.id)).status).toBe(200);
+    const paid = await upload(http().post(`/api/signups/${HAGIKGIK}/receipts`), "BPI-5");
+    expect([paid.status, paid.text]).toEqual([409, "Primolar has already confirmed your payment"]);
+    expect((await http().post(`/api/operator/signups/signup_hagikgik/approve`).set("Cookie", op)).status).toBe(201);
+    const decided = await upload(http().post(`/api/signups/${HAGIKGIK}/receipts`), "BPI-6");
+    expect([decided.status, decided.text]).toEqual([409, "This sign-up has already been decided"]);
+  });
+
   it("records the setup fee when confirmed, after which Approve works", async () => {
     const sent = await upload(http().post(`/api/signups/${HAGIKGIK}/receipts`), "BPI-77");
     expect(SignupStatusView.parse(sent.body).receipt?.status).toBe("pending");
