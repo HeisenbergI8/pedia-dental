@@ -129,8 +129,20 @@ erasure requests, not built yet.
   export). Staff download it from the child's Privacy card; a parent from the portal's Privacy page (what the portal
   shows: no chart, notes, growth, visits or documents; the clinic gives the full copy on request).
 - **Correction:** staff edit the record; chart entries and payments are corrected by a new entry, never overwritten.
-- **Erasure and objection:** through the clinic, by writing, until B13c2b's register and erasure flow.
-- **The deadline to answer** a request is a legal threshold (proposed 15 working days): *confirm with counsel*.
+- **The register:** the Owner (or an admin, through the API) logs every request in Settings → Privacy → Privacy
+  requests: who asked, how, when, about which child. It is closed with what was done. Logged and closed requests are
+  in the audit trail ("Privacy request").
+- **The deadline to answer** a request is a legal threshold. It is counted in working days (Monday to Friday;
+  holidays aren't skipped, so it errs early) from `PRIVACY_REQUEST_DUE_WORKING_DAYS`, default 15: *confirm with
+  counsel*. Late requests show as Overdue.
+- **Erasure:** approving an erasure request **restricts** the child's record at once. It leaves every list, search and
+  the parents' portal, photos and reminders turn off, queued texts are withdrawn, and only the Owner and admins can
+  open it (every other attempt is refused and logged). It is anonymised only when its legal retention ends (B13c2b-2:
+  the job ships off until counsel confirms the period). Approval waits until the child has no upcoming appointment or
+  pending request.
+- **Objection:** logged and answered in the register. Stopping a use (reminders, photos) is the child's privacy
+  choices.
+- **Parents** ask the clinic (the portal's Privacy page says so). There is no self-serve request yet.
 
 ## Breach procedure
 

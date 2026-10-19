@@ -127,3 +127,21 @@ Playwright/Chromium screenshots; `apps/web/tsconfig.json` reverted afterwards):
 - Left: the Due column has no "Due soon" example in the walkthrough (unit-tested in `requestStanding`); dark mode
   and 200% zoom were not looked at (tokens only, the design guards pass).
 - Not verified: screen reader announcement of the inline refusal (`role="alert"`).
+
+## Phase 6: Documentation — 2026-10-19
+
+**Steps completed:** 6.1, 6.2
+**Files changed:** `PRIVACY_OPERATIONS.md` (Requests), `CONVENTIONS.md` (Domain rules, Where things live, the mock key
+v32), `apps/api/CONVENTIONS.md` (current phase, Where things live: `src/privacy-requests/`, `patient-restrictions.ts`
+and the `RecordOwners` line, two traps, Decisions recorded), `apps/api/CHUNKS.md` (B13c2b-1 done, B13c2b-2 next)
+**Deviations from plan:** the restricted-list trap in `apps/api/CONVENTIONS.md` also names the known gaps (clinic-wide
+logs, Q3; body-only child routes such as `POST /appointments`, found in Phase 3). The `RecordOwners` row in
+"Where things live" said "the guard asks for parents only", which B13c2b changed; updated.
+**Gate:** `pnpm run check` exit 0 (shared 246, seed 31, infra 41, web 414, api 553), which includes `inventory.test.ts`.
+
+## Not implemented / for the tester and auditor
+
+- Section 5 (B13c2b-2) is out of scope, as asked.
+- Q1–Q8 stay at their defaults (no self-serve request, no lift, clinic-wide logs unfiltered, no request–copy link,
+  the Owner's tab only, holidays not skipped, 15 working days, siblings keep their portal).
+- Not looked at: dark mode, 200% zoom, a screen reader pass on the new dialogs.

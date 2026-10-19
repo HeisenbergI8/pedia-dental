@@ -434,9 +434,15 @@ BIR-registered invoices and a second step for the operator's sign-in stay later 
     copy (`POST /patients/:id/exports`) for staff and parents, `GET /audit-log` and Settings → Privacy, `RETENTION_SCHEDULE`
     with the portal-link and operator-trail prunes, `PRIVACY_OPERATIONS.md`. No new table or permission; no patient data
     deleted.
-  - **B13c2b: the request register, erasure within legal retention, a clinic's return or deletion at cancellation**
-    (outlined in the plan's section 5): `PrivacyRequest` and `privacy.manage`, restriction then anonymisation (ships off
-    until counsel gives periods), the operator's clinic export and purge scripts.
+  - **B13c2b: the request register, erasure within legal retention, a clinic's return or deletion at cancellation**,
+    split in two (B13c2b `decisions.md` S1; `.claude/plans/feature-chunk-b13c2b-privacy-requests-erasure-plan/`):
+    - ✅ **B13c2b-1: the privacy request register and restriction on erasure** (done 2026-10-19): `PrivacyRequest` and
+      `privacy.manage`, the working-day deadline (`PRIVACY_REQUEST_DUE_WORKING_DAYS`, 15, confirm with counsel), an
+      approved erasure restricting the child's record (hidden, refused without `privacy.manage`, photos and reminders
+      off), Settings → Privacy's register card. Nothing deleted.
+    - **B13c2b-2 (next): anonymisation when retention ends (ships off until counsel gives periods), the operator's
+      clinic export and purge scripts with a runbook, the schedule's `"B13c2b"` enforcers** (outlined in the B13c2b-1
+      plan's section 5).
 
 **Decided (2026-10-18):**
 - **Hosting:** AWS in Singapore (`ap-southeast-1`).
