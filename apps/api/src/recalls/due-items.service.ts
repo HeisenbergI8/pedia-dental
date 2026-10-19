@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { isDueItemOpen, type Appointment, type DueItem } from "@pedia/shared";
 import { AppointmentRecordsService } from "../appointments/appointment-records.service";
 import { PatientRestrictions } from "../auth/patient-restrictions";
+import { StandingRefresh } from "../patients/standing-refresh";
 import { PrismaService } from "../prisma/prisma.service";
 import { clinicData } from "../prisma/tenant-scope";
 import type { Tx } from "../prisma/transaction";
@@ -17,6 +18,7 @@ export class DueItemsService {
     private readonly appointments: AppointmentRecordsService,
     private readonly visits: VisitsService,
     private readonly restrictions: PatientRestrictions,
+    private readonly standing: StandingRefresh,
   ) {}
 
   /** GET /due-items: open ones, soonest first, each with its visit's dentist; a restricted child's left out (B13c2b E7). Not audited (decision 6). */
@@ -56,6 +58,7 @@ export class DueItemsService {
     // `now` is the note's signedAt: the mock closes and creates at that instant (notes/mocks.ts:89–95).
     if (change.close.length) await tx.dueItem.updateMany({ where: { id: { in: change.close } }, data: { closedAt: now } });
     await tx.dueItem.create({ data: { ...clinicData(), ...change.open, dueOn: new Date(`${change.open.dueOn}T00:00:00.000Z`), patientId: note.patientId, sourceNoteId: note.id, visitId: note.visitId, createdAt: now } });
+    await this.standing.refresh(tx, note.patientId, ["due"]); // B14
   }
 
   /** Booking from the due list (AppointmentsService.book, in its transaction, under the patient's lock). */
@@ -64,7 +67,9 @@ export class DueItemsService {
     const items = (await tx.dueItem.findMany({ where: { patientId: booked.patientId, ruleId: booked.sourceRuleId, closedAt: null }, select: DUE_COLUMNS })).map((r) => toDueItem(r));
     const appointments = await this.appointments.forPatients([booked.patientId], {}, tx); // the new one too, as the mock
     const item = bookedItem(booked.patientId, booked.sourceRuleId, items, appointments);
-    if (item) await tx.dueItem.update({ where: { id: item.id }, data: { appointmentId: booked.id } });
+    if (!item) return;
+    await tx.dueItem.update({ where: { id: item.id }, data: { appointmentId: booked.id } });
+    await this.standing.refresh(tx, booked.patientId, ["due"]); // B14
   }
 
   /** The backfill (E8) for the signed-in clinic: one transaction per clinic. Returns how many items it created. */

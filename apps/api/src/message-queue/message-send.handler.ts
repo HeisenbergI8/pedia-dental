@@ -4,6 +4,9 @@ import { addMonths, format, parseISO } from "date-fns";
 import { lockAccount } from "../clinic/account-lock";
 import { Clock } from "../common/clock";
 import { OutboxDefer, type OutboxEnvelope, type OutboxHandler, OutboxHandlers, OutboxPermanent } from "../outbox/outbox.handlers";
+import { OutboxService } from "../outbox/outbox.service";
+import { STANDING_REFRESH } from "../patients/standing-refresh";
+import type { Prisma } from "../generated/prisma/client.ts";
 import { PrismaService } from "../prisma/prisma.service";
 import { runInTransaction, type Tx } from "../prisma/transaction";
 import { AccountLinks } from "./account-links";
@@ -20,7 +23,7 @@ export async function partsIn(tx: Tx, month: string): Promise<number> {
   return _sum.segments ?? 0;
 }
 
-type Claim = { send: { number: string; body: string; dispatchedAt: Date } } | { skip: true } | { permanent: string } | { defer: Date };
+type Claim = { send: { number: string; body: string; dispatchedAt: Date; patientId: string; kind: string } } | { skip: true } | { permanent: string } | { defer: Date };
 
 /**
  * Sends one Message (E2, E3). At least once from the outbox becomes exactly once here: the row is claimed
@@ -38,6 +41,7 @@ export class MessageSendHandler implements OutboxHandler, OnModuleInit {
     private readonly registry: OutboxHandlers,
     private readonly links: AccountLinks,
     @Inject(SMS_PROVIDER) private readonly sms: SmsProvider,
+    private readonly outbox: OutboxService,
   ) {}
 
   onModuleInit() {
@@ -54,19 +58,21 @@ export class MessageSendHandler implements OutboxHandler, OnModuleInit {
       // B12 E9: the clinic's account row first, so this clinic's claims run one at a time and the month's count is exact.
       // Then the message (account → Message keeps the global order; B11's Message → PortalLink follows). Raw SQL: name the clinic.
       const clinicId = await lockAccount(tx);
-      const [m] = await tx.$queryRaw<{ status: string; dispatchedAt: Date | null; to: string; body: string; kind: string; linkId: string | null }[]>`
-        SELECT status, dispatchedAt, \`to\`, body, kind, linkId FROM Message WHERE id = ${messageId} AND clinicId = ${clinicId} FOR UPDATE`;
+      const [m] = await tx.$queryRaw<{ status: string; dispatchedAt: Date | null; to: string; body: string; kind: string; linkId: string | null; patientId: string }[]>`
+        SELECT status, dispatchedAt, \`to\`, body, kind, linkId, patientId FROM Message WHERE id = ${messageId} AND clinicId = ${clinicId} FOR UPDATE`;
       if (!m || m.status !== "queued") return { skip: true }; // withdrawn, sent or failed already: a redelivery
       // Decision 4: a retry that lands at night waits, without spending a try. An invite or reset goes at any hour (B11 decision 12).
       if (open > now && !isAccountText(m.kind)) return { defer: open };
       if (m.dispatchedAt) {
         // A previous try reached the provider and never recorded an outcome (a crash, a timeout): don't risk a second text.
         await tx.message.update({ where: { id: messageId }, data: { status: "failed", failureReason: FAILURE.notConfirmed }, select: { id: true } });
+        await this.settled(tx, m);
         return { skip: true };
       }
       const number = smsNumber(m.to);
       if (!number) {
         await tx.message.update({ where: { id: messageId }, data: { status: "failed", failureReason: FAILURE.noPhone }, select: { id: true } });
+        await this.settled(tx, m);
         return { permanent: FAILURE.noPhone };
       }
       // B11 E5: the link is made now, inside the claim, and exists only in memory until the provider has it.
@@ -82,26 +88,31 @@ export class MessageSendHandler implements OutboxHandler, OnModuleInit {
       const refused = textPartsRefusal(m.kind as LoggedMessageKind, await partsIn(tx, manilaMonth(this.clock.today())), parts, TIER_LIMITS[tier].textParts);
       if (refused) {
         await tx.message.update({ where: { id: messageId }, data: { status: "failed", failureReason: refused }, select: { id: true } });
+        await this.settled(tx, m);
         return { permanent: refused };
       }
       await tx.message.update({ where: { id: messageId }, data: { dispatchedAt: now, segments: parts }, select: { id: true } });
-      return { send: { number, body, dispatchedAt: now } };
+      return { send: { number, body, dispatchedAt: now, patientId: m.patientId, kind: m.kind } };
     });
     if ("defer" in claim) throw new OutboxDefer(claim.defer);
     if ("skip" in claim) return;
     if ("permanent" in claim) throw new OutboxPermanent(claim.permanent); // decision 12: no retries
 
     const mine = { id: messageId, status: "queued" as const, dispatchedAt: claim.send.dispatchedAt };
+    // B14: a settled text changes the child's "no contact": the update and its standing.refresh row commit together.
+    const settle = (data: Prisma.MessageUpdateManyMutationInput) => runInTransaction(this.prisma, async (tx) => {
+      if ((await tx.message.updateMany({ where: mine, data })).count) await this.settled(tx, claim.send);
+    });
     try {
       const receipt = await this.sms.send({ messageId, number: claim.send.number, body: claim.send.body });
-      await this.prisma.message.updateMany({ where: mine, data: { status: "sent", sentAt: this.clock.now(), segments: receipt.segments, providerRef: receipt.providerRef } });
+      await settle({ status: "sent", sentAt: this.clock.now(), segments: receipt.segments, providerRef: receipt.providerRef });
     } catch (error) {
       if (error instanceof SmsInDoubt) {
-        await this.prisma.message.updateMany({ where: mine, data: { status: "failed", failureReason: FAILURE.notConfirmed } });
+        await settle({ status: "failed", failureReason: FAILURE.notConfirmed });
         return; // settled: the outbox row is done, nothing is retried (decision 13)
       }
       if (error instanceof SmsRejected) {
-        await this.prisma.message.updateMany({ where: mine, data: { status: "failed", failureReason: FAILURE.rejected, segments: null } }); // not sent: not counted (E9)
+        await settle({ status: "failed", failureReason: FAILURE.rejected, segments: null }); // not sent: not counted (E9)
         throw new OutboxPermanent(FAILURE.rejected);
       }
       // Definitely not taken: release the claim so the retry may send (E3); it no longer counts toward the month (E9).
@@ -113,6 +124,18 @@ export class MessageSendHandler implements OutboxHandler, OnModuleInit {
   /** The tries ran out (decision 5): `failed` with the plain reason. A row already settled is left alone. */
   async deadLetter({ payload }: OutboxEnvelope, reason: string | undefined): Promise<void> {
     const { messageId } = payload as { messageId: string };
-    await this.prisma.message.updateMany({ where: { id: messageId, status: "queued" }, data: { status: "failed", failureReason: reason ?? FAILURE.gaveUp, dispatchedAt: null, segments: null } });
+    await runInTransaction(this.prisma, async (tx) => {
+      const failed = await tx.message.updateMany({ where: { id: messageId, status: "queued" }, data: { status: "failed", failureReason: reason ?? FAILURE.gaveUp, dispatchedAt: null, segments: null } });
+      if (failed.count) await this.settled(tx, (await tx.message.findUniqueOrThrow({ where: { id: messageId }, select: { patientId: true, kind: true } })));
+    });
+  }
+
+  /**
+   * B14: a text went `sent` or `failed`, so the child's stored "no contact" may change. Queued in this transaction, never
+   * refreshed here: this handler holds the account and the Message row, and taking the patient would reverse E8's order.
+   * An account text never decides "no contact" (hasNoContact).
+   */
+  private async settled(tx: Tx, m: { patientId: string; kind: string }): Promise<void> {
+    if (!isAccountText(m.kind)) await this.outbox.enqueue(tx, { kind: STANDING_REFRESH, payload: { patientId: m.patientId } });
   }
 }

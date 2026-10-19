@@ -1,5 +1,5 @@
-import { DEMO_PASSWORD, OPERATORS, SEED_FILES, allAccounts, demoAccounts, demoLogins, staffEmail, type Platform, type SeedFileType } from "@pedia/seed";
-import { smsSegments } from "@pedia/shared";
+import { DEMO_PASSWORD, OPERATORS, SEED_FILES, allAccounts, demoAccounts, demoLogins, staffEmail, type Db, type Platform, type SeedFileType } from "@pedia/seed";
+import { smsSegments, storedStanding, type PatientFacts, type StoredStanding } from "@pedia/shared";
 import { requestContext } from "../common/request-context";
 import type { Env } from "../config/env";
 import type { PrismaService } from "../prisma/prisma.service";
@@ -110,7 +110,8 @@ export async function seedDatabase(prisma: PrismaService, hasher: Hasher, env: P
       // B4: every child, their guardians, consents and privacy choices, with the seed's ids (hybrid needs them: MSW's
       // visits, invoices and appointments name these patient ids).
       const rows = db.patients.map(patientRows);
-      await prisma.patient.createMany({ data: rows.map((r) => ({ ...r.patient, clinicId })) });
+      const standing = standingOf(db);
+      await prisma.patient.createMany({ data: rows.map((r, i) => ({ ...r.patient, clinicId, ...standingData(standing[i]!) })) });
       await prisma.patientGuardian.createMany({ data: rows.flatMap((r) => r.guardians.map((g) => ({ ...g, clinicId }))) });
       await prisma.patientConsent.createMany({ data: rows.flatMap((r) => r.consents.map((c) => ({ ...c, clinicId }))) });
       await prisma.patientPrivacyConsent.createMany({ data: rows.flatMap((r) => (r.privacyConsent ? [{ ...r.privacyConsent, clinicId }] : [])) });
@@ -181,6 +182,25 @@ export async function seedDatabase(prisma: PrismaService, hasher: Hasher, env: P
     });
   }
 }
+
+/**
+ * B14: each seeded child's stored standing, from the seed's own rows with the shared storedStanding (the rule
+ * PatientStandingService runs on the API's). Facts are sliced per child first, so 5,000 children stay linear.
+ */
+function standingOf(db: Db): StoredStanding[] {
+  const by = new Map<string, PatientFacts>();
+  const of = (id: string) => by.get(id) ?? by.set(id, { visits: [], appointments: [], dueItems: [], invoices: [], payments: [], messages: [] }).get(id)!;
+  for (const v of db.visits) of(v.patientId).visits.push(v);
+  for (const a of db.appointments) of(a.patientId).appointments.push(a);
+  for (const i of db.dueItems) of(i.patientId).dueItems.push(i);
+  for (const i of db.invoices) of(i.patientId).invoices.push(i);
+  for (const p of db.payments) of(p.patientId).payments.push(p);
+  for (const m of db.messages) of(m.patientId).messages.push(m);
+  return db.patients.map((p) => storedStanding(p.id, of(p.id))); // in db.patients' order
+}
+
+const day = (d: string | undefined) => (d ? new Date(`${d}T00:00:00.000Z`) : null);
+const standingData = (s: StoredStanding) => ({ lastVisitOn: day(s.lastVisitOn), nextDueOn: day(s.nextDueOn), balance: s.balance, noContact: s.noContact });
 
 /**
  * B12: Primolar's billing. The price list (the migration's row, overwritten), the sign-ups, each clinic's subscription

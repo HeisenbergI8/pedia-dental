@@ -4,6 +4,8 @@ import type { Tx } from "../prisma/transaction";
 /** Which stored columns a write can change (B14 D4). A refresh recomputes only those, from source. */
 export type StandingPart = "visit" | "due" | "balance" | "contact";
 export const ALL_PARTS: readonly StandingPart[] = ["visit", "due", "balance", "contact"];
+/** B14: the outbox kind that refreshes one child's "no contact" after a text settles (StandingRefreshHandler). */
+export const STANDING_REFRESH = "standing.refresh";
 export type Refresher = (tx: Tx, patientId: string, parts: readonly StandingPart[]) => Promise<void>;
 
 /**

@@ -109,7 +109,9 @@ describe("sending texts on MySQL", () => {
     expect(await message(id)).toMatchObject({ status: "failed", failureReason: "Couldn't be sent after 4 tries" });
     expect(await outboxOf(id)).toMatchObject({ status: "failed" });
     clock.set(at("2026-10-20T12:00:00"));
+    expect(await a.get(OutboxWorker).drain()).toBe(1); // B14: the failed text's standing.refresh ("no contact"), not a 5th try
     expect(await a.get(OutboxWorker).drain()).toBe(0);
+    expect(calls).toHaveLength(4);
   });
 
   it("sends on a retry after the provider recovers", async () => {

@@ -17,6 +17,7 @@
     "db:seed": "prisma db seed",
     "db:demo-reset": "node --import @swc-node/register/esm-register prisma/demo-reset.ts",
     "db:backfill-due-items": "node --import @swc-node/register/esm-register prisma/backfill-due-items.ts",
+    "db:backfill-standing": "node --import @swc-node/register/esm-register prisma/backfill-standing.ts",
     "db:clinic-export": "node --import @swc-node/register/esm-register prisma/clinic-data.ts export",
     "db:clinic-purge": "node --import @swc-node/register/esm-register prisma/clinic-data.ts purge",
     "db:studio": "prisma studio",

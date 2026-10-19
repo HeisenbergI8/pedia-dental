@@ -9,6 +9,7 @@ import { Clock } from "../common/clock";
 import { requireContext } from "../common/request-context";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { lockPatient } from "../patients/patient-lock";
+import { StandingRefresh } from "../patients/standing-refresh";
 import { PrismaService } from "../prisma/prisma.service";
 import { clinicData } from "../prisma/tenant-scope";
 import { runInTransaction, type Tx } from "../prisma/transaction";
@@ -26,6 +27,7 @@ export class VisitsService implements OnModuleInit {
     private readonly clock: Clock,
     private readonly appointments: AppointmentRecordsService,
     private readonly owners: RecordOwners,
+    private readonly standing: StandingRefresh,
   ) {}
 
   /** B13c2b: the guard finds a restricted child behind a visit route (and a parent's, were they ever allowed). */
@@ -83,6 +85,7 @@ export class VisitsService implements OnModuleInit {
       // that names nothing) is left as it is, as the mock.
       if (appointmentId) await this.appointments.advance(tx, appointmentId, "in_chair", "done");
       const row = await tx.visit.update({ where: { id }, data: { status: "completed", completedAt: this.clock.now() }, select: VISIT_COLUMNS });
+      await this.standing.refresh(tx, found.patientId, ["visit"]); // B14, under the patient's lock
       await this.audit.record("update", "Visit (completed)", found.patientId, tx);
       return toVisit(row);
     });
