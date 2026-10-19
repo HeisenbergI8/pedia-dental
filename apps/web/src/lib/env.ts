@@ -9,7 +9,7 @@ const apiMockingMode: ApiMockingMode = MODES.find((m) => m === asked) ?? "disabl
 
 export const env = {
   apiMockingMode,
-  /** MSW is running (enabled or hybrid). Also gates the demo-only UI, as before. */
+  /** MSW is running (enabled or hybrid). The demo-only UI follows the API instead (features/auth/demo.ts, B13c1 E4). */
   apiMocking: apiMockingMode !== "disabled",
   apiUrl: process.env.NEXT_PUBLIC_API_URL ?? "/api",
 };

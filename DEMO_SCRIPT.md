@@ -1,6 +1,6 @@
 # Primolar demo script (9 minutes)
 
-A walk through the prototype for a clinic owner. It follows one clinic's day, shows what makes Primolar a product for
+A walk through Primolar for a clinic owner. It follows one clinic's day, shows what makes Primolar a product for
 many clinics, how a new clinic joins and pays, and how children's records are handled under the Data Privacy Act. Every login uses the password **pass123**. All data is fake. It lives on Primolar's demo server and resets every night at 3:40 AM (Manila), so the next walk-through starts fresh.
 
 **Before you start:** the demo is shared: changes you make are seen by anyone else signed in to it until the night's

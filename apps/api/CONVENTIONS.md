@@ -304,7 +304,8 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **"Ported" is the ledger** (`test/port-ledger.ts`, checked in `pnpm run check`): every case of the web's handler tests
   maps to an API test that exists (or a twin title). A new web handler test needs a ledger line or a twin.
 - **The load test's database name must end in `_load`** (`load:seed` refuses anything else). The targets are
-  `test/load/targets.ts`; the patient list and search miss them past ~1,000 patients (B13c1 decisions.md L1, a Later chunk).
+  `test/load/targets.ts`; the patient list and search miss them past ~1,000 patients, and every target misses at 5,000 (B13c1
+  decisions.md L1, a Later chunk).
 - **Every operator route that changes something carries `@OperatorAudited`** (`test/operator-audit-coverage.test.ts`
   fails otherwise). The row is written after the handler succeeds (B13a E9).
 - **Prisma 7's `migrate dev` doesn't regenerate the client.** Run `pnpm --filter api db:generate` after it.
@@ -637,6 +638,20 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
     billing-only session (25); a pause made by hand or a cancellation keeps everyone but parents out.
   - Platform files have no ledger and no clinic (E2); new ids are UUIDs (no cuid2 library); approve writes every row
     in one transaction in the new clinic's context and copies the logo after commit (E7).
+- **Production and operations** (B13a, decisions E1–E10 in its plan): `APP_ENV` local / demo / production; one image,
+  two commands (service and `prisma migrate deploy`); esbuild + SWC bundle; liveness and readiness probes with a 12 s
+  drain on SIGTERM; CloudWatch EMF metrics and error fingerprints, no vendor; the operator's trail in its own table,
+  written after the change (E9).
+- **AWS** (B13b, I1–I22 in its plan): CDK in `packages/infra`, two stacks; no NAT gateway; RDS MySQL 8.4 single-AZ,
+  30 days of point-in-time restore; `DATABASE_URL` built in the container; exactly one task runs background work;
+  manual OIDC deploys; no TLS to RDS yet (I5).
+- **Mocks off** (B13c1, E1–E12 and L1 in its plan):
+  - No deployment runs MSW; it stays as the offline `enabled` mode (E2, E3).
+  - The demo's help follows `/auth/demo-accounts`, not the mocking mode (E4).
+  - The demo is API-backed and reset nightly; four guards keep the reset off real data (E5).
+  - "Ported" is the ledger, enforced in `check`, with `test:int` proving the mapped tests pass (E7).
+  - The load test uses autocannon on the production bundle, with thresholds on p97.5 and p99 (E9, E10). Its misses
+    were accepted for the first clinics and moved to "Patient list and search at scale" (L1).
 - **Seed** (B1): `packages/seed` (`@pedia/seed`), so MSW and `prisma db seed` run the same `seedPlatform()`. Not
   `@pedia/shared`: the seed needs faker and is built from `new Date()`, which don't belong in the contract package.
 

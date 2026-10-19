@@ -8,7 +8,7 @@ import { USERS, signIn, signInOperator } from "./support/users";
  * .claude/plans/feature-chunk-b2d-web-cutover-plan/ (Step 4.1). The Ipin owner is left out: its grace period and
  * pause are the mock's alone until B12.
  */
-test.skip(!process.env.E2E_API, "Needs apps/api and a hybrid web server: E2E_API=1 E2E_BASE_URL=…");
+test.skip(!process.env.E2E_API, "Needs apps/api and a web server on it: E2E_API=1 E2E_BASE_URL=…");
 test.describe.configure({ timeout: 120_000 });
 
 const accountMenu = (page: Page) => page.getByRole("button", { name: /Account menu/ }).first();

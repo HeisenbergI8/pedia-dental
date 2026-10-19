@@ -82,7 +82,7 @@ TanStack Query · React Hook Form + Zod 4 · Zustand (UI state, plus the demo se
 ## Data flow
 
 Component → feature hook (`features/*/api.ts`) → `api(path, ZodSchema)` → `fetch(/api/...)` →
-MSW handler (now) or NestJS (later).
+the NestJS API through Next's `/api` rewrite (or, offline in `enabled` mode, an MSW handler).
 
 - Never call `fetch` from a component, and never import `@/mocks/*` from feature code outside `mocks.ts` (or a feature's second handler file, `*-mocks.ts`).
 - Every response is parsed with a shared schema. If parsing fails, fix the mock or schema; don't loosen it.

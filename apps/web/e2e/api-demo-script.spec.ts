@@ -449,7 +449,11 @@ test("9 · privacy: registration asks for consent, Calista has none recorded, an
   await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBe(1);
   const [tab] = await Promise.all([context.waitForEvent("page"), page.locator("a").filter({ has: img }).click()]);
   await tab.waitForLoadState();
-  expect(new URL(tab.url()).pathname).toMatch(/^\/api\/files\/[\w-]+$/); // the 302's link, through Next's proxy
+  // The 302's link: the local-disk driver's /api/files/<token> through Next's proxy, or on the deployed demo (S3) a
+  // presigned link to the bucket. Either way a short-lived, signed link, not the API's own route.
+  const opened = new URL(tab.url());
+  if (opened.hostname.endsWith(".amazonaws.com")) expect(opened.searchParams.get("X-Amz-Signature")).toBeTruthy();
+  else expect(opened.pathname).toMatch(/^\/api\/files\/[\w-]+$/);
   expect(await tab.evaluate(() => document.contentType)).toMatch(/^image\/(png|jpeg)$/); // the dialog may re-encode it
   await tab.close();
 });

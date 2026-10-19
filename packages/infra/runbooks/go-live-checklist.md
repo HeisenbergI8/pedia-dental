@@ -54,7 +54,8 @@ Tick every line before real clinics' data goes in. Each line names how to check 
 - [ ] `apps/web/e2e/api-demo-script.spec.ts` passes against the deployed demo (`E2E_BASE_URL=https://<demo web>`), right
   after a reset (B13's "Done when").
 - [ ] The load test's local run is recorded (B13c1 implementation log), and its accepted misses are understood:
-  the patient list and search slow down past ~1,000 patients until the "at scale" chunk.
+  the patient list and search slow down past ~1,000 patients; at 5,000, Today and booking miss their targets too
+  (B13c1 decisions.md L1), until the "at scale" chunk.
 - [ ] B13c2's Data Privacy Act items (export and deletion requests, retention, NPC registration) are done.
 - [ ] The operator's password is strong and stored in a password manager. Two-step sign-in comes later (B13a D3).
 

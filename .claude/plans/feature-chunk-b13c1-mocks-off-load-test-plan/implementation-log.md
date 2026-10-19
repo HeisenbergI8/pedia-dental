@@ -139,3 +139,19 @@ handlers2 also hoisted `parent-ownership`'s `it.each` table, so the parser reads
 3. **After a reset:** run `E2E_API=1 E2E_BASE_URL=https://<demo web> npx playwright test e2e/api-demo-script.spec.ts --project=desktop`. This closes B13's "Done when", and its X-ray is the real-S3 check left from B10.
 4. **Optionally:** `LOAD_RECORD_ONLY=1 LOAD_BASE_URL=https://<apiDomain> pnpm --filter api load:run` at demo size, recorded only.
 5. **Before real clinics:** a fresh database, `appEnv` = `production`, `demoLogins` and `demoDailyReset` = `false` (go-live checklist).
+
+## Auditor fixes — 2026-10-19
+
+The auditor scored 71/100.
+- **1, high: section 9 of the demo-script spec would fail on the S3-backed demo.** The opened tab may now be either the local driver's `/api/files/<token>` or a presigned bucket link: an `*.amazonaws.com` host with an `X-Amz-Signature` parameter. The content-type check is unchanged.
+- **2, medium: the docs understated the load misses.** CHUNKS, the go-live checklist and API CONVENTIONS now say every target missed at 5,000 patients, and the list and search already miss at 1,000. That matches the log's tables and L1.
+- **3, low:** API CONVENTIONS "Decisions recorded" gains B13a, B13b and B13c1 summaries.
+- **4, low:** the ledger's 86 `// GAP: see *.gaps.md` comments, which pointed at scratch files, now read `// was a gap: written for B13c1`.
+- **5, low: stale wording.**
+  - The `env.ts` comment on `apiMocking`.
+  - The root CONVENTIONS data-flow line.
+  - The `DEMO_SCRIPT.md` intro ("prototype").
+  - Four `api-*.spec.ts` headers and every skip message, which said "hybrid".
+- **6, low:** infra's vitest config sets `hookTimeout: 60_000`, so synthesis in `beforeAll` doesn't time out on a busy machine.
+- **Smells left as is:** the e2e helpers repeated across specs, and the ledger's string value.
+**Gate:** `pnpm run check`: exit 0.
