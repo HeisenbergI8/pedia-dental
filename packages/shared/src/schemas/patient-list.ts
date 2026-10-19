@@ -21,7 +21,7 @@ export const PatientListQuery = z.object({
 });
 export type PatientListQuery = z.infer<typeof PatientListQuery>;
 
-/** Computed on every request from due items, invoices, payments, messages, visits and appointments. Never stored. */
+/** Computed per request from the stored standing (B14: `Patient.lastVisitOn`, `nextDueOn`, `balance`, `noContact`) and today (`standingOn`). */
 export const PatientFlags = z.object({ recallDue: z.boolean(), balanceDue: z.boolean(), noContact: z.boolean() });
 export type PatientFlags = z.infer<typeof PatientFlags>;
 

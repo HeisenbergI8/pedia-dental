@@ -75,3 +75,14 @@ Open questions settled (user: "fix it, merge only if the load test proves it"): 
 - The reconcile case also corrupts one row's balance and checks a run corrects exactly 1; the parallel case books while `reconcileAll` runs (both commit, drift 0).
 - 7.2 runs today, today+7 and today+30 (both bounds cross with the load data's spread) × front desk and dentist (no `billing.view`) × q "" and "ma" × 5 filters × 3 sorts × first and last page: 720 page comparisons against `standingPage` over the same readers. Matches come from the uncapped directory filtered by the shared `matchesSearch`. Non-vacuity (every chip non-empty) is asserted on today only. No collation tie surfaced (D6).
 **Gate:** `test:int test/int/standing.int.test.ts` 4 passed (run by hand on `pedia_dental_b14_test`).
+
+## Phase 8: Documentation — 2026-10-19
+
+**Steps completed:** 8.1 (CHUNKS in Phase 9, with the table)
+**Files changed:** `CONVENTIONS.md`, `apps/api/CONVENTIONS.md`, `apps/api/README.md`, `packages/shared/src/schemas/patient-list.ts`
+**Deviations from plan:**
+- Root CONVENTIONS has no "Patients bullet"; the search cap is its own Domain-rules bullet next to the amended balance rule (Q1 confirmed by the user).
+- apps/api CONVENTIONS: current phase, the Patients row (`PatientStandingService`, `StandingRefresh`, the handler, `standing.jobs.ts`, `patient-standing.ts`), the three new Traps, the load-test trap (no "misses"; stop by PID, confirm the exit, never `pkill -f`), the Paging bullet (search capped, directory unpaged), the money rule and the B8 balances bullet amended to "cache".
+- README → Load test: a fresh `_load` database each run, the bundle started with its PID recorded, killed by PID, wait for the "Stored standing reconciled" line.
+- `apps/api/CHUNKS.md` is written in Phase 9, with the final table (the plan's own Phase 9 step).
+**Gate:** prose only (no Verify); `pnpm run check` runs at Phase 9.

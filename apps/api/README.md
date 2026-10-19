@@ -56,17 +56,20 @@ A hosted deployment (B13b) sets these variables:
 `STORAGE_LINK_SECRET` is unused with S3. B13b sets these in `packages/infra/src/service-stack.ts`; its settings live in
 `packages/infra/cdk.json`.
 
-## Load test (B13c1)
+## Load test (B13c1, B14)
 
 ```bash
-mysql -h127.0.0.1 -P3307 -uroot -proot -e "CREATE DATABASE pedia_dental_load; GRANT ALL ON pedia_dental_load.* TO 'pedia'@'%'"
+mysql -h127.0.0.1 -P3307 -upedia -ppedia -e "DROP DATABASE IF EXISTS pedia_dental_load; CREATE DATABASE pedia_dental_load"
 export DATABASE_URL=mysql://pedia:pedia@127.0.0.1:3307/pedia_dental_load
 pnpm --filter api db:deploy && pnpm --filter api load:seed           # 5,000 extra patients (LOAD_PATIENTS=n for another size)
 pnpm --filter api build
-(cd apps/api && DEMO_LOGINS=true COOKIE_SECURE=false BACKGROUND_WORK=true pnpm start:prod > /dev/null &)
+(cd apps/api && DEMO_LOGINS=true COOKIE_SECURE=false BACKGROUND_WORK=true node --enable-source-maps dist/main.mjs > /tmp/api.log 2>&1 & echo $! > /tmp/api.pid)
 pnpm --filter api load:run                                           # exits 1 on a missed target
+kill "$(cat /tmp/api.pid)"                                           # then confirm it exited; never pkill -f
 ```
 
+Use a fresh database for each run: the bookings change the data. Wait for the API's "Stored standing reconciled" log
+line (the start-up `standing.reconcile`) before `load:run`.
 It runs on the production bundle with the outbox worker on, so each booking's texts are queued and sent (log driver)
 while the load runs. The targets and thresholds are in `test/load/targets.ts`. `load:seed` refuses any database whose
 name doesn't end in `_load`. `LOAD_BASE_URL` points it elsewhere; `LOAD_RECORD_ONLY=1` prints without failing.
