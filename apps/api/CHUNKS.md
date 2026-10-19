@@ -464,6 +464,34 @@ restoring last night's backup to a fresh database works; the load test meets its
 
 ---
 
+## B14: Patient list, search and Today at scale ✅
+
+**Goal:** the B13c1 "Later" entry (decisions.md L1): `pnpm --filter api load:run` at 5,000 patients meets every target
+in `test/load/targets.ts`, thresholds unchanged.
+
+**Done:** Today reads only the week's, today's-appointment and today's-birthday children, with a `Visit (clinicId, status,
+date)` index; a search answers at most `PATIENT_SEARCH_LIMIT` (50) children (API and MSW); each patient's standing
+(`lastVisitOn`, `nextDueOn`, `balance`, `noContact`) is stored, recomputed from source by `PatientStandingService` inside
+the writes' transactions (a settled text through the `standing.refresh` outbox kind), reconciled at start-up and 03:35
+Manila (`standing.reconcile`, `db:backfill-standing`); the list counts, filters, sorts and pages in SQL. The booking's
+locked section was shortened (an `Appointment (clinicId, startsAt)` index for the clash check, no read-backs after the
+outbox and audit inserts, one template read per booking's texts). Left for a later chunk: the unpaged full directory
+(`usePatients()` with no `q`) on 8 screens.
+
+Load run, 2026-10-19, commit 6fb34b8, fresh `pedia_dental_b14f_load` (5,000 extra patients, seed 20 s), production
+bundle with `BACKGROUND_WORK=true`, MySQL 8.0.46 on the same 4-core box (baseline: master f42038e, the plan's section 1):
+
+| Target | req/s | p50 ms | p97.5 ms | p99 ms | Target p97.5 / p99 | Baseline p97.5 / p99 | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Today (Imus) | 92.3 | 105 | 148 | 160 | 300 / 800 | 601 / 640 | OK |
+| Today (all branches) | 84.7 | 116 | 157 | 165 | 400 / 1000 | 534 / 599 | OK |
+| Patient list | 95.1 | 102 | 150 | 159 | 500 / 1200 | 5709 / 5711 | OK |
+| Patient list: balance due, by balance | 71.8 | 137 | 203 | 217 | 500 / 1200 | 5836 / 5841 | OK |
+| Search (`?q=ma`) | 96.9 | 98 | 150 | 159 | 300 / 800 | 2077 / 2355 | OK |
+| Book | 35.6 | 273 | 346 | 360 | 400 / 1000, ≥ 20 req/s | 349 / 357 | OK |
+
+---
+
 ## Later (own chunks, after B13)
 
 - PayMongo checkout and automatic monthly charging, replacing B12's manual QR payments once there are paying clinics;
@@ -472,11 +500,6 @@ restoring last night's backup to a fresh database works; the load test meets its
 - Per-clinic web addresses; operator impersonation with an audit trail.
 - Patient merge (after duplicate detection in B4).
 - Operator two-step sign-in (B12 decisions 10 and 36; B13a decisions.md D3).
-- **Patient list and search at scale (next, B13c1 decisions.md L1).** The load test (2026-10-19) at 1,000 extra patients
-  missed on the list (p97.5 about 1.5–2.3 s) and search; at the plan's 5,000 every target missed: the list about 8 s,
-  search 5.7 s, Today 0.6–0.8 s and booking 436 ms (p97.5). Store each patient's standing (last visit,
-  recall, balance, flags) in columns kept by the writes, so filter, sort and page run in SQL; page `GET /patients`; then
-  `pnpm --filter api load:run` at 5,000 must meet `test/load/targets.ts`.
 
 ---
 

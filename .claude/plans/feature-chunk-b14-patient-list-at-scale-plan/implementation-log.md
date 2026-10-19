@@ -86,3 +86,63 @@ Open questions settled (user: "fix it, merge only if the load test proves it"): 
 - README → Load test: a fresh `_load` database each run, the bundle started with its PID recorded, killed by PID, wait for the "Stored standing reconciled" line.
 - `apps/api/CHUNKS.md` is written in Phase 9, with the final table (the plan's own Phase 9 step).
 **Gate:** prose only (no Verify); `pnpm run check` runs at Phase 9.
+
+## Phase 9: Load run at 5,000 and the gate — 2026-10-19
+
+**Steps completed:** 9.1, 9.2
+**Files changed:** fix commit 6fb34b8: `apps/api/prisma/schema.prisma`, `apps/api/prisma/migrations/20261022000200_b14_appointment_start_index/migration.sql`, `apps/api/src/outbox/outbox.service.ts`, `apps/api/src/audit/audit.service.ts` (+ test), `apps/api/src/message-queue/message-queue.service.ts`, `apps/api/src/patients/standing-refresh.handler.ts`, `apps/api/test/int/today.int.test.ts`; then `apps/api/CHUNKS.md`, this log.
+
+### First run: Book missed (everything else met)
+
+A first run after Phase 6 (fresh `pedia_dental_b14p_load`, production bundle, `LOAD_RECORD_ONLY=1`): Today 152/147, list
+147, balance list 207, search 140 (p97.5 ms, all OK), **Book p97.5 464 ms > 400** (27.6 req/s).
+
+Profile (B14 bundle, Book only, same `PROFILE`, via a scratch copy of `run.ts` filtered to one target under the
+gitignored `apps/api/var/`, removed afterwards):
+- **Master misses too today.** The master f42038e bundle on a fresh `_load` database: Book p97.5 448 ms, 27.5 req/s
+  (the plan's baseline was 349 ms, 32.6 req/s, so the box or the hour is slower now); on a used database 435 ms. A B14
+  run with the `standing.refresh` enqueue switched off (a temporary env check, never committed) was no faster (417 vs
+  411–416 ms on the same database), so the refresh was not the cause.
+- Process CPU during Book: node 76%, mysqld 47%: not CPU-bound. The slow log at `long_query_time=0` (globals restored
+  afterwards) showed 304 s of the run's ~35 s × 10 connections waiting on `SELECT … FROM ClinicAccount … FOR UPDATE`:
+  bookings serialize on the clinic's lock (E1), so throughput = 1 / (the locked section's length). One booking's
+  section was ~37 ms and ~30 statements.
+- The largest statement in it: the clash check (`near`), 2.8–5.6 ms, `EXPLAIN ANALYZE`: the planner used
+  `(clinicId, branchId, startsAt)` on `clinicId` only and scanned the clinic's 6,127 appointments.
+
+Fixes (deviation, recorded here: the plan's Book assumption was "unchanged ≤ 360 ms"; these stay within its design and
+touch no threshold, profile or data size):
+1. `Appointment @@index([clinicId, startsAt])` (migration `20261022000200_b14_appointment_start_index`, from `prisma migrate diff`): the clash check is a one-day range scan, 0.08 ms.
+2. `OutboxService.enqueue` and `AuditService.record` insert with `createMany` (one INSERT, no SELECT read-back; no caller used the returned outbox id). Unit test updated.
+3. `MessageQueueService.queueBooking` reads the templates, dentist and clinic name once for all of a booking's texts (`refs` + `write`, split out of `queue`).
+4. `StandingRefreshHandler` compares without the lock first and locks only to write (most settled texts change nothing).
+
+Book-only after 1: p97.5 443 (p50 310); after 1+2: 378, 385; after 1–4: 361. A full run after 1+2: all OK, Book 396.
+
+### Gate run (final)
+
+Commit 6fb34b8, fresh `pedia_dental_b14f_load`: `db:deploy`, `load:seed` (5,000 extra patients, 20 s), `build`, then
+`DEMO_LOGINS=true COOKIE_SECURE=false BACKGROUND_WORK=true node --enable-source-maps dist/main.mjs` (PID recorded; start-up
+log "Stored standing reconciled: 0 patient row(s) corrected"), then `pnpm --filter api load:run` (thresholds enforced, not
+record-only): **exit 0**. MySQL 8.0.46, 4 cores, 15 GB, the same box as the baseline.
+
+| Target | Requests | req/s | p50 ms | p97.5 ms | p99 ms | Target p97.5 / p99 | Baseline req/s, p50 / p97.5 / p99 | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Today (Imus) | 2770 | 92.3 | 105 | 148 | 160 | 300 / 800 | 23.8, 410 / 601 / 640 | OK |
+| Today (all branches) | 2541 | 84.7 | 116 | 157 | 165 | 400 / 1000 | 23.6, 416 / 534 / 599 | OK |
+| Patient list | 2853 | 95.1 | 102 | 150 | 159 | 500 / 1200 | 2.3, 3540 / 5709 / 5711 | OK |
+| Patient list: balance due, by balance | 2155 | 71.8 | 137 | 203 | 217 | 500 / 1200 | 2.3, 3558 / 5836 / 5841 | OK |
+| Search (`?q=ma`) | 2907 | 96.9 | 98 | 150 | 159 | 300 / 800 | 8.1, 1192 / 2077 / 2355 | OK |
+| Book | 1067 | 35.6 | 273 | 346 | 360 | 400 / 1000, ≥ 20 req/s | 32.6, 302 / 349 / 357 | OK |
+
+No non-2xx answers. The API was stopped by its PID (exit confirmed); every `_load` database this session made
+(`pedia_dental_b14p_load`, `_b14m_load`, `_b14f_load`) was dropped (`pedia_dental_load` pre-existed and was left).
+
+**Other deviation:** the full `test:int` on the fix commit's parent failed one case, `today.int` "for every day of this
+week": on 2026-10-23 two seeded roster children share a birthday, the mock lists them in its array's order and the API by
+id (as master's `basics()` did), and neither id, `createdAt` nor `patientNo` follows the seed's array. The case now
+compares birthdays sorted by child on both sides (`byChild`); the API keeps `ORDER BY id`. A date-dependent flake on
+master as well, not a B14 behaviour change.
+
+**Gate:** `pnpm run check` exit 0 (api 563 / shared 253 / web 416 / infra 41 / seed 31). Full `pnpm --filter api test:int`
+on 6fb34b8: 59 files, 652 passed. `load:run` at 5,000: every target met (table above).
