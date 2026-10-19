@@ -7,6 +7,9 @@ import { MetricsService } from "../metrics/metrics.service";
 import { PrismaService } from "../prisma/prisma.service";
 
 /** The platform audit trail (B13a, F1): one row per operator action. Insert-only (APPEND_ONLY), but for `prune` (B13c2a). */
+/** The shortest period the operator trail may be pruned to (one year; confirm with counsel, decisions.md C2). */
+export const OPERATOR_AUDIT_MIN_KEEP_DAYS = 365;
+
 @Injectable()
 export class OperatorAuditService {
   private readonly log = new Logger(OperatorAuditService.name);
@@ -56,6 +59,8 @@ export class OperatorAuditService {
    * Raw SQL on purpose: the tenant extension refuses any Prisma delete here, which keeps every other path insert-only.
    */
   async prune(keepDays: number, now = this.clock.now()): Promise<number> {
+    // The same floor env.ts holds OPERATOR_AUDIT_KEEP_DAYS to, here too: no caller can empty the trail by mistake.
+    if (!Number.isInteger(keepDays) || keepDays < OPERATOR_AUDIT_MIN_KEEP_DAYS) throw new Error(`Refusing to prune the operator trail to under ${OPERATOR_AUDIT_MIN_KEEP_DAYS} days`);
     const before = new Date(now.getTime() - keepDays * 24 * 60 * 60_000).toISOString().slice(0, 23).replace("T", " ");
     let total = 0;
     for (;;) {

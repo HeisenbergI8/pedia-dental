@@ -2,6 +2,7 @@ import type { INestApplication } from "@nestjs/common";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { FixedClock } from "../../src/common/clock";
 import { OperatorAuditJobs } from "../../src/operator-audit/operator-audit.jobs";
+import { OperatorAuditService } from "../../src/operator-audit/operator-audit.service";
 import { KEEP_LINK_DAYS, PortalService } from "../../src/portal/portal.service";
 import { TenantScopeError } from "../../src/prisma/tenant-scope";
 import { resetDatabase, testPrisma } from "./support/database";
@@ -56,5 +57,10 @@ describe("retention prunes (B13c2a)", () => {
 
   it("still refuses a Prisma delete on the operator trail", async () => {
     await expect(prisma.operatorAuditEvent.deleteMany({})).rejects.toBeInstanceOf(TenantScopeError);
+  });
+
+  it("refuses a prune shorter than a year whoever calls it", async () => {
+    const audit = new OperatorAuditService(prisma, new FixedClock(NOW), {} as never);
+    for (const days of [0, 30, 364, 365.5]) await expect(audit.prune(days)).rejects.toThrow(/under 365 days/);
   });
 });

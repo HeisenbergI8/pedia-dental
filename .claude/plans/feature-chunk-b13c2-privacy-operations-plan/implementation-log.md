@@ -80,3 +80,21 @@ Branch `feature/b13c2a-privacy-operations`, from master (B1–B13c1 merged). Pla
 - The inventory table was pasted from `retentionInventory()`'s output (printed once by a throwaway test, deleted).
 **Gate:** `pnpm run check` → exit 0 (api 84 files / 546 tests; web 36 / 407; shared 30 / 242; seed 1 / 31; infra 5 / 41). Ran directly: `inventory.test.ts` 2 passed.
 **Notes:** the NPC facts (registration thresholds, Circular 16-03's 72 hours) are stated as commonly summarised and marked *confirm with counsel*; they were not checked against the NPC's current text. Plan steps not built: none of B13c2a. B13c2b (section 5) is out of scope.
+
+## Tester fixes — 2026-10-19
+
+The tester found no privacy leak.
+- **Checked:**
+  - Every role's copy: sections, omitted, contacts, drafts excluded, parents' copies hold no clinical section and no other child.
+  - Refusals: no existence oracle for parents, refusals unaudited.
+  - One export audit entry.
+  - The paused clinic.
+  - The audit log: access, cursor paging over 317 rows with ties and concurrent inserts, filters, tenancy, reads audited, malformed input refused.
+  - The web, mocks off: both downloads, the Owner-only tab, 375 px, keyboard.
+  - Both prunes at their boundaries.
+  - `check` and `test:int` (619 tests).
+- **Fixed, finding 1 (low):** `OperatorAuditService.prune` held no floor of its own; only env parsing did. It now refuses under `OPERATOR_AUDIT_MIN_KEEP_DAYS` (365), so no caller can empty the trail by mistake. New int case in `retention.int.test.ts` (5 passed).
+- **Left, findings 2–4 (design limits or pre-existing, informational):**
+  - Keyset paging can't show a late-committing older row.
+  - The parent notice acknowledgement is a UI gate.
+  - Staff of an operator-paused clinic get no copy (only parents can download during a pause).
