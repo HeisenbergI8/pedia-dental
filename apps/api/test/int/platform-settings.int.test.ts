@@ -71,6 +71,7 @@ describe("the price list on MySQL (B12 decision 11)", () => {
   it("refuses a negative fee with the schema's issues", async () => {
     const res = await http().put("/api/operator/prices").set("Cookie", op).send(raise(SEED_PRICES, -10_000_000));
     expect(res.status).toBe(400);
+    expect((await http().put("/api/operator/prices").set("Cookie", op).send({ ...SEED_PRICES, designAddOn: 10.5 })).status).toBe(400);
   });
 
   it("serialises parallel saves on the platform lock: five saves on a new day, one change, no deadlock", async () => {

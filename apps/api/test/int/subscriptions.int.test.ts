@@ -1,6 +1,6 @@
 import type { INestApplication } from "@nestjs/common";
 import { DEMO_CLINIC_ID, SEED_PRICES, seedPlatform, staffEmail } from "@pedia/seed";
-import { BILLING_ONLY_MESSAGE, RECEIPT_PENDING, Session, SubscriptionView, type PriceList } from "@pedia/shared";
+import { BILLING_ONLY_MESSAGE, RECEIPT_PENDING, Session, SubscriptionView, amountDue, type PriceList } from "@pedia/shared";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Hasher } from "../../src/auth/hashing";
@@ -8,7 +8,7 @@ import { FixedClock } from "../../src/common/clock";
 import { PrismaService } from "../../src/prisma/prisma.service";
 import { seedDatabase } from "../../src/seed/seed-database";
 import { SubscriptionRecordsService } from "../../src/subscription-records/subscription-records.service";
-import { resetDatabase } from "./support/database";
+import { inClinic, resetDatabase } from "./support/database";
 import { signIn } from "./support/clinic-login";
 import { createIntApp } from "./support/int-app";
 import { asOperator } from "./support/operator";
@@ -113,6 +113,20 @@ describe("the nightly settle and the check at sign-in (decision 4)", () => {
     const owner = await signIn(app, "owner@gmail.com", DEMO_CLINIC_ID);
     expect(owner.res.status).toBe(403);
   });
+
+  it("shows only the Owner the overdue state, with the date to pay by, for seven days", async () => {
+    daysOn(4);
+    const payBy = clock.today(); // Ipin is 3 days past due today: its last day of grace is 4 days on
+    for (const day of [-2, 4]) { // 1 and 7 days past due
+      daysOn(day);
+      const owner = await signIn(app, IPIN_OWNER);
+      const view = SubscriptionView.parse((await http().get("/api/clinic/subscription").set("Cookie", owner.cookie)).body);
+      expect(view, `day ${day}`).toMatchObject({ state: "overdue", payBy });
+    }
+    const desk = await signIn(app, NGITI_DESK, NGITI);
+    expect((await http().get("/api/clinic/subscription").set("Cookie", desk.cookie)).status).toBe(403); // billing #31: other staff see none of it
+    expect((await http().get("/api/clinic").set("Cookie", desk.cookie)).status).toBe(200);
+  });
 });
 
 describe("payments and prices (billing #29, decision 11)", () => {
@@ -167,6 +181,16 @@ describe("plan changes (billing #27, decision 12, E13)", () => {
     expect((await http().post(`/api/operator/accounts/${DEMO_CLINIC_ID}/subscription/cancel`).set("Cookie", op)).status).toBe(409);
     const paid = await payByHand(DEMO_CLINIC_ID);
     expect([paid.status, paid.text]).toEqual([409, "This subscription is cancelled, so Primolar records no more payments for it."]);
+    const change = await http().put(`/api/operator/accounts/${DEMO_CLINIC_ID}/tier`).set("Cookie", op).send({ tier: "big" });
+    expect([change.status, change.text]).toEqual([409, "This subscription is cancelled, so its plan no longer changes."]);
+    const staff = await inClinic(DEMO_CLINIC_ID, () => prisma.staff.count());
+    daysOn(cancelled.daysUntilDue); // the paid month has run out
+    await records.settleAll();
+    const later = await asOperator(app);
+    expect(SubscriptionView.parse((await http().get(`/api/operator/accounts/${DEMO_CLINIC_ID}/subscription`).set("Cookie", later)).body)).toMatchObject({ state: "ended", pausedFor: "cancelled" });
+    expect(await account(DEMO_CLINIC_ID)).toMatchObject({ status: "suspended" });
+    expect((await http().post(`/api/operator/accounts/${DEMO_CLINIC_ID}/reactivate`).set("Cookie", later)).status).toBe(409);
+    expect(await inClinic(DEMO_CLINIC_ID, () => prisma.staff.count())).toBe(staff); // billing #30: all data kept
   });
 
   it("refuses to reactivate a lapsed clinic until it pays", async () => {
@@ -175,5 +199,87 @@ describe("plan changes (billing #27, decision 12, E13)", () => {
     const op = await asOperator(app);
     const res = await http().post(`/api/operator/accounts/${IPIN}/reactivate`).set("Cookie", op);
     expect([res.status, res.text]).toEqual([409, "This clinic's Primolar payment is past its grace period. Record the payment to reactivate it."]);
+    const before = SubscriptionView.parse((await http().get(`/api/operator/accounts/${IPIN}/subscription`).set("Cookie", op)).body);
+    const after = SubscriptionView.parse((await payByHand(IPIN)).body);
+    expect(after).toMatchObject({ state: "paid", pausedFor: null });
+    expect(after.payments[0]).toMatchObject({ periodStart: before.nextDue, amount: SEED_PRICES.plans.small.monthlyFee });
+    expect(after.nextDue).toBe(after.payments[0]!.periodEnd); // the anchor's next date, not a month from the day paid
+    expect(await account(IPIN)).toMatchObject({ status: "active" });
+  });
+
+  it("raises the next invoice at once on an upgrade", async () => {
+    const op = await asOperator(app);
+    const view = async () => SubscriptionView.parse((await http().get(`/api/operator/accounts/${NGITI}/subscription`).set("Cookie", op)).body);
+    const before = await view(); // Ngiti: Small, paid up, due in 2 days
+    expect((await http().put(`/api/operator/accounts/${NGITI}/tier`).set("Cookie", op).send({ tier: "mid" })).body.account.tier).toBe("mid");
+    const mid = SEED_PRICES.plans.mid.monthlyFee;
+    expect(await view()).toMatchObject({ tier: "mid", downgrade: null, nextTier: "mid", nextAmount: mid });
+    const paid = SubscriptionView.parse((await payByHand(NGITI)).body); // paid early: the schedule doesn't move
+    expect(paid.payments[0]).toMatchObject({ tier: "mid", amount: mid, periodStart: before.nextDue });
+  });
+
+  it("makes a downgrade wait for the next due date, disabling nothing before it", async () => {
+    const op = await asOperator(app);
+    expect((await http().put(`/api/operator/accounts/${NGITI}/tier`).set("Cookie", op).send({ tier: "mid" })).status).toBe(200);
+    expect((await http().put(`/api/operator/accounts/${NGITI}/tier`).set("Cookie", op).send({ tier: "small" })).body.account.tier).toBe("mid");
+    const view = SubscriptionView.parse((await http().get(`/api/operator/accounts/${NGITI}/subscription`).set("Cookie", op)).body);
+    expect(view).toMatchObject({ tier: "mid", downgrade: { tier: "small", on: view.nextDue }, nextAmount: SEED_PRICES.plans.small.monthlyFee });
+    daysOn(view.daysUntilDue - 1);
+    await records.settleAll();
+    expect(await account(NGITI)).toMatchObject({ tier: "mid", status: "active" });
+    daysOn(view.daysUntilDue);
+    await records.settleAll();
+    expect(await account(NGITI)).toMatchObject({ tier: "small" });
+    const later = await asOperator(app);
+    expect(SubscriptionView.parse((await http().get(`/api/operator/accounts/${NGITI}/subscription`).set("Cookie", later)).body)).toMatchObject({ tier: "small", downgrade: null });
+  });
+
+  it("bills an overdue month at the plan it began on when the clinic upgrades meanwhile (billing #27)", async () => {
+    const op = await asOperator(app); // Ipin: Small, 3 days past due
+    const fee = (t: "small" | "mid") => SEED_PRICES.plans[t].monthlyFee;
+    expect((await http().put(`/api/operator/accounts/${IPIN}/tier`).set("Cookie", op).send({ tier: "mid" })).status).toBe(200);
+    const view = SubscriptionView.parse((await http().get(`/api/operator/accounts/${IPIN}/subscription`).set("Cookie", op)).body);
+    expect(view).toMatchObject({ tier: "mid", nextTier: "small", nextAmount: fee("small") });
+    const after = SubscriptionView.parse((await payByHand(IPIN)).body);
+    expect(after.payments[0]).toMatchObject({ tier: "small", amount: fee("small"), periodStart: view.nextDue });
+    expect(after).toMatchObject({ nextTier: "mid", nextAmount: fee("mid") });
+  });
+
+  it("makes a downgrade asked for while overdue wait for the next due date, not the passed one", async () => {
+    const fee = (t: "small" | "mid") => SEED_PRICES.plans[t].monthlyFee;
+    const op = await asOperator(app);
+    const view = async (cookie: string) => SubscriptionView.parse((await http().get(`/api/operator/accounts/${NGITI}/subscription`).set("Cookie", cookie)).body);
+    const dueIn = (await view(op)).daysUntilDue; // Ngiti: Small, paid up, due in 2 days
+    expect((await http().put(`/api/operator/accounts/${NGITI}/tier`).set("Cookie", op).send({ tier: "mid" })).status).toBe(200); // before its month begins: billed at Mid
+    daysOn(dueIn + 2); // 2 days past due, within grace
+    const late = await asOperator(app);
+    expect((await http().put(`/api/operator/accounts/${NGITI}/tier`).set("Cookie", late).send({ tier: "small" })).status).toBe(200);
+    const waiting = await view(late);
+    expect(waiting).toMatchObject({ tier: "mid", nextTier: "mid", downgrade: { tier: "small" } });
+    expect(waiting.downgrade!.on > waiting.nextDue).toBe(true); // not the passed due date
+    const paid = SubscriptionView.parse((await payByHand(NGITI)).body);
+    expect(paid.payments[0]).toMatchObject({ tier: "mid", amount: fee("mid"), periodStart: waiting.nextDue });
+    expect(paid.nextDue).toBe(waiting.downgrade!.on);
+    daysOn(dueIn + 2 + paid.daysUntilDue);
+    await records.settleAll();
+    expect(await view(await asOperator(app))).toMatchObject({ tier: "small", downgrade: null, nextTier: "small", nextAmount: fee("small") });
+  });
+});
+
+describe("the first invoice (billing #29, chunk 23)", () => {
+  it("dues a clinic approved on the 31st on the 30th next month, with its upfront payment as its first invoice", async () => {
+    clock.set(new Date("2026-08-31T09:00:00+08:00"));
+    const op = await asOperator(app);
+    await http().post("/api/operator/signups/signup_hagikgik/payment").set("Cookie", op).send({ method: "bank_transfer", paidOn: "2026-08-30" });
+    const counter = (await prisma.invoiceCounter.findUniqueOrThrow({ where: { id: "primolar" } })).next;
+    const made = await http().post("/api/operator/signups/signup_hagikgik/approve").set("Cookie", op);
+    expect(made.status).toBe(201);
+    const view = SubscriptionView.parse((await http().get(`/api/operator/accounts/${made.body.overview.account.id}/subscription`).set("Cookie", op)).body);
+    expect(view).toMatchObject({ tier: "mid", state: "paid", nextDue: "2026-09-30", payBy: "2026-10-07" });
+    expect(view.payments).toHaveLength(1);
+    expect(view.payments[0]).toMatchObject({
+      invoiceNo: `PRM-INV-${String(counter).padStart(5, "0")}`, amount: amountDue(SEED_PRICES, "mid", "designed").total, periodStart: "2026-08-31", periodEnd: "2026-09-30",
+    });
+    expect(view.payments[0]!.lines.map((l) => l.label)).toEqual(["Setup fee", "First month", "Design it for me"]);
   });
 });
