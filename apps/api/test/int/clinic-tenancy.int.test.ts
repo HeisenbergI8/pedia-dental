@@ -114,6 +114,18 @@ describe("access control (handlers.test.ts, operator.test.ts)", () => {
     }
   });
 
+  it("lets dentist and front desk load everything the patient record and documents tab read", async () => {
+    const id = seedPlatform().tenants.clinic_demo!.patients[0]!.id;
+    const paths = [
+      ...["", "/visits", "/notes", "/chart", "/growth", "/plan", "/photos", "/appointments", "/invoices", "/payments", "/documents"].map((p) => `/patients/${id}${p}`),
+      "/staff", "/procedures", "/chairs", "/note-templates", "/message-templates",
+    ];
+    for (const accountId of ["staff_reyes", "staff_cruz"]) {
+      const cookie = await as("clinic_demo", accountId);
+      for (const path of paths) expect([accountId, path, await status(path, cookie)]).toEqual([accountId, path, 200]);
+    }
+  });
+
   it("lets a suspended clinic's parents read, and nobody else (decisions #41, #44)", async () => {
     const parent = await prisma.credential.findFirstOrThrow({ where: { clinicId: "clinic_ngiti", guardianId: { not: null } } });
     const [staff, family] = [await as("clinic_ngiti", "ngiti_staff_tan"), await as("clinic_ngiti", parent.accountId)];

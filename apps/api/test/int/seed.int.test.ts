@@ -151,6 +151,7 @@ describe("prisma db seed (seedDatabase) on MySQL", () => {
         const messages = (await prisma.message.findMany({ select: MESSAGE_COLUMNS })).map(toMessage);
         const byId = new Map(messages.map((m) => [m.id, m]));
         expect(byId).toEqual(new Map(db.messages.map((m) => [m.id, { ...m, clinicId: id }])));
+        expect(messages.filter((m) => /\{\w+\}/.test(m.body)).map((m) => m.id)).toEqual([]); // every placeholder filled
         expect(await prisma.message.count({ where: { status: "sent", sentAt: null } })).toBe(0);
       });
       const outbox = await prisma.outboxMessage.findMany({ where: { clinicId: id, kind: MESSAGE_SEND }, select: { payload: true } });

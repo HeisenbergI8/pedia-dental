@@ -203,6 +203,15 @@ describe("edit (PUT, PATCH) and consents", () => {
       expect([res.status, res.text], `${method} ${path}`).toEqual([404, "Patient not found"]);
     }
   });
+
+  it("lets front desk quick-update a child, and refuses a parent the quick update and the duplicate check", async () => {
+    const sibling = platform.tenants[DEMO_CLINIC_ID]!.patients.find((p) => p.id === "patient_sibling")!;
+    const desk = await as(FRONT_DESK);
+    expect((await ok(call("patch", `/patients/${sibling.id}`, desk, { nickname: "Miks", tags: [], alerts: sibling.alerts }), PatientView)).nickname).toBe("Miks");
+    const parent = await as([DEMO_CLINIC_ID, `guardian.${sibling.guardians[0]!.id}`] as Login);
+    expect((await call("patch", `/patients/${sibling.id}`, parent, { nickname: "X", tags: [], alerts: [] })).status).toBe(403);
+    expect((await call("get", "/patient-duplicates?firstName=a&lastName=b&birthDate=2020-01-01", parent)).status).toBe(403);
+  });
 });
 
 describe("contacts", () => {

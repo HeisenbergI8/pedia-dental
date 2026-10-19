@@ -1,12 +1,13 @@
 import { DEMO_CLINIC_ID } from "@pedia/seed";
 import {
-  ClinicalNote, IDEMPOTENCY_KEY_MISSING, IDEMPOTENCY_KEY_REUSED, Invoice, Payment, PlanItem, Procedure,
+  ChartEntry, ClinicalNote, IDEMPOTENCY_KEY_MISSING, IDEMPOTENCY_KEY_REUSED, Invoice, Payment, PlanItem, Procedure,
   accountSummary, depositBalance, invoiceBalance, invoiceTotal, isMoneyIn, pesos,
 } from "@pedia/shared";
 import { format } from "date-fns";
 import request from "supertest";
 import { z } from "zod";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { inClinic } from "./support/database";
 import { ADMIN, FRONT_DESK, NGITI_OWNER, clinicalApp, type Login } from "./clinical-support";
 
 /** apps/web's billing handler tests, against the API (CHUNKS B8), plus B8's decisions: refunds, voids, keys. */
@@ -106,6 +107,7 @@ describe("billing (apps/web handlers.test.ts → billing)", () => {
     const apply = (amount: number, cookie = admin) => post(`/invoices/${invoice.id}/apply-credit`, cookie, { amount, receivedBy: "staff_cruz" });
     expect(await words(apply(pesos(900)))).toEqual([409, "Only ₱800.00 is on deposit"]);
     const applied = await t.ok(apply(pesos(600)), Payment, 201);
+    expect(applied.receiptNo).toMatch(/^CR-/);
     expect(applied).toMatchObject({ method: "account_credit", invoiceId: invoice.id, note: "Paid from deposit" });
     expect((await paymentsOf(id)).filter((p) => p.receiptNo === applied.receiptNo).map((p) => p.amount)).toEqual([pesos(600), -pesos(600)]);
     expect([invoiceBalance(invoice, await paymentsOf(id)), await held()]).toEqual([pesos(200), pesos(200)]);
@@ -114,6 +116,21 @@ describe("billing (apps/web handlers.test.ts → billing)", () => {
     expect([invoiceBalance(invoice, await paymentsOf(id)), await held()]).toEqual([pesos(800), pesos(800)]);
     const day = await t.ok(get(`/payments?date=${format(new Date(), "yyyy-MM-dd")}`, desk), z.array(Payment));
     expect(day.filter((p) => p.patientId === id && isMoneyIn(p)).reduce((s, p) => s + p.amount, 0)).toBe(pesos(800));
+    // With ₱1,300 held, ₱900 is still refused: it is more than the ₱800 bill balance.
+    await t.ok(deposit({ amount: pesos(500) }), Payment, 201);
+    expect(await words(apply(pesos(900)))).toEqual([409, "That's more than the ₱800.00 balance"]);
+    expect(invoiceBalance(invoice, await paymentsOf(id))).toBe(pesos(800));
+  });
+
+  it("numbers deposit credit receipts without a gap, one number per application", async () => {
+    const { id, items } = await fluoride();
+    const invoice = await bill(id, [items[0]!.id]);
+    await t.ok(post(`/patients/${id}/deposits`, admin, { receivedBy: "staff_cruz", method: "cash", amount: pesos(500) }), Payment, 201);
+    const apply = () => t.ok(post(`/invoices/${invoice.id}/apply-credit`, admin, { amount: pesos(100), receivedBy: "staff_cruz" }), Payment, 201);
+    const [a, b] = [await apply(), await apply()];
+    expect(a.receiptNo).toMatch(/^CR-\d{6}$/);
+    expect(Number(b.receiptNo.slice(3))).toBe(Number(a.receiptNo.slice(3)) + 1);
+    expect((await paymentsOf(id)).filter((p) => p.receiptNo === a.receiptNo).map((p) => p.amount)).toEqual([pesos(100), -pesos(100)]); // the bill side and the deposit side share it
   });
 
   it("leaves refunds to the Owner and admins, and writes nothing on a refused one (decision 3)", async () => {
@@ -256,6 +273,22 @@ describe("billing (apps/web handlers.test.ts → billing)", () => {
       [`/invoices/${voided.id}/apply-credit`, { amount: 1, receivedBy: "staff_cruz" }],
     ] as const) expect((await post(path, parent, body)).status, path).toBe(403);
     expect((await post(`/invoices/${voided.id}/void`, parent, { reason: "x" }, null)).status).toBe(403);
+  });
+
+  it("gives a front desk who is also a dentist both roles' access (decision #39)", async () => {
+    const id = await t.register();
+    const alsoRoles = (roles: string[]) => inClinic(DEMO_CLINIC_ID, () => t.prisma.staff.update({ where: { id: "staff_cruz" }, data: { alsoRoles: roles } }));
+    await alsoRoles(["dentist"]);
+    try {
+      const cruz = await t.as(FRONT_DESK);
+      const visit = await t.start(id, cruz);
+      const entry = await t.ok(t.call("post", `/patients/${id}/chart`, cruz, { visitId: visit.id, tooth: 74, surfaces: ["O"], condition: "caries" }), ChartEntry, 201);
+      expect(entry.tooth).toBe(74); // the dentist's clinical.write
+      const deposit = await t.ok(post(`/patients/${id}/deposits`, cruz, { amount: pesos(300), method: "cash", receivedBy: "staff_cruz" }), Payment, 201);
+      expect(deposit.amount).toBe(pesos(300)); // the front desk's billing.collect
+    } finally {
+      await alsoRoles([]);
+    }
   });
 
 });
