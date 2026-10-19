@@ -12,11 +12,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { env } from "@/lib/env";
+import { useSessionStore } from "@/stores/session-store";
 import { ROLE_HOME, ROLE_LABEL, useSession } from "../access";
 import { authKeys, useDemoAccounts, useSignIn } from "../api";
 import { demoHelp } from "../demo";
 import { LegalLinks } from "@/features/legal/components/legal-links";
 import { useDemoTexts } from "@/features/portal/api";
+import { useHydrated } from "./access-gate";
 import { ClinicChooser } from "./clinic-chooser";
 import { PasswordField } from "./password-field";
 
@@ -49,9 +51,12 @@ export function LoginScreen() {
   const help = demoHelp(env.apiMockingMode, demo);
   const session = useSession();
   // The account this page opened with. Once a sign-in starts, or the session changes to someone else,
-  // the "signed in as" line would only flash the old or new name while the next page loads.
-  const [openedAs] = useState(() => session?.user.id);
-  const signingIn = useIsMutating({ mutationKey: authKeys.signIn }) > 0 || session?.user.id !== openedAs;
+  // the "signed in as" line would only flash the old or new name while the next page loads. Read from the store, not
+  // from `session`: while the server-rendered page hydrates, `session` is the server's (none), and comparing that with
+  // the stored one would read as a sign-in that never ends (seen with mocks off, B13c1).
+  const hydrated = useHydrated();
+  const [openedAs] = useState(() => useSessionStore.getState().session?.user.id);
+  const signingIn = useIsMutating({ mutationKey: authKeys.signIn }) > 0 || (hydrated && session?.user.id !== openedAs);
 
   return (
     <>

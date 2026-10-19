@@ -73,9 +73,11 @@ test("the seeded photos open through a 302 to a 5-minute link, through Next's pr
   expect(location).toMatch(FILE_LINK);
   const file = await page.request.get(location);
   expect([file.status(), file.headers()["content-type"], file.headers()["content-security-policy"]]).toEqual([200, "image/png", "sandbox"]);
-  // On the page, MSW's passthrough follows the 302 inside the service worker: the <img> gets the picture.
+  // On the page the <img> gets the picture: with mocks off (B13c1) the browser follows the API's 302 itself; in hybrid,
+  // MSW's passthrough follows it inside the service worker and hands back the 200.
   const [img] = await Promise.all([loads(page, /^\/api\/photos\/photo_seed_1\/file$/), openPhotos(page, child)]);
-  expect([img.status(), img.headers()["content-type"]]).toEqual([200, "image/png"]);
+  if (img.status() === 302) expect(img.headers()["location"]).toMatch(FILE_LINK);
+  else expect([img.status(), img.headers()["content-type"]]).toEqual([200, "image/png"]);
   await expect.poll(() => page.locator('img[src$="/photos/photo_seed_1/file"]').first().evaluate((el: HTMLImageElement) => el.naturalWidth)).toBe(1);
 });
 
