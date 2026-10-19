@@ -4,8 +4,8 @@ import { join } from "node:path";
 import type { INestApplication } from "@nestjs/common";
 import { SEED_PRICES, seedPlatform } from "@pedia/seed";
 import {
-  CreateAccountResult, DEFAULT_OPENING_HOURS, DUPLICATE_EMAIL_MESSAGE, Session, Signup, SignupStatusView, amountDue, duplicateNameMessage,
-  type GetStartedInput,
+  ClinicContext, CreateAccountResult, DEFAULT_OPENING_HOURS, DUPLICATE_EMAIL_MESSAGE, PriceList, Session, Signup, SignupStatusView, amountDue,
+  duplicateNameMessage, pesos, signupStatusLabel, type GetStartedInput,
 } from "@pedia/shared";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -62,7 +62,7 @@ const pay = (id: string) => http().post(`/api/operator/signups/${id}/payment`).s
 
 describe("the public Get started form on MySQL (billing #4–#11)", () => {
   it("takes each branding choice and quotes setup + first month (+ design) from the operator's prices", async () => {
-    const own = await submit(form({ choice: "own", brandColor: "#0d6e8c", headingFont: "poppins" }), { logo: [SVG, "image/svg+xml"] });
+    const own = await submit(form({ choice: "own", brandColor: "#0D6E8C", headingFont: "poppins" }), { logo: [SVG, "image/svg+xml"] });
     const plain = await submit(form({ choice: "default" }, "mid"));
     const designed = await submit(form({ choice: "designed", brief: "Sunny, calm" }, "big"), { references: [PNG, PNG] });
     expect([own.status, plain.status, designed.status]).toEqual([201, 201, 201]);
@@ -70,6 +70,13 @@ describe("the public Get started form on MySQL (billing #4–#11)", () => {
     expect(designed.body).toMatchObject({ status: "waiting", paid: false, receipt: null, paymentQr: null });
     expect((await signupOf(designed.body.reference)).referenceRefs).toHaveLength(2);
     expect((await signupOf(own.body.reference)).logoRef).toMatch(/^platform\/signups\/.+\.svg$/);
+    for (const [res, tier, choice] of [[own, "small", "own"], [plain, "mid", "default"], [designed, "big", "designed"]] as const) {
+      expect(SignupStatusView.parse(res.body)).toMatchObject({ status: "waiting", paid: false, branding: choice, rejectionReason: null, quote: amountDue(SEED_PRICES, tier, choice) });
+      expect(res.body.reference).toMatch(/^PRM-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
+    }
+    expect([own.body.quote.designAddOn, designed.body.quote.designAddOn]).toEqual([0, SEED_PRICES.designAddOn]);
+    expect((await signupOf(own.body.reference)).branding).toMatchObject({ brandColor: "#0d6e8c" });
+    expect((await signupOf(plain.body.reference)).logoRef).toBeUndefined();
   });
 
   it("needs a logo and a passing colour for Use my own; refuses a GIF logo and four reference images", async () => {
@@ -119,6 +126,11 @@ describe("the public Get started form on MySQL (billing #4–#11)", () => {
 });
 
 describe("sign-ups in the console on MySQL (billing #12–#15)", () => {
+  it("lists the demo sign-up waiting for its setup fee", async () => {
+    const rows = Signup.array().parse((await http().get("/api/operator/signups").set("Cookie", op)).body);
+    expect(signupStatusLabel(rows.find((s) => s.id === "signup_hagikgik")!)).toBe("Waiting for setup fee");
+  });
+
   it("won't approve before the setup fee, records it once as the quoted total, then approves into a working clinic", async () => {
     const made = await submit(form({ choice: "own", brandColor: "#0d6e8c", headingFont: "poppins" }), { logo: [PNG, "image/png"] });
     const s = await signupOf(made.body.reference);
@@ -162,6 +174,13 @@ describe("sign-ups in the console on MySQL (billing #12–#15)", () => {
     expect((await http().post("/api/auth/acknowledgement").set("Cookie", cookie).send({ kind: "confidentiality", version: 1 })).status).toBe(200);
     const logo = await http().get("/api/clinic/logo").set("Cookie", cookie).buffer(true).parse(binary);
     expect([logo.status, (logo.body as Buffer).equals(PNG)]).toEqual([200, true]);
+    expect(result.overview.design).toBeNull();
+    const clinic = ClinicContext.parse((await http().get("/api/clinic").set("Cookie", cookie)).body);
+    expect(clinic.account).toMatchObject({ brandColor: "#0d6e8c", headingFont: "poppins" });
+    expect(clinic.branches[0]).toMatchObject({ name: "Tagaytay", openingHours: DEFAULT_OPENING_HOURS });
+    expect(clinic.logoUrl).toContain("/clinic/logo?v=");
+    // The client's page says so too (A1).
+    expect(SignupStatusView.parse((await http().get(`/api/signups/${s.reference}`)).body).status).toBe("approved");
   });
 
   it("approves the default look with Primolar's colour and no logo, and Design it for me as in progress", async () => {
@@ -223,6 +242,22 @@ describe("sign-ups in the console on MySQL (billing #12–#15)", () => {
     await pay(s.id);
     const locked = await fix({ ...input, account: { ...input.account, tier: "big", contactEmail: s.account.contactEmail } });
     expect([locked.status, locked.text]).toEqual([409, PAID_PLAN_LOCKED]);
+    const look = await fix({ ...input, branding: { choice: "designed", brief: "x" }, account: { ...input.account, contactEmail: s.account.contactEmail } });
+    expect([look.status, look.text]).toEqual([409, PAID_PLAN_LOCKED]);
+    const typo = await fix({ ...input, account: { ...input.account, name: `${s.account.name} Kids`, contactEmail: s.account.contactEmail } });
+    expect(typo.status).toBe(200);
+    expect(Signup.parse(typo.body)).toMatchObject({ account: { name: `${s.account.name} Kids`, tier: "mid" }, quote: fixed.quote });
+  });
+
+  it("fixes a waiting sign-up, re-quoting a plan change, and refuses a fix that clashes (billing #13, A2)", async () => {
+    const s = await signupOf((await submit(form({ choice: "default" }))).body.reference);
+    const fix = (input: unknown) => multipart(http().put(`/api/operator/signups/${s.id}`).set("Cookie", op), input);
+    const { acceptTerms: _, ...input } = form({ choice: "default" }, "big", `${s.account.name} Kids`);
+    const fixed = await fix({ ...input, account: { ...input.account, contactEmail: s.account.contactEmail } });
+    expect(fixed.status).toBe(200);
+    expect(Signup.parse(fixed.body)).toMatchObject({ account: { name: `${s.account.name} Kids`, tier: "big" }, quote: amountDue(SEED_PRICES, "big", "default") });
+    const clash = await fix({ ...input, account: { ...input.account, name: "Ngiti Kids Dental", contactEmail: s.account.contactEmail } });
+    expect([clash.status, clash.text]).toEqual([409, duplicateNameMessage("Ngiti Kids Dental")]);
   });
 
   it("rejects with a reason the client sees, and its waiting receipt is rejected with it", async () => {
@@ -238,6 +273,34 @@ describe("sign-ups in the console on MySQL (billing #12–#15)", () => {
     await prisma.platformSettings.update({ where: { id: "primolar" }, data: { paymentQrKey: null, paymentQrUpdatedAt: null } });
   });
 
+  it("rejects with a reason the client sees; a paid one reads Rejected, refunded (billing #13, #14)", async () => {
+    const input = form({ choice: "default" });
+    const s = await signupOf((await submit(input)).body.reference);
+    await pay(s.id);
+    const reason = "We couldn't confirm the clinic's PRC registration. Call us to sort it out.";
+    const rejected = await http().post(`/api/operator/signups/${s.id}/reject`).set("Cookie", op).send({ reason });
+    expect(signupStatusLabel(Signup.parse(rejected.body))).toBe("Rejected, refunded");
+    const approve = await http().post(`/api/operator/signups/${s.id}/approve`).set("Cookie", op);
+    expect([approve.status, approve.text]).toEqual([409, "This sign-up has already been decided"]);
+    expect((await http().post(`/api/operator/signups/${s.id}/reject`).set("Cookie", op).send({ reason })).status).toBe(409);
+    expect(SignupStatusView.parse((await http().get(`/api/signups/${s.reference}`)).body)).toMatchObject({ status: "rejected", paid: true, rejectionReason: reason });
+    // A11: a rejected name may sign up again.
+    expect((await submit(input)).status).toBe(201);
+  });
+
+  it("re-checks the name at approval, in case a clinic took it since", async () => {
+    const s = await signupOf((await submit(form({ choice: "default" }))).body.reference);
+    await pay(s.id);
+    const { name: was } = await prisma.clinicAccount.findUniqueOrThrow({ where: { id: "clinic_ngiti" } });
+    await prisma.clinicAccount.update({ where: { id: "clinic_ngiti" }, data: { name: s.account.name } }); // the Owner renamed their clinic in Settings meanwhile
+    try {
+      const res = await http().post(`/api/operator/signups/${s.id}/approve`).set("Cookie", op);
+      expect([res.status, res.text]).toEqual([409, duplicateNameMessage(s.account.name)]);
+    } finally {
+      await prisma.clinicAccount.update({ where: { id: "clinic_ngiti" }, data: { name: was } });
+    }
+  });
+
   it("serves a sign-up's files to the operator only, and only its own", async () => {
     const made = await submit(form({ choice: "designed", brief: "x" }), { references: [PNG] });
     const s = await signupOf(made.body.reference);
@@ -247,5 +310,23 @@ describe("sign-ups in the console on MySQL (billing #12–#15)", () => {
     const other = encodeURIComponent("platform/signups/someone-else.png");
     const res = await http().get(`/api/operator/signups/${s.id}/files/${other}`).set("Cookie", op);
     expect([res.status, res.text]).toEqual([404, "That file isn't part of this sign-up"]);
+  });
+});
+
+describe("the price list (billing #23, A2)", () => {
+  it("is edited by the operator; new sign-ups are quoted from it, waiting ones keep their quote", async () => {
+    const waiting = await signupOf((await submit(form({ choice: "default" }, "mid"))).body.reference);
+    const raised: PriceList = { ...SEED_PRICES, plans: { ...SEED_PRICES.plans, mid: { setupFee: pesos(12000), monthlyFee: pesos(6000) } } };
+    try {
+      const put = await http().put("/api/operator/prices").set("Cookie", op).send(raised);
+      expect([put.status, put.body]).toEqual([200, raised]);
+      const after = SignupStatusView.parse((await submit(form({ choice: "default" }, "mid"))).body);
+      expect(after.quote).toEqual(amountDue(raised, "mid", "default"));
+      expect(after.quote.total).toBe(pesos(18000));
+      expect((await signupOf(waiting.reference)).quote).toEqual(waiting.quote);
+      expect(PriceList.parse((await http().get("/api/signups/prices")).body)).toEqual(raised);
+    } finally {
+      await http().put("/api/operator/prices").set("Cookie", op).send(SEED_PRICES);
+    }
   });
 });

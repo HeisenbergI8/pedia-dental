@@ -20,6 +20,8 @@ class Routes {
   @Get("patients/:id/plan") plan() { return "reached"; }
   @Post("appointments/:id/status") status() { return "reached"; }
   @Put("notes/:id") note() { return "reached"; }
+  @Get("signups/x/unruled") signupsUnruled() { return "reached"; }
+  @Get("operator/unruled") operatorUnruled() { return "reached"; }
 }
 
 /** A fake RecordOwners with only the appointment route registered; `lookups` counts the guard's calls. */
@@ -124,5 +126,16 @@ describe("AccessGuard over HTTP", () => {
     expect((await get("/api/operator/accounts")).status).toBe(401); // a clinic session is not an operator
     expect((await get("/api/operator/accounts", "pd_operator=op")).status).toBe(200);
     expect((await get("/api/clinic", "pd_operator=op")).status).toBe(401); // nor the reverse
+  });
+
+  it("refuses a public route with no rule, and never needs a clinic session", async () => {
+    const res = await request(app.getHttpServer()).get("/api/signups/x/unruled"); // no cookie at all (not /signups/unruled: that is GET /signups/:reference)
+    expect([res.status, res.text]).toEqual([403, "No access rule for GET /signups/x/unruled"]);
+    expect((await get("/api/clinic", "")).status).toBe(401); // the same browser has no clinic access
+  });
+
+  it("refuses an operator route with no rule", async () => {
+    const res = await get("/api/operator/unruled", "pd_operator=op");
+    expect([res.status, res.text]).toEqual([403, "No access rule for GET /operator/unruled"]);
   });
 });

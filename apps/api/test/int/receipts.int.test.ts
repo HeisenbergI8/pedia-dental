@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { INestApplication } from "@nestjs/common";
 import { DEMO_CLINIC_ID, SEED_PRICES, seedPlatform } from "@pedia/seed";
-import { RECEIPT_PENDING, ReceiptToCheck, SignupStatusView, SubscriptionView } from "@pedia/shared";
+import { DEFAULT_OPENING_HOURS, RECEIPT_PENDING, ReceiptToCheck, SignupStatusView, SubscriptionView } from "@pedia/shared";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Hasher } from "../../src/auth/hashing";
@@ -188,5 +188,37 @@ describe("a sign-up's receipt (decision 7) and the purge (decision 15)", () => {
     await prisma.outboxMessage.updateMany({ data: { availableAt: new Date(start - 60_000) } });
     await app.get(OutboxWorker).drain();
     expect(await app.get(FileStorage).get(fileKey!)).toBeUndefined();
+  });
+
+  it("deletes a sign-up's files 30 days after its rejection, keeping its record", async () => {
+    const submit = async (n: string) => {
+      const data = {
+        account: { name: `Ngipin ${n} Dental`, contactEmail: `hello@${n}.demo`, tin: "567-890-123", tier: "small" },
+        branch: { name: "Tagaytay", address: "1 Aguinaldo Hi-way, Tagaytay", phone: "(046) 483 0000", openingHours: DEFAULT_OPENING_HOURS },
+        owner: { fullName: `Dr. ${n} Cruz`, email: `owner@${n}.demo`, role: "admin" },
+        branding: { choice: "designed", brief: "Pastel teeth" },
+        acceptTerms: true,
+      };
+      const res = await http().post("/api/signups").field("data", JSON.stringify(data)).attach("reference", PNG, { filename: "ref.png", contentType: "image/png" });
+      expect(res.status).toBe(201);
+      return prisma.signup.findUniqueOrThrow({ where: { reference: res.body.reference } });
+    };
+    const rejectSignup = (id: string) => http().post(`/api/operator/signups/${id}/reject`).set("Cookie", op).send({ reason: "Duplicate" });
+    const old = await submit("purge");
+    const recent = await submit("kept");
+    const key = (old.referenceKeys as string[])[0]!;
+    expect((await rejectSignup(old.id)).status).toBe(200);
+    clock.set(new Date(start + 2 * 86_400_000));
+    op = await asOperator(app);
+    expect((await rejectSignup(recent.id)).status).toBe(200);
+    clock.set(new Date(start + 31 * 86_400_000)); // 31 days after the first rejection, 29 after the second
+    expect(await app.get(SignupsService).purgeRejectedFiles()).toBe(1);
+    const gone = await prisma.signup.findUniqueOrThrow({ where: { id: old.id } });
+    expect([gone.status, gone.rejectionReason, gone.filesDeletedAt !== null, gone.referenceKeys]).toEqual(["rejected", "Duplicate", true, []]);
+    const kept = await prisma.signup.findUniqueOrThrow({ where: { id: recent.id } });
+    expect([kept.filesDeletedAt, (kept.referenceKeys as string[]).length]).toEqual([null, 1]);
+    op = await asOperator(app);
+    const res = await http().get(`/api/operator/signups/${old.id}/files/${encodeURIComponent(key)}`).set("Cookie", op);
+    expect([res.status, res.text]).toEqual([404, "That file isn't part of this sign-up"]);
   });
 });
