@@ -1,5 +1,6 @@
 import { appointmentHandlers } from "@/features/appointments/mocks";
 import { auditHandlers } from "@/features/audit/mocks";
+import { privacyRequestHandlers } from "@/features/privacy-requests/mocks";
 import { authHandlers } from "@/features/auth/mocks";
 import { portalHandlers } from "@/features/portal/mocks";
 import { billingHandlers } from "@/features/billing/mocks";
@@ -51,5 +52,6 @@ export const handlers = [
   ...messageHandlers,
   ...documentHandlers,
   ...auditHandlers,
+  ...privacyRequestHandlers,
   ...dashboardHandlers,
 ];

@@ -1,5 +1,5 @@
 import { http, HttpResponse } from "msw";
-import { ALL_BRANCHES, BILLING_ONLY_MESSAGE, BILLING_ONLY_ROUTES, TIER_LIMITS, permissionScopeFor, reportBranchFilter, usableBranches, type AcknowledgementKind, type AuditAction, type Branch, type OperatorUser, type Permission } from "@pedia/shared";
+import { ALL_BRANCHES, BILLING_ONLY_MESSAGE, BILLING_ONLY_ROUTES, TIER_LIMITS, permissionScopeFor, reportBranchFilter, rolesCan, usableBranches, type AcknowledgementKind, type AuditAction, type Branch, type OperatorUser, type Permission } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { BRANCH_COOKIE, clinicTokenCookie, operatorTokenCookie } from "@/lib/session-cookies";
 import { accountById, credentialOf, currentAccount, currentClinicId, db, persist, platform, selectTenant } from "./db";
@@ -418,7 +418,13 @@ export const accessGate = http.all(url("/*"), ({ request }) => {
   }
 
   const refused = refusal(session, hit.rule, hit.params, u);
+  // B13c2b E6: a restricted child's record is privacy.manage's alone. The mock resolves every route's child (patientOf).
+  const patientId = patientOf(hit.rule, hit.params, u);
+  if (!refused && patientId && !rolesCan(session.roles, "privacy.manage") && db.patients.find((p) => p.id === patientId)?.restrictedAt) {
+    recordAudit(session, "denied", "Patient record (restricted)", patientId);
+    return deny(403, "This child's record is restricted after a privacy request. Ask the clinic's Owner.");
+  }
   const { audit, action = ACTION_OF[request.method] } = hit.rule;
-  if (audit) recordAudit(session, refused ? "denied" : action, audit, patientOf(hit.rule, hit.params, u));
+  if (audit) recordAudit(session, refused ? "denied" : action, audit, patientId);
   return refused;
 });

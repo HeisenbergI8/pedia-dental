@@ -33,6 +33,7 @@ import type {
   PaymentQr,
   PaymentReceipt,
   PriceChange,
+  PrivacyRequest,
 } from "@pedia/shared";
 import { DEMO_ACCOUNT, seed } from "./seed";
 import { IPIN_ACCOUNT, seedIpin } from "./seed-ipin";
@@ -76,6 +77,7 @@ export type Db = {
   acknowledgements: Acknowledgement[]; // privacy #20, #21: who read which notice or confidentiality version, when
   portalAccounts: PortalAccount[]; // B11: each guardian's portal access; never served (a parent is a login only while active)
   storedFiles: StoredFileRecord[]; // B12 decision 16: what counts toward the plan's storage (the API's StoredFile ledger)
+  privacyRequests: PrivacyRequest[]; // B13c2b: the request register (the API's PrivacyRequest); `patientName` added when served
 };
 
 /** B12: one stored file of the clinic, by its blob key (the API's `StoredFile` row). */
@@ -89,7 +91,7 @@ export const emptyDb = (): Db => ({
   branches: [], patients: [], staff: [], chairs: [], procedures: [], visits: [], chartEntries: [], noteTemplates: [],
   notes: [], growth: [], planItems: [], appointments: [], photos: [], dueItems: [], invoices: [], payments: [],
   messageTemplates: [], messages: [], documents: [], appointmentRequests: [], auditEvents: [], staffPins: [],
-  staffCredentials: [], privacyNotices: [], acknowledgements: [], portalAccounts: [], storedFiles: [],
+  staffCredentials: [], privacyNotices: [], acknowledgements: [], portalAccounts: [], storedFiles: [], privacyRequests: [],
 });
 
 

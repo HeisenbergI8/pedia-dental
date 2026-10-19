@@ -71,3 +71,26 @@ the whole `pnpm --filter api test:int` 56 files / 628 tests passed.
 - Gap, outside the plan (Q3-adjacent): routes that carry a child only in the **body** (e.g. `POST /appointments`,
   `POST /privacy-requests` itself) aren't checked by the guard. A restricted child is hidden from every picker, so the
   web can't reach it, but the API would accept a hand-made booking for a restricted id. Left for the auditor/user.
+
+## Phase 4: MSW: the handlers, the gate and the web's cases — 2026-10-19
+
+**Steps completed:** 4.1, 4.2, 4.3
+**Files changed:** `packages/seed/src/{platform,logins,seed,seed-ipin,seed-ngiti}.ts`, `apps/web/src/mocks/db.ts` (key
+`pedia-dental:mock-db:v32`), `apps/web/src/features/privacy-requests/mocks.ts` (new), `apps/web/src/mocks/handlers.ts`,
+`apps/web/src/mocks/access.ts`, `apps/web/src/features/patients/mocks.ts`, `apps/web/src/features/dashboard/mocks.ts`,
+`apps/web/src/mocks/privacy.test.ts`
+**Deviations from plan:**
+- Withdrawal of queued texts: the mock has no helper; the reminders "no" path does it inline, setting `"cancelled"`
+  (not the plan sketch's `"withdrawn"`, which isn't the mock's status). `restrict` does the same, inline.
+- The mock's `restrict` also writes the API's two audit rows ("Privacy consent (changed)", "Patient record
+  (restricted)", both `update`), which the plan sketch left out.
+- Today's birthdays in MSW come from `todaySummary(branchView(db, …))` in `features/dashboard/mocks.ts` (there is no
+  `features/reports/mocks.ts`): the Today handler passes `patients` without restricted children, as the API's
+  `basics()`.
+- `/auth/me` parity (plan's open question for case 7): the mock answered 200 for a parent whose only child is
+  restricted, because `allAccounts` listed every guardian on any patient. Instead of a ledger line, `allAccounts`
+  (`packages/seed/src/logins.ts`) now builds its guardians from unrestricted children only, matching the API (sign-in
+  skips such a parent, the open session ends). So all seven web cases are twins with identical titles; no ledger line.
+- The mock gate's existing audit line reuses the `patientId` it now computes (same value as before).
+**Gate:** `pnpm run check` exit 0 (web 414, api 553, shared 246, seed 31, infra 41);
+`pnpm --filter web exec vitest run src/mocks/privacy.test.ts` 24/24; `port-ledger` 16/16.

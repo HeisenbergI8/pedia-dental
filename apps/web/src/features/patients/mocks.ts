@@ -91,7 +91,7 @@ export const visibleTo = (session: MockSession | undefined, p: Patient): Patient
  */
 function siblingsOf(session: MockSession | undefined, p: Patient): Patient[] {
   const phones = new Set(p.guardians.map((g) => g.phone));
-  return db.patients.filter((x) => x.id !== p.id && x.guardians.some((g) => phones.has(g.phone)) && inScope(session, "patients.view", x.id));
+  return db.patients.filter((x) => !x.restrictedAt && x.id !== p.id && x.guardians.some((g) => phones.has(g.phone)) && inScope(session, "patients.view", x.id));
 }
 
 /**
@@ -106,7 +106,8 @@ export const patientHandlers = [
     const rows = db.patients
       // The directory (⌘K search, pickers): child or guardian name, or a guardian's phone for those who may see phones.
       // A parent: their children only.
-      .filter((p) => inScope(session, "patients.view", p.id) && matchesSearch(p, q, { phones: !!session && rolesCan(session.roles, "patients.contact") }))
+      // B13c2b E6: a restricted child leaves every list and search (the API's PatientsService.where).
+      .filter((p) => !p.restrictedAt && inScope(session, "patients.view", p.id) && matchesSearch(p, q, { phones: !!session && rolesCan(session.roles, "patients.contact") }))
       .sort((a, b) => a.lastName.localeCompare(b.lastName))
       .map((p) => visibleTo(session, p));
     return HttpResponse.json(rows);
@@ -124,7 +125,7 @@ export const patientHandlers = [
     const money = rolesCan(session.roles, "billing.view");
 
     const all = db.patients
-      .filter((p) => inScope(session, "patients.view", p.id) && matchesSearch(p, query.q, { phones: contact }))
+      .filter((p) => !p.restrictedAt && inScope(session, "patients.view", p.id) && matchesSearch(p, query.q, { phones: contact }))
       .map((p): PatientSummary => {
         const g = p.guardians.find((x) => x.isPrimary) ?? p.guardians[0];
         const s = patientStanding(p.id, db, today);
@@ -316,7 +317,7 @@ export const patientHandlers = [
     await delay(100);
     const q = new URL(request.url).searchParams;
     const candidate = { firstName: q.get("firstName") ?? "", lastName: q.get("lastName") ?? "", birthDate: q.get("birthDate") ?? "" };
-    const rows = findDuplicates(candidate, db.patients).map(({ id, patientNo, firstName, lastName, birthDate }) => ({
+    const rows = findDuplicates(candidate, db.patients.filter((p) => !p.restrictedAt)).map(({ id, patientNo, firstName, lastName, birthDate }) => ({
       id,
       patientNo,
       firstName,

@@ -11,19 +11,25 @@ import {
   LEGAL_DOCUMENTS,
   Message,
   Patient,
+  PatientPage,
   PatientView,
   PrivacyNoticeView,
+  PrivacyRequest,
+  PrivacyRequestPage,
   RecordsCopy,
   Session,
+  SessionUser,
   Signup,
   SignupStatusView,
+  addWorkingDays,
   type GetStartedInput,
   type RegisterPatientInput,
 } from "@pedia/shared";
 import { ApiError, api } from "@/lib/api-client";
 import { signupFormData } from "@/features/signup/form-data";
+import { today } from "./clock";
 import { db, platform } from "./db";
-import { DEMO_PASSWORD } from "./demo-accounts";
+import { DEMO_PASSWORD, childrenOf } from "./demo-accounts";
 import { handlers } from "./handlers";
 import { OPERATORS, OPERATOR_COOKIE, operatorToken } from "./operator";
 import { resetSignupHits } from "./signups";
@@ -296,5 +302,106 @@ describe("copy of records and the audit log (B13c2a)", () => {
     asStaff("staff_delacruz");
     expect(await status(api("/audit-log", AuditLogPage))).toBe(200);
     expect(demo().auditEvents.some((e) => e.record === "Audit log" && e.action === "view")).toBe(true);
+  });
+});
+
+// B13c2b: last in the file. These cases add requests and restrict one child; nothing after depends on the seed.
+describe("privacy requests and erasure (B13c2b)", () => {
+  const demo = () => platform.tenants.clinic_demo!;
+  const child = () => demo().patients[0]!;
+  const logOne = (body: Record<string, unknown>) =>
+    api("/privacy-requests", PrivacyRequest, send("POST", { kind: "access", requesterName: "Maria Santos", relationship: "Mother", channel: "in_person", receivedOn: today(), ...body }));
+  const UPCOMING = ["booked", "confirmed", "arrived", "in_chair"];
+  const activeLogin = (guardianId: string) => demo().portalAccounts.some((a) => a.guardianId === guardianId && a.state === "active");
+  // As the API twin: guardians with no other child, one with an active portal login, no upcoming appointment, no pending request.
+  const lone = () => {
+    const now = new Date().toISOString();
+    return demo().patients.find((p) => !p.restrictedAt && p.guardians.every((g) => childrenOf(demo(), g.id).length === 1)
+      && p.guardians.some((g) => activeLogin(g.id))
+      && !demo().appointments.some((a) => a.patientId === p.id && a.startsAt >= now && UPCOMING.includes(a.status))
+      && !demo().appointmentRequests.some((r) => r.patientId === p.id && r.status === "pending"))!;
+  };
+  let restricted: { id: string; firstName: string; parent: string };
+
+  it("logs a request with its deadline in working days, for the Owner and admins only", async () => {
+    asStaff("staff_villanueva");
+    const r = await logOne({ patientId: child().id });
+    expect(r).toMatchObject({ status: "open", dueOn: addWorkingDays(today(), 15), patientName: `${child().firstName} ${child().lastName}`, loggedByName: expect.any(String) });
+    asStaff("staff_delacruz");
+    await logOne({ kind: "objection", requesterName: "A parent" }); // no child: a general objection
+    for (const id of ["staff_cruz", "staff_reyes"]) {
+      asStaff(id);
+      expect(await status(api("/privacy-requests", PrivacyRequest, send("POST")))).toBe(403);
+    }
+    expect(await status(api("/privacy-requests", PrivacyRequestPage))).toBe(403);
+    expect(demo().auditEvents.filter((e) => e.record === "Privacy request" && e.action === "create")).toHaveLength(2);
+  });
+
+  it("refuses an erasure request without a child, and a day after today", async () => {
+    asStaff("staff_villanueva");
+    expect(await status(api("/privacy-requests", PrivacyRequest, send("POST", { kind: "erasure", requesterName: "X", channel: "letter", receivedOn: today() })))).toBe(400);
+    const late = api("/privacy-requests", PrivacyRequest, send("POST", { kind: "access", requesterName: "X", channel: "letter", receivedOn: addWorkingDays(today(), 1) }));
+    await expect(late).rejects.toMatchObject({ status: 409, message: "The day it was received can't be after today" });
+  });
+
+  it("lists open requests soonest due first, with the child's name", async () => {
+    asStaff("staff_villanueva");
+    await logOne({ receivedOn: "2026-01-05", requesterName: "Earliest" }); // overdue on any later day
+    asStaff("staff_delacruz");
+    const page = await api("/privacy-requests", PrivacyRequestPage);
+    expect(page.requests[0]!.requesterName).toBe("Earliest");
+    expect(page.requests.map((r) => r.dueOn)).toEqual([...page.requests.map((r) => r.dueOn)].sort());
+    expect(page.requests.find((r) => r.patientId === child().id)?.patientName).toBe(`${child().firstName} ${child().lastName}`);
+    expect(page.next).toBeUndefined();
+  });
+
+  it("closes a request once, with its outcome, and pages the closed ones newest first", async () => {
+    asStaff("staff_villanueva");
+    const open = (await api("/privacy-requests", PrivacyRequestPage)).requests;
+    for (const r of open) await api(`/privacy-requests/${r.id}/close`, PrivacyRequest, send("POST", { status: "done", outcome: "Copy given in person" }));
+    expect(await status(api(`/privacy-requests/${open[0]!.id}/close`, PrivacyRequest, send("POST", { status: "declined", outcome: "x" })))).toBe(409);
+    const first = await api("/privacy-requests?status=closed&limit=2", PrivacyRequestPage);
+    expect(first.requests).toHaveLength(2);
+    expect(first.requests[0]!.closedAt! >= first.requests[1]!.closedAt!).toBe(true);
+    const rest = await api(`/privacy-requests?status=closed&limit=2&before=${encodeURIComponent(first.next!)}`, PrivacyRequestPage);
+    expect(rest.requests.map((r) => r.id)).not.toContain(first.requests[0]!.id);
+    expect((await api("/privacy-requests", PrivacyRequestPage)).requests).toEqual([]);
+  });
+
+  it("won't approve an erasure while the child has an upcoming appointment", async () => {
+    asStaff("staff_villanueva");
+    const busy = demo().appointments.find((a) => a.startsAt >= new Date().toISOString() && a.status === "booked")!;
+    const r = await logOne({ kind: "erasure", patientId: busy.patientId });
+    const approve = api(`/privacy-requests/${r.id}/close`, PrivacyRequest, send("POST", { status: "done", outcome: "Approved" }));
+    await expect(approve).rejects.toMatchObject({ status: 409, message: expect.stringMatching(/upcoming appointments first$/) });
+    expect(demo().patients.find((p) => p.id === busy.patientId)!.restrictedAt).toBeUndefined();
+    await api(`/privacy-requests/${r.id}/close`, PrivacyRequest, send("POST", { status: "declined", outcome: "Still in treatment" }));
+  });
+
+  it("restricts the record when an erasure is approved: hidden from lists, refused to front desk, readable by the Owner", async () => {
+    const p = lone();
+    restricted = { id: p.id, firstName: p.firstName, parent: `guardian.${p.guardians.find((g) => activeLogin(g.id))!.id}` };
+    cookies(`pd_session=demo.clinic_demo.${restricted.parent}`);
+    expect(await status(api("/auth/me", SessionUser))).toBe(200); // the parent's session works before
+    asStaff("staff_villanueva");
+    const r = await logOne({ kind: "erasure", patientId: p.id });
+    asStaff("staff_delacruz");
+    await api(`/privacy-requests/${r.id}/close`, PrivacyRequest, send("POST", { status: "done", outcome: "Restricted; anonymised when retention ends" }));
+    asStaff("staff_cruz");
+    await expect(api(`/patients/${p.id}`, PatientView)).rejects.toMatchObject({ status: 403, message: "This child's record is restricted after a privacy request. Ask the clinic's Owner." });
+    const list = await api(`/patient-summaries?q=${encodeURIComponent(p.firstName)}&page=1&pageSize=50`, PatientPage);
+    expect(list.rows.map((x) => x.id)).not.toContain(p.id);
+    asStaff("staff_villanueva");
+    expect((await api(`/patients/${p.id}`, PatientView)).restrictedAt).toEqual(expect.any(String));
+    expect(demo().auditEvents.filter((e) => e.patientId === p.id && e.record === "Patient record (restricted)" && e.action === "denied")).toHaveLength(1);
+  });
+
+  it("turns photos and reminders off and takes the child out of the parent's portal", async () => {
+    asStaff("staff_villanueva");
+    const record = await api(`/patients/${restricted.id}`, PatientView);
+    expect(record.privacyChoices!.at(-1)).toMatchObject({ photos: false, reminders: false, by: "staff" });
+    expect(demo().messages.filter((m) => m.patientId === restricted.id && m.status === "queued")).toHaveLength(0);
+    cookies(`pd_session=demo.clinic_demo.${restricted.parent}`);
+    expect(await status(api("/auth/me", SessionUser))).toBe(401); // no child left: the session is no login any more
   });
 });
