@@ -2,11 +2,11 @@ import { expect as baseExpect, test, type Page, type Response } from "@playwrigh
 import { USERS, signIn } from "./support/users";
 
 /**
- * B3: the Owner's Settings against apps/api in `hybrid` (profile, look, logo, usage, branches, staff, reference data);
+ * B3: the Owner's Settings against apps/api (the web in `disabled` since B13c1) (profile, look, logo, usage, branches, staff, reference data);
  * the privacy notice and the subscription stay on MSW. Skipped unless E2E_API=1. Start-up commands: the B3 plan,
  * Step 11.1. Re-runnable against one database: every change carries a run stamp or is undone.
  */
-test.skip(!process.env.E2E_API, "Needs apps/api and a hybrid web server: E2E_API=1 E2E_BASE_URL=…");
+test.skip(!process.env.E2E_API, "Needs apps/api and a web server on it: E2E_API=1 E2E_BASE_URL=…");
 test.describe.configure({ timeout: 120_000 });
 const expect = baseExpect.configure({ timeout: 20_000 });
 

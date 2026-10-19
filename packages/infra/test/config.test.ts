@@ -7,7 +7,7 @@ const refusal = (overrides: Record<string, unknown>) => () => exampleSettings(ov
 describe("infra settings", () => {
   it("fills the defaults (decisions.md I8, I11, I14, I18)", () => {
     expect(exampleSettings()).toMatchObject({
-      appEnv: "production", demoLogins: false, trustProxyHops: 2, extraWebTasks: 0, monthlyBudgetUsd: 100,
+      appEnv: "production", demoLogins: false, demoDailyReset: false, trustProxyHops: 2, extraWebTasks: 0, monthlyBudgetUsd: 100,
       webOrigins: ["https://app.example.com"], certificateArn: undefined, semaphoreSecretArn: undefined,
     });
   });
@@ -28,6 +28,9 @@ describe("infra settings", () => {
     expect(refusal({ webOrigins: "https://app.example.com/" })).toThrow(/https origin/);
     expect(refusal({ webUrl: "http://app.example.com" })).toThrow(/webUrl/);
     expect(refusal({ demoLogins: true })).toThrow(/demoLogins can't be true with appEnv=production/);
+    expect(refusal({ demoDailyReset: true })).toThrow(/demoDailyReset needs appEnv=demo/);
+    expect(refusal({ appEnv: "demo", demoDailyReset: true })).toThrow(/demoDailyReset needs appEnv=demo/);
+    expect(exampleSettings({ appEnv: "demo", demoLogins: true, demoDailyReset: true }).demoDailyReset).toBe(true);
     expect(refusal({ trustProxyHops: 4 })).toThrow(/trustProxyHops/);
     expect(refusal({ smsSenderName: "PRIMOLAR-CLINICS" })).toThrow(/smsSenderName/);
   });

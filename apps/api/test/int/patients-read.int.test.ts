@@ -149,6 +149,9 @@ describe("the list (decision 3)", () => {
     for (const f of PatientFilter.options) {
       expect([f, (await ok(get(`/patient-summaries?filter=${f}&pageSize=100`, await as(ADMIN)), PatientPage)).total]).toEqual([f, page.counts[f]]);
     }
+    for (const f of ["needs_attention", "recent_visit", "balance_due", "recall_due"] as const) {
+      expect([f, page.counts[f] > 0, page.counts[f] < page.counts.all]).toEqual([f, true, true]); // not vacuous, and no chip flags everyone
+    }
   });
 
   it("recall due matches /recall (B7)", async () => {
@@ -190,6 +193,7 @@ describe("parents (decision 5)", () => {
   it("lists exactly a parent's children, with their contacts", async () => {
     const cookie = await as(PARENT);
     expect(ids(await directory(cookie, "")).sort()).toEqual([...parentsChildren].sort());
+    expect((await directory(cookie, "")).every((p) => p.guardians.every((g) => g.phone))).toBe(true); // patients.contact at "own"
     const page = await ok(get("/patient-summaries", cookie), PatientPage);
     expect(ids(page.rows).sort()).toEqual([...parentsChildren].sort());
     expect(page.rows.every((r) => r.guardianPhone)).toBe(true);
@@ -251,5 +255,16 @@ describe("tenancy", () => {
     expect([res.status, res.text]).toEqual([404, "Patient not found"]);
     const theirs = ids(await directory(cookie, ""));
     expect(theirs.filter((id) => db.patients.some((p) => p.id === id) || id.startsWith("pt_"))).toEqual([]);
+  });
+
+  it("writes each account's audit trail to that account", async () => {
+    const ngitiPatient = platform.tenants.clinic_ngiti!.patients[0]!.id;
+    expect((await get(`/patients/${ngitiPatient}`, await as(NGITI_OWNER))).status).toBe(200); // an audited record view
+    const theirs = await inClinic("clinic_ngiti", () =>
+      prisma.auditEvent.findMany({ where: { patientId: ngitiPatient, action: "view", record: "Patient profile" }, select: { clinicId: true, actorId: true } }));
+    expect(theirs).toContainEqual({ clinicId: "clinic_ngiti", actorId: "ngiti_staff_lim" });
+    const leaked = await inClinic(DEMO_CLINIC_ID, () =>
+      prisma.auditEvent.count({ where: { OR: [{ actorId: { startsWith: "ngiti_" } }, { patientId: ngitiPatient }] } }));
+    expect(leaked).toBe(0);
   });
 });

@@ -2,11 +2,11 @@ import { expect as baseExpect, test, type Locator, type Page, type Response } fr
 import { USERS, signIn } from "./support/users";
 
 /**
- * B6: notes, growth and the treatment plan against apps/api in `hybrid`. Skipped unless E2E_API=1. Start-up: a fresh database
- * seeded with B6's rows (`DEMO_LOGINS=true COOKIE_SECURE=false`), the API, and the web in `hybrid` (B6 plan Step 7.2).
+ * B6: notes, growth and the treatment plan against apps/api (the web in `disabled` since B13c1). Skipped unless E2E_API=1. Start-up: a fresh database
+ * seeded with B6's rows (`DEMO_LOGINS=true COOKIE_SECURE=false`), the API, and the web in `disabled` (B6 plan Step 7.2).
  * Re-runnable against one database: every run records on its own new child.
  */
-test.skip(!process.env.E2E_API, "Needs apps/api and a hybrid web server: E2E_API=1 E2E_BASE_URL=…");
+test.skip(!process.env.E2E_API, "Needs apps/api and a web server on it: E2E_API=1 E2E_BASE_URL=…");
 test.describe.configure({ mode: "serial", timeout: 180_000 });
 const expect = baseExpect.configure({ timeout: 20_000 });
 

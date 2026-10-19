@@ -2,14 +2,14 @@ import { expect as baseExpect, test, type Page, type Response } from "@playwrigh
 import { USERS, signIn } from "./support/users";
 
 /**
- * B8: billing, payments, deposits, voids and the financial dashboard against apps/api in `hybrid`. Skipped unless
+ * B8: billing, payments, deposits, voids and the financial dashboard against apps/api (the web in `disabled` since B13c1). Skipped unless
  * E2E_API=1. Start-up (B8 plan Step 10.2), on a fresh database (`db:seed` refuses a seeded one; no `migrate reset`):
  *   CREATE DATABASE pedia_dental_e2e_b8; then in apps/api: DATABASE_URL=… pnpm db:deploy && DEMO_LOGINS=true pnpm db:seed
  *   DATABASE_URL=… PORT=4120 DEMO_LOGINS=true COOKIE_SECURE=false pnpm dev:api
- *   NEXT_DIST_DIR=.next-hybrid NEXT_PUBLIC_API_MOCKING=hybrid API_PROXY_TARGET=http://localhost:4120 pnpm exec next dev --port 3170
+ *   NEXT_DIST_DIR=.next-hybrid NEXT_PUBLIC_API_MOCKING=disabled API_PROXY_TARGET=http://localhost:4120 pnpm exec next dev --port 3170
  * Re-runnable against one database: every run registers its own children. About 8 sign-ins a run.
  */
-test.skip(!process.env.E2E_API, "Needs apps/api and a hybrid web server: E2E_API=1 E2E_BASE_URL=…");
+test.skip(!process.env.E2E_API, "Needs apps/api and a web server on it: E2E_API=1 E2E_BASE_URL=…");
 test.describe.configure({ mode: "serial", timeout: 180_000 });
 const expect = baseExpect.configure({ timeout: 20_000 });
 

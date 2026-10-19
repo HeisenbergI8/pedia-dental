@@ -1,9 +1,12 @@
 import type { INestApplication } from "@nestjs/common";
 import { DEMO_PASSWORD, demoLogins, seedPlatform } from "@pedia/seed";
-import { DemoAccounts, LoginResult, Session, SessionUser } from "@pedia/shared";
+import { Appointment, DemoAccounts, LoginResult, Session, SessionUser } from "@pedia/shared";
+import { startOfDay } from "date-fns";
 import request from "supertest";
+import { z } from "zod";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Hasher } from "../../src/auth/hashing";
+import { SessionService } from "../../src/auth/session.service";
 import { PrismaService } from "../../src/prisma/prisma.service";
 import { seedDatabase } from "../../src/seed/seed-database";
 import { inClinic, resetDatabase } from "./support/database";
@@ -41,6 +44,8 @@ describe("POST /auth/login on MySQL", () => {
       expect(Session.parse(res.body).token).toBe("cookie");
       expect(cookieOf(res)).toMatch(/HttpOnly/);
       expect(SessionUser.parse((await me(cookieOf(res))).body).role, email).toBe(role);
+      // The parent login is the two-children family.
+      if (role === "parent") expect(((await http().get("/api/patients").set("Cookie", cookieOf(res).split(";")[0]!)).body as { id: string }[]).map((p) => p.id)).toContain("patient_sibling");
     }
   });
 
@@ -75,7 +80,17 @@ describe("POST /auth/login on MySQL", () => {
       // dentist@gmail.com goes straight into the one active clinic: no chooser.
       expect(Session.parse((await login({ email: "dentist@gmail.com" })).body).user.clinicId).toBe("clinic_demo");
       expect((await me(tan)).status).toBe(401); // the live staff session ended
-      expect(Session.parse((await login({ email: parent.email, clinicId: "clinic_ngiti" })).body).user).toMatchObject({ role: "parent", readOnly: true });
+      const signedIn = await login({ email: parent.email, clinicId: "clinic_ngiti" });
+      expect(Session.parse(signedIn.body).user).toMatchObject({ role: "parent", readOnly: true });
+      const family = cookieOf(signedIn).split(";")[0]!;
+      const reads = await http().get("/api/patients").set("Cookie", family);
+      expect(reads.status).toBe(200); // reads work
+      const [child] = reads.body as { id: string }[];
+      const paused = [403, "Your clinic's account is paused, so you can view records but not make changes. Contact your clinic."];
+      const confirm = await http().post("/api/appointments/ngiti_appointment_1/status").set("Cookie", family).send({ status: "confirmed" });
+      expect([confirm.status, confirm.text]).toEqual(paused);
+      const ask = await http().post(`/api/patients/${child!.id}/appointment-requests`).set("Cookie", family).send({});
+      expect([ask.status, ask.text]).toEqual(paused);
     } finally {
       await prisma.clinicAccount.update({ where: { id: "clinic_ngiti" }, data: { status: "active" } });
     }
@@ -107,6 +122,8 @@ describe("GET /auth/demo-accounts on MySQL", () => {
     expect(new Set(accounts.map((a) => a.role))).toEqual(new Set(["owner", "admin", "dentist", "front_desk", "parent"]));
     expect(accounts.filter((a) => a.role === "parent")).toHaveLength(3);
     for (const a of accounts) expect(Boolean(a.pin), a.name).toBe(a.role !== "parent");
+    const pins = accounts.filter((a) => a.role !== "parent").map((a) => a.pin);
+    expect(new Set(pins).size).toBe(pins.length); // their own PIN each
     expect(logins.map(({ role, email }) => [role, email])).toEqual([
       ["owner", "owner@gmail.com"],
       ["admin", "admin@gmail.com"],
@@ -116,6 +133,18 @@ describe("GET /auth/demo-accounts on MySQL", () => {
       ["owner", "owner@ngiti.demo"],
     ]);
     expect(logins.find((l) => l.email === "dentist@gmail.com")!.clinics).toEqual(["Bulilit Smiles Pediatric Dental", "Ngiti Kids Dental"]);
+  });
+
+  it("offers a 'to confirm' parent whose child's next visit is still booked", async () => {
+    const { accounts } = DemoAccounts.parse((await http().get("/api/auth/demo-accounts")).body);
+    const parent = accounts.find((a) => a.summary === "Has an appointment to confirm")!;
+    const cookie = `pd_session=${await app.get(SessionService).openClinic("clinic_demo", parent.id)}`;
+    const [child] = (await http().get("/api/patients").set("Cookie", cookie)).body as { id: string }[];
+    const today = startOfDay(new Date()).toISOString();
+    const next = z.array(Appointment).parse((await http().get(`/api/patients/${child!.id}/appointments`).set("Cookie", cookie)).body)
+      .filter((a) => ["booked", "confirmed", "arrived", "in_chair"].includes(a.status) && a.startsAt >= today)
+      .sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0];
+    expect(next?.status).toBe("booked");
   });
 
   it("serves the signed-in account's people, and nothing at all without DEMO_LOGINS", async () => {

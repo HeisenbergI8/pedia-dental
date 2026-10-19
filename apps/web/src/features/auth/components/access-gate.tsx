@@ -17,7 +17,7 @@ import { AcknowledgeScreen } from "./acknowledge-screen";
 import { ChangePasswordScreen } from "./change-password-screen";
 
 /** True once the persisted session has been read, so a signed-in user is never bounced to /login. */
-function useHydrated() {
+export function useHydrated() {
   return useSyncExternalStore(
     (onChange) => useSessionStore.persist.onFinishHydration(onChange),
     () => useSessionStore.persist.hasHydrated(),

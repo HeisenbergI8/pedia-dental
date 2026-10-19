@@ -98,7 +98,7 @@ describe("register (POST /patients)", () => {
     const notice = await inClinic(DEMO_CLINIC_ID, () => prisma.privacyNotice.findFirstOrThrow({ orderBy: { version: "desc" } }));
     expect(created.privacyConsent).toMatchObject({
       guardianId: "g_mother", guardianName: "Rosa Mendoza", relationship: "Mother",
-      recordedById: "staff_cruz", noticeVersion: notice.version, formVersion: LEGAL_DOCUMENTS.consent.version,
+      recordedById: "staff_cruz", recordedByName: "Liza Cruz", noticeVersion: notice.version, formVersion: LEGAL_DOCUMENTS.consent.version,
     });
     expect(created.privacyChoices).toEqual([expect.objectContaining({ photos: false, reminders: true, by: "staff" })]);
   });
@@ -203,6 +203,15 @@ describe("edit (PUT, PATCH) and consents", () => {
       expect([res.status, res.text], `${method} ${path}`).toEqual([404, "Patient not found"]);
     }
   });
+
+  it("lets front desk quick-update a child, and refuses a parent the quick update and the duplicate check", async () => {
+    const sibling = platform.tenants[DEMO_CLINIC_ID]!.patients.find((p) => p.id === "patient_sibling")!;
+    const desk = await as(FRONT_DESK);
+    expect((await ok(call("patch", `/patients/${sibling.id}`, desk, { nickname: "Miks", tags: [], alerts: sibling.alerts }), PatientView)).nickname).toBe("Miks");
+    const parent = await as([DEMO_CLINIC_ID, `guardian.${sibling.guardians[0]!.id}`] as Login);
+    expect((await call("patch", `/patients/${sibling.id}`, parent, { nickname: "X", tags: [], alerts: [] })).status).toBe(403);
+    expect((await call("get", "/patient-duplicates?firstName=a&lastName=b&birthDate=2020-01-01", parent)).status).toBe(403);
+  });
 });
 
 describe("contacts", () => {
@@ -267,5 +276,21 @@ describe("audit and tenancy", () => {
       const res = await call(method, path, ngiti, body);
       expect([res.status, res.text], `${method} ${path}`).toEqual([404, "Patient not found"]);
     }
+  });
+
+  it("stores a new record in the caller's account only, guardian ids and all", async () => {
+    const created = await register(await as(NGITI_OWNER));
+    expect(created.clinicId).toBe("clinic_ngiti");
+    const find = (clinicId: string) => inClinic(clinicId, () => prisma.patient.findUnique({ where: { id: created.id }, select: { id: true } }));
+    expect(await find("clinic_ngiti")).not.toBeNull();
+    expect(await find(DEMO_CLINIC_ID)).toBeNull();
+    // Same guardian id (g_mother) in the demo clinic: the session names the clinic, so the two parents never meet.
+    await register(await as(ADMIN));
+    // The guardian signs in once invited (B11): her login in Ngiti only, as an accepted invite would make it.
+    await prisma.credential.create({
+      data: { clinicId: "clinic_ngiti", accountId: "guardian.g_mother", email: null, phone: null, staffId: null, guardianId: "g_mother", name: "Rosa Mendoza", passwordHash: "EXAMPLE-not-used", mustChange: false, pinHash: null, pinFailedAt: [] },
+    });
+    const parent = await as(["clinic_ngiti", "guardian.g_mother"]);
+    expect((await ok(call("get", "/patients", parent), z.array(PatientView))).map((p) => p.id)).toEqual([created.id]);
   });
 });

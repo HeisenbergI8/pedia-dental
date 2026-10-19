@@ -424,7 +424,12 @@ BIR-registered invoices and a second step for the operator's sign-in stay later 
   `.claude/plans/feature-chunk-b13a-production-build-plan/`).
 - ✅ **B13b: AWS infrastructure as code, deploy and runbooks** (done 2026-10-18,
   `.claude/plans/feature-chunk-b13b-aws-infra-plan/`). The deploy to AWS is the owner's: `packages/infra/runbooks/`.
-- **B13c:** mocks off, Data Privacy Act operations, the load test. This closes B13's "Done when".
+- ✅ **B13c1: mocks off, the port ledger, the API-backed demo, the load test** (done 2026-10-19,
+  `.claude/plans/feature-chunk-b13c1-mocks-off-load-test-plan/`). The demo script passes end to end on the API locally;
+  the load test's misses (all six targets at 5,000 patients; the list and search already at 1,000) are accepted and
+  moved to a Later chunk (decisions.md L1).
+- **B13c2:** Data Privacy Act operations (copy of records, request register, erasure within legal retention, retention
+  schedule, the audit-log reader, NPC registration notes).
 
 **Decided (2026-10-18):**
 - **Hosting:** AWS in Singapore (`ap-southeast-1`).
@@ -436,7 +441,8 @@ BIR-registered invoices and a second step for the operator's sign-in stay later 
   - An AWS budget alert from day one; no NAT gateway at the start.
 - **Backups:** RDS automated backups with point-in-time restore, kept for 30 days.
 
-**Done when:** the client demo script (`DEMO_SCRIPT.md`) runs end to end with the mocks off on the deployed API;
+**Done when:** the client demo script (`DEMO_SCRIPT.md`) runs end to end with the mocks off on the deployed API (proven
+locally by `e2e/api-demo-script.spec.ts`, B13c1; on the deployed demo it is the go-live run);
 restoring last night's backup to a fresh database works; the load test meets its targets.
 
 **Depends on:** B12.
@@ -451,6 +457,11 @@ restoring last night's backup to a fresh database works; the load test meets its
 - Per-clinic web addresses; operator impersonation with an audit trail.
 - Patient merge (after duplicate detection in B4).
 - Operator two-step sign-in (B12 decisions 10 and 36; B13a decisions.md D3).
+- **Patient list and search at scale (next, B13c1 decisions.md L1).** The load test (2026-10-19) at 1,000 extra patients
+  missed on the list (p97.5 about 1.5–2.3 s) and search; at the plan's 5,000 every target missed: the list about 8 s,
+  search 5.7 s, Today 0.6–0.8 s and booking 436 ms (p97.5). Store each patient's standing (last visit,
+  recall, balance, flags) in columns kept by the writes, so filter, sort and page run in SQL; page `GET /patients`; then
+  `pnpm --filter api load:run` at 5,000 must meet `test/load/targets.ts`.
 
 ---
 

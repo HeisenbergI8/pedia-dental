@@ -2,11 +2,11 @@ import { expect as baseExpect, test, type Page, type Response } from "@playwrigh
 import { USERS, signIn } from "./support/users";
 
 /**
- * B4: patients, consents and the privacy notice against apps/api in `hybrid`. Skipped unless E2E_API=1. Start-up: a
- * fresh database seeded with B4's rows (`DEMO_LOGINS=true COOKIE_SECURE=false`), the API, and the web in `hybrid`.
+ * B4: patients, consents and the privacy notice against apps/api (the web in `disabled` since B13c1). Skipped unless E2E_API=1. Start-up: a
+ * fresh database seeded with B4's rows (`DEMO_LOGINS=true COOKIE_SECURE=false`), the API, and the web in `disabled`.
  * Re-runnable against one database: every child carries a run stamp. Run it on its own (sign-ins are rate-limited).
  */
-test.skip(!process.env.E2E_API, "Needs apps/api and a hybrid web server: E2E_API=1 E2E_BASE_URL=…");
+test.skip(!process.env.E2E_API, "Needs apps/api and a web server on it: E2E_API=1 E2E_BASE_URL=…");
 test.describe.configure({ mode: "serial", timeout: 120_000 });
 const expect = baseExpect.configure({ timeout: 20_000 });
 

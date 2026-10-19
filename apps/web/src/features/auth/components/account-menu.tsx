@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { env } from "@/lib/env";
+import { canResetDemoData } from "../demo";
 import { firstName, withoutTitle } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Can, ROLE_LABEL, useSession } from "../access";
@@ -91,7 +92,7 @@ export function AccountMenu({ variant = "full" }: { variant?: "full" | "bar" | "
               <UsersIcon /> Switch user
             </DropdownMenuItem>
           </Can>
-          {env.apiMocking && (
+          {canResetDemoData(env.apiMockingMode) && (
             <DropdownMenuItem onSelect={resetDemoData}>
               <RotateCcwIcon /> Reset demo data
             </DropdownMenuItem>

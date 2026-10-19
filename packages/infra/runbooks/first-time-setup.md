@@ -26,6 +26,7 @@ In `packages/infra/cdk.json` → `context`:
 | `githubRepo` | `HeisenbergI8/pedia-dental` | Owner/name: only this repository's `production` environment may deploy |
 | `trustProxyHops` | `2` | Leave it until step 10 |
 | `appEnv`, `demoLogins` | `production`, `false` | See the go-live checklist before changing |
+| `demoDailyReset` | `false` | Only for the client demo (`appEnv=demo`, `demoLogins=true`): wipes and reseeds every night at 03:40 Manila, and seeds an empty database at start-up |
 
 Check: `cdk synth -q` exits 0. It names any setting that is missing or wrong.
 
@@ -93,7 +94,7 @@ Project → Settings → Environment Variables → **Production**:
 
 - `API_PROXY_TARGET` = `https://<apiDomain>`. Next's `/api/*` rewrite (`apps/web/next.config.ts`) sends the browser's
   calls there, same-origin, so cookies work without CORS.
-- `NEXT_PUBLIC_API_MOCKING` = `hybrid` until B13c moves it to `disabled`.
+- `NEXT_PUBLIC_API_MOCKING` = `disabled`, for Production and Preview (B13c1: no deployment runs MSW).
 
 Then redeploy the web, and sign in on it once.
 

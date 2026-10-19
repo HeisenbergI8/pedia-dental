@@ -51,7 +51,8 @@ describe("appointments (apps/web handlers.test.ts → appointments)", () => {
     expect([first.status, first.branchId]).toEqual(["booked", "branch_imus"]);
     const clash = await book(slot(b, { chairId: "chair_2", startsAt: at("2030-01-08", "09:15") }));
     expect([clash.status, clash.text]).toEqual([409, "Dr. Ana Reyes is already booked at 9:00 AM"]);
-    await t.ok(move(first.id, { dentistId: "staff_reyes", chairId: "chair_1", startsAt: at("2030-01-08", "11:00"), durationMin: 30 }), Appointment);
+    const moved = await t.ok(move(first.id, { dentistId: "staff_reyes", chairId: "chair_1", startsAt: at("2030-01-08", "11:00"), durationMin: 30 }), Appointment);
+    expect(moved.startsAt).toBe(at("2030-01-08", "11:00"));
     await t.ok(book(slot(b, { chairId: "chair_2", startsAt: at("2030-01-08", "09:15") })), Appointment, 201);
     expect((await t.ok(status(first.id, { status: "confirmed" }), Appointment)).status).toBe("confirmed");
     expect((await t.ok(status(first.id, { status: "arrived" }), Appointment)).status).toBe("arrived");
@@ -94,6 +95,8 @@ describe("appointments (apps/web handlers.test.ts → appointments)", () => {
     expect([santos.status, santos.text]).toEqual([400, "Dr. Miguel Santos doesn't work at this branch"]);
     const chair = await book(slot(id, { chairId: "chair_4", startsAt: day("11:00") }));
     expect([chair.status, chair.text]).toEqual([400, "Choose a chair at this branch"]);
+    const late = await book(slot(id, { chairId: "chair_4", startsAt: day("17:00") }), dasma(owner));
+    expect([late.status, late.text]).toEqual([400, "Book between 9:00 AM and 5:00 PM."]); // Dasmariñas's own hours, not Imus's 6 PM
   });
 
   it("keeps each branch's calendar to its own bookings, in a half-open window", async () => {
@@ -109,6 +112,11 @@ describe("appointments (apps/web handlers.test.ts → appointments)", () => {
     for (const query of ["", `?from=${encodeURIComponent(at("2030-01-14", "00:00"))}`, `?to=${encodeURIComponent("+275000-01-01T00:00:00Z")}`]) {
       expect((await calendar(admin, query)).map((a) => a.id), query).toContain(imus.id);
     }
+    // A dentist at both branches sees each device branch's own bookings, the whole day (tenancy.test.ts).
+    const reyes = await t.as([DEMO_CLINIC_ID, "staff_reyes"] as Login);
+    const wholeDay = `?from=${encodeURIComponent(at("2030-01-14", "00:00"))}&to=${encodeURIComponent(at("2030-01-15", "00:00"))}`;
+    expect((await calendar(`${reyes}; pd_branch=branch_dasma`, wholeDay)).map((a) => a.id)).toEqual([there.id]);
+    expect((await calendar(`${reyes}; pd_branch=branch_imus`, wholeDay)).map((a) => a.id)).toEqual([imus.id]);
   });
 
   it("lists a child's appointments at every branch, by start, and audits the read", async () => {
@@ -176,7 +184,10 @@ describe("appointments (apps/web handlers.test.ts → appointments)", () => {
         ["appointment_confirmation", "queued", "09171234567", "Rosa Mendoza"],
         ["appointment_reminder", "queued", "09171234567", "Rosa Mendoza"],
       ]);
-      for (const m of rows) expect(m.body).toContain("Bea");
+      for (const m of rows) {
+        expect(m.body).toContain("Bea");
+        expect(m.body).not.toMatch(/\{\w+\}/); // every placeholder filled
+      }
       expect(rows[1]!.sendAt.toISOString()).toBe(reminderSendAt(appt.startsAt));
       expect(await outboxFor(rows.map((m) => m.id))).toHaveLength(2);
     });
@@ -203,6 +214,19 @@ describe("appointments (apps/web handlers.test.ts → appointments)", () => {
       await t.ok(status(appt.id, { status: "no_show" }), Appointment);
       const after = await texts({ appointmentId: appt.id });
       expect(after.filter((m) => m.status === "queued").map((m) => m.kind)).toEqual(["missed_appointment"]);
+    });
+
+    it("re-queues pre-treatment instructions when an extraction is moved, and withdraws them on a no-show", async () => {
+      const id = await t.register();
+      const appt = await t.ok(book(slot(id, { procedureCode: "extraction", startsAt: at("2030-04-09", "09:00") })), Appointment, 201);
+      const moved = await t.ok(move(appt.id, { dentistId: "staff_reyes", chairId: "chair_1", procedureCode: "extraction", startsAt: at("2030-04-10", "10:00"), durationMin: 30 }), Appointment);
+      const pre = () => texts({ appointmentId: appt.id, kind: "pre_treatment" });
+      expect((await pre()).map((m) => [m.status, m.sendAt.toISOString()])).toEqual([
+        ["cancelled", reminderSendAt(appt.startsAt)],
+        ["queued", reminderSendAt(moved.startsAt)],
+      ]);
+      await t.ok(status(appt.id, { status: "no_show" }), Appointment);
+      expect((await pre()).map((m) => m.status)).toEqual(["cancelled", "cancelled"]);
     });
 
     it("saves a booking and its texts together, or neither (same transaction)", async () => {

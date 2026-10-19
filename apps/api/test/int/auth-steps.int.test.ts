@@ -108,10 +108,12 @@ describe("POST /auth/password and /auth/acknowledgement on MySQL", () => {
     const own = cookieOf(changed);
     const prompt = AcknowledgementPrompt.parse((await http().get("/api/auth/acknowledgement").set("Cookie", own)).body);
     expect([prompt.kind, prompt.version]).toEqual(["confidentiality", CONFIDENTIALITY_NOTICE.version]);
+    expect(prompt.paragraphs[0]).toContain("every access is logged");
     const ack = (version: number) => http().post("/api/auth/acknowledgement").set("Cookie", own).send({ kind: "confidentiality", version });
     expect((await ack(CONFIDENTIALITY_NOTICE.version + 1)).status).toBe(409);
     expect(Session.parse((await ack(CONFIDENTIALITY_NOTICE.version)).body).user.mustAcknowledge).toBeUndefined();
     expect(await trail("staff_new", "Confidentiality (acknowledged)")).toEqual(["create"]);
+    expect((await http().get("/api/patients").set("Cookie", own)).status).toBe(200); // to work
     expect((await http().get("/api/auth/acknowledgement").set("Cookie", own)).status).toBe(409);
   });
 });

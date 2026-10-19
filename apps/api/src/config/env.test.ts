@@ -12,6 +12,7 @@ describe("loadEnv", () => {
       METRICS_INTERVAL_S: 0,
       LOG_LEVEL: "info",
       DEMO_LOGINS: false,
+      DEMO_DAILY_RESET: false,
       COOKIE_SECURE: true,
       BACKGROUND_WORK: true,
       OUTBOX_POLL_MS: 2000,
@@ -54,6 +55,14 @@ describe("loadEnv", () => {
     expect(() => loadEnv({ ...hosted, APP_ENV: "production", DEMO_LOGINS: "true" })).toThrow(/DEMO_LOGINS/);
     expect(loadEnv({ ...hosted, APP_ENV: "demo", DEMO_LOGINS: "true" }).DEMO_LOGINS).toBe(true);
     expect(() => loadEnv({ ...hosted, APP_ENV: "demo", COOKIE_SECURE: "false" })).toThrow(/COOKIE_SECURE/);
+  });
+
+  it("allows the nightly demo reset only on a demo deployment with demo logins (B13c1)", () => {
+    const hosted = { DATABASE_URL: "mysql://u:p@h/db", CORS_ORIGIN: "https://demo.primolar.ph", WEB_URL: "https://demo.primolar.ph", S3_BUCKET: "primolar-demo" };
+    expect(loadEnv({ ...hosted, APP_ENV: "demo", DEMO_LOGINS: "true", DEMO_DAILY_RESET: "true" }).DEMO_DAILY_RESET).toBe(true);
+    expect(() => loadEnv({ ...hosted, APP_ENV: "demo", DEMO_DAILY_RESET: "true" })).toThrow(/DEMO_DAILY_RESET/);
+    expect(() => loadEnv({ ...hosted, APP_ENV: "production", DEMO_DAILY_RESET: "true" })).toThrow(/DEMO_DAILY_RESET/);
+    expect(() => loadEnv({ DATABASE_URL: "mysql://u:p@h/db", DEMO_LOGINS: "true", DEMO_DAILY_RESET: "true" })).toThrow(/DEMO_DAILY_RESET/);
   });
 
   it("takes 0–3 proxy hops", () => {

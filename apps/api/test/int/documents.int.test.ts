@@ -58,6 +58,7 @@ describe("documents (apps/web handlers.test.ts → documents)", () => {
   it("logs a dental certificate and a receipt for a payment made on the API (B8's receipts as documents)", async () => {
     const { id, visit, payment } = await child();
     const certificate = await t.ok(issue(id, { type: "dental_certificate", sourceId: visit.id, issuedBy: "staff_reyes" }), PatientDocument, 201);
+    expect(certificate.title).toMatch(/^Dental certificate · Bea Record\d+$/);
     const receipt = await t.ok(issue(id, { type: "receipt", sourceId: payment.id, issuedBy: "staff_cruz" }), PatientDocument, 201);
     expect((await docsOf(id)).map((d) => d.id)).toEqual([receipt.id, certificate.id]);
     expect((await log()).map((d) => d.id)).toContain(receipt.id);

@@ -2,14 +2,14 @@ import { expect as baseExpect, test, type Page, type Response } from "@playwrigh
 import { USERS, signIn } from "./support/users";
 
 /**
- * B10: photos and documents against apps/api in `hybrid`. Skipped unless E2E_API=1. Start-up (B10 plan Step 9.2), fresh database:
+ * B10: photos and documents against apps/api (the web in `disabled` since B13c1). Skipped unless E2E_API=1. Start-up (B10 plan Step 9.2), fresh database:
  *   CREATE DATABASE pedia_dental_e2e_b10; then in apps/api: DATABASE_URL=… pnpm db:deploy && DEMO_LOGINS=true STORAGE_DIR=var/e2e-b10 pnpm db:seed
  *   DATABASE_URL=… PORT=4150 DEMO_LOGINS=true COOKIE_SECURE=false STORAGE_DIR=var/e2e-b10 STORAGE_LINK_SECRET=<32+ chars> pnpm dev:api
- *   NEXT_DIST_DIR=.next-hybrid NEXT_PUBLIC_API_MOCKING=hybrid API_PROXY_TARGET=http://localhost:4150 pnpm exec next dev --port 3190
+ *   NEXT_DIST_DIR=.next-hybrid NEXT_PUBLIC_API_MOCKING=disabled API_PROXY_TARGET=http://localhost:4150 pnpm exec next dev --port 3190
  * Local-disk driver (no S3_BUCKET): links are /api/files/<token> through Next's proxy. Re-runnable on one database: each
  * run registers its own children. 6 sign-ins a run.
  */
-test.skip(!process.env.E2E_API, "Needs apps/api and a hybrid web server: E2E_API=1 E2E_BASE_URL=…");
+test.skip(!process.env.E2E_API, "Needs apps/api and a web server on it: E2E_API=1 E2E_BASE_URL=…");
 test.describe.configure({ mode: "serial", timeout: 180_000 });
 const expect = baseExpect.configure({ timeout: 20_000 });
 
@@ -73,9 +73,11 @@ test("the seeded photos open through a 302 to a 5-minute link, through Next's pr
   expect(location).toMatch(FILE_LINK);
   const file = await page.request.get(location);
   expect([file.status(), file.headers()["content-type"], file.headers()["content-security-policy"]]).toEqual([200, "image/png", "sandbox"]);
-  // On the page, MSW's passthrough follows the 302 inside the service worker: the <img> gets the picture.
+  // On the page the <img> gets the picture: with mocks off (B13c1) the browser follows the API's 302 itself; in hybrid,
+  // MSW's passthrough follows it inside the service worker and hands back the 200.
   const [img] = await Promise.all([loads(page, /^\/api\/photos\/photo_seed_1\/file$/), openPhotos(page, child)]);
-  expect([img.status(), img.headers()["content-type"]]).toEqual([200, "image/png"]);
+  if (img.status() === 302) expect(img.headers()["location"]).toMatch(FILE_LINK);
+  else expect([img.status(), img.headers()["content-type"]]).toEqual([200, "image/png"]);
   await expect.poll(() => page.locator('img[src$="/photos/photo_seed_1/file"]').first().evaluate((el: HTMLImageElement) => el.naturalWidth)).toBe(1);
 });
 

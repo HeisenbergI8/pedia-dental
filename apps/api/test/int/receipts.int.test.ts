@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { INestApplication } from "@nestjs/common";
 import { DEMO_CLINIC_ID, SEED_PRICES, seedPlatform } from "@pedia/seed";
-import { RECEIPT_PENDING, ReceiptToCheck, SignupStatusView, SubscriptionView } from "@pedia/shared";
+import { CreateAccountResult, DEFAULT_OPENING_HOURS, RECEIPT_PENDING, ReceiptToCheck, SignupStatusView, SubscriptionView } from "@pedia/shared";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Hasher } from "../../src/auth/hashing";
@@ -128,6 +128,53 @@ describe("the Owner's receipts (decisions 6, 21, 24)", () => {
     const res = await upload(http().post("/api/clinic/subscription/receipts").set("Cookie", ipin), "GC-LATE");
     expect([res.status, res.text]).toEqual([409, "This subscription is cancelled, so Primolar takes no more payments for it."]);
   });
+  it("is taken once at a time, for the first unpaid month, only from the Owner, as a real image", async () => {
+    const owner = (await signIn(app, "owner@gmail.com", DEMO_CLINIC_ID)).cookie; // Bulilit: paid up, nothing waiting
+    const post = () => http().post("/api/clinic/subscription/receipts").set("Cookie", owner).field("data", JSON.stringify({ reference: "GC 1111" }));
+    const before = await prisma.paymentReceipt.count({ where: { clinicId: DEMO_CLINIC_ID } });
+    expect((await post().attach("file", Buffer.from("GIF89a"), { filename: "r.gif", contentType: "image/gif" })).status).toBe(400);
+    expect((await post().attach("file", Buffer.concat([PNG, Buffer.alloc(5 * 1024 * 1024)]), { filename: "r.png", contentType: "image/png" })).status).toBe(413);
+    expect(await prisma.paymentReceipt.count({ where: { clinicId: DEMO_CLINIC_ID } })).toBe(before);
+
+    const sent = await upload(http().post("/api/clinic/subscription/receipts").set("Cookie", owner), "GC 1111");
+    expect(sent.status).toBe(201);
+    const view = SubscriptionView.parse(sent.body);
+    expect(view.receipts[0]).toMatchObject({ status: "pending", reference: "GC 1111", amountDue: view.nextAmount, periodStart: view.nextDue });
+    expect(view.paymentQr).not.toBeNull();
+    const again = await upload(http().post("/api/clinic/subscription/receipts").set("Cookie", owner), "GC 1112");
+    expect([again.status, again.text]).toEqual([409, RECEIPT_PENDING]);
+
+    const desk = (await signIn(app, "frontdesk@gmail.com", DEMO_CLINIC_ID)).cookie;
+    expect((await upload(http().post("/api/clinic/subscription/receipts").set("Cookie", desk), "GC 1113")).status).toBe(403);
+  });
+
+  it("lists pending receipts oldest first; confirming Ipin's pays its month and takes it off the list", async () => {
+    const bulilit = (await signIn(app, "owner@gmail.com", DEMO_CLINIC_ID)).cookie;
+    expect((await upload(http().post("/api/clinic/subscription/receipts").set("Cookie", bulilit), "GC-NOW")).status).toBe(201);
+    const list = ReceiptToCheck.array().parse((await http().get("/api/operator/receipts").set("Cookie", op)).body);
+    expect(list.map((r) => r.payer.kind === "subscription" && r.payer.clinicName)).toEqual(["Ipin Kids Dental", "Bulilit Smiles Pediatric Dental"]);
+    expect(list[0]!.id).toBe(SEEDED);
+    const paidBefore = await prisma.subscriptionPayment.count({ where: { clinicId: IPIN } });
+    expect(ReceiptToCheck.parse((await confirm(SEEDED)).body).status).toBe("confirmed");
+    expect(await prisma.subscriptionPayment.count({ where: { clinicId: IPIN } })).toBe(paidBefore + 1);
+    expect(ReceiptToCheck.array().parse((await http().get("/api/operator/receipts").set("Cookie", op)).body).map((r) => r.id)).not.toContain(SEEDED);
+    const again = await confirm(SEEDED);
+    expect([again.status, again.text]).toEqual([409, "This receipt has already been checked"]);
+  });
+
+  it("refuses a receipt whose month was then paid by hand, and lets the Owner send a new one after a rejection", async () => {
+    const byHand = await http().post(`/api/operator/accounts/${IPIN}/subscription/payments`).set("Cookie", op).send({ method: "cash", paidOn: clock.today() });
+    expect(byHand.status).toBe(201);
+    const refused = await confirm(SEEDED);
+    expect([refused.status, refused.text]).toEqual([409, "This month is already paid. Reject the receipt if it was sent twice."]);
+    expect(ReceiptToCheck.parse((await reject(SEEDED, "Paid in cash at the office")).body).status).toBe("rejected");
+    const owner = await ownerOfIpin();
+    const view = SubscriptionView.parse((await http().get("/api/clinic/subscription").set("Cookie", owner)).body);
+    expect(view.receipts[0]).toMatchObject({ status: "rejected", rejectionReason: "Paid in cash at the office" });
+    const again = await upload(http().post("/api/clinic/subscription/receipts").set("Cookie", owner), "GC 2222");
+    expect(again.status).toBe(201);
+    expect(SubscriptionView.parse(again.body).receipts[0]).toMatchObject({ status: "pending", reference: "GC 2222" });
+  });
 });
 
 describe("a sign-up's receipt (decision 7) and the purge (decision 15)", () => {
@@ -154,13 +201,16 @@ describe("a sign-up's receipt (decision 7) and the purge (decision 15)", () => {
 
   it("records the setup fee when confirmed, after which Approve works", async () => {
     const sent = await upload(http().post(`/api/signups/${HAGIKGIK}/receipts`), "BPI-77");
-    expect(SignupStatusView.parse(sent.body).receipt?.status).toBe("pending");
+    const status = SignupStatusView.parse(sent.body);
+    expect(status).toMatchObject({ paid: false, receipt: { status: "pending", amountDue: status.quote.total } });
     const [receipt] = ReceiptToCheck.array().parse((await http().get("/api/operator/receipts").set("Cookie", op)).body).filter((r) => r.payer.kind === "signup");
     expect(receipt!.payer).toMatchObject({ kind: "signup", signupReference: HAGIKGIK, clinicName: "Hagikgik Kids Dental" });
     expect((await confirm(receipt!.id)).status).toBe(200);
     const view = SignupStatusView.parse((await http().get(`/api/signups/${HAGIKGIK}`)).body);
     expect([view.paid, view.receipt?.status]).toEqual([true, "confirmed"]);
-    expect((await http().post(`/api/operator/signups/signup_hagikgik/approve`).set("Cookie", op)).status).toBe(201);
+    const approved = await http().post(`/api/operator/signups/signup_hagikgik/approve`).set("Cookie", op);
+    expect(approved.status).toBe(201);
+    expect(CreateAccountResult.parse(approved.body).overview.account.name).toBe(status.clinicName);
   });
 
   it("refuses an 11th sign-up receipt from one address within the hour", async () => {
@@ -188,5 +238,37 @@ describe("a sign-up's receipt (decision 7) and the purge (decision 15)", () => {
     await prisma.outboxMessage.updateMany({ data: { availableAt: new Date(start - 60_000) } });
     await app.get(OutboxWorker).drain();
     expect(await app.get(FileStorage).get(fileKey!)).toBeUndefined();
+  });
+
+  it("deletes a sign-up's files 30 days after its rejection, keeping its record", async () => {
+    const submit = async (n: string) => {
+      const data = {
+        account: { name: `Ngipin ${n} Dental`, contactEmail: `hello@${n}.demo`, tin: "567-890-123", tier: "small" },
+        branch: { name: "Tagaytay", address: "1 Aguinaldo Hi-way, Tagaytay", phone: "(046) 483 0000", openingHours: DEFAULT_OPENING_HOURS },
+        owner: { fullName: `Dr. ${n} Cruz`, email: `owner@${n}.demo`, role: "admin" },
+        branding: { choice: "designed", brief: "Pastel teeth" },
+        acceptTerms: true,
+      };
+      const res = await http().post("/api/signups").field("data", JSON.stringify(data)).attach("reference", PNG, { filename: "ref.png", contentType: "image/png" });
+      expect(res.status).toBe(201);
+      return prisma.signup.findUniqueOrThrow({ where: { reference: res.body.reference } });
+    };
+    const rejectSignup = (id: string) => http().post(`/api/operator/signups/${id}/reject`).set("Cookie", op).send({ reason: "Duplicate" });
+    const old = await submit("purge");
+    const recent = await submit("kept");
+    const key = (old.referenceKeys as string[])[0]!;
+    expect((await rejectSignup(old.id)).status).toBe(200);
+    clock.set(new Date(start + 2 * 86_400_000));
+    op = await asOperator(app);
+    expect((await rejectSignup(recent.id)).status).toBe(200);
+    clock.set(new Date(start + 31 * 86_400_000)); // 31 days after the first rejection, 29 after the second
+    expect(await app.get(SignupsService).purgeRejectedFiles()).toBe(1);
+    const gone = await prisma.signup.findUniqueOrThrow({ where: { id: old.id } });
+    expect([gone.status, gone.rejectionReason, gone.filesDeletedAt !== null, gone.referenceKeys]).toEqual(["rejected", "Duplicate", true, []]);
+    const kept = await prisma.signup.findUniqueOrThrow({ where: { id: recent.id } });
+    expect([kept.filesDeletedAt, (kept.referenceKeys as string[]).length]).toEqual([null, 1]);
+    op = await asOperator(app);
+    const res = await http().get(`/api/operator/signups/${old.id}/files/${encodeURIComponent(key)}`).set("Cookie", op);
+    expect([res.status, res.text]).toEqual([404, "That file isn't part of this sign-up"]);
   });
 });

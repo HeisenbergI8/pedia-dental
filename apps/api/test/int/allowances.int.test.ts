@@ -126,6 +126,21 @@ describe("texts (decisions 2, 3, 18, 19, E9)", () => {
     expect(await statusOf("reminder_d")).toBe("sent");
   });
 
+  it("never refuses an invite for the limit (decision 3)", async () => {
+    await dispatched(300, new Date(`${month}-01T09:00:00+08:00`)); // the month's parts all used
+    const kid = ngiti.patients.find((p) => p.guardians.some((g) => /^09\d{9}$/.test(g.phone)))!;
+    const g = kid.guardians.find((x) => /^09\d{9}$/.test(x.phone))!;
+    // Seeded parents are active: turn the login off so it can be invited again.
+    await inClinic(NGITI, () => prisma.portalAccount.updateMany({ where: { guardianId: g.id }, data: { state: "off" } }));
+    const invites = () => inClinic(NGITI, () => prisma.message.findMany({ where: { patientId: kid.id, kind: "portal_invite" }, select: { id: true, status: true } }));
+    const before = new Set((await invites()).map((m) => m.id));
+    const res = await http().post(`/api/patients/${kid.id}/guardians/${g.id}/portal-invite`).set("Cookie", await owner());
+    expect(res.status).toBe(200);
+    await app.get(OutboxWorker).drain();
+    const sent = (await invites()).filter((m) => !before.has(m.id));
+    expect(sent.map((m) => m.status)).toEqual(["sent"]); // account texts always go (decision 3)
+  });
+
   it("shows the same storage and texts on the Plan and in the console", async () => {
     await dispatched(42, new Date(`${month}-01T09:00:00+08:00`));
     const plan = ClinicUsage.parse((await http().get("/api/clinic/usage").set("Cookie", await owner())).body);

@@ -2,7 +2,8 @@ import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { env } from "@/lib/env";
-import { OPERATOR_RULES, PUBLIC_RULES } from "./access";
+import { ACCESS_RULES, OPERATOR_RULES, PUBLIC_RULES } from "./access";
+import { handlers } from "./handlers";
 import { API_ROUTES, apiPassthrough, servedBy } from "./passthrough";
 
 /** B12: every operator route, the five public sign-up routes and the Owner's three bill routes (swept below). */
@@ -87,10 +88,34 @@ describe("which routes the API serves", () => {
     ] as const;
     for (const [method, path] of b11) expect(api(method, path), `${method} ${path}`).toBe(true);
     expect(API_ROUTES).toHaveLength(14 + b3.length + b4.length + b5.length + b6.length + b7.length + b8.length + b9.length + b10.length + b11.length + B12_ROUTES);
-    // Same prefixes, other chunks (B13): still MSW's. DELETE /notes/:id isn't a route (exact method).
+    // POST /patients/:id/exports is B13c2's (no handler, no controller yet). DELETE /notes/:id isn't a route (exact method).
     expect([api("POST", "/patients/p1/exports"), api("DELETE", "/notes/n1")]).toEqual([false, false]);
     expect(api("DELETE", "/appointments/a1")).toBe(false);
     expect(api("DELETE", "/branches/b1")).toBe(false); // B12 serves /operator/accounts now (swept below)
+  });
+});
+
+/** B13c1: mocks off. Nothing MSW answers is missing from the API, so `disabled` loses no route. */
+describe("no route is MSW's alone (B13c1 E2)", () => {
+  const prefix = new URL(env.apiUrl, "http://x").pathname; // "/api"
+  // Not routes: the access gate's catch-all (http.all) answers 401/403 before any handler.
+  const routes = handlers.flatMap((h) =>
+    "method" in h.info && typeof h.info.path === "string" && typeof h.info.method === "string" && h.info.method !== "ALL"
+      ? [{ method: String(h.info.method), path: new URL(h.info.path, "http://x").pathname.slice(prefix.length) }]
+      : [],
+  );
+  /** Measured 2026-10-18: 133 handlers, one per route. A new handler without its API route fails the sweep below. */
+  it("reads every feature handler", () => expect(routes.length).toBeGreaterThanOrEqual(133));
+
+  it("serves every route MSW answers from the API", () => {
+    expect(routes.filter((r) => !API_ROUTES.some((a) => a.method === r.method && a.path === r.path)).map((r) => `${r.method} ${r.path}`)).toEqual([]);
+  });
+
+  // Two rules have no handler, no controller and no screen yet: the copy of records and the audit-log reader (B13c2).
+  it("serves every clinic, operator and public rule from the API, but B13c2's two", () => {
+    const rules = [...ACCESS_RULES, ...OPERATOR_RULES, ...PUBLIC_RULES].map((r) => `${r.method} ${r.path}`);
+    const served = new Set(API_ROUTES.map((r) => `${r.method} ${r.path}`));
+    expect(rules.filter((r) => !served.has(r)).sort()).toEqual(["GET /audit-log", "POST /patients/:id/exports"]);
   });
 });
 

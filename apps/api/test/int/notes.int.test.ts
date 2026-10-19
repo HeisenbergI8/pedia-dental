@@ -1,5 +1,5 @@
 import { DEMO_CLINIC_ID } from "@pedia/seed";
-import { ClinicalNote, PlanItem, Visit } from "@pedia/shared";
+import { ClinicalNote, DueItem, Message, PlanItem, Visit } from "@pedia/shared";
 import { z } from "zod";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { inClinic } from "./support/database";
@@ -267,6 +267,24 @@ describe("notes (apps/web handlers.test.ts → notes, treatment plan)", () => {
       await t.ok(sign(note.id), ClinicalNote);
       expect((await sign(note.id)).status).toBe(409);
       expect((await texts(id)).map((m) => [m.kind, m.noteId, m.status])).toEqual([["post_pulpotomy", note.id, "queued"]]);
+    });
+
+    it("queues post-extraction instructions when the note is signed, and a recall message from the due list once", async () => {
+      const id = await t.register();
+      const visit = await t.start(id, admin);
+      const note = await draft(id, visit.id, "tpl_extraction", { teeth: [75], reason: "Caries, non-restorable" });
+      expect(await texts(id)).toEqual([]); // a draft sends nothing
+      await t.ok(sign(note.id), ClinicalNote);
+      const [instructions, ...rest] = await texts(id);
+      expect(rest).toEqual([]);
+      expect(instructions).toMatchObject({ kind: "post_extraction", noteId: note.id, status: "queued" });
+      expect(instructions!.body).toContain("Bea");
+
+      const desk = await t.as(FRONT_DESK);
+      const [due] = (await t.ok(t.call("get", "/due-items", desk), z.array(DueItem))).filter((i) => i.patientId === id);
+      const reminder = await t.ok(t.call("post", `/due-items/${due!.id}/message`, desk), Message, 201);
+      expect(reminder).toMatchObject({ kind: "follow_up_reminder", dueItemId: due!.id });
+      expect((await t.call("post", `/due-items/${due!.id}/message`, desk)).status).toBe(409);
     });
 
     it("queues nothing for a procedure with no instructions", async () => {

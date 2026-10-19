@@ -6,8 +6,8 @@ export const NAMESPACE = "Primolar/API";
 /** The load test's routes (CHUNKS B13: Today, patient list, booking), by Express route template: never a raw URL. */
 export const TRACKED_ROUTES: ReadonlySet<string> = new Set([
   "GET /api/reports/today",
-  "GET /api/patient-summaries", // Q4: which of the two the patient list calls is confirmed by B13c's load test
-  "GET /api/patients",
+  "GET /api/patient-summaries", // the patient list screen (usePatientPage); B13c1 load target
+  "GET /api/patients", // the search box and the booking pickers (?q=); B13c1 load target
   "POST /api/appointments",
 ]);
 /** EMF takes at most 100 values per metric per line. */

@@ -12,10 +12,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { env } from "@/lib/env";
+import { useSessionStore } from "@/stores/session-store";
 import { ROLE_HOME, ROLE_LABEL, useSession } from "../access";
 import { authKeys, useDemoAccounts, useSignIn } from "../api";
+import { demoHelp } from "../demo";
 import { LegalLinks } from "@/features/legal/components/legal-links";
 import { useDemoTexts } from "@/features/portal/api";
+import { useHydrated } from "./access-gate";
 import { ClinicChooser } from "./clinic-chooser";
 import { PasswordField } from "./password-field";
 
@@ -45,11 +48,15 @@ const PROMISES: { icon: LucideIcon; text: string; tint: string }[] = [
 
 export function LoginScreen() {
   const demo = useDemoAccounts();
+  const help = demoHelp(env.apiMockingMode, demo);
   const session = useSession();
   // The account this page opened with. Once a sign-in starts, or the session changes to someone else,
-  // the "signed in as" line would only flash the old or new name while the next page loads.
-  const [openedAs] = useState(() => session?.user.id);
-  const signingIn = useIsMutating({ mutationKey: authKeys.signIn }) > 0 || session?.user.id !== openedAs;
+  // the "signed in as" line would only flash the old or new name while the next page loads. Read from the store, not
+  // from `session`: while the server-rendered page hydrates, `session` is the server's (none), and comparing that with
+  // the stored one would read as a sign-in that never ends (seen with mocks off, B13c1).
+  const hydrated = useHydrated();
+  const [openedAs] = useState(() => useSessionStore.getState().session?.user.id);
+  const signingIn = useIsMutating({ mutationKey: authKeys.signIn }) > 0 || (hydrated && session?.user.id !== openedAs);
 
   return (
     <>
@@ -101,11 +108,11 @@ export function LoginScreen() {
               </Link>
             </p>
             <LegalLinks className="mt-6" />
-            {env.apiMocking && (
+            {help === "loading" && <Loading label="Loading demo logins" />}
+            {help === "failed" && <p role="alert" className="text-danger">Couldn&apos;t load the demo logins.</p>}
+            {help === "show" && demo.data && (
               <>
-                {demo.isLoading && <Loading label="Loading demo logins" />}
-                {demo.error && <p role="alert" className="text-danger">Couldn&apos;t load the demo logins.</p>}
-                {demo.data && <DemoLogins {...demo.data} />}
+                <DemoLogins {...demo.data} />
                 <DemoTextsList />
               </>
             )}
@@ -197,9 +204,9 @@ function DemoLogins({ logins, password }: Pick<DemoAccounts, "logins" | "passwor
   );
 }
 
-/** Prototype and demo deployments only (B11 E6): the invite and reset links the demo would have texted. */
+/** Demo deployments only (B11 E6): the invite and reset links the demo would have texted. */
 function DemoTextsList() {
-  const { data } = useDemoTexts();
+  const { data } = useDemoTexts(true); // rendered only once the backend is a demo
   if (!data?.texts.length) return null;
   return (
     <section aria-labelledby="demo-texts" className="space-y-3">

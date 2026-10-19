@@ -2,15 +2,15 @@ import { expect as baseExpect, test, type Page, type Response } from "@playwrigh
 import { USERS, signIn } from "./support/users";
 
 /**
- * B9: parent messages against apps/api in `hybrid`. Skipped unless E2E_API=1. Start-up (B9 plan Step 9.3), on a fresh
+ * B9: parent messages against apps/api (the web in `disabled` since B13c1). Skipped unless E2E_API=1. Start-up (B9 plan Step 9.3), on a fresh
  * database (`db:seed` refuses a seeded one):
  *   CREATE DATABASE pedia_dental_e2e_b9; then in apps/api: DATABASE_URL=… pnpm db:deploy && DEMO_LOGINS=true pnpm db:seed
  *   DATABASE_URL=… PORT=4130 DEMO_LOGINS=true COOKIE_SECURE=false BACKGROUND_WORK=true OUTBOX_POLL_MS=500 pnpm dev:api
- *   NEXT_DIST_DIR=.next-hybrid NEXT_PUBLIC_API_MOCKING=hybrid API_PROXY_TARGET=http://localhost:4130 pnpm exec next dev --port 3180
+ *   NEXT_DIST_DIR=.next-hybrid NEXT_PUBLIC_API_MOCKING=disabled API_PROXY_TARGET=http://localhost:4130 pnpm exec next dev --port 3180
  * No SEMAPHORE_API_KEY: the log driver sends. Texts outside 8 AM–8 PM Manila stay "Queued", so checks accept either.
  * Re-runnable against one database: every run registers its own children. 7 sign-ins a run.
  */
-test.skip(!process.env.E2E_API, "Needs apps/api and a hybrid web server: E2E_API=1 E2E_BASE_URL=…");
+test.skip(!process.env.E2E_API, "Needs apps/api and a web server on it: E2E_API=1 E2E_BASE_URL=…");
 test.describe.configure({ mode: "serial", timeout: 180_000 });
 const expect = baseExpect.configure({ timeout: 20_000 });
 

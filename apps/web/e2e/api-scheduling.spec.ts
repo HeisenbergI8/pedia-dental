@@ -3,14 +3,14 @@ import { addDays, format, isSunday } from "date-fns";
 import { USERS, signIn } from "./support/users";
 
 /**
- * B7: the schedule, follow-ups, Today and the parent's confirm and request against apps/api in `hybrid`. Skipped unless
+ * B7: the schedule, follow-ups, Today and the parent's confirm and request against apps/api (the web in `disabled` since B13c1). Skipped unless
  * E2E_API=1. Start-up (B7 plan Step 9.2), on a fresh database (`db:seed` refuses a seeded one; no `migrate reset`):
  *   CREATE DATABASE pedia_dental_e2e_b7; then in apps/api: DATABASE_URL=… pnpm db:deploy && DEMO_LOGINS=true pnpm db:seed
  *   DATABASE_URL=… PORT=4110 DEMO_LOGINS=true COOKIE_SECURE=false pnpm dev:api
- *   NEXT_DIST_DIR=.next-hybrid NEXT_PUBLIC_API_MOCKING=hybrid API_PROXY_TARGET=http://localhost:4110 pnpm exec next dev --port 3160
+ *   NEXT_DIST_DIR=.next-hybrid NEXT_PUBLIC_API_MOCKING=disabled API_PROXY_TARGET=http://localhost:4110 pnpm exec next dev --port 3160
  * Re-runnable against one database: every run books new children on a day of its own.
  */
-test.skip(!process.env.E2E_API, "Needs apps/api and a hybrid web server: E2E_API=1 E2E_BASE_URL=…");
+test.skip(!process.env.E2E_API, "Needs apps/api and a web server on it: E2E_API=1 E2E_BASE_URL=…");
 test.describe.configure({ mode: "serial", timeout: 180_000 });
 const expect = baseExpect.configure({ timeout: 20_000 });
 

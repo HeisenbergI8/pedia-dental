@@ -1,5 +1,6 @@
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  test: { include: ["test/**/*.test.ts"], testTimeout: 60_000 },
+  // Synthesis in beforeAll is slow when the machine is busy: the hooks get the tests' minute too.
+  test: { include: ["test/**/*.test.ts"], testTimeout: 60_000, hookTimeout: 60_000 },
 });

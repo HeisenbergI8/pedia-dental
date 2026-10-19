@@ -71,6 +71,7 @@ describe("the price list on MySQL (B12 decision 11)", () => {
   it("refuses a negative fee with the schema's issues", async () => {
     const res = await http().put("/api/operator/prices").set("Cookie", op).send(raise(SEED_PRICES, -10_000_000));
     expect(res.status).toBe(400);
+    expect((await http().put("/api/operator/prices").set("Cookie", op).send({ ...SEED_PRICES, designAddOn: 10.5 })).status).toBe(400);
   });
 
   it("serialises parallel saves on the platform lock: five saves on a new day, one change, no deadlock", async () => {
@@ -105,6 +106,7 @@ describe("Primolar's payment QR on MySQL (B12 decisions 5, 23)", () => {
     expect(first.status).toBe(302);
     const image = await http().get(first.headers.location!).buffer(true).parse(binary);
     expect([image.status, (image.body as Buffer).equals(PNG)]).toEqual([200, true]);
+    expect(image.headers["content-type"]).toBe("image/png");
   });
 
   it("deletes the old image once a replacement commits (the worker, through the outbox)", async () => {
