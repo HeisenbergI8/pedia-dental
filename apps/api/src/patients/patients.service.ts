@@ -86,9 +86,18 @@ export class PatientsService implements OnModuleInit {
     return new Map(rows.map((p) => [p.id, `${p.firstName} ${p.lastName}`]));
   }
 
-  /** Every patient's name and birthday: Today's names and birthdays (todaySummary's `patients`). */
-  async basics(): Promise<{ id: string; firstName: string; lastName: string; birthDate: string }[]> {
-    const rows = await this.prisma.patient.findMany({ where: { restrictedAt: null }, select: { id: true, firstName: true, lastName: true, birthDate: true }, orderBy: { id: "asc" } }); // E6: no birthday for a restricted child
+  /**
+   * B14: these ids plus every child born on `today`'s month and day (isBirthdayOn: exact MM-DD, so no 29 February rule).
+   * Today's `patients` and the birthday job's children; never the whole table (5,000 rows were Today's cost).
+   * E6: no restricted child. Raw SQL names the clinic.
+   */
+  async basicsFor(ids: readonly string[], today: string): Promise<{ id: string; firstName: string; lastName: string; birthDate: string }[]> {
+    const named = ids.length ? Prisma.sql`id IN (${Prisma.join([...ids])}) OR ` : Prisma.empty;
+    const rows = await this.prisma.$queryRaw<{ id: string; firstName: string; lastName: string; birthDate: Date }[]>`
+      SELECT id, firstName, lastName, birthDate FROM Patient
+      WHERE clinicId = ${requireContext().clinicId!} AND restrictedAt IS NULL
+        AND (${named}(MONTH(birthDate) = ${Number(today.slice(5, 7))} AND DAY(birthDate) = ${Number(today.slice(8, 10))}))
+      ORDER BY id`;
     return rows.map((r) => ({ ...r, birthDate: r.birthDate.toISOString().slice(0, 10) }));
   }
 

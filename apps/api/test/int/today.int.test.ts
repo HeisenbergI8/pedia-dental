@@ -1,10 +1,11 @@
 import { DEMO_CLINIC_ID, type Db } from "@pedia/seed";
-import { Appointment, AppointmentRequest, Message, TodaySummary, Visit, inStatusGroup, todaySummary } from "@pedia/shared";
+import { Appointment, AppointmentRequest, Message, Patient, TodaySummary, Visit, inStatusGroup, todaySummary, type RegisterPatientInput } from "@pedia/shared";
 import { addDays, format, parseISO, startOfWeek } from "date-fns";
 import { z } from "zod";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { OutboxWorker } from "../../src/outbox/outbox.worker";
 import { ADMIN, FRONT_DESK, NGITI_OWNER, clinicalApp, type Login } from "./clinical-support";
+import { inClinic } from "./support/database";
 
 /** apps/web's Today handler tests, and parity with the mock's todaySummary over the same seed (CHUNKS B7 done-when). */
 let t: Awaited<ReturnType<typeof clinicalApp>>;
@@ -137,5 +138,47 @@ describe("Today's greeting ticks (B9)", () => {
     if (before === inHours()) expect(after).toBe(before ? "sent" : "queued"); // a run crossing 8 AM or 8 PM checks only that it moved on
     else expect(["queued", "sent"]).toContain(after);
     expect(await tick(other!.patientId)).toBeUndefined();
+  });
+});
+
+describe("Today at scale (B14)", () => {
+  it("names, birthdays and visitMix come from only this week's and today's patients", async () => {
+    const [owner, desk] = [await t.as(OWNER), await t.as(FRONT_DESK)];
+    const born = async (birthDate: string) => {
+      const body = {
+        firstName: "Tala", lastName: `Born${birthDate.replaceAll("-", "")}`, birthDate, sex: "female", address: "",
+        guardians: [{ id: "g_mother", fullName: "Rosa Mendoza", relationship: "Mother", phone: "09171234568", isPrimary: true }],
+        emergencyContact: { name: "", phone: "" }, allergies: [], noKnownAllergies: true, medicalConditions: [], medications: [], alerts: [],
+        dentalHistory: { previousClinic: "", notes: "" }, privacyConsent: { guardianId: "g_mother", photos: true, reminders: true, confirmed: true },
+      } as RegisterPatientInput;
+      return (await t.ok(t.call("post", "/patients", desk, body), Patient, 201)).id;
+    };
+    const birthday = `2019-${today.slice(5)}`;
+    const [child, restricted, leap, seen] = [await born(birthday), await born(birthday), await born("2020-02-29"), await t.register()];
+    await inClinic(DEMO_CLINIC_ID, () => t.prisma.patient.update({ where: { id: restricted }, data: { restrictedAt: new Date() } }));
+    // Seen this week, first seen last year: returning today.
+    const first = await t.start(seen, owner);
+    await t.complete(first.id, owner);
+    await inClinic(DEMO_CLINIC_ID, () => t.prisma.visit.update({ where: { id: first.id }, data: { date: new Date(`${Number(today.slice(0, 4)) - 1}${today.slice(4)}T00:00:00.000Z`) } }));
+    await t.complete((await t.start(seen, owner)).id, owner);
+
+    // The oracle: the shared todaySummary over every patient, visit and done appointment.
+    const all = await inClinic(DEMO_CLINIC_ID, async () => ({
+      patients: (await t.prisma.patient.findMany({ where: { restrictedAt: null }, select: { id: true, firstName: true, lastName: true, birthDate: true } }))
+        .map((p) => ({ ...p, birthDate: p.birthDate.toISOString().slice(0, 10) })),
+      visits: (await t.prisma.visit.findMany({ where: { status: "completed" }, select: { patientId: true, status: true, date: true } }))
+        .map((v) => ({ ...v, date: v.date.toISOString().slice(0, 10) })),
+      appointments: (await t.prisma.appointment.findMany({ where: { status: "done" } })).map((a) => ({ ...a, startsAt: a.startsAt.toISOString() })),
+      messages: (await t.prisma.message.findMany({ where: { kind: "birthday" } })).map((m) => ({ ...m, createdAt: m.createdAt.toISOString() })),
+    }));
+    const oracle = todaySummary({ ...all, staff: [], appointmentRequests: [] } as unknown as Parameters<typeof todaySummary>[0], today);
+    const got = await summary(owner, `?today=${today}&branch=all`);
+    expect(got.birthdays).toEqual(oracle.birthdays);
+    expect(got.visitMix).toEqual(oracle.visitMix);
+    const ids = got.birthdays.map((b) => b.patientId);
+    expect(ids).toContain(child);
+    expect(ids).not.toContain(restricted); // E6
+    if (today.slice(5) !== "02-29") expect(ids).not.toContain(leap);
+    expect(got.visitMix.find((d) => d.date === today)!.returning).toBeGreaterThan(0);
   });
 });

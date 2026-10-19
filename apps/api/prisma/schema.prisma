@@ -774,6 +774,8 @@ model Visit {
   @@index([clinicId, patientId, startedAt])
   /// The last visit's day per patient (VisitDaysService): completed only, MAX(date).
   @@index([clinicId, patientId, status, date])
+  /// B14: Today's week of visitors (visitorsBetween) without scanning every visit.
+  @@index([clinicId, status, date])
 }
 
 /// Mirrors ToothCondition in packages/shared/src/schemas/chart.ts (tenant-scope.test.ts checks they match).
