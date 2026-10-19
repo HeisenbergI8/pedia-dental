@@ -64,3 +64,30 @@ At 1,000 extra patients:
 
 **Gate:** `load:run` exits 1 at both sizes. The misses are accepted by the user and moved to a Later chunk (decisions.md L1); the thresholds are unchanged. `pnpm run check` before the commit, exit code below.
 **Why the list is slow:** every page computes the standing of every patient who matches. With no search, that is the whole clinic: four `IN (5,000 ids)` queries plus the JS. One request takes about 0.6 s; under 10 connections they queue. `GET /patients` (search) returns every match unpaged: "ma" returned 762 KB at 5,000 patients.
+
+## Phases 1–3: the port ledger for all 13 files — 2026-10-19
+
+**Steps completed:** 1.2, 2.1, 2.2, 3.1, 3.2
+**How:**
+- **Mapping:** five read-only agents mapped the web cases to API tests, reading both test bodies, into scratch files: small, access, primolar, and handlers.test.ts in two halves.
+- **New tests:** five more agents, each in its own git worktree with its own `pedia_dental_<group>_test` database, wrote the API cases the mapping found missing, and ran their files green. None changed API source, and none found a contract difference.
+- **Merge:** their branches merged into this one. Three import-line conflicts were resolved by keeping both sides.
+- **The ledger:** the fragments were assembled into `PORT_LEDGER`. `ENFORCED` is now all 13 files. The `it.todo` loop is replaced by "enforces all 13 files".
+**Added by group:**
+
+| Group | New cases | Extended cases |
+| --- | --- | --- |
+| small | 5 | 6 |
+| access | 7 | 13 |
+| primolar | 16 | 12 |
+| handlers1 | 1 | 4 |
+| handlers2 | 9 | 8 |
+
+handlers2 also hoisted `parent-ownership`'s `it.each` table, so the parser reads its title.
+**Deviations:**
+- **primolar's G2 stub route** is `GET /signups/x/unruled`, because `/signups/unruled` matched the public `/signups/:reference` rule.
+- **primolar's G13 sweep** skips the two rules that have no controller: `POST /patients/:id/exports` and `GET /audit-log`. These are the same two found in Step 1.3, and both are B13c2's.
+- **photos.int's re-seeding case** has a 60 s timeout.
+**Gate:**
+- `pnpm run check`: exit 0. `port-ledger.test.ts`: 16 passed, all 13 files enforced.
+- `pnpm --filter api test:int`: 53 files, 607 tests passed (was 568).

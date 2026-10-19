@@ -256,4 +256,15 @@ describe("tenancy", () => {
     const theirs = ids(await directory(cookie, ""));
     expect(theirs.filter((id) => db.patients.some((p) => p.id === id) || id.startsWith("pt_"))).toEqual([]);
   });
+
+  it("writes each account's audit trail to that account", async () => {
+    const ngitiPatient = platform.tenants.clinic_ngiti!.patients[0]!.id;
+    expect((await get(`/patients/${ngitiPatient}`, await as(NGITI_OWNER))).status).toBe(200); // an audited record view
+    const theirs = await inClinic("clinic_ngiti", () =>
+      prisma.auditEvent.findMany({ where: { patientId: ngitiPatient, action: "view", record: "Patient profile" }, select: { clinicId: true, actorId: true } }));
+    expect(theirs).toContainEqual({ clinicId: "clinic_ngiti", actorId: "ngiti_staff_lim" });
+    const leaked = await inClinic(DEMO_CLINIC_ID, () =>
+      prisma.auditEvent.count({ where: { OR: [{ actorId: { startsWith: "ngiti_" } }, { patientId: ngitiPatient }] } }));
+    expect(leaked).toBe(0);
+  });
 });

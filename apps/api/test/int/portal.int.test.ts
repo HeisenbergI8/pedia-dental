@@ -90,6 +90,7 @@ describe("portal invitations on MySQL (B11)", () => {
     const [mother, father] = await access(kid.id);
     expect(mother).toEqual({ guardianId: "g_m_Ana", state: "not_invited" });
     expect(father).toMatchObject({ state: "not_invited", blocked: "Add a mobile number for Jun Ana to invite them" });
+    expect((await access("patient_sibling"))[0]).toMatchObject({ state: "active" }); // a seeded parent (decision 13)
   });
 
   it("texts an invite at night to a family that declined reminders, the real link only to the phone (decisions 12, 20, E5)", async () => {
@@ -121,6 +122,7 @@ describe("portal invitations on MySQL (B11)", () => {
     expect(Session.parse(first.body).user).toMatchObject({ role: "parent", guardianId: "g_m_Cy", mustAcknowledge: "notice" });
     expect([(await accept(token, pw(2))).status, (await check(token)).status]).toEqual([410, 410]);
     expect((await login("09170000003", pw(1))).status).toBe(200);
+    expect((await login("09170000003", DEMO_PASSWORD)).status).toBe(401); // their own password, not the demo one
     expect((await access(kid.id))[0]).toMatchObject({ state: "active" });
     // Another family's child: 403 (the guard's own-scope check).
     const parent = cookieOf(first);
@@ -147,6 +149,15 @@ describe("portal invitations on MySQL (B11)", () => {
     clock.set(NIGHT);
     expect(calls.at(-2)!.body).not.toBe(calls.at(-1)!.body);
     expect([(await check(failed)).status, (await check(lastToken())).status]).toEqual([410, 200]);
+
+    // A resend before the first text went out withdraws it: one text cancelled, one waiting, one sent.
+    const early = await family("Dy", "09170000016");
+    await invite(early.id, "g_m_Dy");
+    await invite(early.id, "g_m_Dy");
+    const log = Message.array().parse((await http().get(`/api/messages?patientId=${early.id}`).set("Cookie", desk)).body);
+    expect(log.map((m) => m.status).sort()).toEqual(["cancelled", "queued"]);
+    await drain();
+    expect(calls.filter((c) => c.number === "639170000016")).toHaveLength(1);
   });
 
   it("refuses a second guardian on a number another parent uses, under parallel invites too (decision 14)", async () => {
@@ -155,6 +166,10 @@ describe("portal invitations on MySQL (B11)", () => {
     const res = await Promise.all([invite(one.id, "g_m_Ed"), invite(two.id, "g_m_Fe")]);
     expect(res.map((r) => r.status).sort()).toEqual([200, 409]);
     expect(res.find((r) => r.status === 409)!.text).toMatch(/already signs in to the portal as Rosa (Ed|Fe)/);
+    const blocked = res[0]!.status === 409 ? one : two;
+    expect((await access(blocked.id))[0]!.blocked).toMatch(/Rosa (Ed|Fe)/);
+    const sibling = seedPlatform().tenants.clinic_demo!.patients.find((p) => p.id === "patient_sibling")!;
+    expect((await invite(sibling.id, sibling.guardians[0]!.id)).status).toBe(409); // already active
   });
 
   it("lets one of two parallel accepts of one link through (single use under a race)", async () => {
@@ -282,5 +297,18 @@ describe("forgot password on MySQL (decisions 6, 19)", () => {
     expect((await reset("09995550001")).status).toBe(202);
     const buckets = (await prisma.rateLimitCounter.findMany({ select: { bucket: true } })).map((r) => r.bucket);
     expect(buckets.some((b) => b.includes("9995550001"))).toBe(false);
+  });
+});
+
+describe("a parent's own password on a demo deployment (decision 7)", () => {
+  it("keeps a seeded parent on the demo password, and lets a parent with their own change it", async () => {
+    const seeded = await signIn("parent@gmail.com");
+    expect((await http().post("/api/auth/password").set("Cookie", seeded).send({ current: DEMO_PASSWORD, next: pw(20) })).status).toBe(403);
+    const kid = await family("Pe", "09170000017");
+    await invite(kid.id, "g_m_Pe");
+    await drain();
+    const own = cookieOf(await accept(lastToken("639170000017"), pw(21)));
+    expect((await http().post("/api/auth/password").set("Cookie", own).send({ current: pw(21), next: pw(22) })).status).toBe(200);
+    expect((await login("09170000017", pw(22))).status).toBe(200);
   });
 });

@@ -57,6 +57,5 @@ describe("the port ledger (B13c1 E7)", () => {
     expect(webCases.get(file)!.map((t) => unported(file, t)).filter(Boolean)).toEqual([]);
   });
 
-  // Removed in Step 3.1, when ENFORCED is all 13.
-  for (const f of WEB_FILES.filter((f) => !ENFORCED.includes(f))) it.todo(`ports every case of ${f} (pending, B13c1 Phase 2 or 3)`);
+  it("enforces all 13 files", () => expect([...ENFORCED].sort()).toEqual(WEB_FILES));
 });

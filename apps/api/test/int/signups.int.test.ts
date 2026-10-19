@@ -4,8 +4,8 @@ import { join } from "node:path";
 import type { INestApplication } from "@nestjs/common";
 import { SEED_PRICES, seedPlatform } from "@pedia/seed";
 import {
-  ClinicContext, CreateAccountResult, DEFAULT_OPENING_HOURS, DUPLICATE_EMAIL_MESSAGE, PriceList, Session, Signup, SignupStatusView, amountDue,
-  duplicateNameMessage, pesos, signupStatusLabel, type GetStartedInput,
+  ClinicContext, CreateAccountResult, DEFAULT_OPENING_HOURS, DUPLICATE_EMAIL_MESSAGE, LEGAL_DOCUMENTS, PriceList, Session, Signup, SignupStatusView,
+  amountDue, duplicateNameMessage, pesos, signupStatusLabel, type GetStartedInput,
 } from "@pedia/shared";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -192,6 +192,19 @@ describe("sign-ups in the console on MySQL (billing #12–#15)", () => {
     await pay(designed.id);
     const d = CreateAccountResult.parse((await http().post(`/api/operator/signups/${designed.id}/approve`).set("Cookie", op)).body);
     expect(d.overview.design).toBe("in_progress");
+  });
+
+  it("refuses a sign-up without the acceptance, and carries an accepted one to the approved clinic", async () => {
+    expect((await submit({ ...form({ choice: "default" }), acceptTerms: false } as unknown as GetStartedInput)).status).toBe(400);
+    const s = await signupOf((await submit(form({ choice: "default" }))).body.reference);
+    expect(s.agreement).toMatchObject({ termsVersion: LEGAL_DOCUMENTS.terms.version, dpaVersion: LEGAL_DOCUMENTS.dpa.version, acceptedBy: s.owner.fullName, method: "online" });
+    await pay(s.id);
+    const made = CreateAccountResult.parse((await http().post(`/api/operator/signups/${s.id}/approve`).set("Cookie", op)).body);
+    expect(made.overview.privacy).toMatchObject({ current: true, patientsWithoutConsent: 0, agreement: { acceptedBy: s.owner.fullName, method: "online" } });
+    // #23: the acceptance is the new clinic's first audited event (review L4).
+    const [first] = await inClinic(made.overview.account.id, () =>
+      prisma.auditEvent.findMany({ orderBy: { at: "asc" }, take: 1, select: { record: true, actorName: true } }));
+    expect(first).toEqual({ record: "Terms and DPA (accepted)", actorName: s.owner.fullName });
   });
 
   it("approves once of two at once, leaving no orphan rows", async () => {
