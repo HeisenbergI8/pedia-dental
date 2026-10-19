@@ -50,3 +50,11 @@ export const RETENTION_SCHEDULE = {
   OutboxMessage: { holds: "system", keep: "Sent rows 7 days; failed rows kept for repair", enforcedBy: "outbox.prune" },
   JobLock: { holds: "system", keep: "Kept (one row per job)", enforcedBy: "kept" },
 } as const satisfies Record<Prisma.ModelName, Retention>;
+
+/** The inventory table PRIVACY_OPERATIONS.md carries between its markers (inventory.test.ts). Sorted by what it holds. */
+export function retentionInventory(): string {
+  const rows = Object.entries(RETENTION_SCHEDULE)
+    .sort(([a, x], [b, y]) => x.holds.localeCompare(y.holds) || a.localeCompare(b))
+    .map(([model, r]) => `| ${model} | ${r.holds} | ${r.keep} | ${r.enforcedBy} | ${"counsel" in r ? "yes" : ""} |`);
+  return ["| Table | Holds | Kept | Enforced by | Confirm with counsel |", "| --- | --- | --- | --- | --- |", ...rows].join("\n");
+}

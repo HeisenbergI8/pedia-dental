@@ -428,8 +428,15 @@ BIR-registered invoices and a second step for the operator's sign-in stay later 
   `.claude/plans/feature-chunk-b13c1-mocks-off-load-test-plan/`). The demo script passes end to end on the API locally;
   the load test's misses (all six targets at 5,000 patients; the list and search already at 1,000) are accepted and
   moved to a Later chunk (decisions.md L1).
-- **B13c2:** Data Privacy Act operations (copy of records, request register, erasure within legal retention, retention
-  schedule, the audit-log reader, NPC registration notes).
+- **B13c2:** Data Privacy Act operations, split in two (B13c2 `decisions.md` E1;
+  `.claude/plans/feature-chunk-b13c2-privacy-operations-plan/`):
+  - ✅ **B13c2a: copy of records, the audit-log reader, the retention schedule, the NPC notes** (done 2026-10-19): the
+    copy (`POST /patients/:id/exports`) for staff and parents, `GET /audit-log` and Settings → Privacy, `RETENTION_SCHEDULE`
+    with the portal-link and operator-trail prunes, `PRIVACY_OPERATIONS.md`. No new table or permission; no patient data
+    deleted.
+  - **B13c2b: the request register, erasure within legal retention, a clinic's return or deletion at cancellation**
+    (outlined in the plan's section 5): `PrivacyRequest` and `privacy.manage`, restriction then anonymisation (ships off
+    until counsel gives periods), the operator's clinic export and purge scripts.
 
 **Decided (2026-10-18):**
 - **Hosting:** AWS in Singapore (`ap-southeast-1`).

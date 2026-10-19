@@ -69,3 +69,14 @@ Branch `feature/b13c2a-privacy-operations`, from master (B1–B13c1 merged). Pla
 - Int test: one `PortalLink`/`OperatorAuditEvent` fixture shape per table, two apps (setting unset and `365`) on a fixed clock, as `jobs.int.test.ts` builds its two instances; case 3 also asserts the job reports `"ran"`.
 **Gate:** `pnpm run check` → exit 0 (api 83 files / 544 tests; web 36 / 407; shared 30 / 242; seed 1 / 31; infra 5 / 41); ran directly: `env.test.ts` 9 passed, `retention-schedule.test.ts` 3 passed. MySQL: `retention.int.test.ts` 4 passed; full `pnpm --filter api test:int` → 55 files / 619 tests passed.
 **Notes:** nothing patient-related is deleted. The operator prune is off unless `OPERATOR_AUDIT_KEEP_DAYS` is set (≥ 365); `cdk.json` unchanged (E12). Both crons load only where `ScheduleModule` runs (`BACKGROUND_WORK`).
+
+## Phase 7: `PRIVACY_OPERATIONS.md` and the documentation — 2026-10-19
+
+**Steps completed:** 7.1, 7.2
+**Files changed:** `PRIVACY_OPERATIONS.md` (new), `apps/api/src/privacy/retention-schedule.ts` (`retentionInventory`), `apps/api/src/privacy/inventory.test.ts` (new), `CONVENTIONS.md`, `apps/api/CONVENTIONS.md`, `apps/api/CHUNKS.md`
+**Deviations from plan:**
+- Security measures say TLS runs between the browser and the load balancer and **not yet** between the API and RDS (B13b I5), rather than an unqualified "TLS"; the restore drill is cited by its file (`runbooks/restore-drill.md`).
+- Step 7.2's heading names the README, but its file list and bullets don't; no README change was made.
+- The inventory table was pasted from `retentionInventory()`'s output (printed once by a throwaway test, deleted).
+**Gate:** `pnpm run check` → exit 0 (api 84 files / 546 tests; web 36 / 407; shared 30 / 242; seed 1 / 31; infra 5 / 41). Ran directly: `inventory.test.ts` 2 passed.
+**Notes:** the NPC facts (registration thresholds, Circular 16-03's 72 hours) are stated as commonly summarised and marked *confirm with counsel*; they were not checked against the NPC's current text. Plan steps not built: none of B13c2a. B13c2b (section 5) is out of scope.
