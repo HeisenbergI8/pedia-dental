@@ -64,3 +64,14 @@ Open questions settled (user: "fix it, merge only if the load test proves it"): 
 - `PatientsService` no longer injects `DueItemsService` or `MessageQueueService` (unused after `names()` and the four reader calls went). `names()` had no other caller.
 - Each count is `COALESCE(SUM(cond), 0)` aliased by its filter and read by key (a SUM over no rows is NULL).
 **Gate:** `patient-standing.test.ts` 3 passed; `test:int patients-read` 17 passed (the list cases compare against the mock's computation over the seed); `pnpm run check` exit 0 (api 563, shared 253, web 416, infra 41, seed 31).
+
+## Phase 7: Consistency and parity tests — 2026-10-19
+
+**Steps completed:** 7.1, 7.2
+**Files changed:** `apps/api/test/int/standing.int.test.ts` (new), `apps/api/test/int/clinical-support.ts` (`clinicalApp({ platform, clock })`, optional)
+**Deviations from plan:**
+- One app for both describes: the demo plus `loadPlatform(300)` on a `FixedClock` (10:00 Manila, inside sending hours), through the shared `clinicalApp` harness given two optional arguments.
+- 7.1's order follows what each step needs: register → sign an extraction note (opens the recall) → sign fluoride and prophylaxis → complete the visit → book from the due list → bill → pay part → refund → bill again and void → deposit and apply credit → no-show the booking (the recall reopens) → a text rejected by the provider, then the outbox drained. After each step the stored row equals `PatientStandingService.compute` (a fresh read through the readers), plus the expected value where the step decides it. The text's case asserts `noContact` turns true only after the outbox pass.
+- The reconcile case also corrupts one row's balance and checks a run corrects exactly 1; the parallel case books while `reconcileAll` runs (both commit, drift 0).
+- 7.2 runs today, today+7 and today+30 (both bounds cross with the load data's spread) × front desk and dentist (no `billing.view`) × q "" and "ma" × 5 filters × 3 sorts × first and last page: 720 page comparisons against `standingPage` over the same readers. Matches come from the uncapped directory filtered by the shared `matchesSearch`. Non-vacuity (every chip non-empty) is asserted on today only. No collation tie surfaced (D6).
+**Gate:** `test:int test/int/standing.int.test.ts` 4 passed (run by hand on `pedia_dental_b14_test`).
