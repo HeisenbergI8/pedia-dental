@@ -69,6 +69,13 @@ export class PatientsService {
     return g!.guardianId; // every patient has a guardian (CreatePatientInput)
   }
 
+  /** B13c2a: children's names for one page of the audit log, in one query. A deleted id is simply absent. */
+  async namesOf(ids: readonly string[]): Promise<Map<string, string>> {
+    if (ids.length === 0) return new Map();
+    const rows = await this.prisma.patient.findMany({ where: { id: { in: [...new Set(ids)] } }, select: { id: true, firstName: true, lastName: true } });
+    return new Map(rows.map((p) => [p.id, `${p.firstName} ${p.lastName}`]));
+  }
+
   /** Every patient's name and birthday: Today's names and birthdays (todaySummary's `patients`). */
   async basics(): Promise<{ id: string; firstName: string; lastName: string; birthDate: string }[]> {
     const rows = await this.prisma.patient.findMany({ select: { id: true, firstName: true, lastName: true, birthDate: true }, orderBy: { id: "asc" } });

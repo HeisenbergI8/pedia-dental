@@ -5,20 +5,21 @@ import { createTestApp } from "./support/test-app";
 
 type Method = "get" | "put" | "post";
 
-/** B4d's notice routes: the clinic's behind the guard, the public one reaching its controller without a session. */
-const B4D_ROUTES: [Method, string][] = [
+/** B4d's notice routes and B13c2a's copy and audit log: the clinic's behind the guard, the public one reaching its controller without a session. */
+const PRIVACY_ROUTES: [Method, string][] = [
   ["get", "/clinic/privacy-notice"], ["put", "/clinic/privacy-notice"],
   ["post", "/patients/patient_sibling/exports"], // B13c2a: the copy of records
+  ["get", "/audit-log"], // B13c2a: the audit-log reader
 ];
 
-describe("B4d's notice routes are served (no database)", () => {
+describe("B4d's and B13c2a's privacy routes are served (no database)", () => {
   let app: INestApplication;
   beforeAll(async () => {
     app = await createTestApp();
   });
   afterAll(() => app.close());
 
-  it.each(B4D_ROUTES)("%s %s answers 401 without a session", async (method, path) => {
+  it.each(PRIVACY_ROUTES)("%s %s answers 401 without a session", async (method, path) => {
     expect((await request(app.getHttpServer())[method](`/api${path}`)).status).toBe(401);
   });
 

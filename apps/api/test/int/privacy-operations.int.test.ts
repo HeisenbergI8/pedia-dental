@@ -1,6 +1,6 @@
 import type { INestApplication } from "@nestjs/common";
 import { DEMO_CLINIC_ID, childrenOf, seedPlatform } from "@pedia/seed";
-import { type AuditAction, RecordsCopy } from "@pedia/shared";
+import { type AuditAction, AuditLogPage, RecordsCopy } from "@pedia/shared";
 import request from "supertest";
 import { z } from "zod";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -84,5 +84,29 @@ describe("copy of records (B13c2a)", () => {
     } finally {
       await inClinic(DEMO_CLINIC_ID, () => prisma.clinicAccount.update({ where: { id: DEMO_CLINIC_ID }, data: { status: "active" } }));
     }
+  });
+});
+
+describe("the audit-log reader (B13c2a)", () => {
+  it("lists the clinic's audit trail newest first, a page at a time, filtered by action and person, naming the child", async () => {
+    const cookie = await as(OWNER);
+    await call("get", `/patients/${own.id}`, await as(FRONT_DESK)); // a "Patient profile" view by front desk
+    const first = await ok(call("get", "/audit-log?limit=2", cookie), AuditLogPage);
+    expect(first.entries).toHaveLength(2);
+    expect(first.entries.every((e) => e.clinicId === DEMO_CLINIC_ID)).toBe(true);
+    expect(Date.parse(first.entries[0]!.at)).toBeGreaterThanOrEqual(Date.parse(first.entries[1]!.at));
+    const second = await ok(call("get", `/audit-log?limit=2&before=${encodeURIComponent(first.next!)}`, cookie), AuditLogPage);
+    expect(second.entries.map((e) => e.id)).not.toContain(first.entries[0]!.id);
+    const views = await ok(call("get", `/audit-log?action=view&actorId=staff_cruz`, cookie), AuditLogPage);
+    expect(views.entries.length).toBeGreaterThan(0);
+    expect(views.entries.every((e) => e.action === "view" && e.actorId === "staff_cruz")).toBe(true);
+    expect(views.entries.find((e) => e.patientId === own.id)!.patientName).toBe(`${own.firstName} ${own.lastName}`);
+    expect((await call("get", "/audit-log?before=nonsense", cookie)).status).toBe(400);
+  });
+
+  it("shows the audit trail only to the Owner and admins, and logs that it was read", async () => {
+    for (const login of [FRONT_DESK, DENTIST, PARENT]) expect((await call("get", "/audit-log", await as(login))).status).toBe(403);
+    expect((await call("get", "/audit-log", await as(ADMIN))).status).toBe(200);
+    expect(await audits(null, "Audit log", "view")).toBeGreaterThan(0);
   });
 });

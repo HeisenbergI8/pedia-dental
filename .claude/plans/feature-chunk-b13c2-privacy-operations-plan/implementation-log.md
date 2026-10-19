@@ -22,3 +22,11 @@ Branch `feature/b13c2a-privacy-operations`, from master (B1–B13c1 merged). Pla
 - Confirmed before pasting (the plan's open questions): the pause value is `AccountStatus.suspended`; `GuardianView.phone` is optional.
 **Gate:** `pnpm run check` → exit 0 (api 82 files / 539 tests; web 36 / 402; shared 30 / 242; seed 1 / 31; infra 5 / 41). Ran directly: `records-copy.service.test.ts` 3 passed, `records-copy.rules.test.ts` 12 passed, `privacy-routes.test.ts` 4 passed. MySQL: `vitest run --config vitest.int.config.ts test/int/privacy-operations.int.test.ts` 4 passed; `parent-ownership.int.test.ts` + `operator-console.int.test.ts` 29 passed.
 **Notes:** the export's ownership is proven by the parent-ownership sweep now that `NOT_SERVED` is gone.
+
+## Phase 3: API: the audit-log reader — 2026-10-19
+
+**Steps completed:** 3.1, 3.2, 3.3
+**Files changed:** `apps/api/src/audit/audit.service.ts` (`page`), `apps/api/src/patients/patients.service.ts` (`namesOf`), `apps/api/src/audit-log/{audit-log.controller.ts, audit-log.module.ts}` (new), `apps/api/src/app.module.ts`, `apps/api/test/privacy-routes.test.ts` (`PRIVACY_ROUTES`, retitled), `apps/api/test/int/operator-console.int.test.ts` (`noController` removed: every clinic rule swept), `apps/api/test/int/privacy-operations.int.test.ts`
+**Deviations from plan:** none. The plan's suggested direct tenancy proof (`every entry's clinicId is the demo clinic`) is in the first case.
+**Gate:** `pnpm run check` → exit 0 (api 82 files / 540 tests; web 36 / 402; shared 30 / 242; seed 1 / 31; infra 5 / 41). `privacy-routes.test.ts` 5 passed. MySQL: `privacy-operations.int.test.ts` + `operator-console.int.test.ts` 16 passed; full `pnpm --filter api test:int` → 54 files / 615 tests passed.
+**Notes:** the name join stays in the controller (plan Q8 default). The API writes "Audit log" after the read, MSW's gate before it; no test asserts the first row.

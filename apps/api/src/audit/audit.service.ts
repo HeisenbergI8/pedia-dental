@@ -1,5 +1,5 @@
-import { Injectable } from "@nestjs/common";
-import type { AuditAction, Role } from "@pedia/shared";
+import { BadRequestException, Injectable } from "@nestjs/common";
+import { type AuditAction, type AuditEvent, type AuditLogQuery, type Role, auditCursor, readAuditCursor } from "@pedia/shared";
 import { Clock } from "../common/clock";
 import { requireContext } from "../common/request-context";
 import { PrismaService } from "../prisma/prisma.service";
@@ -56,5 +56,27 @@ export class AuditService {
       data: { ...clinicData(), at, actorId: actor.id, actorName: actor.name, actorRole: actor.role, action, record },
       select: { id: true },
     });
+  }
+
+  /**
+   * B13c2a: one page of the clinic's trail, newest first (GET /audit-log). Keyset on (at, id) over the
+   * (clinicId, at) / (clinicId, actorId, at) / (clinicId, patientId, at) indexes: no OFFSET, no COUNT.
+   */
+  async page(query: AuditLogQuery): Promise<{ rows: AuditEvent[]; next?: string }> {
+    const after = query.before ? readAuditCursor(query.before) : undefined;
+    if (query.before && !after) throw new BadRequestException("This page link has expired. Reload the audit log.");
+    const rows = await this.prisma.auditEvent.findMany({
+      where: {
+        ...(query.action && { action: query.action }),
+        ...(query.actorId && { actorId: query.actorId }),
+        ...(query.patientId && { patientId: query.patientId }),
+        ...(after && { OR: [{ at: { lt: new Date(after.at) } }, { at: new Date(after.at), id: { lt: after.id } }] }),
+      },
+      orderBy: [{ at: "desc" }, { id: "desc" }],
+      take: query.limit + 1, // one more says whether there is a next page
+      select: { id: true, clinicId: true, at: true, actorId: true, actorName: true, actorRole: true, action: true, record: true, patientId: true },
+    });
+    const page = rows.slice(0, query.limit).map((r) => ({ ...r, at: r.at.toISOString(), patientId: r.patientId ?? undefined }));
+    return { rows: page, ...(rows.length > query.limit && { next: auditCursor(page[page.length - 1]!) }) };
   }
 }
