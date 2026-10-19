@@ -70,4 +70,11 @@ describe("loadEnv", () => {
     expect(loadEnv({ ...base, TRUST_PROXY_HOPS: "1" }).TRUST_PROXY_HOPS).toBe(1);
     expect(() => loadEnv({ ...base, TRUST_PROXY_HOPS: "4" })).toThrow(/TRUST_PROXY_HOPS/);
   });
+
+  it("keeps the operator trail forever unless a period of a year or more is set (B13c2a)", () => {
+    const base = { DATABASE_URL: "mysql://u:p@h/db" };
+    expect(loadEnv(base).OPERATOR_AUDIT_KEEP_DAYS).toBeUndefined();
+    expect(loadEnv({ ...base, OPERATOR_AUDIT_KEEP_DAYS: "1826" }).OPERATOR_AUDIT_KEEP_DAYS).toBe(1826);
+    expect(() => loadEnv({ ...base, OPERATOR_AUDIT_KEEP_DAYS: "30" })).toThrow(/at least 365/);
+  });
 });

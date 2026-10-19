@@ -6,6 +6,7 @@ import { MessageQueueModule } from "../message-queue/message-queue.module";
 import { FamilyModule } from "../patients/family.module";
 import { PasswordLinksController } from "./password-links.controller";
 import { PortalAccessController } from "./portal-access.controller";
+import { PortalJobs } from "./portal.jobs";
 import { PortalService } from "./portal.service";
 
 /**
@@ -15,7 +16,7 @@ import { PortalService } from "./portal.service";
 @Module({
   imports: [AuthModule, AuditModule, FamilyModule, MessageQueueModule],
   controllers: [PortalAccessController, PasswordLinksController],
-  providers: [PortalService],
+  providers: [PortalService, PortalJobs],
   exports: [PortalService],
 })
 export class PortalModule implements NestModule {

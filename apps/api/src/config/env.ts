@@ -30,6 +30,9 @@ const Env = z.object({
   BACKGROUND_WORK: flag().default(true),
   // How long the outbox worker waits after finding nothing to send.
   OUTBOX_POLL_MS: z.coerce.number().int().min(100).default(2000),
+  // B13c2a (decisions.md C2): days to keep Primolar's operator audit trail. CONFIRM WITH COUNSEL before setting it.
+  // Unset (the default): nothing is ever pruned. At least 365, so a typo can't empty the trail. Proposed: 1826 (5 years).
+  OPERATOR_AUDIT_KEEP_DAYS: z.coerce.number().int().min(365, "OPERATOR_AUDIT_KEEP_DAYS must be at least 365 (one year)").optional(),
   // The local-disk storage driver's root, relative to the API's working directory (used when S3_BUCKET is unset, B10).
   STORAGE_DIR: z.string().min(1).default("var/storage"),
   // B10 (E11): the S3-compatible driver. Unset S3_BUCKET: the local-disk driver under STORAGE_DIR.

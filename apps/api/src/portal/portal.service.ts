@@ -25,6 +25,8 @@ import { clinicData } from "../prisma/tenant-scope";
 import { runInTransaction, type Tx } from "../prisma/transaction";
 
 const GONE = "This link has expired or was already used.";
+/** B13c2a: an expired link is kept this long for support questions, then pruned (decisions.md E9: not a legal threshold). */
+export const KEEP_LINK_DAYS = 30;
 const parentId = (guardianId: string) => `guardian.${guardianId}`;
 const clashText = (g: Pick<FamilyGuardian, "phone">, holder: Pick<FamilyGuardian, "fullName">) =>
   `${maskedNumber(g.phone)} already signs in to the portal as ${holder.fullName}. Each parent needs their own mobile number.`;
@@ -335,5 +337,20 @@ export class PortalService implements OnModuleInit {
     return {
       texts: rows.map((r) => ({ name: names.get(r.guardianId) ?? "A parent", purpose: r.purpose, link: linkPath(r.demoToken!), expiresAt: r.expiresAt.toISOString() })),
     };
+  }
+
+  /**
+   * B13c2a: links whose expiry passed more than KEEP_LINK_DAYS ago, every clinic, 1,000 at a time. A used or cancelled
+   * link has expired too (its lifetime is fixed at creation). The card reads a missing invite as "Invite expired",
+   * which it already was. PortalLink is a platform table (model-scope.ts), so the delete names no clinic on purpose.
+   */
+  async pruneLinks(now = this.clock.now()): Promise<number> {
+    const before = new Date(now.getTime() - KEEP_LINK_DAYS * 24 * 60 * 60_000).toISOString().slice(0, 23).replace("T", " ");
+    let total = 0;
+    for (;;) {
+      const n = await this.prisma.$executeRaw`DELETE FROM PortalLink WHERE expiresAt < ${before} LIMIT 1000`;
+      total += n;
+      if (n < 1000) return total;
+    }
   }
 }

@@ -6,7 +6,7 @@ import { requireContext } from "../common/request-context";
 import { MetricsService } from "../metrics/metrics.service";
 import { PrismaService } from "../prisma/prisma.service";
 
-/** The platform audit trail (B13a, F1): one row per operator action. Insert-only (APPEND_ONLY). */
+/** The platform audit trail (B13a, F1): one row per operator action. Insert-only (APPEND_ONLY), but for `prune` (B13c2a). */
 @Injectable()
 export class OperatorAuditService {
   private readonly log = new Logger(OperatorAuditService.name);
@@ -48,6 +48,20 @@ export class OperatorAuditService {
     } catch (error) {
       this.metrics.countUnhandled();
       this.log.error({ fingerprint: errorFingerprint(error) }, `Operator audit row not written (${detail})`);
+    }
+  }
+
+  /**
+   * B13c2a (decisions.md E10): the only delete on an append-only table. Rows older than `keepDays`, 1,000 at a time.
+   * Raw SQL on purpose: the tenant extension refuses any Prisma delete here, which keeps every other path insert-only.
+   */
+  async prune(keepDays: number, now = this.clock.now()): Promise<number> {
+    const before = new Date(now.getTime() - keepDays * 24 * 60 * 60_000).toISOString().slice(0, 23).replace("T", " ");
+    let total = 0;
+    for (;;) {
+      const n = await this.prisma.$executeRaw`DELETE FROM OperatorAuditEvent WHERE at < ${before} LIMIT 1000`;
+      total += n;
+      if (n < 1000) return total;
     }
   }
 }
