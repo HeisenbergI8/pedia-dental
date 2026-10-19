@@ -16,5 +16,6 @@ import { PaymentsService } from "./payments.service";
   imports: [BillingRecordsModule, IdempotencyModule, PatientsModule, PlanModule, VisitsModule, AppointmentRecordsModule, ClinicModule, AuditModule],
   controllers: [BillingController],
   providers: [InvoicesService, PaymentsService],
+  exports: [InvoicesService, PaymentsService], // B13c2a: the copy of records reads a child's bills and payments
 })
 export class BillingModule {}

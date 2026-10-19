@@ -34,6 +34,8 @@ import { StorageModule } from "./storage/storage.module";
 import { PhotosModule } from "./photos/photos.module";
 import { PortalModule } from "./portal/portal.module";
 import { DocumentsModule } from "./documents/documents.module";
+import { RecordsCopyModule } from "./records-copy/records-copy.module";
+import { AuditLogModule } from "./audit-log/audit-log.module";
 import { MetricsMiddleware } from "./metrics/metrics.middleware";
 import { MetricsModule } from "./metrics/metrics.module";
 import { OperatorAuditModule } from "./operator-audit/operator-audit.module";
@@ -67,6 +69,8 @@ export class AppModule implements NestModule {
         StorageModule,
         PhotosModule,
         DocumentsModule,
+        RecordsCopyModule,
+        AuditLogModule,
         AuthModule,
         PortalModule,
         ClinicModule,

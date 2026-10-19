@@ -12,6 +12,7 @@ import { DownloadDocumentButton } from "@/features/documents/components/download
 import { formatDate } from "@/lib/format";
 import { useRecordPrivacyConsent, useSetPrivacyChoices } from "../api";
 import { PrivacyConsentDialog } from "./privacy-consent-dialog";
+import { RecordsCopyButton } from "./records-copy-button";
 
 const yesNo = (on: boolean | undefined) => (on === undefined ? "Not recorded" : on ? "Yes" : "No");
 const day = (iso: string) => formatDate(iso.slice(0, 10));
@@ -86,6 +87,11 @@ export function PrivacyCard({ patient: p }: { patient: PatientView }) {
           <p className="text-ink-muted">To withdraw consent to treatment records, the parent contacts the clinic in writing. The records are kept as the law requires.</p>
         </div>
       )}
+      {/* Access to one's records doesn't depend on consent, so this shows either way. */}
+      <div className="mt-4 space-y-1.5 border-t border-line pt-3 text-sm">
+        <RecordsCopyButton patientId={p.id} label="Download a copy of records" />
+        <p className="text-ink-muted">For a parent who asks to see or take their child&apos;s records. A JSON file of everything you can see here; the download is logged.</p>
+      </div>
       </div>
       {recording && (
         <PrivacyConsentDialog

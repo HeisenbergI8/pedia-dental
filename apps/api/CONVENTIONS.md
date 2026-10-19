@@ -6,9 +6,10 @@ The Primolar backend. It replaces the browser mocks (MSW) in `apps/web` **endpoi
 feature code in the web app**. The product, the users and the domain are the ones in the root `CONVENTIONS.md`
 and `ROADMAP.md`; read those first. This file covers only how the API is built.
 
-**Current phase: B1–B12, B13a, B13b and B13c1 done** (B13c1: mocks off everywhere, the port ledger, the API-backed
+**Current phase: B1–B12, B13a, B13b, B13c1 and B13c2a done** (B13c2a: the copy of records, the audit-log reader, the
+retention schedule with two prunes, `PRIVACY_OPERATIONS.md`; B13c1: mocks off everywhere, the port ledger, the API-backed
 demo with its nightly reset, and the load test; B13b: AWS CDK in `packages/infra`; the AWS deploy itself is the owner's).
-B13c2 (Data Privacy Act operations) is next, then "Patient list and search at scale". B13a added the production
+B13c2b (privacy requests and erasure) is next, then "Patient list and search at scale". B13a added the production
 build (`build.mjs`), the image (`Dockerfile`), `APP_ENV`, helmet and `trust proxy`, liveness and readiness probes,
 EMF metrics, error fingerprints and the operator's audit trail. The runtime core (request context, `Clock`, logs, tenant scoping,
 transactions, audit), `@pedia/seed`, the `test:int` suite on MySQL and CI, identity, sessions and the access guard,
@@ -79,7 +80,7 @@ Run from the repo root.
 | Bootstrap | `src/main.ts` | Env, process error handlers, metrics timer, shutdown (SIGTERM drains first). Nothing feature-specific |
 | HTTP setup | `src/http-setup.ts` | `configureHttp`: `/api` prefix, helmet, `trust proxy`, CORS. Called by `main.ts` and both test apps |
 | Metrics | `src/metrics/` | `MetricsService` (EMF lines), the timing middleware |
-| Operator audit | `src/operator-audit/` | `OperatorAuditService`, `@OperatorAudited` and its interceptor |
+| Operator audit | `src/operator-audit/` | `OperatorAuditService`, `@OperatorAudited` and its interceptor; `operator-audit.jobs.ts` (B13c2a: the prune, only with `OPERATOR_AUDIT_KEEP_DAYS`) |
 | Root module | `src/app.module.ts` | `AppModule.forRoot(env)`: provides `ENV`, `Clock`, the logger, the global error filter and the request-context middleware; imports feature modules |
 | Config | `src/config/env.ts` | Zod-validated environment, injected with `@Inject(ENV)`. The only reader of `process.env` |
 | Database | `src/prisma/` | `PrismaService`, the only database client (global module), always tenant-scoped |
@@ -102,6 +103,9 @@ Run from the repo root.
 | Idempotency | `src/idempotency/` | B8: `IdempotencyService.once` (claims the key in the write's own transaction; replays, 422 on another request), `keyOf` (the header's 400), `IdempotencyJobs` (the hourly sweep) |
 | Clinic time | `src/clinic-time.ts` | Pins the process to Asia/Manila. Imported first by `main.ts`, the seed and the backfill, and a `setupFiles` of both test runners |
 | Chart | `src/chart/` | B5: `ChartService` (reads and appends only), `chart.rules.ts` (the mock's refusals as a pure function), `chart.rows.ts` (rows ↔ `ChartEntry`, `CHART_ORDER`) |
+| Copy of records | `src/records-copy/` | B13c2a: `RecordsCopyService` (`POST /patients/:id/exports`): composes each owner's read, sections by `copySections`, signed notes only, one `export` entry. A leaf module |
+| Audit-log reader | `src/audit-log/` | B13c2a: `GET /audit-log` (a leaf controller: `AuditService.page`, keyset on `at\|id`, and `PatientsService.namesOf`) |
+| Privacy operations | `src/privacy/` | B13c2a: `RETENTION_SCHEDULE` (every model: what it holds, how long, what enforces it) and `retentionInventory()`, the table in `PRIVACY_OPERATIONS.md` |
 | Legal | `src/legal/` | `PrivacyNoticeService` (owns `PrivacyNotice`: the version in force, the Owner's save, the public read) and the public `LegalController` (`GET /legal/notices/:clinicId`) |
 | Notes | `src/notes/` | `NotesService`: templates (B3), notes and signing (B6); `note.rows.ts`, `note.rules.ts` (the mock's refusals, `checkValues`) |
 | Growth | `src/growth/` | B6: `GrowthService` (one record per visit, replaced), `growth.rows.ts` |
@@ -109,7 +113,7 @@ Run from the repo root.
 | Messages | `src/messages/` | B3: `GET`/`PUT /message-templates`. B9: `GET /messages`, `POST /due-items/:id/message`, `POST /patients/:id/birthday-greeting`; `messages.jobs.ts` (the daily birthday job, 08:05 Manila, and the dead-letter repair) |
 | Message queue | `src/message-queue/` | B9: `MessageQueueService` (the only reader and writer of `Message`: queue, withdraw, the birthday rule, the monthly count), `MessageSendHandler` (the `message.send` outbox kind), `SmsProvider` with `LogSmsProvider` and `SemaphoreSmsProvider`, `message.rows.ts` |
 | Outbox | `src/outbox/` | `OutboxService.enqueue(tx, …)` (the write side, inside the caller's transaction), `OutboxWorker` (claim, run, settle), `OutboxHandlers` (features register a handler per kind), `NoopHandler` |
-| Scheduled jobs | `src/jobs/`, `src/<feature>/<feature>.jobs.ts` | `JobRunner.run(job, fn)` (the `JobLock` lease). Each `@Cron` lives in the module that owns its tables: `auth.jobs.ts` (session and rate-limit sweeps), `outbox.jobs.ts` (prune), `messages.jobs.ts` (birthday greetings and the dead-letter repair, B9) |
+| Scheduled jobs | `src/jobs/`, `src/<feature>/<feature>.jobs.ts` | `JobRunner.run(job, fn)` (the `JobLock` lease). Each `@Cron` lives in the module that owns its tables: `auth.jobs.ts` (session and rate-limit sweeps), `outbox.jobs.ts` (prune), `messages.jobs.ts` (birthday greetings and the dead-letter repair, B9), `portal.jobs.ts` (expired links, 03:20 Manila) and `operator-audit.jobs.ts` (03:25, off by default), B13c2a |
 | File storage | `src/storage/` | `StorageService` (clinic-scoped keys), `FileStorage` (the driver), `LocalDiskStorage`, and the `storage.delete` outbox handler (`delete-file.handler.ts`). Import `StorageModule` where files are kept |
 | Platform files (B12) | `src/storage/` | `PlatformFilesService` (Primolar's files under `platform/<area>/`: sign-up files, receipts, the QR; no ledger, no clinic), `platformKey`/`parsePlatformKey`, `readUploads` (several named file parts), `image-form.ts` (`readImageForm`: a `data` part and one sniffed image) |
 | File storage (B10) | `src/storage/` | `S3FileStorage`, `fileStorageOf` (picks the driver), `readUpload` (busboy → temp file, `multipart.ts`), `sniff`, `LocalFilesController` (`GET /files/:token`, the local driver's signed links), the `StoredFile` ledger and `StorageService.link`/`putFile`/`usedBytes` |
@@ -279,6 +283,11 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   the query unstarted; it runs when awaited, outside the context, and is refused as "needs a clinic". Write
   `run(ctx, async () => await prisma.x.findMany())` in workers, the seed and tests.
 - **`TEST_DATABASE_URL` must end in `_test`**: every integration test empties it. `test:int` refuses anything else.
+- **A new model needs a `RETENTION_SCHEDULE` line** (`src/privacy/retention-schedule.ts`; tsc and
+  `retention-schedule.test.ts` fail without it), then `retentionInventory()`'s output pasted into `PRIVACY_OPERATIONS.md`
+  between its markers (`inventory.test.ts`).
+- **`OperatorAuditEvent` is append-only but for one path:** `OperatorAuditService.prune`, raw SQL, run only when
+  `OPERATOR_AUDIT_KEEP_DAYS` (≥ 365, confirm with counsel) is set. Every Prisma update or delete on it is still refused.
 - **Raw SQL returns integers as `bigint`** through the mariadb driver (`COUNT(*)` → `3n`). Wrap them in `Number(...)`.
 - **A deadlock in a raw query is P2010, not P2034**: the adapter's `TransactionWriteConflict` (MySQL 1213) sits in
   `meta.driverAdapterError.cause`. `isWriteConflict` (`src/prisma/transaction.ts`) accepts both; proven on MySQL.
@@ -652,6 +661,15 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   - "Ported" is the ledger, enforced in `check`, with `test:int` proving the mapped tests pass (E7).
   - The load test uses autocannon on the production bundle, with thresholds on p97.5 and p99 (E9, E10). Its misses
     were accepted for the first clinics and moved to "Patient list and search at scale" (L1).
+- **Privacy operations** (B13c2a, B13c2 `decisions.md`: U1, E1–E12, C1–C5):
+  - Legal thresholds are configurable, ship off or conservative, and are marked "confirm with counsel" (U1, C1–C5).
+  - A copy of records is JSON parsed by `RecordsCopy`, saved by the browser; files are listed, not embedded (E2). It
+    holds what the caller may read (`RECORDS_COPY_SECTIONS`, tested against `CLINIC_RULES`), the rest named in `omitted`
+    (E3), through each owner's own read (E4); signed notes only (E5).
+  - The audit log is cursor-paged, newest first, 50 a page, with the child's name added by the server (E6); the screen
+    is the Owner's Settings → Privacy tab (E7), "Load older" with no total (E8).
+  - Portal links are pruned 30 days after expiry (E9); the operator trail only once `OPERATOR_AUDIT_KEEP_DAYS` is set
+    (E10, C2). `RETENTION_SCHEDULE` lives in the API, total over the models (E11); no infra change (E12).
 - **Seed** (B1): `packages/seed` (`@pedia/seed`), so MSW and `prisma db seed` run the same `seedPlatform()`. Not
   `@pedia/shared`: the seed needs faker and is built from `new Date()`, which don't belong in the contract package.
 

@@ -168,9 +168,7 @@ describe("the console's accounts on MySQL (decision #25)", () => {
 
   it("is refused by every clinic route, by cookie and by bearer header", async () => {
     const token = op.slice("pd_operator=".length);
-    // POST /patients/:id/exports (B13c2's) and GET /audit-log have a rule but no controller yet, so Nest answers 404 before any guard.
-    const noController = new Set(["POST /patients/:id/exports", "GET /audit-log"]);
-    for (const rule of CLINIC_RULES.filter((r) => !noController.has(`${r.method} ${r.path}`))) {
+    for (const rule of CLINIC_RULES) {
       const path = `/api${rule.path.replace(/:\w+/g, "patient_sibling")}`;
       const method = rule.method.toLowerCase() as "get" | "post" | "put" | "patch" | "delete";
       // The operator's token in its own cookie, in the clinic cookie, and as a bearer header: none is a clinic session.

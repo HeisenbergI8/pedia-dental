@@ -11,5 +11,5 @@ import { AppointmentsController } from "./appointments.controller";
 import { AppointmentsService } from "./appointments.service";
 
 /** Appointments (B7): book, move, status and the calendar; parents' requests. The table itself is AppointmentRecordsService's (E4). */
-@Module({ imports: [AuditModule, AuthModule, ClinicModule, AppointmentRecordsModule, PatientsModule, RecallsModule, MessageQueueModule], controllers: [AppointmentsController], providers: [AppointmentsService, AppointmentRequestsService], exports: [AppointmentRequestsService] })
+@Module({ imports: [AuditModule, AuthModule, ClinicModule, AppointmentRecordsModule, PatientsModule, RecallsModule, MessageQueueModule], controllers: [AppointmentsController], providers: [AppointmentsService, AppointmentRequestsService], exports: [AppointmentsService, AppointmentRequestsService] })
 export class AppointmentsModule {}

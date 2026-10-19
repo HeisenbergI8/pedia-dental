@@ -8,6 +8,6 @@ import { VisitsModule } from "../visits/visits.module";
 import { DocumentsController } from "./documents.controller";
 import { DocumentsService } from "./documents.service";
 
-/** B10: the issued-documents log. A leaf: it reads through five owners and nothing imports it. */
-@Module({ imports: [AuditModule, PatientsModule, VisitsModule, NotesModule, BillingRecordsModule, ClinicModule], controllers: [DocumentsController], providers: [DocumentsService] })
+/** B10: the issued-documents log. A leaf: it reads through five owners; only RecordsCopyModule (a leaf) imports it. */
+@Module({ imports: [AuditModule, PatientsModule, VisitsModule, NotesModule, BillingRecordsModule, ClinicModule], controllers: [DocumentsController], providers: [DocumentsService], exports: [DocumentsService] })
 export class DocumentsModule {}

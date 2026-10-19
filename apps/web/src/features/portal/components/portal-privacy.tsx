@@ -3,6 +3,7 @@ import Link from "next/link";
 import { SectionCard } from "@/components/section-card";
 import { Can, useSession } from "@/features/auth/access";
 import { PrivacyChoiceEditor } from "@/features/patients/components/privacy-card";
+import { RecordsCopyButton } from "@/features/patients/components/records-copy-button";
 import { useActiveChild } from "../use-child";
 
 /** Privacy #15, #20 (P23): what the parent agreed to for this child; photos and reminders switch here, any time. */
@@ -27,6 +28,11 @@ export function PortalPrivacy() {
           Read the clinic&apos;s privacy notice
         </Link>
       )}
+      {/* Not behind consents.manage: a paused clinic's parent may still download (decision #44). */}
+      <div className="mt-4 space-y-1.5">
+        <RecordsCopyButton patientId={child.id} label={`Download ${child.firstName}'s records`} className="h-11" />
+        <p className="text-sm text-ink-muted">A file with {child.firstName}&apos;s details, visits booked, bills and messages, to keep or take to another dentist. For dental charts and notes, ask the clinic.</p>
+      </div>
     </SectionCard>
   );
 }

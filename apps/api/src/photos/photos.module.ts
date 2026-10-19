@@ -8,6 +8,6 @@ import { VisitsModule } from "../visits/visits.module";
 import { PhotosController } from "./photos.controller";
 import { PhotosService } from "./photos.service";
 
-/** B10: clinical photos. A leaf: nothing imports it, so it can't close a cycle. */
-@Module({ imports: [AuditModule, AuthModule, OutboxModule, PatientsModule, StorageModule, VisitsModule], controllers: [PhotosController], providers: [PhotosService] })
+/** B10: clinical photos. A leaf but for RecordsCopyModule (itself a leaf), so it can't close a cycle. */
+@Module({ imports: [AuditModule, AuthModule, OutboxModule, PatientsModule, StorageModule, VisitsModule], controllers: [PhotosController], providers: [PhotosService], exports: [PhotosService] })
 export class PhotosModule {}

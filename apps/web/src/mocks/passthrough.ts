@@ -166,6 +166,9 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "GET", path: "/clinic/subscription" },
   { method: "POST", path: "/clinic/subscription/receipts" },
   { method: "GET", path: "/clinic/subscription/receipts/:id/image" },
+  // B13c2a: the copy of records and the audit-log reader (RecordsCopyModule, AuditLogModule).
+  { method: "POST", path: "/patients/:id/exports" },
+  { method: "GET", path: "/audit-log" },
 ];
 
 export const servedBy = (routes: readonly ApiRoute[], method: string, path: string) =>

@@ -61,6 +61,7 @@ TanStack Query · React Hook Form + Zod 4 · Zustand (UI state, plus the demo se
 | Access gate | `apps/web/src/mocks/access.ts` | Route → permission (`RULES`), 401 / 403, parent ownership. `/operator/*` branches off before `sessionOf` (`operatorRefusal`); `/signups/*` and `/legal/*` too (`publicRefusal`, deny-by-default `PUBLIC_RULES`) |
 | Operator console | `apps/web/src/features/operator/`, `apps/web/src/app/operator/` | Primolar's console: clinic accounts, tiers, Owners, usage counts; sign-ups (record payment, fix, reject, approve), the price list, Set branding for Design it for me clinics; each clinic's subscription (record a month's payment, cancel). Its own sign-in, session store and routes; never a clinic user |
 | Public sign-up | `apps/web/src/features/signup/`, `apps/web/src/app/get-started/` | Get started form and the status page by reference. No sign-in; `/signups/*` answered outside every clinic |
+| Audit log | `apps/web/src/features/audit/` | B13c2a: `useAuditLog` (`useInfiniteQuery`, the cursor), the Settings → Privacy screen, the `GET /audit-log` handler |
 | Infrastructure | `packages/infra/` (`@pedia/infra`) | AWS CDK: `PrimolarFoundation` (network, RDS, S3, ECR, certificate, alerts, budget, deploy role) and `PrimolarService` (ECS, ALB, logs, alarms); settings in `cdk.json`; runbooks in `runbooks/`. Tests synthesize offline |
 
 **Read this first:** `apps/web/src/features/patients/`. Every new feature copies its shape.
@@ -156,6 +157,11 @@ the NestJS API through Next's `/api` rewrite (or, offline in `enabled` mode, an 
   takes `RegisterPatientInput`, which requires the parent's consent. Optional consents are enforced only on an explicit
   "no" (`choiceDeclined`): intraoral and extraoral uploads, and every message through `queueMessage`. A clinic's notice is
   versioned in `Db.privacyNotices`.
+- Privacy operations (B13c2a): a child's copy of records is `POST /patients/:id/exports` (`RecordsCopy`, JSON), holding
+  only the sections the caller may read (`RECORDS_COPY_SECTIONS`, `copySections`), signed notes only, logged as an export;
+  staff download it from the child's Privacy card, a parent from the portal. The trail is read with `GET /audit-log`
+  (cursor-paged by `before`, newest first; Settings → Privacy, the Owner's). `PRIVACY_OPERATIONS.md` holds the NPC
+  notes and the generated data inventory; every legal threshold is marked "confirm with counsel".
 - Branch-level reports (Today, finance, daily collections) take `?branch=` (a branch id or `all`), resolved only by
   `reportBranches(request)`. Who may ask for what is `reportBranchFilter` in `domain/tenancy.ts`: Mid and Big, two or
   more branches; `all` for the Owner.
@@ -258,6 +264,8 @@ the NestJS API through Next's `/api` rewrite (or, offline in `enabled` mode, an 
 - `handlers.test.ts` signs in by stubbing `document.cookie` (admin by default), because the mock reads the session
   from the `pd_session` cookie (`<img>` photo requests can't send headers). `describe("access control")` and
   `describe("parent portal")` stay last and restore admin in `afterAll`.
+- `lib/save-file.ts` (`saveFile`) is the only place that clicks a download link: PDFs and the copy of records go
+  through it.
 - PDFs (`@react-pdf/renderer`) must use Noto Sans from `apps/web/public/fonts/`. The built-in PDF fonts have no
   `₱` glyph. Keep the library behind the dynamic import in `features/documents/download.ts` so it stays out of
   page bundles.

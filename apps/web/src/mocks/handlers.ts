@@ -1,4 +1,5 @@
 import { appointmentHandlers } from "@/features/appointments/mocks";
+import { auditHandlers } from "@/features/audit/mocks";
 import { authHandlers } from "@/features/auth/mocks";
 import { portalHandlers } from "@/features/portal/mocks";
 import { billingHandlers } from "@/features/billing/mocks";
@@ -13,6 +14,7 @@ import { operatorHandlers } from "@/features/operator/mocks";
 import { operatorSignupHandlers } from "@/features/operator/signup-mocks";
 import { operatorPaymentHandlers } from "@/features/operator/payment-mocks";
 import { patientHandlers } from "@/features/patients/mocks";
+import { recordsCopyHandlers } from "@/features/patients/export-mocks";
 import { photoHandlers } from "@/features/photos/mocks";
 import { planHandlers } from "@/features/plan/mocks";
 import { recallHandlers } from "@/features/recalls/mocks";
@@ -35,6 +37,7 @@ export const handlers = [
   ...signupHandlers,
   ...legalHandlers,
   ...patientHandlers,
+  ...recordsCopyHandlers,
   ...clinicHandlers,
   ...visitHandlers,
   ...chartHandlers,
@@ -47,5 +50,6 @@ export const handlers = [
   ...billingHandlers,
   ...messageHandlers,
   ...documentHandlers,
+  ...auditHandlers,
   ...dashboardHandlers,
 ];
