@@ -53,3 +53,14 @@ Open questions settled (user: "fix it, merge only if the load test proves it"): 
 - `message-sending.int` "retries after about 1, 5 and 30 minutes…": the last drain now handles the dead letter's `standing.refresh` row (1), then nothing (0), and the provider still saw 4 tries.
 - `retention-schedule.test.ts` unchanged: the reconcile is not a retention job.
 **Gate:** `pnpm run check` exit 0 (api 567, shared 253, web 416, infra 41, seed 31). `test:int` over appointments, visits, notes, billing, billing-races, recalls, message-sending, messages, messages-races, seed, jobs, outbox, message-queue, idempotency, appointment-requests: 254 tests, 1 failed (the drain count above), fixed; `message-sending.int` re-run 11 passed.
+
+## Phase 6: The list in SQL — 2026-10-19
+
+**Steps completed:** 6.1, 6.2
+**Files changed:** `apps/api/src/patients/patient-standing.ts`, `apps/api/src/patients/patient-standing.test.ts`, `apps/api/src/patients/patients.service.ts`, `apps/api/src/patients/patient.views.ts`, `apps/api/test/int/support/standing-oracle.ts` (new)
+**Deviations from plan:**
+- `standingPage` (and its `byKey`, `Named`, `Standing`) moved unchanged to `test/int/support/standing-oracle.ts` as Phase 7's oracle, as the plan says; its old unit cases (which tested that JS) are replaced by the SQL builders' cases (3), so the api unit count goes 567 → 563.
+- `toSummary` takes `{ lastVisitOn?, recallDueOn?, balance, flags }` instead of `Pick<Standing, …>`.
+- `PatientsService` no longer injects `DueItemsService` or `MessageQueueService` (unused after `names()` and the four reader calls went). `names()` had no other caller.
+- Each count is `COALESCE(SUM(cond), 0)` aliased by its filter and read by key (a SUM over no rows is NULL).
+**Gate:** `patient-standing.test.ts` 3 passed; `test:int patients-read` 17 passed (the list cases compare against the mock's computation over the seed); `pnpm run check` exit 0 (api 563, shared 253, web 416, infra 41, seed 31).

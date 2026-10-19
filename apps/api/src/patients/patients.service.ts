@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, type OnModuleInit } from "@nestjs/common";
 import {
-  PATIENT_SEARCH_LIMIT, PatientHeaderSummary, PatientPage, accountCredit, accountSummary, findDuplicates, permissionScopeFor, rolesCan, searchWords,
+  PATIENT_SEARCH_LIMIT, PatientFilter, PatientHeaderSummary, PatientPage, accountCredit, listBounds, pageWindow, standingOn, accountSummary, findDuplicates, permissionScopeFor, rolesCan, searchWords,
   type DuplicateMatch, type Patient, type PatientListQuery, type PatientView,
 } from "@pedia/shared";
 import { AuditService } from "../audit/audit.service";
@@ -10,18 +10,17 @@ import { requireContext } from "../common/request-context";
 import { Prisma } from "../generated/prisma/client.ts";
 import { PrismaService } from "../prisma/prisma.service";
 import { BillingRecordsService } from "../billing-records/billing-records.service";
-import { DueItemsService } from "../recalls/due-items.service";
 import { StorageService } from "../storage/storage.service";
 import type { Tx } from "../prisma/transaction";
 import { VisitDaysService } from "../visits/visit-days.service";
 import { PATIENT_NOT_FOUND } from "./patient-lock";
 import { photoFileName } from "./patient-photo";
-import { MessageQueueService } from "../message-queue/message-queue.service";
-import { standingPage, type Named } from "./patient-standing";
+import { countsSql, filterSql, orderSql } from "./patient-standing";
 import { scopeCondition, searchCondition } from "./patient-search";
 import { inScope, toDuplicate, toPatient, toSummary, visibleTo, type Viewer } from "./patient.views";
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+const day = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : undefined); // a @db.Date: UTC midnight
 
 /** The patient reads (features/patients/mocks.ts). Every response passes through visibleTo or toSummary. */
 @Injectable()
@@ -31,10 +30,8 @@ export class PatientsService implements OnModuleInit {
     private readonly audit: AuditService,
     private readonly storage: StorageService,
     private readonly visitDays: VisitDaysService,
-    private readonly dueItems: DueItemsService,
     private readonly clock: Clock,
     private readonly billing: BillingRecordsService,
-    private readonly messages: MessageQueueService,
     private readonly restrictions: PatientRestrictions,
   ) {}
 
@@ -114,11 +111,23 @@ export class PatientsService implements OnModuleInit {
 
   /** GET /patient-summaries: search (SQL), then the mock's standing, filters, counts, sort and page (E7). */
   async summaries(viewer: Viewer, query: PatientListQuery): Promise<PatientPage> {
-    const matched = await this.names(await this.matching(viewer, query.q)); // every match: the counts need them all
-    const ids = matched.map((p) => p.id);
-    const [facts, due, bills, lastTried] = await Promise.all([this.visitDays.facts(ids), this.dueItems.openFor(ids), this.billing.billTotals(ids), this.messages.lastTried(ids)]);
+    // B14: counts, filter, sort and page in SQL over the stored standing (D2): two queries whatever the clinic's size.
+    const today = this.clock.today();
+    const bounds = listBounds(today);
     const money = rolesCan(viewer.roles, "billing.view");
-    const { rows, total, page, counts } = standingPage(matched, facts, due, bills, lastTried, query, this.clock.today(), money);
+    const where = this.where(viewer, query.q);
+    const [c] = await this.prisma.$queryRaw<Record<PatientFilter, unknown>[]>`SELECT ${countsSql(bounds)} FROM Patient WHERE ${where}`;
+    const counts = Object.fromEntries(PatientFilter.options.map((f) => [f, Number(c![f])])) as Record<PatientFilter, number>;
+    const total = counts[query.filter];
+    const { page, offset } = pageWindow(total, query.page, query.pageSize);
+    const sort = query.sort === "balance" && !money ? "name" : query.sort; // the mock's leak guard (mocks.ts:144)
+    const stored = await this.prisma.$queryRaw<{ id: string; lastVisitOn: Date | null; nextDueOn: Date | null; balance: number; noContact: unknown }[]>`
+      SELECT id, lastVisitOn, nextDueOn, balance, noContact FROM Patient WHERE ${where} AND ${filterSql(query.filter, bounds)}
+      ORDER BY ${orderSql(sort)} LIMIT ${query.pageSize} OFFSET ${offset}`;
+    const rows = stored.map((r) => ({
+      id: r.id,
+      ...standingOn({ lastVisitOn: day(r.lastVisitOn), nextDueOn: day(r.nextDueOn), balance: Number(r.balance), noContact: Number(r.noContact) === 1 }, today),
+    }));
     const patients = await this.records(rows.map((r) => r.id)); // the page's records, in the page's order
     const siblings = await this.siblingsOf(viewer, patients);
     const standing = new Map(rows.map((r) => [r.id, r]));
@@ -198,14 +207,6 @@ export class PatientsService implements OnModuleInit {
     const cap = limit === undefined ? Prisma.empty : Prisma.sql` LIMIT ${limit}`;
     const rows = await this.prisma.$queryRaw<{ id: string }[]>`SELECT id FROM Patient WHERE ${this.where(viewer, q)} ORDER BY lastName, firstName, id${cap}`;
     return rows.map((r) => r.id);
-  }
-
-  /** What the list sorts by, in `ids`' order. */
-  private async names(ids: readonly string[]): Promise<Named[]> {
-    if (!ids.length) return [];
-    const rows = await this.prisma.patient.findMany({ where: { id: { in: [...ids] } }, select: { id: true, firstName: true, lastName: true } });
-    const byId = new Map(rows.map((r) => [r.id, r]));
-    return ids.flatMap((id) => byId.get(id) ?? []);
   }
 
   private where(viewer: Viewer, q: string): Prisma.Sql {
