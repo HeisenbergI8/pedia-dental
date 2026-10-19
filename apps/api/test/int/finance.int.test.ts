@@ -50,6 +50,7 @@ const choices = () => [
   { name: "Imus (admin's device)", cookie: admin, query: "", clinic: DEMO_CLINIC_ID, branches: [IMUS] },
   { name: "Dasmariñas (Owner)", cookie: owner, query: `&branch=${DASMA}`, clinic: DEMO_CLINIC_ID, branches: [DASMA] },
   { name: "all (Owner)", cookie: owner, query: "&branch=all", clinic: DEMO_CLINIC_ID, branches: [IMUS, DASMA] },
+  { name: "Dasmariñas (Owner's device, no branch asked)", cookie: `${owner}; pd_branch=${DASMA}`, query: "", clinic: DEMO_CLINIC_ID, branches: [DASMA] },
 ];
 
 describe("the financial dashboard matches the mock's financeSummary (done-when)", () => {
@@ -110,6 +111,8 @@ describe("the financial dashboard matches the mock's financeSummary (done-when)"
     for (const c of choices()) expect(await report(c.cookie, `?today=${today}${c.query}`), c.name).toEqual(await expected(c.clinic, c.branches));
     const all = await report(owner, `?today=${today}&branch=all`);
     expect(all.outstanding.map((o) => o.patientId)).not.toContain(voided.id);
+    const day = await t.ok(t.call("get", `/payments?date=${today}&branch=all`, owner), z.array(Payment));
+    expect(new Set(day.map((p) => p.branchId))).toEqual(new Set([IMUS, DASMA]));
   });
 
   it("totals what SQL sums: collected this month, the six months, outstanding and deposits (done-when)", async () => {
@@ -154,7 +157,11 @@ describe("the financial dashboard matches the mock's financeSummary (done-when)"
   it("refuses a bad day, other branches without the right, and staff without the dashboard", async () => {
     expect(await words(admin, "?today=2026-02-30")).toEqual([400, "today must be YYYY-MM-DD"]);
     expect(await words(admin, "?branch=all")).toEqual([403, "Reports across branches need two open branches you work at"]);
+    expect(await words(admin, `?today=${today}&branch=${DASMA}`)).toEqual([403, "Reports across branches need two open branches you work at"]);
+    expect((await t.call("get", `/reports/finance?today=${today}&branch=${IMUS}`, admin)).status).toBe(200);
     expect(await words(await t.as(NGITI_OWNER), "?branch=all")).toEqual([403, "Reports across branches come with the Mid and Big plans. Contact Primolar to upgrade."]);
+    const collections = await t.call("get", `/payments?date=${today}&branch=all`, await t.as(NGITI_OWNER));
+    expect([collections.status, collections.text]).toEqual([403, "Reports across branches come with the Mid and Big plans. Contact Primolar to upgrade."]);
     expect((await t.call("get", "/reports/finance", await t.as(FRONT_DESK))).status).toBe(403);
   });
 });
