@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException, type OnModuleInit } from "@nestjs/common";
 import { CreateInvoiceInput, VoidInvoiceInput, liveInvoices, rolesCan, unbilledItems, type Invoice } from "@pedia/shared";
 import { AppointmentRecordsService } from "../appointments/appointment-records.service";
 import { AuditService } from "../audit/audit.service";
+import { RecordOwners } from "../auth/record-owners";
 import type { ClinicIdentity } from "../auth/identity.service";
 import { BillingRecordsService } from "../billing-records/billing-records.service";
 import { ClinicService } from "../clinic/clinic.service";
@@ -20,7 +21,7 @@ import { INVOICE_NOT_FOUND, duplicateRefusal, invoiceAppointment, invoiceRefusal
 
 /** features/billing/mocks.ts: a patient's bills, billing done treatments, and voiding one made by mistake (decision 2). */
 @Injectable()
-export class InvoicesService {
+export class InvoicesService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly records: BillingRecordsService,
@@ -32,7 +33,13 @@ export class InvoicesService {
     private readonly clinic: ClinicService,
     private readonly audit: AuditService,
     private readonly clock: Clock,
+    private readonly owners: RecordOwners,
   ) {}
+
+  /** B13c2b: the guard finds a restricted child behind a bill (BillingRecordsService owns Invoice). */
+  onModuleInit() {
+    for (const path of ["/invoices/:id/payments", "/invoices/:id/apply-credit", "/invoices/:id/void"]) this.owners.register(path, (id) => this.records.patientOfInvoice(id));
+  }
 
   /**
    * GET /patients/:id/invoices: oldest first. Staff see voided ones too; a parent (billing.view only for their own

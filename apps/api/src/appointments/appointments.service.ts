@@ -1,5 +1,5 @@
-import { Injectable, NotFoundException, type OnModuleInit } from "@nestjs/common";
-import { ChangeAppointmentStatusInput, RescheduleAppointmentInput, rolesCan, type Appointment, type BookAppointmentInput, type Role } from "@pedia/shared";
+import { ConflictException, Injectable, NotFoundException, type OnModuleInit } from "@nestjs/common";
+import { ChangeAppointmentStatusInput, RescheduleAppointmentInput, RESTRICTED_BOOKING_MESSAGE, rolesCan, type Appointment, type BookAppointmentInput, type Role } from "@pedia/shared";
 import { AuditService } from "../audit/audit.service";
 import { RecordOwners } from "../auth/record-owners";
 import { lockAccount } from "../clinic/account-lock";
@@ -49,6 +49,7 @@ export class AppointmentsService implements OnModuleInit {
   onModuleInit() {
     // Decision 2: a parent may confirm their own child's appointment (appointments/mocks.ts:120–124; access.ts:198–205).
     this.owners.register("/appointments/:id/status", (id) => this.records.patientOf(id));
+    this.owners.register("/appointments/:id", (id) => this.records.patientOf(id)); // B13c2b: the guard's restricted check
   }
 
   /** GET /appointments: the device's branch, [from, to), by start then chair (decision 5). Not audited (decision 6). */
@@ -66,12 +67,15 @@ export class AppointmentsService implements OnModuleInit {
     return rows;
   }
 
-  /** POST /appointments: 400 body (pipe) → lock → 404 → slot refusals → 409 → write. 201. */
+  /** POST /appointments: 400 body (pipe) → lock → 404 → 409 restricted → slot refusals → 409 → write. 201. */
   async book(input: BookAppointmentInput): Promise<Appointment> {
     const branchId = requireContext().branchId!; // the device's branch (the mock's activeBranch)
     return runInTransaction(this.prisma, async (tx) => {
       await lockAccount(tx); // E1: the first statement, so the snapshot sees every booking committed before ours
       await lockPatient(tx, input.patientId); // 404 "Patient not found"; E2: account → patient
+      const patient = await this.patients.one(input.patientId, tx);
+      // B13c2b E7: the body names the child, so the guard's restricted check can't (the due list's Book still offers them).
+      if (patient.restrictedAt) throw new ConflictException(RESTRICTED_BOOKING_MESSAGE);
       const slot = { ...input, id: "", branchId, status: "booked" as const };
       const refs = await this.clinic.scheduleRefs(tx);
       refuse(slotRefusal(slot, { ...refs, existing: await this.records.near(tx, slot) }));
@@ -80,7 +84,7 @@ export class AppointmentsService implements OnModuleInit {
       // Booked from the due list: the patient's earliest open item for that rule is now booked (mocks.ts:85–91).
       await this.dueItems.takeFor(tx, booked);
       // A confirmation now, a reminder the day before, pre-visit instructions with it (mocks.ts:92), in this transaction.
-      await this.messages.queueBooking(tx, booked, await this.patients.one(input.patientId, tx));
+      await this.messages.queueBooking(tx, booked, patient);
       await this.audit.record("create", "Appointment", input.patientId, tx);
       return booked;
     });

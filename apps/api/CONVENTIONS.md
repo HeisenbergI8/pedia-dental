@@ -6,10 +6,11 @@ The Primolar backend. It replaces the browser mocks (MSW) in `apps/web` **endpoi
 feature code in the web app**. The product, the users and the domain are the ones in the root `CONVENTIONS.md`
 and `ROADMAP.md`; read those first. This file covers only how the API is built.
 
-**Current phase: B1–B12, B13a, B13b, B13c1 and B13c2a done** (B13c2a: the copy of records, the audit-log reader, the
+**Current phase: B1–B12, B13a, B13b, B13c1, B13c2a and B13c2b-1 done** (B13c2b-1: the privacy request register and
+restriction on an approved erasure; B13c2a: the copy of records, the audit-log reader, the
 retention schedule with two prunes, `PRIVACY_OPERATIONS.md`; B13c1: mocks off everywhere, the port ledger, the API-backed
 demo with its nightly reset, and the load test; B13b: AWS CDK in `packages/infra`; the AWS deploy itself is the owner's).
-B13c2b (privacy requests and erasure) is next, then "Patient list and search at scale". B13a added the production
+B13c2b-2 (anonymisation, the clinic export and purge) is next, then "Patient list and search at scale". B13a added the production
 build (`build.mjs`), the image (`Dockerfile`), `APP_ENV`, helmet and `trust proxy`, liveness and readiness probes,
 EMF metrics, error fingerprints and the operator's audit trail. The runtime core (request context, `Clock`, logs, tenant scoping,
 transactions, audit), `@pedia/seed`, the `test:int` suite on MySQL and CI, identity, sessions and the access guard,
@@ -92,7 +93,7 @@ Run from the repo root.
 | Cross-cutting | `src/common/` | `ZodValidationPipe`, `HttpErrorFilter`, the request context (`request-context*.ts`: context + request id), `Clock` (`clock.ts`), `refusal.ts` (`Refusal`, `refuse()`: the mock's plain-text refusals that rules modules return) |
 | Logging | `src/logging/logger.ts` | pino options and the redaction list (`PERSONAL_FIELDS`) |
 | Audit trail | `src/audit/` | `AuditService.record` (import `AuditModule`) |
-| Identity and access | `src/auth/` | `auth.controller.ts` / `operator-auth.controller.ts` and `auth.service.ts` (sign-in, sign-out, switch, password, acknowledgement), `rate-limit.ts` (`RATE_LIMITS`), `access-rules.ts` (the route → permission map, held to the mock's `RULES` by a test), `access.guard.ts` (the global guard), `record-owners.ts` (`RecordOwners`: features register who owns an `owner: "record"` route's record; the guard asks for parents only), `session.service.ts` (sessions), `identity.service.ts` (who a session is, PINs), `hashing.ts` (argon2id), `cookies.ts` |
+| Identity and access | `src/auth/` | `auth.controller.ts` / `operator-auth.controller.ts` and `auth.service.ts` (sign-in, sign-out, switch, password, acknowledgement), `rate-limit.ts` (`RATE_LIMITS`), `access-rules.ts` (the route → permission map, held to the mock's `RULES` by a test), `access.guard.ts` (the global guard), `record-owners.ts` (`RecordOwners`: features register who owns an `owner: "record"` route's record; the guard asks for parents, and since B13c2b for anyone without `privacy.manage` while the clinic has a restricted child), `patient-restrictions.ts` (`PatientRestrictions`: B13c2b, the restricted children's ids, a slot `PatientsService` fills), `session.service.ts` (sessions), `identity.service.ts` (who a session is, PINs), `hashing.ts` (argon2id), `cookies.ts` |
 | Clinic | `src/clinic/` | The account and its setup: `ClinicService` (context, profile, branding, logo, usage, chairs, procedures), `BranchesService`, `StaffService`; `limits.ts` (tier limits, from `TIER_LIMITS`), `account-lock.ts` (`ownClinicId`, `lockAccount`), `logo.ts` (`cleanLogo`: type sniffing and the SVG sanitiser), row shaping in `clinic.views.ts` |
 | Patients | `src/patients/` | `PatientsService` (reads: `records`/`one` for other features, search, the list, the header summary, duplicates, the photo), `PatientWritesService` (register, edit, quick update, consents, privacy consent and choices, the photo swap), `patient.views.ts` (`visibleTo`: **the only producer of `PatientView`**; `toPatient`, `toSummary`, `viewerOf`), `patient.rows.ts` (contract → rows, the edit rules), `patient-search.ts` (the search as SQL), `patient-photo.ts`, `patient-lock.ts` (`lockPatient`, `lockPatientIfExists`). `FamilyService` (a parent's children) sits in its own `FamilyModule`, imported by `AuthModule` and `PatientsModule` |
 | Visits | `src/visits/` | B5: `VisitsService` (list, start, complete, `forPatient` for the chart; B7 seats and finishes the appointment), `visit.rows.ts` (rows ↔ `Visit`), `VisitDaysService` (the days patients were seen: completed visits and done appointments) in its own `VisitDaysModule`, imported by `PatientsModule` |
@@ -105,6 +106,7 @@ Run from the repo root.
 | Chart | `src/chart/` | B5: `ChartService` (reads and appends only), `chart.rules.ts` (the mock's refusals as a pure function), `chart.rows.ts` (rows ↔ `ChartEntry`, `CHART_ORDER`) |
 | Copy of records | `src/records-copy/` | B13c2a: `RecordsCopyService` (`POST /patients/:id/exports`): composes each owner's read, sections by `copySections`, signed notes only, one `export` entry. A leaf module |
 | Audit-log reader | `src/audit-log/` | B13c2a: `GET /audit-log` (a leaf controller: `AuditService.page`, keyset on `at\|id`, and `PatientsService.namesOf`) |
+| Privacy requests | `src/privacy-requests/` | B13c2b-1: `PrivacyRequestsService` (the only reader and writer of `PrivacyRequest`: list, log, close; closing an erasure as done restricts the child, refused while they have upcoming appointments or a pending request). A leaf module |
 | Privacy operations | `src/privacy/` | B13c2a: `RETENTION_SCHEDULE` (every model: what it holds, how long, what enforces it) and `retentionInventory()`, the table in `PRIVACY_OPERATIONS.md` |
 | Legal | `src/legal/` | `PrivacyNoticeService` (owns `PrivacyNotice`: the version in force, the Owner's save, the public read) and the public `LegalController` (`GET /legal/notices/:clinicId`) |
 | Notes | `src/notes/` | `NotesService`: templates (B3), notes and signing (B6); `note.rows.ts`, `note.rules.ts` (the mock's refusals, `checkValues`) |
@@ -286,6 +288,15 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **A new model needs a `RETENTION_SCHEDULE` line** (`src/privacy/retention-schedule.ts`; tsc and
   `retention-schedule.test.ts` fail without it), then `retentionInventory()`'s output pasted into `PRIVACY_OPERATIONS.md`
   between its markers (`inventory.test.ts`).
+- **Every `owner: "record"` rule has a `RecordOwners` registration** (B13c2b; `parent-ownership.int.test.ts`): the
+  guard needs the record's child to refuse a restricted one. A new record route registers its lookup in its service's
+  `onModuleInit`.
+- **A restricted child is hidden by `restrictedAt IS NULL`** (or `restrictedAt: null`) in `PatientsService.where`,
+  `basics`, `duplicates`, `siblingsOf` and `FamilyService.childrenOf`: a new patient list adds it. No test sweeps every
+  list. Clinic-wide logs (calendar, documents, collections, request inbox) still name one (B13c2b-1 Q3); the due list
+  leaves them out (`DueItemsService.list`, its Book would book them). The guard can't see a child named only in a body:
+  `POST /appointments` refuses a restricted one itself (409, `RESTRICTED_BOOKING_MESSAGE`). A new body-only route does
+  the same.
 - **`OperatorAuditEvent` is append-only but for one path:** `OperatorAuditService.prune`, raw SQL, run only when
   `OPERATOR_AUDIT_KEEP_DAYS` (≥ 365, confirm with counsel) is set. Every Prisma update or delete on it is still refused.
 - **Raw SQL returns integers as `bigint`** through the mariadb driver (`COUNT(*)` → `3n`). Wrap them in `Number(...)`.
@@ -661,6 +672,14 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   - "Ported" is the ledger, enforced in `check`, with `test:int` proving the mapped tests pass (E7).
   - The load test uses autocannon on the production bundle, with thresholds on p97.5 and p99 (E9, E10). Its misses
     were accepted for the first clinics and moved to "Patient list and search at scale" (L1).
+- **Privacy requests** (B13c2b-1, its `decisions.md` E1–E14):
+  - `privacy.manage` is the Owner's and admins' (E1); staff log a request on the parent's behalf (E2); the deadline is
+    `addWorkingDays(receivedOn, PRIVACY_REQUEST_DUE_WORKING_DAYS)`, stored when logged, holidays not skipped (E3, C4:
+    confirm with counsel); open requests unpaged, closed ones cursor-paged on `closedAt|id` (E4).
+  - Approving an erasure restricts in the closing transaction, with no lift in the app (E5); restriction hides the
+    child, refuses every route naming them without `privacy.manage` (logged `denied`), turns photos and reminders
+    off and takes the child out of their families (E6); refused while upcoming appointments or a pending request (E7).
+  - Lock order account → patient → request. `PrivacyRequest` is kept (E14).
 - **Privacy operations** (B13c2a, B13c2 `decisions.md`: U1, E1–E12, C1–C5):
   - Legal thresholds are configurable, ship off or conservative, and are marked "confirm with counsel" (U1, C1–C5).
   - A copy of records is JSON parsed by `RecordsCopy`, saved by the browser; files are listed, not embedded (E2). It

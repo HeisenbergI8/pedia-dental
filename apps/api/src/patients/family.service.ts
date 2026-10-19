@@ -12,10 +12,16 @@ export type FamilyGuardian = { guardianId: string; fullName: string; phone: stri
 export class FamilyService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** The patient ids listing this guardian. Computed per request, as the mock does: never cached on a session. */
+  /**
+   * The patient ids listing this guardian. Computed per request, as the mock does: never cached on a session.
+   * B13c2b E6: a restricted child isn't the parent's any more, so a parent left with none can't sign in, and an open
+   * session ends on its next request (IdentityService.forSession).
+   */
   async childrenOf(guardianId: string): Promise<ReadonlySet<string>> {
     const rows = await this.prisma.patientGuardian.findMany({ where: { guardianId }, select: { patientId: true } });
-    return new Set(rows.map((r) => r.patientId));
+    if (!rows.length) return new Set();
+    const open = await this.prisma.patient.findMany({ where: { id: { in: rows.map((r) => r.patientId) }, restrictedAt: null }, select: { id: true } });
+    return new Set(open.map((p) => p.id));
   }
 
   /** One guardian as a child's record has them (B11: the portal invites them). Undefined: not on this child. */

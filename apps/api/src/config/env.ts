@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PRIVACY_REQUEST_DUE_WORKING_DAYS_DEFAULT } from "@pedia/shared";
 
 /** "true"/"1" or "false"/"0" only: Zod's default also takes yes/on/enabled, and a typo should stop startup. */
 const flag = () => z.stringbool({ truthy: ["true", "1"], falsy: ["false", "0"] });
@@ -33,6 +34,9 @@ const Env = z.object({
   // B13c2a (decisions.md C2): days to keep Primolar's operator audit trail. CONFIRM WITH COUNSEL before setting it.
   // Unset (the default): nothing is ever pruned. At least 365, so a typo can't empty the trail. Proposed: 1826 (5 years).
   OPERATOR_AUDIT_KEEP_DAYS: z.coerce.number().int().min(365, "OPERATOR_AUDIT_KEEP_DAYS must be at least 365 (one year)").optional(),
+  // B13c2b (decisions.md E3, C4): working days to answer a data-subject request, Monday to Friday. CONFIRM WITH COUNSEL.
+  // Stored on each request when it is logged, so a change moves only new deadlines.
+  PRIVACY_REQUEST_DUE_WORKING_DAYS: z.coerce.number().int().min(1).max(60, "PRIVACY_REQUEST_DUE_WORKING_DAYS is at most 60").default(PRIVACY_REQUEST_DUE_WORKING_DAYS_DEFAULT),
   // The local-disk storage driver's root, relative to the API's working directory (used when S3_BUCKET is unset, B10).
   STORAGE_DIR: z.string().min(1).default("var/storage"),
   // B10 (E11): the S3-compatible driver. Unset S3_BUCKET: the local-disk driver under STORAGE_DIR.

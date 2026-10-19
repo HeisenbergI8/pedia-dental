@@ -5,6 +5,7 @@ import {
   BookAppointmentInput,
   ChangeAppointmentStatusInput,
   CreateAppointmentRequestInput,
+  RESTRICTED_BOOKING_MESSAGE,
   RescheduleAppointmentInput,
   canReschedule,
   canTransition,
@@ -74,9 +75,9 @@ export const appointmentHandlers = [
   http.post(url("/appointments"), async ({ request }) => {
     const parsed = BookAppointmentInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
-    if (!db.patients.some((p) => p.id === parsed.data.patientId)) {
-      return new HttpResponse("Patient not found", { status: 404 });
-    }
+    const patient = db.patients.find((p) => p.id === parsed.data.patientId);
+    if (!patient) return new HttpResponse("Patient not found", { status: 404 });
+    if (patient.restrictedAt) return new HttpResponse(RESTRICTED_BOOKING_MESSAGE, { status: 409 }); // B13c2b E7
     const branchId = activeBranch(request).id; // booked at the branch this device is on
     const appointment: Appointment = { ...parsed.data, id: crypto.randomUUID(), clinicId: currentClinicId(), branchId, status: "booked" };
     const rejected = rejectSlot(appointment);

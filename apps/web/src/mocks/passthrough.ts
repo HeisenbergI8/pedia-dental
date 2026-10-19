@@ -169,6 +169,10 @@ export const API_ROUTES: readonly ApiRoute[] = [
   // B13c2a: the copy of records and the audit-log reader (RecordsCopyModule, AuditLogModule).
   { method: "POST", path: "/patients/:id/exports" },
   { method: "GET", path: "/audit-log" },
+  // B13c2b: the privacy request register (PrivacyRequestsModule).
+  { method: "GET", path: "/privacy-requests" },
+  { method: "POST", path: "/privacy-requests" },
+  { method: "POST", path: "/privacy-requests/:id/close" },
 ];
 
 export const servedBy = (routes: readonly ApiRoute[], method: string, path: string) =>

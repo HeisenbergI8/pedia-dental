@@ -288,6 +288,7 @@ export function seed(): Db {
     acknowledgements: staffAcknowledged(CLINIC_ID, STAFF),
     portalAccounts: [], // filled by seedPlatform (B11)
     storedFiles: [], // filled by seedPlatform (B12)
+    privacyRequests: [], // B13c2b: none seeded
   };
 }
 

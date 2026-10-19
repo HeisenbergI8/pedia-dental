@@ -30,6 +30,7 @@ export const RETENTION_SCHEDULE = {
   // Audit
   AuditEvent: { holds: "audit trail", keep: "While the clinic's records are kept (confirm with counsel)", enforcedBy: "kept", counsel: true },
   OperatorAuditEvent: { holds: "audit trail", keep: "OPERATOR_AUDIT_KEEP_DAYS once confirmed with counsel (proposed 5 years); unset keeps it forever", enforcedBy: "operator-audit.prune", counsel: true },
+  PrivacyRequest: { holds: "audit trail", keep: "While the clinic's records are kept: how each request was answered (confirm with counsel)", enforcedBy: "kept", counsel: true },
   // The clinic's setup and logins
   Branch: SETUP, Staff: SETUP, Chair: SETUP, Procedure: SETUP, NoteTemplate: SETUP, MessageTemplate: SETUP,
   Acknowledgement: { ...SETUP, holds: "audit trail", counsel: true }, PrivacyNotice: SETUP,

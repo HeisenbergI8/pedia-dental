@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException, type OnModuleInit } from "@nestjs/common";
 import { AppointmentRequestStatus, CreateAppointmentRequestInput, type AppointmentRequest } from "@pedia/shared";
 import { AuditService } from "../audit/audit.service";
+import { RecordOwners } from "../auth/record-owners";
 import { Clock } from "../common/clock";
 import { refuse } from "../common/refusal";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
@@ -8,19 +9,35 @@ import { lockPatient } from "../patients/patient-lock";
 import { PatientsService } from "../patients/patients.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { clinicData } from "../prisma/tenant-scope";
-import { runInTransaction } from "../prisma/transaction";
+import { runInTransaction, type Tx } from "../prisma/transaction";
 import { REQUEST_NOT_FOUND, requestRefusal } from "./appointment.rules";
 import { REQUEST_COLUMNS, REQUEST_ORDER, toRequest } from "./request.rows";
 
 /** features/appointments/mocks.ts:137–183. One pending request per child holds under the patient's lock. */
 @Injectable()
-export class AppointmentRequestsService {
+export class AppointmentRequestsService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly patients: PatientsService,
     private readonly audit: AuditService,
     private readonly clock: Clock,
+    private readonly owners: RecordOwners,
   ) {}
+
+  /** B13c2b: the guard finds a restricted child behind a request. */
+  onModuleInit() {
+    this.owners.register("/appointment-requests/:id/handled", (id) => this.patientOf(id));
+  }
+
+  /** B13c2b: the request's child, for the guard. Undefined for an unknown request or another clinic's (tenant extension). */
+  async patientOf(id: string): Promise<string | undefined> {
+    return (await this.prisma.appointmentRequest.findUnique({ where: { id }, select: { patientId: true } }))?.patientId;
+  }
+
+  /** B13c2b E7: whether the child has a request waiting for the clinic. */
+  async pendingFor(tx: Tx, patientId: string): Promise<boolean> {
+    return (await tx.appointmentRequest.count({ where: { patientId, status: "pending" } })) > 0;
+  }
 
   /** GET /appointment-requests: newest first; ?status= narrows when it parses (mocks.ts:140). Not audited (decision 6). */
   async list(status: unknown): Promise<AppointmentRequest[]> {

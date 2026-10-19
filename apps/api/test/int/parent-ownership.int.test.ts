@@ -67,6 +67,11 @@ describe("a parent's ownership on every route they can pass (B11 E12)", () => {
     expect(PARENT_ROUTES.filter((r) => r.owner === "record").filter((r) => !owners.has(r.path)).map((r) => r.path)).toEqual([]);
   });
 
+  it("registers an owner for every record route, so the guard can find a restricted child (B13c2b)", () => {
+    const owners = app.get(RecordOwners);
+    expect(CLINIC_RULES.filter((r) => r.owner === "record" && !owners.has(r.path)).map((r) => r.path)).toEqual([]);
+  });
+
   it.each(PARENT_CASES)("%s: 403 for another family's child, never for their own", async (_, rule) => {
     const theirs = await call(rule.method, pathFor(rule, "theirs"));
     expect([theirs.status, theirs.text]).toEqual([403, "This isn't one of your children's records"]);

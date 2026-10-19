@@ -102,6 +102,10 @@ export const CLINIC_RULES: readonly ClinicRule[] = [
   { method: "GET", path: "/reports/finance", permission: "dashboard.view" },
   { method: "GET", path: "/reports/today", permission: "today.view" },
   { method: "GET", path: "/audit-log", permission: "audit.view" },
+  // B13c2b: the privacy request register (decisions.md E1: the Owner and admins).
+  { method: "GET", path: "/privacy-requests", permission: "privacy.manage" },
+  { method: "POST", path: "/privacy-requests", permission: "privacy.manage" },
+  { method: "POST", path: "/privacy-requests/:id/close", permission: "privacy.manage" },
 ];
 
 /** OPERATOR_RULES in the mock: one question only, "is this a Primolar operator?" (decision #25). */

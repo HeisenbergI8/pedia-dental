@@ -54,6 +54,7 @@ export const MODEL_SCOPE = {
   PatientDocument: "clinic",
   StoredFile: "clinic",
   PortalAccount: "clinic", // B11
+  PrivacyRequest: "clinic", // B13c2b: the request register. Not append-only: a request is closed in place, once.
   // Platform: Primolar's own records
   ClinicAccount: "platform",
   Agreement: "platform",

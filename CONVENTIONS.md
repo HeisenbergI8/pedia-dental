@@ -62,6 +62,7 @@ TanStack Query · React Hook Form + Zod 4 · Zustand (UI state, plus the demo se
 | Operator console | `apps/web/src/features/operator/`, `apps/web/src/app/operator/` | Primolar's console: clinic accounts, tiers, Owners, usage counts; sign-ups (record payment, fix, reject, approve), the price list, Set branding for Design it for me clinics; each clinic's subscription (record a month's payment, cancel). Its own sign-in, session store and routes; never a clinic user |
 | Public sign-up | `apps/web/src/features/signup/`, `apps/web/src/app/get-started/` | Get started form and the status page by reference. No sign-in; `/signups/*` answered outside every clinic |
 | Audit log | `apps/web/src/features/audit/` | B13c2a: `useAuditLog` (`useInfiniteQuery`, the cursor), the Settings → Privacy screen, the `GET /audit-log` handler |
+| Privacy requests | `apps/web/src/features/privacy-requests/` | B13c2b-1: the register's hooks, its card and dialogs in Settings → Privacy, and the `/privacy-requests` handlers (restriction on an approved erasure) |
 | Infrastructure | `packages/infra/` (`@pedia/infra`) | AWS CDK: `PrimolarFoundation` (network, RDS, S3, ECR, certificate, alerts, budget, deploy role) and `PrimolarService` (ECS, ALB, logs, alarms); settings in `cdk.json`; runbooks in `runbooks/`. Tests synthesize offline |
 
 **Read this first:** `apps/web/src/features/patients/`. Every new feature copies its shape.
@@ -162,6 +163,12 @@ the NestJS API through Next's `/api` rewrite (or, offline in `enabled` mode, an 
   staff download it from the child's Privacy card, a parent from the portal. The trail is read with `GET /audit-log`
   (cursor-paged by `before`, newest first; Settings → Privacy, the Owner's). `PRIVACY_OPERATIONS.md` holds the NPC
   notes and the generated data inventory; every legal threshold is marked "confirm with counsel".
+- Privacy requests (B13c2b-1): `GET/POST /privacy-requests`, `POST /privacy-requests/:id/close` (`privacy.manage`: the
+  Owner and admins); due in working days (`addWorkingDays`, `PRIVACY_REQUEST_DUE_WORKING_DAYS`, 15, confirm with
+  counsel). An erasure closed as done sets `Patient.restrictedAt`: the child leaves every list, search and family, and
+  every route naming them is refused without `privacy.manage` (the gate and the guard). A body names the child on
+  `POST /appointments` only, so booking refuses a restricted child itself (409, everyone) and the due list omits them. Settings → Privacy holds the
+  register above the audit log.
 - Branch-level reports (Today, finance, daily collections) take `?branch=` (a branch id or `all`), resolved only by
   `reportBranches(request)`. Who may ask for what is `reportBranchFilter` in `domain/tenancy.ts`: Mid and Big, two or
   more branches; `all` for the Owner.
@@ -188,7 +195,7 @@ the NestJS API through Next's `/api` rewrite (or, offline in `enabled` mode, an 
 - **A new route needs its API controller and its MSW handler.** `passthrough.test.ts` fails when a handler's route is
   missing from `API_ROUTES`; a new web handler test needs a twin API test or a line in `apps/api/test/port-ledger.ts`.
 - In `enabled` mode only, mock data lives in `localStorage`. After changing `seed()` or `Db`, bump the key in `mocks/db.ts`
-  or clear storage, or you'll keep seeing old data. The key is `pedia-dental:mock-db:v31`; each bump gets a
+  or clear storage, or you'll keep seeing old data. The key is `pedia-dental:mock-db:v32`; each bump gets a
   one-line comment above it saying why.
 - The mock store is partitioned by clinic account: `Platform = { accounts, tenants, signups, prices, subscriptions, agreements, priceChanges, paymentQr, receipts }`
   in `mocks/db.ts`. Sign-ups, prices, subscriptions and agreements are Primolar's, never inside a tenant. `db` is a

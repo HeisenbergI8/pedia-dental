@@ -99,6 +99,8 @@ export const Patient = ClinicScoped.extend({
   privacyConsent: PrivacyConsent.optional(),
   /** Privacy #13–#15: the optional consents, append-only, newest last (`currentChoices`). */
   privacyChoices: z.array(PrivacyChoice).optional(),
+  /** B13c2b E6: set when an erasure request was approved. Only the Owner and admins (privacy.manage) still read the record. */
+  restrictedAt: IsoDateTime.optional(),
   createdAt: IsoDateTime,
 });
 export type Patient = z.infer<typeof Patient>;
@@ -141,6 +143,7 @@ const PatientInputBase = Patient.omit({
   privacyChoices: true,
   patientNo: true, // server-assigned
   photoUpdatedAt: true, // set by the photo endpoints
+  restrictedAt: true, // set only by closing an erasure request (B13c2b)
 });
 
 /** Used for create, and for edit by a caller holding patients.contact (PUT replaces the whole record except consents). */

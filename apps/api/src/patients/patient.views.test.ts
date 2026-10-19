@@ -9,7 +9,7 @@ const record: PatientRecord = {
     birthDate: new Date("2019-04-12T00:00:00.000Z"), sex: "female", address: "12 Mabini St",
     emergencyName: "Lola", emergencyPhone: "0918 000 0000", allergies: [], noKnownAllergies: true, medicalConditions: [],
     medications: [], noKnownConditions: true, alerts: [], tags: ["HMO"], dentalHistory: { previousClinic: "", notes: "" },
-    profile: null, photoRef: null, photoUpdatedAt: null, createdAt: at, searchNames: "", searchPhones: "",
+    profile: null, photoRef: null, photoUpdatedAt: null, createdAt: at, searchNames: "", searchPhones: "", restrictedAt: null,
   },
   guardians: [{
     clinicId: "c1", patientId: "p1", guardianId: "g1", fullName: "Rosa Mendoza", relationship: "Mother",
@@ -61,5 +61,12 @@ describe("toSummary", () => {
   it("shows the balance only with billing.view", () => {
     expect(toSummary(desk, p, [], true, none).balance).toBe(0);
     expect(toSummary(desk, p, [], false, none)).not.toHaveProperty("balance");
+  });
+});
+
+describe("toPatient (B13c2b)", () => {
+  it("carries the restriction to whoever may still read the record", () => {
+    expect(toPatient({ ...record, row: { ...record.row, restrictedAt: at } }).restrictedAt).toBe(at.toISOString());
+    expect(toPatient(record).restrictedAt).toBeUndefined();
   });
 });

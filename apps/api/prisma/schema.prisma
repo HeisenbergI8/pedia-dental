@@ -610,12 +610,17 @@ model Patient {
   searchNames       String    @db.Text
   /// Decision 1: every guardian phone, digits only. Matched only for callers holding patients.contact. Never served.
   searchPhones      String    @db.VarChar(512)
+  /// B13c2b E6: an approved erasure request restricted the record. Only privacy.manage reads it; it leaves every list,
+  /// search and family (PatientsService.where, FamilyService.childrenOf). Anonymised later by B13c2b-2, never cleared here.
+  restrictedAt      DateTime?
 
   @@unique([clinicId, patientNo])
   /// The list's order (lastName, firstName, id) and name lookups.
   @@index([clinicId, lastName, firstName])
   /// Duplicate detection: same birth date first, then the names compared in code (findDuplicates).
   @@index([clinicId, birthDate])
+  /// B13c2b: the guard's "which children are restricted here" (PatientRestrictions), one small read per patient route.
+  @@index([clinicId, restrictedAt])
 }
 
 /// One guardian of one child (Guardian in @pedia/shared). Siblings carry the same guardianId, each in their own row:
@@ -684,6 +689,59 @@ model PrivacyChoice {
   at        DateTime
 
   @@unique([clinicId, patientId, position])
+}
+
+/// Mirrors PrivacyRequestKind, …Channel and …Status in packages/shared/src/schemas/privacy-requests.ts.
+enum PrivacyRequestKind {
+  access
+  correction
+  erasure
+  objection
+  other
+}
+
+enum PrivacyRequestChannel {
+  in_person
+  phone
+  text
+  email
+  letter
+}
+
+enum PrivacyRequestStatus {
+  open
+  done
+  declined
+}
+
+/// B13c2b: the register of data-subject requests (RA 10173), logged by the Owner or an admin (privacy.manage). Kept
+/// (RETENTION_SCHEDULE: proof of how a request was answered, confirm with counsel). Closed once; never deleted.
+model PrivacyRequest {
+  id            String                @id @default(cuid(2))
+  clinicId      String
+  /// Absent for a request about no one child (a general objection). Required for an erasure (the shared input).
+  patientId     String?
+  kind          PrivacyRequestKind
+  requesterName String                @db.VarChar(120)
+  relationship  String?               @db.VarChar(60)
+  channel       PrivacyRequestChannel
+  details       String?               @db.VarChar(500)
+  receivedOn    DateTime              @db.Date
+  /// addWorkingDays(receivedOn, PRIVACY_REQUEST_DUE_WORKING_DAYS) when logged (E3): a later setting moves nothing.
+  dueOn         DateTime              @db.Date
+  status        PrivacyRequestStatus  @default(open)
+  outcome       String?               @db.VarChar(500)
+  loggedById    String
+  loggedByName  String
+  loggedAt      DateTime
+  closedById    String?
+  closedByName  String?
+  closedAt      DateTime?
+
+  /// The open list, soonest due first.
+  @@index([clinicId, status, dueOn])
+  /// The closed pages, newest closed first (keyset on closedAt, id).
+  @@index([clinicId, status, closedAt])
 }
 
 /// Mirrors VisitStatus in packages/shared/src/schemas/visit.ts (tenant-scope.test.ts checks they match).

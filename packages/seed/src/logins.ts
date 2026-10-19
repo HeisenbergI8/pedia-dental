@@ -48,9 +48,9 @@ export const handle = (fullName: string) =>
     .replace(/[^a-z]+/g, ".")
     .replace(/^\.|\.$/g, "");
 
-/** The children listing this guardian. Ownership is exactly this, computed on every request. */
+/** The children listing this guardian, restricted ones left out (B13c2b E6, as the API's FamilyService). Computed on every request. */
 export const childrenOf = (db: Db, guardianId: string): Patient[] =>
-  db.patients.filter((p) => p.guardians.some((g) => g.id === guardianId));
+  db.patients.filter((p) => !p.restrictedAt && p.guardians.some((g) => g.id === guardianId));
 
 const primaryGuardian = (p: Patient) => p.guardians.find((g) => g.isPrimary) ?? p.guardians[0]!;
 
@@ -92,7 +92,8 @@ const parentAccount = (db: Db, g: Guardian, summary: string, phone?: string): De
  * guardian (decision 15); a number another parent already signs in with goes to the first only (decision 14).
  */
 export function allAccounts(db: Db): DemoAccountRecord[] {
-  const guardians = new Map(db.patients.flatMap((p) => p.guardians).map((g) => [g.id, g]));
+  // B13c2b E6: a guardian whose children are all restricted is no login (the API skips them at sign-in, closes the session).
+  const guardians = new Map(db.patients.filter((p) => !p.restrictedAt).flatMap((p) => p.guardians).map((g) => [g.id, g]));
   const taken = new Set<string>();
   const parents = [...guardians.values()]
     .filter((g) => portalAccountOf(db, g.id)?.state === "active")

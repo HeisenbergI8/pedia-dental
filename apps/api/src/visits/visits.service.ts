@@ -1,8 +1,9 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException, type OnModuleInit } from "@nestjs/common";
 import { StartVisitInput, type Visit } from "@pedia/shared";
 import { AppointmentRecordsService } from "../appointments/appointment-records.service";
 import { APPOINTMENT_NOT_FOUND } from "../appointments/appointment.rules";
 import { AuditService } from "../audit/audit.service";
+import { RecordOwners } from "../auth/record-owners";
 import { ClinicService } from "../clinic/clinic.service";
 import { Clock } from "../common/clock";
 import { requireContext } from "../common/request-context";
@@ -17,14 +18,20 @@ export const VISIT_NOT_FOUND = "Visit not found"; // visits/mocks.ts:59
 
 /** features/visits/mocks.ts. A visit is the only clinical row that changes (completing it); everything else appends. */
 @Injectable()
-export class VisitsService {
+export class VisitsService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly clinic: ClinicService,
     private readonly clock: Clock,
     private readonly appointments: AppointmentRecordsService,
+    private readonly owners: RecordOwners,
   ) {}
+
+  /** B13c2b: the guard finds a restricted child behind a visit route (and a parent's, were they ever allowed). */
+  onModuleInit() {
+    for (const path of ["/visits/:id/complete", "/visits/:id/growth"]) this.owners.register(path, (id) => this.patientOf(id));
+  }
 
   /** GET /patients/:id/visits, newest first (mocks.ts:13). An unknown patient has none: [], as the mock. Audited (decision 6). */
   async list(patientId: string): Promise<Visit[]> {

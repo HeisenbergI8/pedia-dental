@@ -43,6 +43,7 @@ export const dashboardHandlers = [
     if (!isDay(today)) return badDay();
     const branches = reportBranches(request);
     if (branches instanceof Response) return branches;
-    return HttpResponse.json(todaySummary(branchView(db, branches), today));
+    // B13c2b E6: no name or birthday for a restricted child (the API's PatientsService.basics).
+    return HttpResponse.json(todaySummary({ ...branchView(db, branches), patients: db.patients.filter((p) => !p.restrictedAt) }, today));
   }),
 ];

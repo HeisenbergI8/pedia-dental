@@ -21,7 +21,15 @@ describe("loadEnv", () => {
       WEB_URL: "http://localhost:3000",
       S3_REGION: "ap-southeast-1",
       S3_FORCE_PATH_STYLE: false,
+      PRIVACY_REQUEST_DUE_WORKING_DAYS: 15,
     });
+  });
+
+  it("takes the request deadline in working days, 1 to 60, default 15 (B13c2b, confirm with counsel)", () => {
+    const base = { DATABASE_URL: "mysql://u:p@h/db" };
+    expect(loadEnv({ ...base, PRIVACY_REQUEST_DUE_WORKING_DAYS: "10" }).PRIVACY_REQUEST_DUE_WORKING_DAYS).toBe(10);
+    expect(() => loadEnv({ ...base, PRIVACY_REQUEST_DUE_WORKING_DAYS: "0" })).toThrow();
+    expect(() => loadEnv({ ...base, PRIVACY_REQUEST_DUE_WORKING_DAYS: "90" })).toThrow(/at most 60/);
   });
 
   it("reads the two switches as booleans and refuses anything else", () => {

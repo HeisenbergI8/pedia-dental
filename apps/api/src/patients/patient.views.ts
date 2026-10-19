@@ -76,6 +76,7 @@ export function toPatient({ row, guardians, consents, privacyConsent, choices }:
       ? [...choices].sort((a, b) => a.position - b.position).map((c) => ({ photos: c.photos, reminders: c.reminders, by: c.by, byName: c.byName, at: c.at.toISOString() }))
       : undefined,
     createdAt: row.createdAt.toISOString(),
+    restrictedAt: row.restrictedAt?.toISOString(), // B13c2b: absent, not null, for a record in use
   });
 }
 

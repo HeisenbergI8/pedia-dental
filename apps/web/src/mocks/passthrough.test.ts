@@ -10,6 +10,8 @@ import { API_ROUTES, apiPassthrough, servedBy } from "./passthrough";
 const B12_ROUTES = 25 + 5 + 3;
 /** B13c2a: the copy of records and the audit-log reader. */
 const B13C2A_ROUTES = 2;
+/** B13c2b: the privacy request register (list, log, close). */
+const B13C2B_ROUTES = 3;
 
 const routes = [{ method: "GET", path: "/branches" }, { method: "POST", path: "/staff/:id/deactivate" }];
 
@@ -89,9 +91,10 @@ describe("which routes the API serves", () => {
       ["POST", "/auth/password-link"], ["POST", "/auth/password-link/accept"], ["POST", "/auth/password-reset"], ["GET", "/auth/demo-texts"],
     ] as const;
     for (const [method, path] of b11) expect(api(method, path), `${method} ${path}`).toBe(true);
-    expect(API_ROUTES).toHaveLength(14 + b3.length + b4.length + b5.length + b6.length + b7.length + b8.length + b9.length + b10.length + b11.length + B12_ROUTES + B13C2A_ROUTES);
+    expect(API_ROUTES).toHaveLength(14 + b3.length + b4.length + b5.length + b6.length + b7.length + b8.length + b9.length + b10.length + b11.length + B12_ROUTES + B13C2A_ROUTES + B13C2B_ROUTES);
     // B13c2a serves the copy; DELETE /notes/:id isn't a route (exact method).
     expect([api("POST", "/patients/p1/exports"), api("DELETE", "/notes/n1")]).toEqual([true, false]);
+    expect([api("GET", "/privacy-requests"), api("POST", "/privacy-requests"), api("POST", "/privacy-requests/r1/close")]).toEqual([true, true, true]); // B13c2b
     expect(api("DELETE", "/appointments/a1")).toBe(false);
     expect(api("DELETE", "/branches/b1")).toBe(false); // B12 serves /operator/accounts now (swept below)
   });

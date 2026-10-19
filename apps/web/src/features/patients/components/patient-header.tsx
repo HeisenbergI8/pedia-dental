@@ -92,6 +92,16 @@ export function PatientHeader({ patientId }: { patientId: string }) {
         </div>
       )}
       {p && <MedicalAlerts allergies={p.allergies} noKnownAllergies={p.noKnownAllergies} conditions={p.medicalConditions} alerts={p.alerts} />}
+      {/* B13c2b E6: under identity and alerts, never instead of them. Only privacy.manage still reads such a record. */}
+      {p?.restrictedAt && (
+        <p role="status" className="mt-3 flex items-start gap-2 rounded-lg border border-warning-line bg-warning-bg px-3 py-2 text-sm text-warning">
+          <ShieldAlertIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span>
+            <span className="font-semibold">Restricted on {formatDate(p.restrictedAt)}</span> after an erasure request. Only you and
+            admins can see this record; it is erased when the law allows.
+          </span>
+        </p>
+      )}
       {/* Privacy #18: a prompt, never a block. */}
       {p && !p.privacyConsent && (
         <p className="mt-2 flex items-center gap-2 text-sm text-ink-muted">

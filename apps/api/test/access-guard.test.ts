@@ -4,6 +4,8 @@ import { Test } from "@nestjs/testing";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AppModule } from "../src/app.module";
+import { AuditService } from "../src/audit/audit.service";
+import { PatientRestrictions } from "../src/auth/patient-restrictions";
 import { RecordOwners } from "../src/auth/record-owners";
 import { IdentityService, type ClinicIdentity } from "../src/auth/identity.service";
 import { SessionService } from "../src/auth/session.service";
@@ -18,6 +20,7 @@ class Routes {
   @Get("reports/finance") finance() { return "reached"; }
   @Get("operator/accounts") accounts() { return "reached"; }
   @Get("patients/:id/plan") plan() { return "reached"; }
+  @Get("patients/:id") patient() { return "reached"; }
   @Post("appointments/:id/status") status() { return "reached"; }
   @Put("notes/:id") note() { return "reached"; }
   @Get("signups/x/unruled") signupsUnruled() { return "reached"; }
@@ -27,6 +30,9 @@ class Routes {
 /** A fake RecordOwners with only the appointment route registered; `lookups` counts the guard's calls. */
 const appointmentOwner: Record<string, string> = { appt1: "kid1", appt2: "kid2" };
 let lookups = 0;
+/** B13c2b: the fake PatientRestrictions' answer; `denials` counts the guard's "denied" audit writes. */
+let restricted: ReadonlySet<string> = new Set();
+let denials: unknown[][] = [];
 
 const branch = { id: "b1", clinicId: "c1", name: "Imus", address: "a", phone: "(046) 471 2580", openingHours: { opensAt: 480, closesAt: 1080, closedWeekdays: [0] }, archived: false };
 let who: ClinicIdentity | undefined;
@@ -54,13 +60,15 @@ describe("AccessGuard over HTTP", () => {
         register: () => {},
         of: async (path: string, id?: string) => { lookups++; return path === "/appointments/:id/status" && id ? appointmentOwner[id] : undefined; },
       })
+      .overrideProvider(PatientRestrictions).useValue({ register: () => {}, restricted: async () => restricted })
+      .overrideProvider(AuditService).useValue({ record: async (...args: unknown[]) => { denials.push(args); } })
       .compile();
     app = moduleRef.createNestApplication({ logger: false });
     app.setGlobalPrefix("api");
     await app.init();
   });
   afterAll(() => app.close());
-  beforeEach(() => { who = as(["dentist"]); lookups = 0; });
+  beforeEach(() => { who = as(["dentist"]); lookups = 0; restricted = new Set(); denials = []; });
 
   const get = (path: string, cookie = "pd_session=good") => request(app.getHttpServer()).get(path).set("Cookie", cookie);
 
@@ -120,6 +128,27 @@ describe("AccessGuard over HTTP", () => {
     who = as(["front_desk"]);
     expect((await request(app.getHttpServer()).post("/api/appointments/appt2/status").set("Cookie", "pd_session=good")).status).toBe(201);
     expect(lookups).toBe(0);
+  });
+
+  it("refuses a restricted child's record to anyone without privacy.manage, and lets the Owner and admins read it (B13c2b)", async () => {
+    restricted = new Set(["kid1"]);
+    const refused = await get("/api/patients/kid1");
+    expect(refused.status).toBe(403);
+    expect(refused.text).toBe("This child's record is restricted after a privacy request. Ask the clinic's Owner.");
+    expect(denials).toEqual([["denied", "Patient record (restricted)", "kid1"]]);
+    expect((await get("/api/patients/kid2")).status).toBe(200);
+    who = as(["admin"]);
+    expect((await get("/api/patients/kid1")).status).toBe(200);
+  });
+
+  it("looks a record route's child up only when the clinic has a restricted child (B13c2b)", async () => {
+    who = as(["front_desk"]);
+    const status = () => request(app.getHttpServer()).post("/api/appointments/appt1/status").set("Cookie", "pd_session=good");
+    await status();
+    expect(lookups).toBe(0);
+    restricted = new Set(["kid1"]);
+    expect((await status()).status).toBe(403); // appt1 belongs to kid1
+    expect(lookups).toBe(1);
   });
 
   it("keeps the operator and clinic cookies apart", async () => {

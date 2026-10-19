@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { isDueItemOpen, type Appointment, type DueItem } from "@pedia/shared";
 import { AppointmentRecordsService } from "../appointments/appointment-records.service";
+import { PatientRestrictions } from "../auth/patient-restrictions";
 import { PrismaService } from "../prisma/prisma.service";
 import { clinicData } from "../prisma/tenant-scope";
 import type { Tx } from "../prisma/transaction";
@@ -15,11 +16,13 @@ export class DueItemsService {
     private readonly prisma: PrismaService,
     private readonly appointments: AppointmentRecordsService,
     private readonly visits: VisitsService,
+    private readonly restrictions: PatientRestrictions,
   ) {}
 
-  /** GET /due-items: open ones, soonest first, each with its visit's dentist. Not audited (decision 6). */
+  /** GET /due-items: open ones, soonest first, each with its visit's dentist; a restricted child's left out (B13c2b E7). Not audited (decision 6). */
   async list(): Promise<DueItem[]> {
-    const rows = await this.prisma.dueItem.findMany({ where: { closedAt: null }, select: DUE_COLUMNS, orderBy: DUE_ORDER });
+    const restricted = [...(await this.restrictions.restricted())];
+    const rows = await this.prisma.dueItem.findMany({ where: { closedAt: null, patientId: { notIn: restricted } }, select: DUE_COLUMNS, orderBy: DUE_ORDER });
     const open = await this.openOf(rows);
     const dentists = await this.visits.dentistsOf(open.map((r) => r.visitId));
     return open.map((r) => toDueItem(r, dentists.get(r.visitId)));
