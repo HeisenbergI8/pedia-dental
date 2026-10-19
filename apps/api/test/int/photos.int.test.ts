@@ -14,6 +14,7 @@ import { OutboxWorker } from "../../src/outbox/outbox.worker";
 import { PrismaService } from "../../src/prisma/prisma.service";
 import { seedDatabase } from "../../src/seed/seed-database";
 import { LINK_GONE } from "../../src/storage/local-files.controller";
+import { FileStorage } from "../../src/storage/storage";
 import { StorageService } from "../../src/storage/storage.service";
 import { inClinic, resetDatabase } from "./support/database";
 import { openFile } from "./support/files";
@@ -261,4 +262,18 @@ describe("B10's guarantees", () => {
     expect((await http().delete(`/api/photos/${photo.id}`).set("Cookie", dentist)).status).toBe(404);
     await expect(inClinic(DEMO_CLINIC_ID, () => prisma.clinicalPhoto.update({ where: { id: photo.id }, data: { caption: "x" } }))).rejects.toThrow(/append-only/);
   });
+
+  // Last: it re-seeds with the app's storage driver, so the seed's photo files exist (the other cases seed rows only).
+  it("serves the seeded photo record with real files", async () => {
+    await resetDatabase(prisma);
+    await seedDatabase(prisma, new Hasher(), { DEMO_LOGINS: true }, platform, app.get(FileStorage));
+    const seeded = db.photos.filter((p) => p.id.startsWith("photo_seed_"));
+    expect(seeded).toHaveLength(4);
+    const dentist = await as(DENTIST);
+    const { first, file } = await openFile(app, dentist, "/api/photos/photo_seed_1/file");
+    expect([first.status, file?.status, file?.headers["content-type"]]).toEqual([302, 200, "image/png"]);
+    expect([...(file!.body as Buffer).subarray(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
+    const list = z.array(ClinicalPhoto).parse((await http().get(`/api/patients/${seeded[0]!.patientId}/photos`).set("Cookie", dentist)).body);
+    expect(list.map((p) => p.id)).toEqual(expect.arrayContaining(seeded.map((p) => p.id)));
+  }, 60_000);
 });
