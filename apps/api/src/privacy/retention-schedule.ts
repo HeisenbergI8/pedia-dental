@@ -7,10 +7,10 @@ export type Holds = "clinical record" | "personal data" | "money" | "audit trail
  */
 export type Retention = { holds: Holds; keep: string; enforcedBy: string; counsel?: true };
 
-const RECORD = "While the clinic subscribes; afterwards as the law on health records requires (confirm with counsel), then returned or deleted at the clinic's written request";
+const RECORD = "While the clinic subscribes; after an approved erasure, anonymised once the record's retention ends (RECORD_RETENTION, confirm with counsel; privacy.anonymise ships off); returned or deleted with the clinic's data at its written request (db:clinic-purge)";
 const MONEY = "As the tax law requires for books and receipts (confirm with counsel; proposed 10 years)";
-const CLINIC: Retention = { holds: "clinical record", keep: RECORD, enforcedBy: "B13c2b", counsel: true };
-const PERSONAL: Retention = { holds: "personal data", keep: RECORD, enforcedBy: "B13c2b", counsel: true };
+const CLINIC: Retention = { holds: "clinical record", keep: RECORD, enforcedBy: "privacy.anonymise", counsel: true };
+const PERSONAL: Retention = { holds: "personal data", keep: RECORD, enforcedBy: "privacy.anonymise", counsel: true };
 const BOOKS: Retention = { holds: "money", keep: MONEY, enforcedBy: "kept", counsel: true };
 const SETUP: Retention = { holds: "account", keep: "While the clinic subscribes, then with its records", enforcedBy: "B13c2b" };
 
