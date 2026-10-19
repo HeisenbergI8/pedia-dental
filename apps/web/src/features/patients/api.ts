@@ -10,6 +10,8 @@ import {
   type Patient,
   PatientHeaderSummary,
   PatientPage,
+  RecordsCopy,
+  recordsCopyFileName,
   type ConsentScope,
   type PatientListQuery,
   type ChangePrivacyChoicesInput,
@@ -21,6 +23,7 @@ import { messageKeys } from "@/features/messages/api";
 import { ApiError, api } from "@/lib/api-client";
 import { env } from "@/lib/env";
 import { compressImage } from "@/lib/image";
+import { saveFile } from "@/lib/save-file";
 
 export const CONSENT_LABEL: Record<ConsentScope, string> = {
   general_treatment: "General treatment",
@@ -170,5 +173,19 @@ export function useSetPrivacyChoices(patientId: string) {
     mutationFn: (input: ChangePrivacyChoicesInput) => api(`/patients/${patientId}/privacy-choices`, PatientView, { method: "POST", body: JSON.stringify(input) }),
     // Saying no to reminders withdraws the family's queued texts (Privacy #15), so the message log changes too.
     onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: patientKeys.all }), qc.invalidateQueries({ queryKey: messageKeys.all })]),
+  });
+}
+
+/**
+ * B13c2a: downloads the child's copy of records (POST /patients/:id/exports, audited). Parsed like every answer, then
+ * saved as pretty JSON. No cache: each copy is a new, logged request.
+ */
+export function useRecordsCopy(patientId: string) {
+  return useMutation({
+    mutationFn: async () => {
+      const copy = await api(`/patients/${patientId}/exports`, RecordsCopy, { method: "POST", body: "{}" });
+      saveFile(new Blob([JSON.stringify(copy, null, 2)], { type: "application/json" }), recordsCopyFileName(copy));
+      return copy;
+    },
   });
 }

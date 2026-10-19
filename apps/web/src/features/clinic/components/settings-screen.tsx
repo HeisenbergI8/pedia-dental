@@ -1,6 +1,7 @@
 "use client";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
+import { AuditLog } from "@/features/audit/components/audit-log";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCan } from "@/features/auth/access";
 import { BranchesPanel } from "./branches-panel";
@@ -17,6 +18,7 @@ const TABS = [
   ["staff", "Staff"],
   ["plan", "Plan"],
   ["reference", "Procedures and chairs"],
+  ["privacy", "Privacy"],
 ] as const;
 
 type Tab = (typeof TABS)[number][0];
@@ -44,9 +46,9 @@ export function SettingsScreen() {
   if (!can("clinic.manage")) return <ClinicSettings />;
   return (
     <div className="space-y-5">
-      <PageHeader title="Settings" description="Your clinic's details and look, its branches and staff logins, and your Primolar plan." />
+      <PageHeader title="Settings" description="Your clinic's details and look, its branches and staff logins, your Primolar plan and the audit log." />
       <Tabs value={tab} onValueChange={setTab}>
-        {/* Five tabs don't fit a phone: the strip scrolls rather than wraps, with the edge fade. */}
+        {/* Six tabs don't fit a phone: the strip scrolls rather than wraps, with the edge fade. */}
         <div className="scroll-fade-x overflow-x-auto border-b border-line">
           <TabsList variant="line" className="h-13 w-max gap-1 px-0 py-2">
             {TABS.map(([value, label]) => (
@@ -65,6 +67,7 @@ export function SettingsScreen() {
         <TabsContent value="staff" className="pt-4"><StaffPanel /></TabsContent>
         <TabsContent value="plan" className="pt-4"><PlanPanel /></TabsContent>
         <TabsContent value="reference" className="pt-4"><ClinicSettings embedded /></TabsContent>
+        <TabsContent value="privacy" className="pt-4"><AuditLog /></TabsContent>
       </Tabs>
     </div>
   );

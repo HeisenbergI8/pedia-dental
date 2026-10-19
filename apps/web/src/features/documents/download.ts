@@ -1,3 +1,4 @@
+import { saveFile } from "@/lib/save-file";
 import type { DocContent } from "./content";
 
 /**
@@ -28,10 +29,5 @@ export async function downloadPdf(content: DocContent): Promise<void> {
     pdfLogo(content.letterhead.logoUrl),
   ]);
   const blob = await pdf(documentPdf(content, logo)).toBlob();
-  const href = URL.createObjectURL(blob);
-  const link = Object.assign(document.createElement("a"), { href, download: content.fileName });
-  document.body.append(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(href), 60_000); // Safari needs the URL alive while the save starts
+  saveFile(blob, content.fileName);
 }
