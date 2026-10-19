@@ -48,6 +48,7 @@ erasure requests, not built yet.
 | Agreement | audit trail | As long as any obligation under it can be raised (confirm with counsel) | kept | yes |
 | AuditEvent | audit trail | While the clinic's records are kept (confirm with counsel) | kept | yes |
 | OperatorAuditEvent | audit trail | OPERATOR_AUDIT_KEEP_DAYS once confirmed with counsel (proposed 5 years); unset keeps it forever | operator-audit.prune | yes |
+| PrivacyRequest | audit trail | While the clinic's records are kept: how each request was answered (confirm with counsel) | kept | yes |
 | ChartEntry | clinical record | While the clinic subscribes; afterwards as the law on health records requires (confirm with counsel), then returned or deleted at the clinic's written request | B13c2b | yes |
 | ClinicalNote | clinical record | While the clinic subscribes; afterwards as the law on health records requires (confirm with counsel), then returned or deleted at the clinic's written request | B13c2b | yes |
 | ClinicalPhoto | clinical record | While the clinic subscribes; afterwards as the law on health records requires (confirm with counsel), then returned or deleted at the clinic's written request | B13c2b | yes |

@@ -243,6 +243,10 @@ const RULES: Rule[] = [
   { method: "GET", path: "/reports/finance", permission: "dashboard.view", audit: "Financial report" },
   { method: "GET", path: "/reports/today", permission: "today.view", audit: "Today's schedule" }, // names, times, birthdays: personal data
   { method: "GET", path: "/audit-log", permission: "audit.view", audit: "Audit log" },
+  // B13c2b: the privacy request register (the Owner and admins). E12's names.
+  { method: "GET", path: "/privacy-requests", permission: "privacy.manage", audit: "Privacy requests" },
+  { method: "POST", path: "/privacy-requests", permission: "privacy.manage", audit: "Privacy request" },
+  { method: "POST", path: "/privacy-requests/:id/close", permission: "privacy.manage", audit: "Privacy request (closed)", action: "update" },
 ];
 
 /** For the separation test (mocks/operator.test.ts): every clinic route, which an operator token must never pass. */

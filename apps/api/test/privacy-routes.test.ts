@@ -5,14 +5,15 @@ import { createTestApp } from "./support/test-app";
 
 type Method = "get" | "put" | "post";
 
-/** B4d's notice routes and B13c2a's copy and audit log: the clinic's behind the guard, the public one reaching its controller without a session. */
+/** B4d's notice routes, B13c2a's copy and audit log, B13c2b's register: the clinic's behind the guard, the public one reaching its controller without a session. */
 const PRIVACY_ROUTES: [Method, string][] = [
   ["get", "/clinic/privacy-notice"], ["put", "/clinic/privacy-notice"],
   ["post", "/patients/patient_sibling/exports"], // B13c2a: the copy of records
   ["get", "/audit-log"], // B13c2a: the audit-log reader
+  ["get", "/privacy-requests"], ["post", "/privacy-requests"], ["post", "/privacy-requests/r1/close"], // B13c2b
 ];
 
-describe("B4d's and B13c2a's privacy routes are served (no database)", () => {
+describe("B4d's, B13c2a's and B13c2b's privacy routes are served (no database)", () => {
   let app: INestApplication;
   beforeAll(async () => {
     app = await createTestApp();
