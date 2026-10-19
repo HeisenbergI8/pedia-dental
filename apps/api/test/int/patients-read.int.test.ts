@@ -1,7 +1,7 @@
 import type { INestApplication } from "@nestjs/common";
 import { DEMO_CLINIC_ID, childrenOf, seedPlatform } from "@pedia/seed";
 import {
-  DueItem, DuplicateMatch, FinanceSummary, PatientFilter, PatientHeaderSummary, PatientPage, PatientView, RECALL_DUE_BUCKETS, dueBucket, matchesFilter, patientStanding, type Patient,
+  DueItem, DuplicateMatch, FinanceSummary, PATIENT_SEARCH_LIMIT, PatientFilter, PatientHeaderSummary, PatientPage, PatientView, RECALL_DUE_BUCKETS, dueBucket, matchesFilter, matchesSearch, patientStanding, type Patient,
 } from "@pedia/shared";
 import { format } from "date-fns";
 import request from "supertest";
@@ -93,6 +93,13 @@ describe("search (decision 1: the mock's matchesSearch)", () => {
     expect(await directory(cookie, "%")).toEqual([]);
     expect(ids(await directory(cookie, "josé"))).toEqual([JOSE.id]);
     expect(ids(await directory(cookie, "jose"))).not.toContain(JOSE.id);
+  });
+
+  it("a search answers at most PATIENT_SEARCH_LIMIT children, by name", async () => {
+    const cookie = await as(FRONT_DESK);
+    const every = (await directory(cookie, "")).filter((p) => matchesSearch(p as Patient, "a", { phones: true })); // the directory isn't capped
+    expect(every.length).toBeGreaterThan(PATIENT_SEARCH_LIMIT);
+    expect(ids(await directory(cookie, "a"))).toEqual(ids(every).slice(0, PATIENT_SEARCH_LIMIT));
   });
 });
 

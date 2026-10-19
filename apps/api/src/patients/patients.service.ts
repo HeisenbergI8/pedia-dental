@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, type OnModuleInit } from "@nestjs/common";
 import {
-  PatientHeaderSummary, PatientPage, accountCredit, accountSummary, findDuplicates, permissionScopeFor, rolesCan, searchWords,
+  PATIENT_SEARCH_LIMIT, PatientHeaderSummary, PatientPage, accountCredit, accountSummary, findDuplicates, permissionScopeFor, rolesCan, searchWords,
   type DuplicateMatch, type Patient, type PatientListQuery, type PatientView,
 } from "@pedia/shared";
 import { AuditService } from "../audit/audit.service";
@@ -106,9 +106,9 @@ export class PatientsService implements OnModuleInit {
     return (await this.prisma.patient.count({ where: { id } })) > 0;
   }
 
-  /** GET /patients: the directory (⌘K, pickers). Unpaged, as the mock (see Follow Ups). Not audited (decision 4). */
+  /** GET /patients: the directory (⌘K, pickers). An empty `q` is unpaged, as the mock (B14 Q2); a search answers PATIENT_SEARCH_LIMIT. Not audited (decision 4). */
   async directory(viewer: Viewer, q: string): Promise<PatientView[]> {
-    const ids = await this.matching(viewer, q);
+    const ids = await this.matching(viewer, q, searchWords(q).length ? PATIENT_SEARCH_LIMIT : undefined); // B14: a search is capped
     return (await this.records(ids)).map((p) => visibleTo(viewer, p));
   }
 
@@ -194,8 +194,9 @@ export class PatientsService implements OnModuleInit {
   }
 
   /** The ids matching a search, in the list's order. `clinicId` is written here: the tenant extension can't see raw SQL. */
-  private async matching(viewer: Viewer, q: string): Promise<string[]> {
-    const rows = await this.prisma.$queryRaw<{ id: string }[]>`SELECT id FROM Patient WHERE ${this.where(viewer, q)} ORDER BY lastName, firstName, id`;
+  private async matching(viewer: Viewer, q: string, limit?: number): Promise<string[]> {
+    const cap = limit === undefined ? Prisma.empty : Prisma.sql` LIMIT ${limit}`;
+    const rows = await this.prisma.$queryRaw<{ id: string }[]>`SELECT id FROM Patient WHERE ${this.where(viewer, q)} ORDER BY lastName, firstName, id${cap}`;
     return rows.map((r) => r.id);
   }
 

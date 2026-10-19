@@ -12,6 +12,11 @@ import { dueBucket, isDueItemOpen, type DueBucket } from "./recall";
 
 /** "Recent visit": seen within this many days, today included. Data, not an `if` (CONVENTIONS, Domain rules). */
 export const RECENT_VISIT_DAYS = 30;
+/**
+ * B14: a search (non-empty `q` on GET /patients) answers at most this many children, by name. ⌘K and the pickers show
+ * 8, so 50 leaves room for the picker's "booked soon first" ranking. An empty `q` (the directory) is unchanged.
+ */
+export const PATIENT_SEARCH_LIMIT = 50;
 /** "Recall due": the two most urgent sections of /recall. "This month" is not yet due. */
 export const RECALL_DUE_BUCKETS: readonly DueBucket[] = ["overdue", "this_week"];
 

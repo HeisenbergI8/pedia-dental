@@ -17,7 +17,9 @@ import {
   Message,
   MessageTemplate,
   NoteTemplate,
+  PATIENT_SEARCH_LIMIT,
   Patient,
+  matchesSearch,
   Payment,
   PatientDocument,
   PatientHeaderSummary,
@@ -107,6 +109,12 @@ describe("patients", () => {
     }
     const none = await api(`/patients?q=${encodeURIComponent("Bea Zz")}`, z.array(Patient));
     expect(none.map((p) => p.id)).not.toContain(created.id);
+  });
+
+  it("a search answers at most PATIENT_SEARCH_LIMIT children, by name", async () => {
+    const every = (await api("/patients", z.array(Patient))).filter((p) => matchesSearch(p, "a", { phones: true })); // the directory isn't capped
+    expect(every.length).toBeGreaterThan(PATIENT_SEARCH_LIMIT);
+    expect((await api("/patients?q=a", z.array(Patient))).map((p) => p.id)).toEqual(every.slice(0, PATIENT_SEARCH_LIMIT).map((p) => p.id));
   });
 
   it("creates a patient that can be read back", async () => {
