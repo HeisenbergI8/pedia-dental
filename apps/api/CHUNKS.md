@@ -440,9 +440,11 @@ BIR-registered invoices and a second step for the operator's sign-in stay later 
       `privacy.manage`, the working-day deadline (`PRIVACY_REQUEST_DUE_WORKING_DAYS`, 15, confirm with counsel), an
       approved erasure restricting the child's record (hidden, refused without `privacy.manage`, photos and reminders
       off), Settings → Privacy's register card. Nothing deleted.
-    - **B13c2b-2 (next): anonymisation when retention ends (ships off until counsel gives periods), the operator's
-      clinic export and purge scripts with a runbook, the schedule's `"B13c2b"` enforcers** (outlined in the B13c2b-1
-      plan's section 5).
+    - ✅ **B13c2b-2: anonymisation, and a clinic's data returned or deleted** (done 2026-10-19): `RECORD_RETENTION`
+      (unset, confirm with counsel), `RETENTION_ERASURE` (off, refused while unset), `ErasureService` and
+      `privacy.anonymise` (restricted children only), `db:clinic-export` / `db:clinic-purge` bundled as
+      `dist/clinic-data.mjs`, `ClinicAccount.purgedAt` (Reactivate refused), the runbook
+      `packages/infra/runbooks/clinic-data-return.md`, the schedule's `"B13c2b"` enforcers replaced. API-only.
 
 **Decided (2026-10-18):**
 - **Hosting:** AWS in Singapore (`ap-southeast-1`).

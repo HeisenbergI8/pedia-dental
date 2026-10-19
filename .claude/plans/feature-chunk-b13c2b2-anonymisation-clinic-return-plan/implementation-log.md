@@ -41,3 +41,14 @@ Open questions settled by the session's safe defaults (user rule: deleting parts
 - `ClinicDataService` relies on `OperatorAuditService` from the `@Global` `OperatorAuditModule`, so `PrivacyModule`'s imports are exactly the plan's.
 **Gate:** `pnpm run check` exit 0 (api 563 tests / 87 files, shared 251, web 415, infra 41, seed 31). `TEST_DATABASE_URL=…/pedia_dental_b13c2b2_test pnpm --filter api test:int test/int/clinic-data.int.test.ts test/int/bundle.int.test.ts`: 12/12 passed (8 clinic-data + 4 bundle, incl. the new "runs the clinic data script from the bundle"). `pnpm --filter api build` exit 0; `dist/clinic-data.mjs` exists (1.7 MB, `dist/` is git-ignored).
 **Notes:** the bundle is about 1.7 MB (not ~1 MB as the plan estimated): it carries the whole AppModule, like `main.mjs`. Neither script was run against any database other than the `_test` one (only through the int tests).
+
+## Phase 5: Runbook and documentation — 2026-10-19
+
+**Steps completed:** 5.1, 5.2, 5.3
+**Files changed:** `packages/infra/runbooks/clinic-data-return.md` (new), `PRIVACY_OPERATIONS.md`, `CONVENTIONS.md`, `apps/api/CONVENTIONS.md`, `apps/api/CHUNKS.md`
+**Deviations from plan:**
+- The "line 31" the plan points to is the Data inventory's intro paragraph (not the Status section); it is rewritten to name `privacy.anonymise` and `db:clinic-purge` instead of "B13c2b".
+- The runbook's purge command (section 7) also sets `DATABASE_URL` from the task's DB_* vars, as the export command does; the plan's one-liner omitted it, and the release task has no `DATABASE_URL` of its own.
+- `apps/api/CONVENTIONS.md`'s "anonymised child stays restricted" trap also notes the guardian phone reads "Anonymised" (the Phase 3 deviation).
+**Gate:** `pnpm run check` exit 0 (api 563 tests / 87 files, shared 251, web 415, infra 41, seed 31; `inventory.test.ts` passes).
+**Notes:** the runbook's AWS, `openssl cms` and S3 commands are unexecuted (no agent runs AWS); the runbook says to dry-run on the demo deployment first.

@@ -168,7 +168,10 @@ the NestJS API through Next's `/api` rewrite (or, offline in `enabled` mode, an 
   counsel). An erasure closed as done sets `Patient.restrictedAt`: the child leaves every list, search and family, and
   every route naming them is refused without `privacy.manage` (the gate and the guard). A body names the child on
   `POST /appointments` only, so booking refuses a restricted child itself (409, everyone) and the due list omits them. Settings → Privacy holds the
-  register above the audit log.
+  register above the audit log. B13c2b-2: an approved erasure is anonymised when its legal retention ends
+  (`privacy.anonymise`, off until counsel gives `RECORD_RETENTION`), and a leaving clinic's data goes through the
+  operator's export and purge (API-only scripts; `packages/infra/runbooks/clinic-data-return.md`). MSW has neither: the
+  offline mode has no anonymisation or clinic purge, a deliberate deferral (no route changes).
 - Branch-level reports (Today, finance, daily collections) take `?branch=` (a branch id or `all`), resolved only by
   `reportBranches(request)`. Who may ask for what is `reportBranchFilter` in `domain/tenancy.ts`: Mid and Big, two or
   more branches; `all` for the Owner.

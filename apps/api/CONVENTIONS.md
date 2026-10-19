@@ -6,11 +6,13 @@ The Primolar backend. It replaces the browser mocks (MSW) in `apps/web` **endpoi
 feature code in the web app**. The product, the users and the domain are the ones in the root `CONVENTIONS.md`
 and `ROADMAP.md`; read those first. This file covers only how the API is built.
 
-**Current phase: B1–B12, B13a, B13b, B13c1, B13c2a and B13c2b-1 done** (B13c2b-1: the privacy request register and
+**Current phase: B1–B12, B13a, B13b, B13c1, B13c2a, B13c2b-1 and B13c2b-2 done** (B13c2b-2: anonymisation of a
+restricted child when retention ends, shipped off until counsel gives the periods, and the operator's clinic export and
+purge scripts with their runbook; B13c2b-1: the privacy request register and
 restriction on an approved erasure; B13c2a: the copy of records, the audit-log reader, the
 retention schedule with two prunes, `PRIVACY_OPERATIONS.md`; B13c1: mocks off everywhere, the port ledger, the API-backed
 demo with its nightly reset, and the load test; B13b: AWS CDK in `packages/infra`; the AWS deploy itself is the owner's).
-B13c2b-2 (anonymisation, the clinic export and purge) is next, then "Patient list and search at scale". B13a added the production
+"Patient list and search at scale" is next. B13a added the production
 build (`build.mjs`), the image (`Dockerfile`), `APP_ENV`, helmet and `trust proxy`, liveness and readiness probes,
 EMF metrics, error fingerprints and the operator's audit trail. The runtime core (request context, `Clock`, logs, tenant scoping,
 transactions, audit), `@pedia/seed`, the `test:int` suite on MySQL and CI, identity, sessions and the access guard,
@@ -68,6 +70,8 @@ Run from the repo root.
 | Load the demo clinics (demo deployments only) | `DEMO_LOGINS=true pnpm --filter api db:seed`. Refuses without the flag, and on a database that already has clinic accounts (`prisma migrate reset --force` first) |
 | Regenerate the Prisma client | `pnpm --filter api db:generate` (also runs on install) |
 | Browse the database | `pnpm --filter api db:studio` |
+| Export a leaving clinic's data (operator; production: `node dist/clinic-data.mjs export …` in a one-off release task) | `pnpm --filter api db:clinic-export <clinicId> <empty dir> --operator <operatorUserId>` ([runbook](../../packages/infra/runbooks/clinic-data-return.md)) |
+| Delete a leaving clinic's data (operator; refused unless the subscription has ended, the account is paused and the name is typed) | `pnpm --filter api db:clinic-purge <clinicId> --confirm "<clinic name>" --operator <operatorUserId>` ([runbook](../../packages/infra/runbooks/clinic-data-return.md)) |
 
 ---
 
@@ -107,7 +111,7 @@ Run from the repo root.
 | Copy of records | `src/records-copy/` | B13c2a: `RecordsCopyService` (`POST /patients/:id/exports`): composes each owner's read, sections by `copySections`, signed notes only, one `export` entry. A leaf module |
 | Audit-log reader | `src/audit-log/` | B13c2a: `GET /audit-log` (a leaf controller: `AuditService.page`, keyset on `at\|id`, and `PatientsService.namesOf`) |
 | Privacy requests | `src/privacy-requests/` | B13c2b-1: `PrivacyRequestsService` (the only reader and writer of `PrivacyRequest`: list, log, close; closing an erasure as done restricts the child, refused while they have upcoming appointments or a pending request). A leaf module |
-| Privacy operations | `src/privacy/` | B13c2a: `RETENTION_SCHEDULE` (every model: what it holds, how long, what enforces it) and `retentionInventory()`, the table in `PRIVACY_OPERATIONS.md` |
+| Privacy operations | `src/privacy/` | B13c2a: `RETENTION_SCHEDULE` (every model: what it holds, how long, what enforces it) and `retentionInventory()`, the table in `PRIVACY_OPERATIONS.md`. B13c2b-2: `ErasureService` (the `ANONYMISE` map), `privacy.jobs.ts` (`privacy.anonymise`, 03:30, off unless `RETENTION_ERASURE` and confirmed `RECORD_RETENTION`), `ClinicDataService` (`clinic-data.ts`: export, purge; run by `prisma/clinic-data.ts`). No controller |
 | Legal | `src/legal/` | `PrivacyNoticeService` (owns `PrivacyNotice`: the version in force, the Owner's save, the public read) and the public `LegalController` (`GET /legal/notices/:clinicId`) |
 | Notes | `src/notes/` | `NotesService`: templates (B3), notes and signing (B6); `note.rows.ts`, `note.rules.ts` (the mock's refusals, `checkValues`) |
 | Growth | `src/growth/` | B6: `GrowthService` (one record per visit, replaced), `growth.rows.ts` |
@@ -115,7 +119,7 @@ Run from the repo root.
 | Messages | `src/messages/` | B3: `GET`/`PUT /message-templates`. B9: `GET /messages`, `POST /due-items/:id/message`, `POST /patients/:id/birthday-greeting`; `messages.jobs.ts` (the daily birthday job, 08:05 Manila, and the dead-letter repair) |
 | Message queue | `src/message-queue/` | B9: `MessageQueueService` (the only reader and writer of `Message`: queue, withdraw, the birthday rule, the monthly count), `MessageSendHandler` (the `message.send` outbox kind), `SmsProvider` with `LogSmsProvider` and `SemaphoreSmsProvider`, `message.rows.ts` |
 | Outbox | `src/outbox/` | `OutboxService.enqueue(tx, …)` (the write side, inside the caller's transaction), `OutboxWorker` (claim, run, settle), `OutboxHandlers` (features register a handler per kind), `NoopHandler` |
-| Scheduled jobs | `src/jobs/`, `src/<feature>/<feature>.jobs.ts` | `JobRunner.run(job, fn)` (the `JobLock` lease). Each `@Cron` lives in the module that owns its tables: `auth.jobs.ts` (session and rate-limit sweeps), `outbox.jobs.ts` (prune), `messages.jobs.ts` (birthday greetings and the dead-letter repair, B9), `portal.jobs.ts` (expired links, 03:20 Manila) and `operator-audit.jobs.ts` (03:25, off by default), B13c2a |
+| Scheduled jobs | `src/jobs/`, `src/<feature>/<feature>.jobs.ts` | `JobRunner.run(job, fn)` (the `JobLock` lease). Each `@Cron` lives in the module that owns its tables: `auth.jobs.ts` (session and rate-limit sweeps), `outbox.jobs.ts` (prune), `messages.jobs.ts` (birthday greetings and the dead-letter repair, B9), `portal.jobs.ts` (expired links, 03:20 Manila) and `operator-audit.jobs.ts` (03:25, off by default), B13c2a; `privacy.jobs.ts` (`privacy.anonymise`, 03:30, off by default), B13c2b-2 |
 | File storage | `src/storage/` | `StorageService` (clinic-scoped keys), `FileStorage` (the driver), `LocalDiskStorage`, and the `storage.delete` outbox handler (`delete-file.handler.ts`). Import `StorageModule` where files are kept |
 | Platform files (B12) | `src/storage/` | `PlatformFilesService` (Primolar's files under `platform/<area>/`: sign-up files, receipts, the QR; no ledger, no clinic), `platformKey`/`parsePlatformKey`, `readUploads` (several named file parts), `image-form.ts` (`readImageForm`: a `data` part and one sniffed image) |
 | File storage (B10) | `src/storage/` | `S3FileStorage`, `fileStorageOf` (picks the driver), `readUpload` (busboy → temp file, `multipart.ts`), `sniff`, `LocalFilesController` (`GET /files/:token`, the local driver's signed links), the `StoredFile` ledger and `StorageService.link`/`putFile`/`usedBytes` |
@@ -299,6 +303,21 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   the same.
 - **`OperatorAuditEvent` is append-only but for one path:** `OperatorAuditService.prune`, raw SQL, run only when
   `OPERATOR_AUDIT_KEEP_DAYS` (≥ 365, confirm with counsel) is set. Every Prisma update or delete on it is still refused.
+- **`APPEND_ONLY` has three raw-SQL exceptions** (B13c2b-2): `OperatorAuditService.prune`, `ANONYMISE`'s five
+  `UPDATE`s (`src/privacy/erasure.service.ts`, each naming `clinicId`) and `ClinicDataService.purge`'s batched
+  `DELETE`s. A new one is a decision, never a convenience; `erasure.test.ts` proves the extension still refuses Prisma
+  writes on those tables.
+- **A new model lands in the clinic export or the purge by construction** (B13c2b-2): `EXPORT_MODELS` is computed from
+  `MODEL_SCOPE` (minus "system" holds), and `PURGE_MODELS` from the `clinicId` column (minus `KEEP_ON_PURGE`).
+  `clinic-data.test.ts` pins both: decide the new model there.
+- **A new clinical or personal model needs an `ANONYMISE` line** (`erasure.test.ts` holds the map to the schedule's
+  "clinical record" and "personal data" models).
+- **Ops scripts are API-only and ship as bundles** (B13c2b-2): a `prisma/*.ts` script meant for production gets a
+  `build.mjs` entry (`dist/<name>.mjs`, run as a one-off release task) and a `tsconfig.json` include. It has no route,
+  so it gets no MSW handler, `API_ROUTES` entry or ledger line.
+- **An anonymised child stays restricted**: `anonymisedAt` never clears `restrictedAt`, so lists, booking and the due
+  list still leave them out (B13c2b-1). Their guardian rows read "Anonymised" in name and phone (the contract's
+  `Guardian.phone` is required).
 - **Raw SQL returns integers as `bigint`** through the mariadb driver (`COUNT(*)` → `3n`). Wrap them in `Number(...)`.
 - **A deadlock in a raw query is P2010, not P2034**: the adapter's `TransactionWriteConflict` (MySQL 1213) sits in
   `meta.driverAdapterError.cause`. `isWriteConflict` (`src/prisma/transaction.ts`) accepts both; proven on MySQL.
