@@ -1,9 +1,10 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException, type OnModuleInit } from "@nestjs/common";
 import {
   PatientHeaderSummary, PatientPage, accountCredit, accountSummary, findDuplicates, permissionScopeFor, rolesCan, searchWords,
   type DuplicateMatch, type Patient, type PatientListQuery, type PatientView,
 } from "@pedia/shared";
 import { AuditService } from "../audit/audit.service";
+import { PatientRestrictions } from "../auth/patient-restrictions";
 import { Clock } from "../common/clock";
 import { requireContext } from "../common/request-context";
 import { Prisma } from "../generated/prisma/client.ts";
@@ -24,7 +25,7 @@ const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** The patient reads (features/patients/mocks.ts). Every response passes through visibleTo or toSummary. */
 @Injectable()
-export class PatientsService {
+export class PatientsService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -34,7 +35,16 @@ export class PatientsService {
     private readonly clock: Clock,
     private readonly billing: BillingRecordsService,
     private readonly messages: MessageQueueService,
+    private readonly restrictions: PatientRestrictions,
   ) {}
+
+  /** B13c2b E6: the guard's list of restricted children (PatientRestrictions). One indexed read, ids only. */
+  onModuleInit() {
+    this.restrictions.register(async () => {
+      const rows = await this.prisma.patient.findMany({ where: { restrictedAt: { not: null } }, select: { id: true } });
+      return new Set(rows.map((r) => r.id));
+    });
+  }
 
   /** Full records for these ids, in this order. Five queries whatever the count (no N+1). Missing ids are skipped. */
   async records(ids: readonly string[], tx: Tx = this.prisma): Promise<Patient[]> {
@@ -78,7 +88,7 @@ export class PatientsService {
 
   /** Every patient's name and birthday: Today's names and birthdays (todaySummary's `patients`). */
   async basics(): Promise<{ id: string; firstName: string; lastName: string; birthDate: string }[]> {
-    const rows = await this.prisma.patient.findMany({ select: { id: true, firstName: true, lastName: true, birthDate: true }, orderBy: { id: "asc" } });
+    const rows = await this.prisma.patient.findMany({ where: { restrictedAt: null }, select: { id: true, firstName: true, lastName: true, birthDate: true }, orderBy: { id: "asc" } }); // E6: no birthday for a restricted child
     return rows.map((r) => ({ ...r, birthDate: r.birthDate.toISOString().slice(0, 10) }));
   }
 
@@ -135,7 +145,7 @@ export class PatientsService {
   async duplicates(candidate: { firstName: string; lastName: string; birthDate: string }): Promise<DuplicateMatch[]> {
     if (!ISO_DAY.test(candidate.birthDate)) return [];
     const rows = await this.prisma.patient.findMany({
-      where: { birthDate: new Date(`${candidate.birthDate}T00:00:00.000Z`) },
+      where: { birthDate: new Date(`${candidate.birthDate}T00:00:00.000Z`), restrictedAt: null }, // B13c2b E6
       select: { id: true, patientNo: true, firstName: true, lastName: true, birthDate: true },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
@@ -161,7 +171,7 @@ export class PatientsService {
     if (!phones.length) return new Map();
     const links = await this.prisma.patientGuardian.findMany({ where: { phone: { in: phones } }, select: { patientId: true, phone: true } });
     const kin = await this.prisma.patient.findMany({
-      where: { id: { in: [...new Set(links.map((l) => l.patientId))] } },
+      where: { id: { in: [...new Set(links.map((l) => l.patientId))] }, restrictedAt: null }, // B13c2b E6: no sibling chip
       select: { id: true, firstName: true },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
@@ -192,6 +202,7 @@ export class PatientsService {
     const clinicId = requireContext().clinicId!; // behind the guard on every clinic route
     const own = permissionScopeFor(viewer.roles, "patients.view") === "all" ? undefined : viewer.children;
     const phones = rolesCan(viewer.roles, "patients.contact"); // the mock's phone rule (mocks.ts:106)
-    return Prisma.sql`clinicId = ${clinicId} AND ${scopeCondition(own)} AND ${searchCondition(searchWords(q), phones)}`;
+    // B13c2b E6: a restricted child leaves the list, the directory and search for everyone.
+    return Prisma.sql`clinicId = ${clinicId} AND restrictedAt IS NULL AND ${scopeCondition(own)} AND ${searchCondition(searchWords(q), phones)}`;
   }
 }

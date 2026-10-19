@@ -49,6 +49,7 @@ export class AppointmentsService implements OnModuleInit {
   onModuleInit() {
     // Decision 2: a parent may confirm their own child's appointment (appointments/mocks.ts:120–124; access.ts:198–205).
     this.owners.register("/appointments/:id/status", (id) => this.records.patientOf(id));
+    this.owners.register("/appointments/:id", (id) => this.records.patientOf(id)); // B13c2b: the guard's restricted check
   }
 
   /** GET /appointments: the device's branch, [from, to), by start then chair (decision 5). Not audited (decision 6). */

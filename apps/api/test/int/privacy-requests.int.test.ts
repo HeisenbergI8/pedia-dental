@@ -1,5 +1,5 @@
 import type { INestApplication } from "@nestjs/common";
-import { DEMO_CLINIC_ID, seedPlatform } from "@pedia/seed";
+import { DEMO_CLINIC_ID, childrenOf, seedPlatform } from "@pedia/seed";
 import { PrivacyRequest, PrivacyRequestPage, addWorkingDays } from "@pedia/shared";
 import request from "supertest";
 import { z } from "zod";
@@ -29,6 +29,16 @@ const ADMIN: Login = [DEMO_CLINIC_ID, "staff_delacruz"];
 const FRONT_DESK: Login = [DEMO_CLINIC_ID, "staff_cruz"];
 const DENTIST: Login = [DEMO_CLINIC_ID, "staff_reyes"];
 const child = db.patients[0]!;
+const UPCOMING = ["booked", "confirmed", "arrived", "in_chair"];
+const seededAt = new Date().toISOString();
+// The child to restrict: guardians with no other child, one of them with an active portal login (so the portal case
+// proves a session that worked before), no upcoming appointment and no pending request. Read from the seed.
+const lone = db.patients.find((p) => p.guardians.every((g) => childrenOf(db, g.id).length === 1)
+  && p.guardians.some((g) => db.portalAccounts.some((a) => a.guardianId === g.id && a.state === "active"))
+  && !db.appointments.some((a) => a.patientId === p.id && a.startsAt >= seededAt && UPCOMING.includes(a.status))
+  && !db.appointmentRequests.some((r) => r.patientId === p.id && r.status === "pending"))!;
+const loneParent = lone.guardians.find((g) => db.portalAccounts.some((a) => a.guardianId === g.id && a.state === "active"))!;
+let parentCookie: string;
 
 beforeAll(async () => {
   app = await createIntApp();
@@ -92,5 +102,44 @@ describe("privacy requests and erasure (B13c2b)", () => {
     const rest = await ok(call("get", `/privacy-requests?status=closed&limit=2&before=${encodeURIComponent(first.next!)}`, owner), PrivacyRequestPage);
     expect(rest.requests.map((r) => r.id)).not.toContain(first.requests[0]!.id);
     expect((await ok(call("get", "/privacy-requests", owner), PrivacyRequestPage)).requests).toEqual([]);
+  });
+
+  it("won't approve an erasure while the child has an upcoming appointment", async () => {
+    const owner = await as(OWNER);
+    const busy = db.appointments.find((a) => a.startsAt >= new Date().toISOString() && a.status === "booked")!;
+    const r = await logOne(OWNER, { kind: "erasure", patientId: busy.patientId });
+    const res = await call("post", `/privacy-requests/${r.id}/close`, owner, { status: "done", outcome: "Approved" });
+    expect(res.status).toBe(409);
+    expect(res.text).toMatch(/upcoming appointments first$/);
+    const after = await inClinic(DEMO_CLINIC_ID, () => prisma.patient.findUniqueOrThrow({ where: { id: busy.patientId }, select: { restrictedAt: true } }));
+    expect(after.restrictedAt).toBeNull();
+    await ok(call("post", `/privacy-requests/${r.id}/close`, owner, { status: "declined", outcome: "Still in treatment" }), PrivacyRequest);
+  });
+
+  it("restricts the record when an erasure is approved: hidden from lists, refused to front desk, readable by the Owner", async () => {
+    parentCookie = await as([DEMO_CLINIC_ID, `guardian.${loneParent.id}`]);
+    expect((await call("get", "/auth/me", parentCookie)).status).toBe(200); // the parent's session works before
+    const r = await logOne(OWNER, { kind: "erasure", patientId: lone.id });
+    await ok(call("post", `/privacy-requests/${r.id}/close`, await as(ADMIN), { status: "done", outcome: "Restricted; anonymised when retention ends" }), PrivacyRequest);
+    const desk = await as(FRONT_DESK);
+    const refused = await call("get", `/patients/${lone.id}`, desk);
+    expect(refused.status).toBe(403);
+    expect(refused.text).toBe("This child's record is restricted after a privacy request. Ask the clinic's Owner.");
+    const list = await call("get", `/patient-summaries?q=${encodeURIComponent(lone.firstName)}&page=1&pageSize=50`, desk);
+    expect(list.status, list.text).toBe(200);
+    expect(list.body.rows.map((x: { id: string }) => x.id)).not.toContain(lone.id);
+    const owner = await call("get", `/patients/${lone.id}`, await as(OWNER));
+    expect(owner.status).toBe(200);
+    expect(owner.body.restrictedAt).toEqual(expect.any(String));
+    const denied = await inClinic(DEMO_CLINIC_ID, () => prisma.auditEvent.count({ where: { patientId: lone.id, record: "Patient record (restricted)", action: "denied" } }));
+    expect(denied).toBe(1);
+  });
+
+  it("turns photos and reminders off and takes the child out of the parent's portal", async () => {
+    const owner = await call("get", `/patients/${lone.id}`, await as(OWNER));
+    expect(owner.body.privacyChoices.at(-1)).toMatchObject({ photos: false, reminders: false, by: "staff" });
+    const queued = await inClinic(DEMO_CLINIC_ID, () => prisma.message.count({ where: { patientId: lone.id, status: "queued" } }));
+    expect(queued).toBe(0);
+    expect((await call("get", "/auth/me", parentCookie)).status).toBe(401); // no child left: the open session is closed
   });
 });

@@ -3,6 +3,8 @@ import {
   PrivacyRequest, PrivacyRequestPage, addWorkingDays, readRequestCursor, requestCursor,
   type ClosePrivacyRequestInput, type LogPrivacyRequestInput, type PrivacyRequestQuery,
 } from "@pedia/shared";
+import { AppointmentRecordsService } from "../appointments/appointment-records.service";
+import { AppointmentRequestsService } from "../appointments/appointment-requests.service";
 import { AuditService } from "../audit/audit.service";
 import { lockAccount } from "../clinic/account-lock";
 import { Clock } from "../common/clock";
@@ -10,6 +12,7 @@ import { requireContext } from "../common/request-context";
 import { ENV, type Env } from "../config/env";
 import type { PrivacyRequest as Row } from "../generated/prisma/client.ts";
 import { PATIENT_NOT_FOUND, lockPatient } from "../patients/patient-lock";
+import { PatientWritesService } from "../patients/patient-writes.service";
 import { PatientsService } from "../patients/patients.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { clinicData } from "../prisma/tenant-scope";
@@ -27,6 +30,9 @@ export class PrivacyRequestsService {
     private readonly audit: AuditService,
     private readonly clock: Clock,
     private readonly patients: PatientsService,
+    private readonly writes: PatientWritesService,
+    private readonly appointments: AppointmentRecordsService,
+    private readonly requests: AppointmentRequestsService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -82,7 +88,7 @@ export class PrivacyRequestsService {
       if (restricts) await lockPatient(tx, found.patientId!);
       const current = await this.lockRequest(tx, id);
       if (current.status !== "open") throw new ConflictException("This request is already closed");
-      // Step 3.4: if (restricts) await this.restrict(tx, found.patientId!);
+      if (restricts) await this.restrict(tx, found.patientId!);
       const { user } = requireContext();
       const closed = await tx.privacyRequest.update({
         where: { id },
@@ -92,6 +98,20 @@ export class PrivacyRequestsService {
       return closed;
     });
     return this.view(row, await this.patients.namesOf(row.patientId ? [row.patientId] : []));
+  }
+
+  /**
+   * E5–E7: under the patient's lock. Refused while the child has upcoming appointments or a pending request (409);
+   * otherwise restricted, photos and reminders "no", queued texts withdrawn, all in the closing transaction.
+   */
+  private async restrict(tx: Tx, patientId: string): Promise<void> {
+    const { firstName, restrictedAt } = await tx.patient.findUniqueOrThrow({ where: { id: patientId }, select: { firstName: true, restrictedAt: true } });
+    if (restrictedAt) return; // a second erasure request for the same child: already restricted
+    if (await this.appointments.upcomingFor(tx, patientId, this.clock.now())) throw new ConflictException(`Cancel ${firstName}'s upcoming appointments first`);
+    if (await this.requests.pendingFor(tx, patientId)) throw new ConflictException(`Handle ${firstName}'s appointment request first`);
+    await tx.patient.update({ where: { id: patientId }, data: { restrictedAt: this.clock.now() }, select: { id: true } });
+    await this.writes.declineAll(tx, patientId);
+    await this.audit.record("update", "Patient record (restricted)", patientId, tx);
   }
 
   private async lockRequest(tx: Tx, id: string): Promise<Row> {

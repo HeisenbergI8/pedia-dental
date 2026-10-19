@@ -1,6 +1,7 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { ConflictException, Injectable, NotFoundException, type OnModuleInit } from "@nestjs/common";
 import { NOTE_MESSAGES, NoteTemplate, UpdateNoteInput, type ClinicalNote, type CreateNoteInput } from "@pedia/shared";
 import { AuditService } from "../audit/audit.service";
+import { RecordOwners } from "../auth/record-owners";
 import { Clock } from "../common/clock";
 import { refuse } from "../common/refusal";
 import { ZodIssuesException, ZodValidationPipe } from "../common/zod-validation.pipe";
@@ -30,7 +31,7 @@ function valuesOrThrow(checked: CheckedValues): Prisma.InputJsonObject {
  * every change is checked under the patient's lock AND written as an update guarded by `signedAt: null`.
  */
 @Injectable()
-export class NotesService {
+export class NotesService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -40,7 +41,13 @@ export class NotesService {
     private readonly dueItems: DueItemsService,
     private readonly patients: PatientsService,
     private readonly messages: MessageQueueService,
+    private readonly owners: RecordOwners,
   ) {}
+
+  /** B13c2b: the guard finds a restricted child behind a note route. */
+  onModuleInit() {
+    for (const path of ["/notes/:id", "/notes/:id/sign"]) this.owners.register(path, (id) => this.ownerOf(id));
+  }
 
   /** GET /note-templates: the clinic's forms in the mock's order (one per catalog procedure). */
   async templates(): Promise<NoteTemplate[]> {
@@ -137,9 +144,14 @@ export class NotesService {
 
   /** The note's patient, read outside the transaction (decision 3): `patientId` never changes, notes are never deleted. */
   private async patientOf(id: string): Promise<string> {
-    const row = await this.prisma.clinicalNote.findUnique({ where: { id }, select: { patientId: true } });
-    if (!row) throw new NotFoundException(NOTE_NOT_FOUND);
-    return row.patientId;
+    const patientId = await this.ownerOf(id);
+    if (!patientId) throw new NotFoundException(NOTE_NOT_FOUND);
+    return patientId;
+  }
+
+  /** The note's patient for the guard (B13c2b): undefined for an unknown note, so the route keeps its own 404. */
+  private async ownerOf(id: string): Promise<string | undefined> {
+    return (await this.prisma.clinicalNote.findUnique({ where: { id }, select: { patientId: true } }))?.patientId;
   }
 
   private async read(tx: Tx, id: string): Promise<ClinicalNote> {

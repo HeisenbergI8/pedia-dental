@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException, type OnModuleInit } from "@nestjs/common";
 import { AddPlanItemInput, SetPlanItemStatusInput, itemsCompletedBy, type PlanItem, type ToothNumber } from "@pedia/shared";
 import { AuditService } from "../audit/audit.service";
+import { RecordOwners } from "../auth/record-owners";
 import { ClinicService } from "../clinic/clinic.service";
 import { Clock } from "../common/clock";
 import { refuse } from "../common/refusal";
@@ -19,13 +20,24 @@ const OPEN = ["planned", "in_progress"] as const;
  * progress is planProgress() in the web, never stored.
  */
 @Injectable()
-export class PlanService {
+export class PlanService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly clinic: ClinicService,
     private readonly clock: Clock,
+    private readonly owners: RecordOwners,
   ) {}
+
+  /** B13c2b: the guard finds a restricted child behind a plan item. */
+  onModuleInit() {
+    this.owners.register("/plan-items/:id", (id) => this.patientOf(id));
+  }
+
+  /** B13c2b: the item's child, for the guard. Undefined for an unknown item or another clinic's (tenant extension). */
+  async patientOf(id: string): Promise<string | undefined> {
+    return (await this.prisma.planItem.findUnique({ where: { id }, select: { patientId: true } }))?.patientId;
+  }
 
   /** GET /patients/:id/plan, oldest first. Parents reach only their own children (the guard, owner: id). Audited. */
   async list(patientId: string): Promise<PlanItem[]> {

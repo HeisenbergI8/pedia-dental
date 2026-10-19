@@ -40,3 +40,34 @@ Branch `feature/b13c2b1-privacy-requests`, from master `5432ad1` (B13c2a merged)
 **Gate:** `pnpm run check` exit 0 (shared 246, seed 31, infra 41, web 407, api 550);
 `pnpm --filter api test:int test/int/privacy-requests.int.test.ts` 4/4 on MySQL 127.0.0.1:3307 (the `_test` database).
 **Notes:** between Phase 2 and Phase 3 an erasure closed as done is not yet restricted (branch-internal, planned).
+
+## Phase 3: API: restriction on an approved erasure — 2026-10-19
+
+**Steps completed:** 3.1, 3.2, 3.3, 3.4, 3.5
+**Files changed:** `apps/api/src/auth/patient-restrictions.ts` (new), `apps/api/src/auth/auth.module.ts`,
+`apps/api/src/auth/access.guard.ts`, `apps/api/test/access-guard.test.ts`, `apps/api/src/visits/{visits.service,visits.module}.ts`,
+`apps/api/src/notes/{notes.service,notes.module}.ts`, `apps/api/src/plan/{plan.service,plan.module}.ts`,
+`apps/api/src/appointments/{appointments.service,appointment-requests.service,appointment-records.service}.ts`,
+`apps/api/src/billing/{invoices.service,billing.module}.ts`, `apps/api/src/patients/{patients.service,patients.module,patient.views,patient.views.test,family.service,patient-writes.service}.ts`,
+`apps/api/src/privacy-requests/{privacy-requests.service,privacy-requests.module}.ts`,
+`apps/api/test/int/parent-ownership.int.test.ts`, `apps/api/test/int/privacy-requests.int.test.ts`
+**Deviations from plan:**
+- Step 3.1: `access-guard.test.ts` needed the `AuditService` override (the plan's open question: its Prisma stub has
+  no `auditEvent`). The override records the calls, so the restricted case also asserts the one `denied` write.
+- Step 3.2: invoices use the existing `BillingRecordsService.patientOfInvoice` (the plan named a new
+  `invoicePatientOf`; it already exists under that name). `NotesService` gains a private non-throwing `ownerOf`, and
+  `patientOf` keeps its 404 on top of it. `BillingModule` and `NotesModule` import `AuthModule` too (the plan named only
+  Visits and Plan; both registering services need `RecordOwners`). No DI cycle (`pnpm run check` builds `AppModule`).
+- Step 3.5: `lone` is picked from the seed with a guardian whose portal account is `active`, and the case first asserts
+  that parent's `/auth/me` is 200, then 401 after the restriction on the **same** session cookie. Without an active
+  portal login the 401 would hold before the restriction too (no credential), so the plan's case would be vacuous.
+  The upcoming filter uses all four `UPCOMING` statuses (booked, confirmed, arrived, in_chair), as the service does.
+- `/auth/me` for a parent with no unrestricted child answers 401 (`auth.controller.ts` `me`: no identity), as expected.
+**Gate:** `pnpm run check` exit 0 (api 553, web 407, shared 246, seed 31, infra 41);
+`pnpm --filter api test:int test/int/privacy-requests.int.test.ts test/int/parent-ownership.int.test.ts` 27/27;
+the whole `pnpm --filter api test:int` 56 files / 628 tests passed.
+**Notes:**
+- The guard writes `denied` "Patient record (restricted)" only for this refusal (the API logs no other gate refusal).
+- Gap, outside the plan (Q3-adjacent): routes that carry a child only in the **body** (e.g. `POST /appointments`,
+  `POST /privacy-requests` itself) aren't checked by the guard. A restricted child is hidden from every picker, so the
+  web can't reach it, but the API would accept a hand-made booking for a restricted id. Left for the auditor/user.

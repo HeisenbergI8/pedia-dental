@@ -63,3 +63,10 @@ describe("toSummary", () => {
     expect(toSummary(desk, p, [], false, none)).not.toHaveProperty("balance");
   });
 });
+
+describe("toPatient (B13c2b)", () => {
+  it("carries the restriction to whoever may still read the record", () => {
+    expect(toPatient({ ...record, row: { ...record.row, restrictedAt: at } }).restrictedAt).toBe(at.toISOString());
+    expect(toPatient(record).restrictedAt).toBeUndefined();
+  });
+});

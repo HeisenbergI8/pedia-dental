@@ -1,10 +1,12 @@
 import { type CanActivate, type ExecutionContext, ForbiddenException, Injectable, UnauthorizedException } from "@nestjs/common";
 import { BILLING_ONLY_MESSAGE, BILLING_ONLY_ROUTES, rolesCan } from "@pedia/shared";
 import type { Request } from "express";
+import { AuditService } from "../audit/audit.service";
 import { requestContext } from "../common/request-context";
-import { clinicRefusal, matchPath, matchRoute } from "./access-rules";
+import { type ClinicRule, clinicRefusal, matchPath, matchRoute } from "./access-rules";
 import { BRANCH_COOKIE, OPERATOR_COOKIE, SESSION_COOKIE, readCookie } from "./cookies";
 import { type ClinicIdentity, IdentityService } from "./identity.service";
+import { PatientRestrictions, RESTRICTED_MESSAGE } from "./patient-restrictions";
 import { RecordOwners } from "./record-owners";
 import { SessionService } from "./session.service";
 
@@ -13,6 +15,9 @@ export const rulePath = (url: string) => new URL(url, "http://api").pathname.rep
 
 /** Staff carry no children: they hold patient permissions at `all`, or not at all. */
 const NO_CHILDREN: ReadonlySet<string> = new Set();
+
+/** Routes whose request names one child: a path under /patients/:id, ?patientId=, or a record whose child RecordOwners knows. */
+const namesPatient = (rule: ClinicRule) => rule.path.startsWith("/patients/:id") || rule.owner === "query" || rule.owner === "record";
 
 /** The identity the guard loaded for each request, for the handlers that serve it (/auth/me, /clinic, /staff). */
 const identities = new WeakMap<Request, ClinicIdentity>();
@@ -29,6 +34,8 @@ export class AccessGuard implements CanActivate {
     private readonly sessions: SessionService,
     private readonly identity: IdentityService,
     private readonly owners: RecordOwners,
+    private readonly restrictions: PatientRestrictions,
+    private readonly audit: AuditService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -67,6 +74,22 @@ export class AccessGuard implements CanActivate {
     const recordPatient = ownRecord ? await this.owners.of(hit.rule.path, hit.params.id) : undefined;
     const refused = clinicRefusal(who.user.roles, hit.rule, hit.params, new URL(req.originalUrl, "http://api").searchParams, who.children ?? NO_CHILDREN, recordPatient);
     if (refused) throw new ForbiddenException(refused);
+    // B13c2b E6: a restricted child's record is privacy.manage's alone (the Owner and admins). A parent never gets
+    // here with one: a restricted child leaves their family (FamilyService.childrenOf), so the refusal above applies.
+    if (namesPatient(hit.rule) && !rolesCan(who.user.roles, "privacy.manage")) {
+      const restricted = await this.restrictions.restricted();
+      if (restricted.size) {
+        const patientId = hit.rule.path.startsWith("/patients/:id")
+          ? hit.params.id
+          : hit.rule.owner === "query"
+            ? (new URL(req.originalUrl, "http://api").searchParams.get("patientId") ?? undefined)
+            : (recordPatient ?? (await this.owners.of(hit.rule.path, hit.params.id)));
+        if (patientId && restricted.has(patientId)) {
+          await this.audit.record("denied", "Patient record (restricted)", patientId); // the context's user is set above
+          throw new ForbiddenException(RESTRICTED_MESSAGE);
+        }
+      }
+    }
     return true;
   }
 

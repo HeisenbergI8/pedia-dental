@@ -8,6 +8,7 @@ import { AuditService } from "../audit/audit.service";
 import { SessionService } from "../auth/session.service";
 import { lockAccount, ownClinicId } from "../clinic/account-lock";
 import { Clock } from "../common/clock";
+import { requireContext } from "../common/request-context";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { PrivacyNoticeService } from "../legal/privacy-notice.service";
 import { MessageQueueService } from "../message-queue/message-queue.service";
@@ -207,6 +208,21 @@ export class PatientWritesService {
       await this.audit.record("update", "Privacy consent (changed)", id, tx);
       return visibleTo(viewer, await this.patients.one(id, tx));
     });
+  }
+
+  /**
+   * B13c2b E6: an approved erasure turns photos and reminders "no" (a new row, append-only) and withdraws queued texts,
+   * in the caller's transaction under its patient lock. Written even for a child with no recorded consent: "no" is
+   * explicit then, so queueMessage's choiceDeclined refuses every later text.
+   */
+  async declineAll(tx: Tx, id: string): Promise<void> {
+    const position = await tx.privacyChoice.count({ where: { patientId: id } });
+    await tx.privacyChoice.create({
+      data: { ...clinicData(), patientId: id, position, photos: false, reminders: false, by: "staff", byName: requireContext().user!.name, at: this.clock.now() },
+      select: { id: true },
+    });
+    await this.messages.withdrawPatient(tx, id);
+    await this.audit.record("update", "Privacy consent (changed)", id, tx);
   }
 
   /** PUT /patients/:id/photo: checked (cleanPhoto), stored, then swapped in. 404 before the file is looked at. */

@@ -80,4 +80,9 @@ export class AppointmentRecordsService {
   async upcomingAt(tx: Tx, branchId: string, now: Date): Promise<number> {
     return tx.appointment.count({ where: { branchId, status: { in: UPCOMING }, startsAt: { gte: now } } });
   }
+
+  /** B13c2b E7: a child's bookings still to come (the same statuses as upcomingAt). */
+  async upcomingFor(tx: Tx, patientId: string, now: Date): Promise<number> {
+    return tx.appointment.count({ where: { patientId, status: { in: UPCOMING }, startsAt: { gte: now } } });
+  }
 }
