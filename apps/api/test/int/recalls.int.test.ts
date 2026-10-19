@@ -110,6 +110,7 @@ describe("due items (apps/web handlers.test.ts → recalls)", () => {
   it("serves the seeded items: recalls only, one per patient, as the seed made them", async () => {
     const seeded = t.platform.tenants[DEMO_CLINIC_ID]!.dueItems;
     const list = (await dueList()).filter((i) => seeded.some((s) => s.id === i.id));
+    expect(list.length).toBeGreaterThan(0); // not vacuous
     expect(list.every((i) => i.kind === "recall" && ["routine", "routine_high_risk"].includes(i.ruleId))).toBe(true);
     expect(new Set(list.map((i) => i.patientId)).size).toBe(list.length);
     const open = seeded.filter((s) => list.some((i) => i.id === s.id));

@@ -51,7 +51,8 @@ describe("appointments (apps/web handlers.test.ts → appointments)", () => {
     expect([first.status, first.branchId]).toEqual(["booked", "branch_imus"]);
     const clash = await book(slot(b, { chairId: "chair_2", startsAt: at("2030-01-08", "09:15") }));
     expect([clash.status, clash.text]).toEqual([409, "Dr. Ana Reyes is already booked at 9:00 AM"]);
-    await t.ok(move(first.id, { dentistId: "staff_reyes", chairId: "chair_1", startsAt: at("2030-01-08", "11:00"), durationMin: 30 }), Appointment);
+    const moved = await t.ok(move(first.id, { dentistId: "staff_reyes", chairId: "chair_1", startsAt: at("2030-01-08", "11:00"), durationMin: 30 }), Appointment);
+    expect(moved.startsAt).toBe(at("2030-01-08", "11:00"));
     await t.ok(book(slot(b, { chairId: "chair_2", startsAt: at("2030-01-08", "09:15") })), Appointment, 201);
     expect((await t.ok(status(first.id, { status: "confirmed" }), Appointment)).status).toBe("confirmed");
     expect((await t.ok(status(first.id, { status: "arrived" }), Appointment)).status).toBe("arrived");
@@ -176,7 +177,10 @@ describe("appointments (apps/web handlers.test.ts → appointments)", () => {
         ["appointment_confirmation", "queued", "09171234567", "Rosa Mendoza"],
         ["appointment_reminder", "queued", "09171234567", "Rosa Mendoza"],
       ]);
-      for (const m of rows) expect(m.body).toContain("Bea");
+      for (const m of rows) {
+        expect(m.body).toContain("Bea");
+        expect(m.body).not.toMatch(/\{\w+\}/); // every placeholder filled
+      }
       expect(rows[1]!.sendAt.toISOString()).toBe(reminderSendAt(appt.startsAt));
       expect(await outboxFor(rows.map((m) => m.id))).toHaveLength(2);
     });

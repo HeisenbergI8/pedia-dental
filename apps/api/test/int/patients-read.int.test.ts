@@ -149,6 +149,9 @@ describe("the list (decision 3)", () => {
     for (const f of PatientFilter.options) {
       expect([f, (await ok(get(`/patient-summaries?filter=${f}&pageSize=100`, await as(ADMIN)), PatientPage)).total]).toEqual([f, page.counts[f]]);
     }
+    for (const f of ["needs_attention", "recent_visit", "balance_due", "recall_due"] as const) {
+      expect([f, page.counts[f] > 0, page.counts[f] < page.counts.all]).toEqual([f, true, true]); // not vacuous, and no chip flags everyone
+    }
   });
 
   it("recall due matches /recall (B7)", async () => {
