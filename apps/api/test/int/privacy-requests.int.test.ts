@@ -1,6 +1,6 @@
 import type { INestApplication } from "@nestjs/common";
 import { DEMO_CLINIC_ID, childrenOf, seedPlatform } from "@pedia/seed";
-import { PrivacyRequest, PrivacyRequestPage, addWorkingDays } from "@pedia/shared";
+import { PrivacyRequest, PrivacyRequestPage, RESTRICTED_BOOKING_MESSAGE, addWorkingDays } from "@pedia/shared";
 import request from "supertest";
 import { z } from "zod";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -141,5 +141,18 @@ describe("privacy requests and erasure (B13c2b)", () => {
     const queued = await inClinic(DEMO_CLINIC_ID, () => prisma.message.count({ where: { patientId: lone.id, status: "queued" } }));
     expect(queued).toBe(0);
     expect((await call("get", "/auth/me", parentCookie)).status).toBe(401); // no child left: the open session is closed
+  });
+
+  it("won't book a restricted child, and leaves them off the due list", async () => {
+    // An open recall for the child, as a signed note would make it: without the filter, the due list offers its Book.
+    await inClinic(DEMO_CLINIC_ID, () => prisma.dueItem.create({ data: { clinicId: DEMO_CLINIC_ID, patientId: lone.id, ruleId: "recall_restricted", kind: "recall", procedure: "D1120", dueOn: new Date(`${today}T00:00:00.000Z`), sourceNoteId: "note_restricted_due", visitId: db.visits[0]!.id, createdAt: new Date() } }));
+    const desk = await as(FRONT_DESK);
+    const due = await call("get", "/due-items", desk);
+    expect(due.status, due.text).toBe(200);
+    expect(due.body.map((i: { patientId: string }) => i.patientId)).not.toContain(lone.id);
+    const startsAt = `${addWorkingDays(today, 2)}T02:00:00.000Z`;
+    const booked = await call("post", "/appointments", desk, { patientId: lone.id, dentistId: "staff_reyes", chairId: "chair_3", startsAt, durationMin: 30, reason: "Check-up" });
+    expect(booked.status).toBe(409);
+    expect(booked.text).toBe(RESTRICTED_BOOKING_MESSAGE);
   });
 });

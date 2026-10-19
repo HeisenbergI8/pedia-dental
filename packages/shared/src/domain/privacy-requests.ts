@@ -6,6 +6,8 @@ import { auditCursor, readAuditCursor } from "./privacy-operations";
  * PRIVACY_REQUEST_DUE_WORKING_DAYS overrides it; MSW uses it as is.
  */
 export const PRIVACY_REQUEST_DUE_WORKING_DAYS_DEFAULT = 15;
+/** B13c2b E7: a restricted child gets no new appointment, from the due list's Book or anywhere else (409). */
+export const RESTRICTED_BOOKING_MESSAGE = "This child's record is restricted after a privacy request, so they can't be booked.";
 /** A row this close to its deadline (working days) says "Due soon" (E10). */
 export const DUE_SOON_WORKING_DAYS = 3;
 

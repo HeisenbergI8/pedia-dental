@@ -293,8 +293,10 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   `onModuleInit`.
 - **A restricted child is hidden by `restrictedAt IS NULL`** (or `restrictedAt: null`) in `PatientsService.where`,
   `basics`, `duplicates`, `siblingsOf` and `FamilyService.childrenOf`: a new patient list adds it. No test sweeps every
-  list. Clinic-wide logs (calendar, due list, documents, collections, request inbox) still name one (B13c2b-1 Q3).
-  Routes that carry a child only in the body (`POST /appointments`) aren't checked by the guard.
+  list. Clinic-wide logs (calendar, documents, collections, request inbox) still name one (B13c2b-1 Q3); the due list
+  leaves them out (`DueItemsService.list`, its Book would book them). The guard can't see a child named only in a body:
+  `POST /appointments` refuses a restricted one itself (409, `RESTRICTED_BOOKING_MESSAGE`). A new body-only route does
+  the same.
 - **`OperatorAuditEvent` is append-only but for one path:** `OperatorAuditService.prune`, raw SQL, run only when
   `OPERATOR_AUDIT_KEEP_DAYS` (≥ 365, confirm with counsel) is set. Every Prisma update or delete on it is still refused.
 - **Raw SQL returns integers as `bigint`** through the mariadb driver (`COUNT(*)` → `3n`). Wrap them in `Number(...)`.

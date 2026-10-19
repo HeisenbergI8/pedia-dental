@@ -11,7 +11,7 @@ export const recallHandlers = [
   http.get(url("/due-items"), async () => {
     await delay(100);
     const rows = db.dueItems
-      .filter((i) => isDueItemOpen(i, db.appointments))
+      .filter((i) => isDueItemOpen(i, db.appointments) && !db.patients.find((p) => p.id === i.patientId)?.restrictedAt) // B13c2b E7
       .sort((a, b) => a.dueOn.localeCompare(b.dueOn))
       // The visit's dentist (always a dentist; a note can be written by another account), for one-tap booking.
       .map((i) => {

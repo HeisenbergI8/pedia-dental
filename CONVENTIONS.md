@@ -166,7 +166,8 @@ the NestJS API through Next's `/api` rewrite (or, offline in `enabled` mode, an 
 - Privacy requests (B13c2b-1): `GET/POST /privacy-requests`, `POST /privacy-requests/:id/close` (`privacy.manage`: the
   Owner and admins); due in working days (`addWorkingDays`, `PRIVACY_REQUEST_DUE_WORKING_DAYS`, 15, confirm with
   counsel). An erasure closed as done sets `Patient.restrictedAt`: the child leaves every list, search and family, and
-  every route naming them is refused without `privacy.manage` (the gate and the guard). Settings → Privacy holds the
+  every route naming them is refused without `privacy.manage` (the gate and the guard). A body names the child on
+  `POST /appointments` only, so booking refuses a restricted child itself (409, everyone) and the due list omits them. Settings → Privacy holds the
   register above the audit log.
 - Branch-level reports (Today, finance, daily collections) take `?branch=` (a branch id or `all`), resolved only by
   `reportBranches(request)`. Who may ask for what is `reportBranchFilter` in `domain/tenancy.ts`: Mid and Big, two or

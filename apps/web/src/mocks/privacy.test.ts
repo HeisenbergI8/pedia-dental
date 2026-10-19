@@ -16,6 +16,8 @@ import {
   PrivacyNoticeView,
   PrivacyRequest,
   PrivacyRequestPage,
+  DueItem,
+  RESTRICTED_BOOKING_MESSAGE,
   RecordsCopy,
   Session,
   SessionUser,
@@ -403,5 +405,15 @@ describe("privacy requests and erasure (B13c2b)", () => {
     expect(demo().messages.filter((m) => m.patientId === restricted.id && m.status === "queued")).toHaveLength(0);
     cookies(`pd_session=demo.clinic_demo.${restricted.parent}`);
     expect(await status(api("/auth/me", SessionUser))).toBe(401); // no child left: the session is no login any more
+  });
+
+  it("won't book a restricted child, and leaves them off the due list", async () => {
+    // An open recall for the child, as a signed note would make it: without the filter, the due list offers its Book.
+    demo().dueItems.push({ id: "due_restricted", clinicId: "clinic_demo", patientId: restricted.id, ruleId: "recall_restricted", kind: "recall", procedure: "D1120", dueOn: today(), sourceNoteId: "note_restricted_due", createdAt: new Date().toISOString() });
+    asStaff("staff_cruz");
+    expect((await api("/due-items", z.array(DueItem))).map((i) => i.patientId)).not.toContain(restricted.id);
+    const startsAt = `${addWorkingDays(today(), 2)}T02:00:00.000Z`;
+    const book = api("/appointments", Appointment, send("POST", { patientId: restricted.id, dentistId: "staff_reyes", chairId: "chair_3", startsAt, durationMin: 30, reason: "Check-up" }));
+    await expect(book).rejects.toMatchObject({ status: 409, message: RESTRICTED_BOOKING_MESSAGE });
   });
 });
