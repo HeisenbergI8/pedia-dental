@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { Appointment, AppointmentStatus } from "@pedia/shared";
+import { ANONYMISED, type Appointment, type AppointmentStatus } from "@pedia/shared";
 import { requireContext } from "../common/request-context";
 import type { Prisma } from "../generated/prisma/client.ts";
 import { PrismaService } from "../prisma/prisma.service";
@@ -84,5 +84,10 @@ export class AppointmentRecordsService {
   /** B13c2b E7: a child's bookings still to come (the same statuses as upcomingAt). */
   async upcomingFor(tx: Tx, patientId: string, now: Date): Promise<number> {
     return tx.appointment.count({ where: { patientId, status: { in: UPCOMING }, startsAt: { gte: now } } });
+  }
+
+  /** B13c2b-2: an anonymised child's appointments keep their times, chair and status; their free text goes. Under the patient's lock. */
+  async anonymiseFor(tx: Tx, patientId: string): Promise<void> {
+    await tx.appointment.updateMany({ where: { patientId }, data: { reason: ANONYMISED, cancelReason: null } });
   }
 }

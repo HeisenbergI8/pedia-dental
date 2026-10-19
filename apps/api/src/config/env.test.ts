@@ -22,7 +22,15 @@ describe("loadEnv", () => {
       S3_REGION: "ap-southeast-1",
       S3_FORCE_PATH_STYLE: false,
       PRIVACY_REQUEST_DUE_WORKING_DAYS: 15,
+      RETENTION_ERASURE: false,
     });
+  });
+
+  it("refuses RETENTION_ERASURE=true while the retention periods are unconfirmed (B13c2b-2, confirm with counsel)", () => {
+    const base = { DATABASE_URL: "mysql://u:p@h/db" };
+    expect(loadEnv({ ...base, RETENTION_ERASURE: "false" }).RETENTION_ERASURE).toBe(false);
+    expect(() => loadEnv({ ...base, RETENTION_ERASURE: "true" })).toThrow(/RETENTION_ERASURE.*unconfirmed/);
+    expect(() => loadEnv({ ...base, RETENTION_ERASURE: "yes" })).toThrow(/RETENTION_ERASURE/);
   });
 
   it("takes the request deadline in working days, 1 to 60, default 15 (B13c2b, confirm with counsel)", () => {

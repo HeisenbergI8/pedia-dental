@@ -37,6 +37,7 @@ import { DocumentsModule } from "./documents/documents.module";
 import { RecordsCopyModule } from "./records-copy/records-copy.module";
 import { AuditLogModule } from "./audit-log/audit-log.module";
 import { PrivacyRequestsModule } from "./privacy-requests/privacy-requests.module";
+import { PrivacyModule } from "./privacy/privacy.module";
 import { MetricsMiddleware } from "./metrics/metrics.middleware";
 import { MetricsModule } from "./metrics/metrics.module";
 import { OperatorAuditModule } from "./operator-audit/operator-audit.module";
@@ -73,6 +74,7 @@ export class AppModule implements NestModule {
         RecordsCopyModule,
         AuditLogModule,
         PrivacyRequestsModule,
+        PrivacyModule,
         AuthModule,
         PortalModule,
         ClinicModule,

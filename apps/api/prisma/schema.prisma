@@ -128,6 +128,8 @@ model ClinicAccount {
   /// #rrggbb. Tints and the dark version are derived (deriveBrandPalette), never stored.
   brandColor   String        @db.Char(7)
   headingFont  HeadingFont?
+  /// B13c2b-2 (D13): when db:clinic-purge finished deleting this clinic's data. The row and Primolar's books stay.
+  purgedAt     DateTime?
 }
 
 /// One location of a clinic account. Archived, never deleted (decision #22).
@@ -613,6 +615,8 @@ model Patient {
   /// B13c2b E6: an approved erasure request restricted the record. Only privacy.manage reads it; it leaves every list,
   /// search and family (PatientsService.where, FamilyService.childrenOf). Anonymised later by B13c2b-2, never cleared here.
   restrictedAt      DateTime?
+  /// B13c2b-2 (D4): when ErasureService.anonymise de-identified this restricted record. Set once; restrictedAt stays set.
+  anonymisedAt      DateTime?
 
   @@unique([clinicId, patientNo])
   /// The list's order (lastName, firstName, id) and name lookups.

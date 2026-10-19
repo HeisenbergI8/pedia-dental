@@ -54,3 +54,4 @@ export * from "./domain/portal";
 export * from "./domain/allowance";
 export * from "./domain/privacy-operations";
 export * from "./domain/privacy-requests";
+export * from "./domain/retention";
