@@ -38,7 +38,7 @@ openssl req -x509 -newkey rsa:4096 -nodes -days 730 -subj "/CN=Primolar export" 
 The task's command (in `--overrides`, as in `rollback.md`):
 
 ```
-export DATABASE_URL="mysql://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME" &&
+export DATABASE_URL="mysql://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME?allowPublicKeyRetrieval=true" &&
 echo "$CERT_B64" | base64 -d > /tmp/export.pem &&
 node dist/clinic-data.mjs export <clinicId> /tmp/out --operator <operatorId> &&
 tar -C /tmp/out -cf /tmp/out.tar . &&
@@ -46,6 +46,10 @@ openssl cms -encrypt -binary -aes256 -outform DER -in /tmp/out.tar -out /tmp/out
 node -e "const {S3Client,PutObjectCommand}=require('@aws-sdk/client-s3');new S3Client({region:process.env.S3_REGION}).send(new PutObjectCommand({Bucket:process.env.S3_BUCKET,Key:'platform/exports/<clinicId>/<yyyymmdd>.tar.cms',Body:require('fs').readFileSync('/tmp/out.tar.cms')})).then(()=>console.log('uploaded'))"
 ```
 
+- The release task's container has only the database settings. Pass **`S3_BUCKET` and `S3_REGION`** (the api
+  service's values) as environment overrides too, or the script refuses: without them it would read the files from
+  local disk and find none. The `?allowPublicKeyRetrieval=true` is the api's own (`API_DATABASE_QUERY`): without it
+  the driver can't sign in after an RDS restart.
 - `CERT_B64` is `base64 -w0 export.pem`, passed as a container environment override. It is a public certificate, so
   the override (visible in `describe-tasks` and CloudTrail) leaks nothing.
 - The task role may put under `platform/*` (`service-stack.ts`).
@@ -91,7 +95,7 @@ copy (`export.tar`, `export/`, the `.cms` and the `.7z`).
 A one-off release task again, with this command:
 
 ```
-export DATABASE_URL="mysql://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME" &&
+export DATABASE_URL="mysql://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME?allowPublicKeyRetrieval=true" &&
 node dist/clinic-data.mjs purge <clinicId> --confirm "<exact clinic name>" --operator <operatorId>
 ```
 

@@ -144,9 +144,12 @@ written request (an operator script, see "A clinic leaving").
   the parents' portal, photos and reminders turn off, queued texts are withdrawn, and only the Owner and admins can
   open it (every other attempt is refused and logged). Clinic-wide lists (calendar, documents, collections) still name
   the child; the due list leaves them out, and no one can book them. When its legal retention ends it is
-  **anonymised** (the job ships off until counsel confirms the periods): names, contacts, free text, the birth day
-  and every photo file go; visits, the chart, the plan, money and the audit trail stay, naming no one. It stays
-  restricted. Approval waits until the child has no upcoming appointment or pending request.
+  **anonymised** (the job ships off until counsel confirms the periods): the names, contacts, notes' and messages'
+  free text, the birth day and every photo file go; visits, the chart, the plan, money and the audit trail stay. This
+  is pseudonymisation, not full anonymity (*confirm with counsel*): the surname becomes the chart number, and the
+  child's alerts, tags, allergy, condition and medication entries, payment notes and references, invoice line text
+  and void reasons, a parent's name on their own audit rows, and the request register's requester and details stay
+  as written. It stays restricted. Approval waits until the child has no upcoming appointment or pending request.
 - **Objection:** logged and answered in the register. Stopping a use (reminders, photos) is the child's privacy
   choices.
 - **Parents** ask the clinic (the portal's Privacy page says so). There is no self-serve request yet.

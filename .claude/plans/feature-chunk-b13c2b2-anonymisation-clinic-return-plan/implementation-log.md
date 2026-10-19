@@ -56,3 +56,11 @@ Open questions settled by the session's safe defaults (user rule: deleting parts
 ## Final gate — 2026-10-19
 
 `TEST_DATABASE_URL=mysql://…/pedia_dental_b13c2b2_test pnpm --filter api test:int` (full suite) on `a0e9fc3`: exit 0, 58 files, 646 tests passed. Every plan step (1.1–5.3) is implemented; none was skipped. Not done, as the plan defers them: Q4–Q8 and F1–F4 (e.g. `purgedAt` in the console, a system audit actor), and the runbook's AWS dry run on the demo deployment.
+
+
+## Review fixes (after auditor, 72/100)
+
+- **High, runbook §3:** the release task has no S3 settings, so the export would read local disk and hand over no files. The runbook now passes `S3_BUCKET`/`S3_REGION` as overrides, and `prisma/clinic-data.ts` refuses an export (exit 2) when `S3_BUCKET` is unset against a non-local database.
+- **Medium:** the runbook's `DATABASE_URL` (§3, §7) carries `?allowPublicKeyRetrieval=true`, as the api task's does.
+- **Medium:** `PRIVACY_OPERATIONS.md` no longer says "naming no one": it says pseudonymisation and lists exactly what stays (confirm with counsel). The ANONYMISE map is unchanged (D4 is the plan's decision; widening it is counsel's call, Follow-ups).
+- Low findings (thin purge fixture, assertions in erasure case 2, branch-scoped export filter, smells) left: recorded here for a later pass.

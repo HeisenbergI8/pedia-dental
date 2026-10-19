@@ -22,7 +22,14 @@ if (!complete || !clinicId || !values.operator) {
   console.error(USAGE);
   process.exit(2);
 }
-const app = await NestFactory.createApplicationContext(AppModule.forRoot(loadEnv()), { logger: false });
+const env = loadEnv();
+// A remote database without S3_BUCKET means local-disk storage: every file would land in `missing` (the release task
+// has no S3 settings of its own; the runbook passes them).
+if (command === "export" && !env.S3_BUCKET && !/@(localhost|127\.0\.0\.1)[:/]/.test(env.DATABASE_URL)) {
+  console.error("Refusing to export: S3_BUCKET is unset, so the clinic's files couldn't be read. Pass S3_BUCKET and S3_REGION.");
+  process.exit(2);
+}
+const app = await NestFactory.createApplicationContext(AppModule.forRoot(env), { logger: false });
 let code = 0;
 try {
   const operator = await app.get(PrismaService).operatorUser.findUnique({ where: { id: values.operator! }, select: { id: true, name: true } });
