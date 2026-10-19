@@ -24,10 +24,8 @@ const RECORDS: Record<string, { ours?: string; theirs?: string }> = {
   "/appointments/:id/status": { ours: db.appointments.find((a) => ours.has(a.patientId))?.id, theirs: db.appointments.find((a) => !ours.has(a.patientId))?.id },
   "/photos/:id/file": { ours: db.photos.find((p) => ours.has(p.patientId) && p.uploadedBy === "parent")?.id, theirs: "photo_other_family" }, // written below
 };
-/** Rules the API has no controller for yet (Nest's 404 comes before the guard): a record's copy is B13's (DPA operations). */
-const NOT_SERVED = new Set(["POST /patients/:id/exports"]);
 const PARENT_ROUTES = CLINIC_RULES.filter(
-  (r) => r.owner && r.owner !== "filtered" && !NOT_SERVED.has(`${r.method} ${r.path}`) && [r.permission].flat().some((p) => rolesCan(["parent"], p) && !rolesCan(["parent"], p, "all")),
+  (r) => r.owner && r.owner !== "filtered" && [r.permission].flat().some((p) => rolesCan(["parent"], p) && !rolesCan(["parent"], p, "all")),
 );
 /** Hoisted so the `.each(...)` argument holds no parentheses: the port ledger's title reader stops at the first `)`. */
 const PARENT_CASES = PARENT_ROUTES.map((r) => [`${r.method} ${r.path}`, r] as const);

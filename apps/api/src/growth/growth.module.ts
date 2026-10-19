@@ -5,5 +5,5 @@ import { GrowthController } from "./growth.controller";
 import { GrowthService } from "./growth.service";
 
 /** Growth and development (B6): one record per visit. Owns GrowthRecord; reads visits through VisitsService. */
-@Module({ imports: [AuditModule, VisitsModule], controllers: [GrowthController], providers: [GrowthService] })
+@Module({ imports: [AuditModule, VisitsModule], controllers: [GrowthController], providers: [GrowthService], exports: [GrowthService] })
 export class GrowthModule {}

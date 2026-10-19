@@ -3,10 +3,13 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApp } from "./support/test-app";
 
-type Method = "get" | "put";
+type Method = "get" | "put" | "post";
 
 /** B4d's notice routes: the clinic's behind the guard, the public one reaching its controller without a session. */
-const B4D_ROUTES: [Method, string][] = [["get", "/clinic/privacy-notice"], ["put", "/clinic/privacy-notice"]];
+const B4D_ROUTES: [Method, string][] = [
+  ["get", "/clinic/privacy-notice"], ["put", "/clinic/privacy-notice"],
+  ["post", "/patients/patient_sibling/exports"], // B13c2a: the copy of records
+];
 
 describe("B4d's notice routes are served (no database)", () => {
   let app: INestApplication;
