@@ -37,6 +37,7 @@ export const Permission = z.enum([
   "clinic.manage", // Owner settings: the account's profile, branding, branches and staff logins (decision #11)
   "consents.manage", // privacy #15 (P16): switch a child's optional consents (photos, reminders). A parent: their own
   "portal.manage", // B11 decision 16: invite a guardian to the portal, resend, turn off. Front desk, the Owner, admins
+  "privacy.manage", // B13c2b E1: the privacy request register and restricted records. The Owner and admins (STAFF_PERMISSIONS)
 ]);
 export type Permission = z.infer<typeof Permission>;
 
