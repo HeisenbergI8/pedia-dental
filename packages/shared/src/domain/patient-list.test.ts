@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  comparePatients, hasNoContact, lastVisitOn, matchesFilter, matchesSearch, paginate, patientSearchText, patientStanding, recallDueOn,
-  searchWords,
+  comparePatients, hasNoContact, lastVisitOn, listBounds, matchesFilter, matchesSearch, paginate, patientSearchText, patientStanding, recallDueOn,
+  searchWords, standingOn, storedStanding, type PatientFacts,
 } from "./patient-list";
 
 const today = "2026-10-03"; // a Saturday
@@ -108,5 +108,38 @@ describe("patientSearchText and searchWords (decision 1)", () => {
     expect(matchesSearch(p, "mendoza rosa", { phones: false })).toBe(true);
     expect(matchesSearch(p, "1234567", { phones: false })).toBe(false);
     expect(matchesSearch(p, "1234567", { phones: true })).toBe(true);
+  });
+});
+
+describe("stored standing (B14)", () => {
+  // Boundary days around `today` (2026-10-03): due today+7 / today+8 / today-1; last visit today-29 / today-30.
+  const days = ["2026-09-03", "2026-09-04", "2026-10-02", "2026-10-03", "2026-10-10", "2026-10-11"];
+  const facts: PatientFacts = { visits: [], appointments: [], dueItems: [], invoices: [], payments: [], messages: [] };
+  days.forEach((d, n) => {
+    const p = `p${n}`;
+    facts.visits.push({ patientId: p, status: n % 2 ? "completed" : "in_progress", date: d });
+    if (n % 3 === 0) facts.appointments.push({ id: `a${n}`, patientId: p, status: "done", startsAt: at(days[(n + 1) % days.length]!) });
+    facts.dueItems.push({ patientId: p, dueOn: d, ruleId: "routine", createdAt: at("2026-01-01") }, { patientId: p, dueOn: days[(n + 2) % days.length]!, ruleId: "routine", createdAt: at("2026-01-01"), appointmentId: `a${n}` });
+    if (n % 2) facts.invoices.push({ id: `i${n}`, patientId: p, lines: [{ amount: 1000 * n }], discount: 0, ...(n === 5 && { voided: { at: at(d), by: "s", reason: "mistake" } }) });
+    if (n === 3) facts.payments.push({ invoiceId: "i3", amount: 3000 });
+    facts.messages.push({ patientId: p, status: n % 2 ? "failed" : "sent", sendAt: at(d) });
+  });
+  const ids = [...days.keys()].map((n) => `p${n}`).concat("nobody");
+
+  it("answers patientStanding and the filters from what is stored, on the boundary days", () => {
+    for (const today of ["2026-10-03", "2026-10-02", "2026-10-04"]) {
+      const { recentFrom } = listBounds(today);
+      for (const id of ids) {
+        const stored = storedStanding(id, facts);
+        const computed = patientStanding(id, facts, today);
+        expect(standingOn(stored, today), `${id} ${today}`).toEqual(computed);
+        const recent = matchesFilter("recent_visit", { ...row(), ...computed }, today);
+        expect(recent, `${id} ${today}`).toBe(!!stored.lastVisitOn && stored.lastVisitOn >= recentFrom);
+      }
+    }
+  });
+
+  it("bounds today: recent from today-29, recall due by today+7", () => {
+    expect(listBounds("2026-10-03")).toEqual({ recentFrom: "2026-09-04", recallBy: "2026-10-10" });
   });
 });

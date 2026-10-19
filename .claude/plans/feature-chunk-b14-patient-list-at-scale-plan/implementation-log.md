@@ -22,3 +22,11 @@ Open questions settled (user: "fix it, merge only if the load test proves it"): 
 - `port-ledger.ts` unchanged: the web and API cases share the title "a search answers at most PATIENT_SEARCH_LIMIT children, by name".
 **Gate:** web `handlers.test.ts -t PATIENT_SEARCH_LIMIT` 1 passed; `test:int patients-read` 17 passed; `pnpm run check` exit 0 (api 563, shared 251, web 416, infra 41, seed 31).
 **Notes:** Q3/Q4 (user) accepted: the picker ranks within the 50 name matches; cap 50. The demo seed has 60 children matching "a", so the cases are not vacuous.
+
+## Phase 3: Stored standing columns and the shared bounds — 2026-10-19
+
+**Steps completed:** 3.1, 3.2
+**Files changed:** `apps/api/prisma/schema.prisma`, `apps/api/prisma/migrations/20261022000100_b14_patient_standing/migration.sql`, `apps/api/src/patients/patient.views.test.ts`, `packages/shared/src/domain/patient-list.ts`, `packages/shared/src/domain/patient-list.test.ts`
+**Deviations from plan:** none (the migration SQL is `prisma migrate diff`'s output, one ALTER with four columns plus the index, with the plan's header comment).
+**Gate:** `db:deploy`, `db:generate` on `pedia_dental_b14_test`, `db:drift` = no difference. `patient-list.test.ts` 16 passed. `pnpm run check` exit 0 (shared 253, api 563, web 416, infra 41, seed 31).
+**Notes:** the parity case runs `standingOn(storedStanding(...))` against `patientStanding` for 7 patients on today = 10-02/10-03/10-04 over due days today±1/+7/+8 and visits at today−29/−30, including a voided bill, a part payment, a booked (closing) due item and failed/sent texts.
