@@ -6,8 +6,9 @@ The Primolar backend. It replaces the browser mocks (MSW) in `apps/web` **endpoi
 feature code in the web app**. The product, the users and the domain are the ones in the root `CONVENTIONS.md`
 and `ROADMAP.md`; read those first. This file covers only how the API is built.
 
-**Current phase: B1–B12, B13a and B13b done** (B13b: AWS CDK in `packages/infra`, the deploy workflow and runbooks;
-the AWS deploy itself is the owner's). B13c (mocks off, privacy, load test) is next. B13a added the production
+**Current phase: B1–B12, B13a, B13b and B13c1 done** (B13c1: mocks off everywhere, the port ledger, the API-backed
+demo with its nightly reset, and the load test; B13b: AWS CDK in `packages/infra`; the AWS deploy itself is the owner's).
+B13c2 (Data Privacy Act operations) is next, then "Patient list and search at scale". B13a added the production
 build (`build.mjs`), the image (`Dockerfile`), `APP_ENV`, helmet and `trust proxy`, liveness and readiness probes,
 EMF metrics, error fingerprints and the operator's audit trail. The runtime core (request context, `Clock`, logs, tenant scoping,
 transactions, audit), `@pedia/seed`, the `test:int` suite on MySQL and CI, identity, sessions and the access guard,
@@ -60,6 +61,8 @@ Run from the repo root.
 | Production bundle, and run it | `pnpm --filter api build` / `start:prod` (from `apps/api`: the bundle resolves its packages there) |
 | Image, and its release step | `docker build -f apps/api/Dockerfile -t primolar-api .` / `docker run … primolar-api node_modules/.bin/prisma migrate deploy` |
 | Production dependency audit | `pnpm run audit:deps` |
+| Reset a demo database to today's seed (demo only) | `DEMO_LOGINS=true pnpm --filter api db:demo-reset` |
+| Load test: seed a `_load` database, run the targets | `pnpm --filter api load:seed`, `load:run` (README → Load test) |
 | Load the demo clinics (demo deployments only) | `DEMO_LOGINS=true pnpm --filter api db:seed`. Refuses without the flag, and on a database that already has clinic accounts (`prisma migrate reset --force` first) |
 | Regenerate the Prisma client | `pnpm --filter api db:generate` (also runs on install) |
 | Browse the database | `pnpm --filter api db:studio` |
@@ -295,6 +298,13 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   and both test apps.
 - **`APP_ENV` other than `local` refuses dev defaults:** https `CORS_ORIGIN` and `WEB_URL`, secure cookies and
   `S3_BUCKET` are required; `production` also refuses `DEMO_LOGINS`. `CORS_ORIGIN` entries must be exact origins.
+- **`DEMO_DAILY_RESET` is demo-only** (`APP_ENV=demo` and `DEMO_LOGINS=true`, else the API refuses to start). On the
+  background instance it wipes and reseeds at 03:40 Manila and seeds an empty database at start-up; it keeps
+  `_prisma_migrations` and `JobLock`. Infra sets it from `cdk.json`'s `demoDailyReset`.
+- **"Ported" is the ledger** (`test/port-ledger.ts`, checked in `pnpm run check`): every case of the web's handler tests
+  maps to an API test that exists (or a twin title). A new web handler test needs a ledger line or a twin.
+- **The load test's database name must end in `_load`** (`load:seed` refuses anything else). The targets are
+  `test/load/targets.ts`; the patient list and search miss them past ~1,000 patients (B13c1 decisions.md L1, a Later chunk).
 - **Every operator route that changes something carries `@OperatorAudited`** (`test/operator-audit-coverage.test.ts`
   fails otherwise). The row is written after the handler succeeds (B13a E9).
 - **Prisma 7's `migrate dev` doesn't regenerate the client.** Run `pnpm --filter api db:generate` after it.

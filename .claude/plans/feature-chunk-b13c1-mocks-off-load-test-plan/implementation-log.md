@@ -91,3 +91,51 @@ handlers2 also hoisted `parent-ownership`'s `it.each` table, so the parser reads
 **Gate:**
 - `pnpm run check`: exit 0. `port-ledger.test.ts`: 16 passed, all 13 files enforced.
 - `pnpm --filter api test:int`: 53 files, 607 tests passed (was 568).
+
+## Step 5.4 and the Phase 4 gate — 2026-10-19 (agent run, commit f4b25c5)
+
+**Steps completed:** 5.4; the Phase 4 e2e gate
+**Files changed:** `apps/web/e2e/api-demo-script.spec.ts` (new), `apps/web/e2e/api-photos-documents.spec.ts`, `apps/web/src/features/auth/components/{login-screen,access-gate}.tsx`
+**Results** (fresh database, mocks off; the web on :3200, the API on :4160):
+- `api-demo-script.spec.ts`: 10 of 10 (sections 0–9, 2.2 min, 13 sign-ins). Section 9's X-ray uploads and opens at `/api/files/<token>`.
+- Every other `api-*.spec.ts` against the `disabled` web:
+
+  | Spec | Passed |
+  | --- | --- |
+  | billing | 8 |
+  | chart | 3 |
+  | messages | 7 |
+  | notes-plan | 4 |
+  | operator | 5 |
+  | owner-settings | 7 |
+  | patients | 5 |
+  | photos-documents | 6 |
+  | portal | 4 |
+  | scheduling | 5 |
+  | sign-in | 10 |
+- `api-sign-in.spec.ts` with `E2E_MOCKING=hybrid` against a hybrid web (:3210): 10.
+**Product fix found by the run:**
+- **Symptom:** with mocks off, `/login` with a stored session but no cookie hung on "Signing you in".
+- **Cause:** the first client render after SSR read the session as empty, then took the stored session for a sign-in in progress.
+- **Fix:** `login-screen.tsx` reads the session it opened with from the store, comparing only once the store is hydrated (`useHydrated`, now exported from `access-gate.tsx`).
+**Spec fix:** `api-photos-documents.spec.ts`'s first case accepts the API's 302 to a file link with mocks off, or hybrid's 200 PNG (MSW follows the redirect). The image-loads assertion is unchanged.
+**Notes:**
+- The installed Playwright 1.64 expects a newer browser than `/opt/pw-browsers` holds, so the run used a temporary config pointing at chromium-1194, with one worker. That config was deleted afterwards.
+- Seed with `STORAGE_DIR` set to the API's storage, so the seeded photos have their files.
+- Start the API with `WEB_URL` pointing at the web, for `api-portal`'s links.
+
+## Phase 7: Documentation — 2026-10-19
+
+**Steps completed:** 7.1, 7.2
+**Files changed:** `CONVENTIONS.md` (current phase, commands, traps: demo help follows the API, a new route needs both sides, `localStorage` only in `enabled`; "the NestJS backend" off the deferral list), `apps/api/CONVENTIONS.md` (current phase, commands, traps: `DEMO_DAILY_RESET`, "ported" is the ledger, `_load`), `apps/api/CHUNKS.md` (B13c1 ✅, B13c2 listed with the audit-log reader, "Done when" note, the Later chunk), `packages/infra/runbooks/go-live-checklist.md` (B13c1's three checks; DPA line now B13c2's)
+
+## Go-live for the client demo (owner's steps)
+
+1. **`packages/infra/cdk.json`:** `appEnv` = `demo`, `demoLogins` = `true`, `demoDailyReset` = `true`. Deploy; the empty RDS gets seeded at start-up.
+2. **Vercel, Production and Preview:**
+   - `NEXT_PUBLIC_API_MOCKING=disabled`;
+   - `API_PROXY_TARGET=https://<apiDomain>`;
+   - then redeploy. Today `primolar.vercel.app` still runs MSW.
+3. **After a reset:** run `E2E_API=1 E2E_BASE_URL=https://<demo web> npx playwright test e2e/api-demo-script.spec.ts --project=desktop`. This closes B13's "Done when", and its X-ray is the real-S3 check left from B10.
+4. **Optionally:** `LOAD_RECORD_ONLY=1 LOAD_BASE_URL=https://<apiDomain> pnpm --filter api load:run` at demo size, recorded only.
+5. **Before real clinics:** a fresh database, `appEnv` = `production`, `demoLogins` and `demoDailyReset` = `false` (go-live checklist).

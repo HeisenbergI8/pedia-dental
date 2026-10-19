@@ -3,9 +3,11 @@
 ## What this project is
 
 Primolar: pediatric dental clinic management sold as a service to many clinics. Each paying clinic is a
-**clinic account** with its own branches, staff, patients and branding (ROADMAP feature 16). **Current phase: frontend prototype.** In the demo every API call is
-answered in the browser by MSW using fake, seeded data; in `hybrid` mode the routes apps/api already serves (B2: sign-in; B3: the Owner's settings and reference data; B4: patients, consents and the privacy notice; B5: visits and the chart; B6: notes, growth and the treatment plan; B7: appointments, requests, the due list and Today; B8: billing, payments and the financial dashboard; B9: the message log, recall texts and birthday greetings; B10: photos, the documents log and file links; B11: parents' portal accounts, invite and reset links; B12: the operator console, sign-ups, subscriptions, receipts and the payment QR) go to it. A NestJS + MySQL API
-(`apps/api`, scaffolded; its own rules are in `apps/api/CONVENTIONS.md`) will replace the mocks later, endpoint by endpoint, without changing feature code. A clinic joins through
+**clinic account** with its own branches, staff, patients and branding (ROADMAP feature 16). **Current phase: the web runs against the API** (`apps/api`, its own rules in `apps/api/CONVENTIONS.md`) in every
+deployment (`NEXT_PUBLIC_API_MOCKING=disabled`, B13c1). MSW stays as the offline mode (`enabled`): every call answered in
+the browser from fake, seeded data, for UI work and the pilot specs; `hybrid` (MSW running, the API's routes passed
+through) is kept for the bridge-cookie tests. The MSW handlers were the API's contract, and `apps/api/test/port-ledger.ts`
+holds each web handler test to an API test. A clinic joins through
 the public **Get started** form, and Primolar approves it in the operator console (ROADMAP feature 17). Each clinic
 then pays Primolar monthly; the operator records payments by hand, and a clinic 7 days overdue pauses itself.
 
@@ -25,7 +27,9 @@ TanStack Query · React Hook Form + Zod 4 · Zustand (UI state, plus the demo se
 | Fast check (runs every turn) | `pnpm run typecheck` |
 | Tests, one file | `pnpm --filter <web|@pedia/shared|@pedia/seed> exec vitest run <path>` |
 | Design guards (contrast, tokens, shell, screens) | `pnpm run check -- design` (typecheck + every `src/design/design-*.test.ts`) |
-| Run the app locally | `pnpm dev` → http://localhost:3000 |
+| Run the app locally | `pnpm dev:api` (MySQL up and seeded: README → Run it), then `pnpm dev` → http://localhost:3000 |
+| Run offline (MSW, no API) | `NEXT_PUBLIC_API_MOCKING=enabled pnpm dev` |
+| The client demo script against the API, end to end | Fresh seeded database, the API and a `disabled` web: `E2E_API=1 E2E_BASE_URL=… npx playwright test e2e/api-demo-script.spec.ts --project=desktop`. Start-up: the spec's header (about 13 sign-ins) |
 | The API's production build and image | `pnpm --filter api build`, `docker build -f apps/api/Dockerfile -t primolar-api .`: `apps/api/README.md` → Production build and image |
 | AWS infrastructure (CDK): test, synthesize, diff | `pnpm --filter @pedia/infra test` (in `check`), `pnpm --filter @pedia/infra exec cdk synth -q` / `cdk diff <stack>`. Deploys: Actions → deploy (`packages/infra/runbooks/deploy.md`); every AWS step is run by the owner, never by an agent |
 | Run against the real API | `NEXT_PUBLIC_API_MOCKING=hybrid API_PROXY_TARGET=http://localhost:4100 pnpm dev` with `pnpm dev:api` running (`DEMO_LOGINS=true COOKIE_SECURE=false`, seeded with `pnpm --filter api db:seed`). `enabled` = MSW answers everything (the demo); `hybrid` = MSW answers all but `API_ROUTES` (`mocks/passthrough.ts`: since B2, sign-in, `/operator/auth/*` and the clinic reads; since B3, the Owner's settings, `/clinic/usage`, the logo and the reference data; since B4, patients, consents, the patient photo and the privacy notice; since B5, visits and the dental chart; since B6, notes, growth and the treatment plan; since B7, appointments, parents' requests, the due list and Today; since B8, bills, payments, deposits, voids, the day's collections and the financial dashboard; since B9, the message log, recall texts and birthday greetings; since B10, clinical photos, the issued-documents log and the API's `/files/<token>` links; since B11, portal access, invites, the set-password and reset links and `/auth/demo-texts`; since B12, every `/operator/*` route, the public `/signups*` routes and `/clinic/subscription*`), which go through Next's `/api` proxy to the API; `disabled`/unset = no MSW |
@@ -172,7 +176,12 @@ MSW handler (now) or NestJS (later).
 - `msw/browser` has no server build. `next.config.ts` aliases it to `false` on the server; keep that,
   and only import `@/mocks/browser` dynamically from `app/providers.tsx`.
 - `NEXT_PUBLIC_*` env vars are inlined at build time. Changing `.env.local` needs a dev-server restart.
-- Mock data lives in `localStorage`. After changing `seed()` or `Db`, bump the key in `mocks/db.ts`
+- **The demo's help follows the API** (B13c1 E4): the demo logins, texts, PINs and the operator hint show whenever
+  `GET /auth/demo-accounts` answers (MSW, or an API with `DEMO_LOGINS=true`), whatever the mocking mode. **Reset demo
+  data** clears MSW's copy, so it shows only while MSW runs (`canResetDemoData`).
+- **A new route needs its API controller and its MSW handler.** `passthrough.test.ts` fails when a handler's route is
+  missing from `API_ROUTES`; a new web handler test needs a twin API test or a line in `apps/api/test/port-ledger.ts`.
+- In `enabled` mode only, mock data lives in `localStorage`. After changing `seed()` or `Db`, bump the key in `mocks/db.ts`
   or clear storage, or you'll keep seeing old data. The key is `pedia-dental:mock-db:v31`; each bump gets a
   one-line comment above it saying why.
 - The mock store is partitioned by clinic account: `Platform = { accounts, tenants, signups, prices, subscriptions, agreements, priceChanges, paymentQr, receipts }`
@@ -275,8 +284,8 @@ MSW handler (now) or NestJS (later).
 
 ## Reporting rules
 
-- **A deferral is not a gap.** Deliberately deferred for the prototype: real authentication (the demo
-  login is a demo control: anyone can sign in as any account with the shown password; the token is the account id; staff PINs, Owner-added passwords and parents' own passwords are stored as typed, and the demo keeps invite and reset link tokens as typed and lists them on the sign-in page ("Demo texts"); a number change can't sign a demo parent out (B11) and PINs are listed in the Switch user dialog's "Demo PINs" hint; the operator's demo sign-in, operator@primolar.demo with the demo password), the NestJS backend, real SMS sending (the API has it since B9, but logs instead of sending until `SEMAPHORE_API_KEY` is set), email sending (staff and parent invites; parents are invited by SMS since B11), real file storage in the demo (MSW keeps files in the browser; the API stores files in S3 or on its disk since B10, and sanitises uploaded SVG logos since B3), BIR
+- **A deferral is not a gap.** Deliberately deferred for the prototype: real authentication in the MSW demo (the demo
+  login is a demo control: anyone can sign in as any account with the shown password; the token is the account id; staff PINs, Owner-added passwords and parents' own passwords are stored as typed, and the demo keeps invite and reset link tokens as typed and lists them on the sign-in page ("Demo texts"); a number change can't sign a demo parent out (B11) and PINs are listed in the Switch user dialog's "Demo PINs" hint; the operator's demo sign-in, operator@primolar.demo with the demo password), real SMS sending (the API has it since B9, but logs instead of sending until `SEMAPHORE_API_KEY` is set), email sending (staff and parent invites; parents are invited by SMS since B11), real file storage in the demo (MSW keeps files in the browser; the API stores files in S3 or on its disk since B10, and sanitises uploaded SVG logos since B3), BIR
   official receipts, and every screen that currently renders `ComingSoon`. Their absence is intentional.
 - **A claim that ages carries the date it was measured.** Any count or "every / all / none" statement
   written into something durable says when it was measured.

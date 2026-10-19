@@ -424,7 +424,11 @@ BIR-registered invoices and a second step for the operator's sign-in stay later 
   `.claude/plans/feature-chunk-b13a-production-build-plan/`).
 - ✅ **B13b: AWS infrastructure as code, deploy and runbooks** (done 2026-10-18,
   `.claude/plans/feature-chunk-b13b-aws-infra-plan/`). The deploy to AWS is the owner's: `packages/infra/runbooks/`.
-- **B13c:** mocks off, Data Privacy Act operations, the load test. This closes B13's "Done when".
+- ✅ **B13c1: mocks off, the port ledger, the API-backed demo, the load test** (done 2026-10-19,
+  `.claude/plans/feature-chunk-b13c1-mocks-off-load-test-plan/`). The demo script passes end to end on the API locally;
+  the load test's list and search misses are accepted and moved to a Later chunk (decisions.md L1).
+- **B13c2:** Data Privacy Act operations (copy of records, request register, erasure within legal retention, retention
+  schedule, the audit-log reader, NPC registration notes).
 
 **Decided (2026-10-18):**
 - **Hosting:** AWS in Singapore (`ap-southeast-1`).
@@ -436,7 +440,8 @@ BIR-registered invoices and a second step for the operator's sign-in stay later 
   - An AWS budget alert from day one; no NAT gateway at the start.
 - **Backups:** RDS automated backups with point-in-time restore, kept for 30 days.
 
-**Done when:** the client demo script (`DEMO_SCRIPT.md`) runs end to end with the mocks off on the deployed API;
+**Done when:** the client demo script (`DEMO_SCRIPT.md`) runs end to end with the mocks off on the deployed API (proven
+locally by `e2e/api-demo-script.spec.ts`, B13c1; on the deployed demo it is the go-live run);
 restoring last night's backup to a fresh database works; the load test meets its targets.
 
 **Depends on:** B12.

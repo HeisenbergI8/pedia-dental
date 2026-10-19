@@ -50,9 +50,12 @@ Tick every line before real clinics' data goes in. Each line names how to check 
 ## Web and the rest of B13
 
 - [ ] Vercel production: `API_PROXY_TARGET` = `https://<apiDomain>`.
-- [ ] B13c done: `NEXT_PUBLIC_API_MOCKING=disabled`, the demo script runs end to end on the deployed API, and the load
-  test meets its targets.
-- [ ] B13c's Data Privacy Act items (export and deletion requests, retention, NPC registration) are done.
+- [ ] Vercel production and preview: `NEXT_PUBLIC_API_MOCKING=disabled` (B13c1: no deployment runs MSW), then redeploy.
+- [ ] `apps/web/e2e/api-demo-script.spec.ts` passes against the deployed demo (`E2E_BASE_URL=https://<demo web>`), right
+  after a reset (B13's "Done when").
+- [ ] The load test's local run is recorded (B13c1 implementation log), and its accepted misses are understood:
+  the patient list and search slow down past ~1,000 patients until the "at scale" chunk.
+- [ ] B13c2's Data Privacy Act items (export and deletion requests, retention, NPC registration) are done.
 - [ ] The operator's password is strong and stored in a password manager. Two-step sign-in comes later (B13a D3).
 
 ## Known limits at go-live (accepted)
