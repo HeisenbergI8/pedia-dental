@@ -26,6 +26,7 @@ import { JobsModule } from "./jobs/jobs.module";
 import { loggerParams } from "./logging/logger";
 import { MessagesModule } from "./messages/messages.module";
 import { LegalModule } from "./legal/legal.module";
+import { StandingRefreshModule } from "./patients/standing-refresh";
 import { PatientsModule } from "./patients/patients.module";
 import { VisitsModule } from "./visits/visits.module";
 import { NotesModule } from "./notes/notes.module";
@@ -60,6 +61,7 @@ export class AppModule implements NestModule {
       imports: [
         LoggerModule.forRoot(loggerParams(env, logStream)),
         PrismaModule,
+        StandingRefreshModule, // B14: the record services' hook into Patient's stored standing
         MetricsModule,
         OperatorAuditModule,
         JobsModule,

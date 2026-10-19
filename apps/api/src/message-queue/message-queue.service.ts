@@ -119,9 +119,9 @@ export class MessageQueueService {
    * time a sent text wins, as `hasNoContact` breaks the tie. One query: raw SQL for the window function, so it names the
    * clinic itself (the tenant extension doesn't see raw SQL).
    */
-  async lastTried(patientIds: readonly string[]): Promise<Pick<Message, "patientId" | "status" | "sendAt">[]> {
+  async lastTried(patientIds: readonly string[], tx: Tx = this.prisma): Promise<Pick<Message, "patientId" | "status" | "sendAt">[]> {
     if (!patientIds.length) return [];
-    const rows = await this.prisma.$queryRaw<{ patientId: string; status: "sent" | "failed"; sendAt: Date }[]>`
+    const rows = await tx.$queryRaw<{ patientId: string; status: "sent" | "failed"; sendAt: Date }[]>`
       SELECT patientId, status, sendAt FROM (
         SELECT patientId, status, sendAt, ROW_NUMBER() OVER (PARTITION BY patientId ORDER BY sendAt DESC, status = 'sent' DESC, id DESC) AS rn
         FROM Message

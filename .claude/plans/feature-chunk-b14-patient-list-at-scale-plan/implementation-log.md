@@ -30,3 +30,12 @@ Open questions settled (user: "fix it, merge only if the load test proves it"): 
 **Deviations from plan:** none (the migration SQL is `prisma migrate diff`'s output, one ALTER with four columns plus the index, with the plan's header comment).
 **Gate:** `db:deploy`, `db:generate` on `pedia_dental_b14_test`, `db:drift` = no difference. `patient-list.test.ts` 16 passed. `pnpm run check` exit 0 (shared 253, api 563, web 416, infra 41, seed 31).
 **Notes:** the parity case runs `standingOn(storedStanding(...))` against `patientStanding` for 7 patients on today = 10-02/10-03/10-04 over due days today±1/+7/+8 and visits at today−29/−30, including a voided bill, a part payment, a booked (closing) due item and failed/sent texts.
+
+## Phase 4: PatientStandingService and the refresh slot — 2026-10-19
+
+**Steps completed:** 4.1, 4.2
+**Files changed:** `apps/api/src/visits/visit-days.service.ts`, `apps/api/src/recalls/due-items.service.ts`, `apps/api/src/billing-records/billing-records.service.ts`, `apps/api/src/message-queue/message-queue.service.ts`, `apps/api/src/patients/standing-refresh.ts` (new), `apps/api/src/patients/patient-standing.service.ts` (new), `apps/api/src/patients/patient-standing.service.test.ts` (new), `apps/api/src/patients/patients.module.ts`, `apps/api/src/app.module.ts`
+**Deviations from plan:**
+- `refresh` reads the stored rows (one `findMany` through `tx`, under the caller's lock) and compares in JS instead of `updateMany({ NOT: data })`: SQL `NOT (col = ?)` is NULL when the column is NULL, so a NULL `lastVisitOn` would never count as drifted (the plan's fallback). Only differing rows are updated; the count is the drift.
+- `compute` feeds `openFor`'s already-open items into `storedStanding`; re-filtering them with `isDueItemOpen` over the done appointments (or none) keeps exactly the same set, so no rule is re-derived. `PrismaService` is not injected (unused).
+**Gate:** `patient-standing.service.test.ts` 4 passed; `pnpm run check` exit 0 (api 567, shared 253, web 416, infra 41, seed 31); `test:int patients-read` 17 passed (the app boots with the global slot).

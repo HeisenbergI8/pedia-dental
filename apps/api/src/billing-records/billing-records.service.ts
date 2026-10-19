@@ -45,9 +45,9 @@ export class BillingRecordsService {
    * Each live bill of these patients with its line sum and payment sum (E8): one aggregate query, shaped for the shared
    * rules (one line carrying the sum; one payment row per bill). Voided bills are left out, as accountSummary would.
    */
-  async billTotals(patientIds: readonly string[]): Promise<BillTotalsOf> {
+  async billTotals(patientIds: readonly string[], tx: Tx = this.prisma): Promise<BillTotalsOf> {
     if (!patientIds.length) return { invoices: [], payments: [] };
-    const rows = await this.prisma.$queryRaw<{ id: string; patientId: string; discount: number; billed: unknown; paid: unknown }[]>`
+    const rows = await tx.$queryRaw<{ id: string; patientId: string; discount: number; billed: unknown; paid: unknown }[]>`
       SELECT i.id, i.patientId, i.discount,
         (SELECT COALESCE(SUM(l.amount), 0) FROM InvoiceLine l WHERE l.clinicId = i.clinicId AND l.invoiceId = i.id) AS billed,
         (SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.clinicId = i.clinicId AND p.invoiceId = i.id) AS paid
