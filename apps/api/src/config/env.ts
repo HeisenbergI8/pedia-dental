@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PRIVACY_REQUEST_DUE_WORKING_DAYS_DEFAULT } from "@pedia/shared";
+import { PRIVACY_REQUEST_DUE_WORKING_DAYS_DEFAULT, RECORD_RETENTION, retentionConfirmed } from "@pedia/shared";
 
 /** "true"/"1" or "false"/"0" only: Zod's default also takes yes/on/enabled, and a typo should stop startup. */
 const flag = () => z.stringbool({ truthy: ["true", "1"], falsy: ["false", "0"] });
@@ -37,6 +37,9 @@ const Env = z.object({
   // B13c2b (decisions.md E3, C4): working days to answer a data-subject request, Monday to Friday. CONFIRM WITH COUNSEL.
   // Stored on each request when it is logged, so a change moves only new deadlines.
   PRIVACY_REQUEST_DUE_WORKING_DAYS: z.coerce.number().int().min(1).max(60, "PRIVACY_REQUEST_DUE_WORKING_DAYS is at most 60").default(PRIVACY_REQUEST_DUE_WORKING_DAYS_DEFAULT),
+  // B13c2b-2 (decisions.md D2): privacy.anonymise de-identifies restricted children whose retention has ended (03:30
+  // Manila). Off by default; refused while RECORD_RETENTION's periods are unconfirmed (CONFIRM WITH COUNSEL).
+  RETENTION_ERASURE: flag().default(false),
   // The local-disk storage driver's root, relative to the API's working directory (used when S3_BUCKET is unset, B10).
   STORAGE_DIR: z.string().min(1).default("var/storage"),
   // B10 (E11): the S3-compatible driver. Unset S3_BUCKET: the local-disk driver under STORAGE_DIR.
@@ -62,6 +65,10 @@ const Env = z.object({
   // B13c1 E5: a nightly wipe only where the data is the demo's by definition.
   if (env.DEMO_DAILY_RESET && (env.APP_ENV !== "demo" || !env.DEMO_LOGINS)) {
     ctx.addIssue({ code: "custom", path: ["DEMO_DAILY_RESET"], message: "DEMO_DAILY_RESET needs APP_ENV=demo and DEMO_LOGINS=true" });
+  }
+  // B13c2b-2 D2: anonymisation can't be switched on before counsel has given the periods, in any APP_ENV.
+  if (env.RETENTION_ERASURE && !retentionConfirmed(RECORD_RETENTION)) {
+    ctx.addIssue({ code: "custom", path: ["RETENTION_ERASURE"], message: "RETENTION_ERASURE can't be true while RECORD_RETENTION's periods are unconfirmed (packages/shared/src/domain/retention.ts; confirm with counsel)" });
   }
   if (env.APP_ENV === "local") return;
   const problem = (path: string, message: string) => ctx.addIssue({ code: "custom", path: [path], message });

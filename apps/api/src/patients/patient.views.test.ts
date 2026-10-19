@@ -9,7 +9,7 @@ const record: PatientRecord = {
     birthDate: new Date("2019-04-12T00:00:00.000Z"), sex: "female", address: "12 Mabini St",
     emergencyName: "Lola", emergencyPhone: "0918 000 0000", allergies: [], noKnownAllergies: true, medicalConditions: [],
     medications: [], noKnownConditions: true, alerts: [], tags: ["HMO"], dentalHistory: { previousClinic: "", notes: "" },
-    profile: null, photoRef: null, photoUpdatedAt: null, createdAt: at, searchNames: "", searchPhones: "", restrictedAt: null,
+    profile: null, photoRef: null, photoUpdatedAt: null, createdAt: at, searchNames: "", searchPhones: "", restrictedAt: null, anonymisedAt: null,
   },
   guardians: [{
     clinicId: "c1", patientId: "p1", guardianId: "g1", fullName: "Rosa Mendoza", relationship: "Mother",
