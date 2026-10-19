@@ -304,7 +304,7 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **"Ported" is the ledger** (`test/port-ledger.ts`, checked in `pnpm run check`): every case of the web's handler tests
   maps to an API test that exists (or a twin title). A new web handler test needs a ledger line or a twin.
 - **The load test's database name must end in `_load`** (`load:seed` refuses anything else). The targets are
-  `test/load/targets.ts`; the patient list and search miss them past ~1,000 patients, and every target misses at 5,000 (B13c1
+  `test/load/targets.ts`; the patient list and search miss them from a few hundred patients (p97.5 683–819 ms at ~560, B13c1 tester), and every target misses at 5,000 (B13c1
   decisions.md L1, a Later chunk).
 - **Every operator route that changes something carries `@OperatorAudited`** (`test/operator-audit-coverage.test.ts`
   fails otherwise). The row is written after the handler succeeds (B13a E9).

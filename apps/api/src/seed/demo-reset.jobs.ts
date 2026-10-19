@@ -20,9 +20,15 @@ export class DemoResetJobs implements OnApplicationBootstrap {
     @Inject(ENV) private readonly env: Env,
   ) {}
 
-  /** A demo database with no clinic yet (just deployed and migrated) is seeded at once, not at 03:40. */
+  /**
+   * A demo database with no clinic yet (just deployed and migrated) is seeded at once, not at 03:40. So is one whose last
+   * reset started and never finished (a failed seed leaves a half-seeded demo, e.g. accounts without logins): the job
+   * runner stamps lastFinishedAt only on success.
+   */
   async onApplicationBootstrap() {
-    if ((await this.prisma.clinicAccount.count()) === 0) await this.reset();
+    const lock = await this.prisma.jobLock.findUnique({ where: { name: DEMO_RESET.name }, select: { lastStartedAt: true, lastFinishedAt: true } });
+    const unfinished = !!lock?.lastStartedAt && (!lock.lastFinishedAt || lock.lastFinishedAt < lock.lastStartedAt);
+    if (unfinished || (await this.prisma.clinicAccount.count()) === 0) await this.reset();
   }
 
   @Cron("40 3 * * *", { name: DEMO_RESET.name, timeZone: "Asia/Manila" })

@@ -155,3 +155,15 @@ The auditor scored 71/100.
 - **6, low:** infra's vitest config sets `hookTimeout: 60_000`, so synthesis in `beforeAll` doesn't time out on a busy machine.
 - **Smells left as is:** the e2e helpers repeated across specs, and the ledger's string value.
 **Gate:** `pnpm run check`: exit 0.
+
+## Tester fixes — 2026-10-19
+
+The tester confirmed the demo-reset guards, the start-up seed, the demo help with mocks off (in a real browser, against `DEMO_LOGINS` true and false), the load tooling, `pnpm run check`, and `test:int` (607 tests) on its own database.
+- **F1, medium-low: a failed start-up seed was never healed.** Storage unreachable left 3 accounts with no logins, and a restart skipped the seed because accounts existed.
+  - **Fix:** `DemoResetJobs.onApplicationBootstrap` also reseeds when the last `demo.reset` started and never finished. `JobRunner` stamps `lastFinishedAt` only on success.
+  - **Test:** a new int case in `seed.int.test.ts` (18 passed).
+- **The patient list misses already at demo size:** p97.5 683–819 ms at ~560 patients. API CONVENTIONS and the go-live checklist now say "from a few hundred patients". L1 already accepts it.
+- **Ledger weaknesses left as is,** all within the plan's rule 3 (map to the main assertion, name the others in a comment):
+  - Several primary mappings are narrower than their web case, with the rest covered by tests named in comments, which the guard doesn't check.
+  - The reverse cross-clinic read (demo staff reading an Ngiti patient by id) isn't asserted. The forward direction and the writes are.
+**Gate:** `pnpm run check` (below); `seed.int.test.ts` 18 passed.

@@ -276,5 +276,18 @@ describe("the demo reset (B13c1 E5)", () => {
     expect((await prisma.clinicAccount.findUniqueOrThrow({ where: { id: DEMO_CLINIC_ID } })).name).toBe("Kept");
     await resetDemo(prisma, hasher, { APP_ENV: "local", DEMO_LOGINS: true }); // leave the seed as the file found it
   }, 60_000);
+
+  it("reseeds at start-up after a reset that never finished, though accounts exist", async () => {
+    const env = loadEnv({ DATABASE_URL: "mysql://unused", APP_ENV: "local", DEMO_LOGINS: "true" });
+    const jobs = new DemoResetJobs(new JobRunner(prisma, new SystemClock()), prisma, hasher, env);
+    // A seed that failed half-way (the tester's case: storage unreachable): accounts written, no demo logins.
+    await prisma.$executeRaw`DELETE FROM DemoLogin`;
+    await prisma.$executeRaw`DELETE FROM JobLock WHERE name = 'demo.reset'`;
+    await prisma.$executeRaw`INSERT INTO JobLock (name, lockedUntil, lockedBy, lastStartedAt) VALUES ('demo.reset', NOW(3), '', NOW(3))`;
+    await jobs.onApplicationBootstrap();
+    expect(await prisma.demoLogin.count()).toBeGreaterThan(0);
+    const [lock] = await prisma.$queryRaw<{ done: number }[]>`SELECT lastFinishedAt >= lastStartedAt AS done FROM JobLock WHERE name = 'demo.reset'`;
+    expect(Number(lock!.done)).toBe(1);
+  }, 60_000);
 });
 
