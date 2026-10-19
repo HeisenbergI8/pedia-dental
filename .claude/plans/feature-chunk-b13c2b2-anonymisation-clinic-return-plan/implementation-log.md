@@ -52,3 +52,7 @@ Open questions settled by the session's safe defaults (user rule: deleting parts
 - `apps/api/CONVENTIONS.md`'s "anonymised child stays restricted" trap also notes the guardian phone reads "Anonymised" (the Phase 3 deviation).
 **Gate:** `pnpm run check` exit 0 (api 563 tests / 87 files, shared 251, web 415, infra 41, seed 31; `inventory.test.ts` passes).
 **Notes:** the runbook's AWS, `openssl cms` and S3 commands are unexecuted (no agent runs AWS); the runbook says to dry-run on the demo deployment first.
+
+## Final gate — 2026-10-19
+
+`TEST_DATABASE_URL=mysql://…/pedia_dental_b13c2b2_test pnpm --filter api test:int` (full suite) on `a0e9fc3`: exit 0, 58 files, 646 tests passed. Every plan step (1.1–5.3) is implemented; none was skipped. Not done, as the plan defers them: Q4–Q8 and F1–F4 (e.g. `purgedAt` in the console, a system audit actor), and the runbook's AWS dry run on the demo deployment.
