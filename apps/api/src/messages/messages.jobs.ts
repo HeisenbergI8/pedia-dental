@@ -55,7 +55,8 @@ export class MessagesJobs {
       const children = await tx.$queryRaw<{ clinicId: string; patientId: string }[]>`
         SELECT DISTINCT m.clinicId, m.patientId FROM Message m JOIN OutboxMessage o
           ON o.kind = ${MESSAGE_SEND} AND JSON_UNQUOTE(JSON_EXTRACT(o.payload, '$.messageId')) = m.id
-        WHERE m.status = 'queued' AND o.status = 'failed' AND m.kind NOT IN (${Prisma.join([...ACCOUNT_TEXT_KINDS])})`;
+        WHERE m.status = 'queued' AND o.status = 'failed' AND m.kind NOT IN (${Prisma.join([...ACCOUNT_TEXT_KINDS])})
+        FOR UPDATE`; // locked: the UPDATE below fails exactly these rows, so none settles without its refresh
       await tx.$executeRaw`
         UPDATE Message m JOIN OutboxMessage o
           ON o.kind = ${MESSAGE_SEND} AND JSON_UNQUOTE(JSON_EXTRACT(o.payload, '$.messageId')) = m.id

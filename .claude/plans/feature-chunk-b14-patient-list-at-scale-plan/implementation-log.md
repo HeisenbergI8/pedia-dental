@@ -146,3 +146,14 @@ master as well, not a B14 behaviour change.
 
 **Gate:** `pnpm run check` exit 0 (api 563 / shared 253 / web 416 / infra 41 / seed 31). Full `pnpm --filter api test:int`
 on 6fb34b8: 59 files, 652 passed. `load:run` at 5,000: every target met (table above).
+
+## Review fixes (after tester PASS and auditor 55/100)
+
+- **F1 High:** a text born `failed` (no usable mobile) now enqueues `standing.refresh` in `MessageQueueService.write`; new case in `standing.int` ("a text born failed") fails without the fix, passes with it.
+- **F2 Medium:** `StandingRefreshHandler` locks first, then recomputes (the unlocked pre-check could lose an update).
+- **F3 Medium:** `standing.int` asserts the FIRST reconcile corrects 0 rows (seed + every write kept the standing).
+- **F5 Low:** the dead-letter repair's select is `FOR UPDATE`.
+- **F7 Low:** CHUNKS Later gains "Page the full patient directory" (Q2).
+- Left: F4 (rolling-deploy window; the nightly reconcile heals it, `db:backfill-standing` after a rollout if wanted), F6 (test-only sort), smells.
+- Gates on the final code: `pnpm run check` exit 0 (api 563, shared 253, web 416, infra 41, seed 31); full `test:int` 59 files, 652 passed.
+- Final `load:run` at 5,000 on fresh `pedia_dental_final_load`, thresholds enforced, exit 0: Today Imus p97.5 142 / p99 155; Today all 147 / 161; Patient list 135 / 148; balance-due list 206 / 223; Search 155 / 162; Book 331 / 344 at 36.7 req/s. Tester's two independent runs on 9cd4c6a also met every target.

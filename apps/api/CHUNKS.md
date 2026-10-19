@@ -500,6 +500,8 @@ bundle with `BACKGROUND_WORK=true`, MySQL 8.0.46 on the same 4-core box (baselin
 - Per-clinic web addresses; operator impersonation with an audit trail.
 - Patient merge (after duplicate detection in B4).
 - Operator two-step sign-in (B12 decisions 10 and 36; B13a decisions.md D3).
+- **Page the full patient directory** (B14 Q2). Eight screens (collections, message log, recalls, calendar, requests,
+  finance, documents, privacy) still load every patient unpaged, about 3.4 MB at 5,000 patients. Not a load target yet.
 
 ---
 

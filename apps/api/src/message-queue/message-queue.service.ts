@@ -4,6 +4,7 @@ import { ownClinicId } from "../clinic/account-lock";
 import { Clock } from "../common/clock";
 import { Prisma } from "../generated/prisma/client.ts";
 import { OutboxService } from "../outbox/outbox.service";
+import { STANDING_REFRESH } from "../patients/standing-refresh";
 import { PrismaService } from "../prisma/prisma.service";
 import type { Tx } from "../prisma/transaction";
 import { MESSAGE_COLUMNS, MESSAGE_SEND, messageData, toMessage } from "./message.rows";
@@ -60,6 +61,9 @@ export class MessageQueueService {
     const { id: _, ...data } = messageData(usable ? composed : { ...composed, status: "failed", failureReason: FAILURE.noPhone }, extra);
     const row = await tx.message.create({ data, select: MESSAGE_COLUMNS });
     if (usable) await this.outbox.enqueue(tx, { kind: MESSAGE_SEND, payload: { messageId: row.id }, availableAt: sendAt });
+    // B14: born failed (no usable number) is a text settling too: the child's "no contact" is recomputed, as the send
+    // handler's failures are.
+    else await this.outbox.enqueue(tx, { kind: STANDING_REFRESH, payload: { patientId: patient.id } });
     return toMessage(row);
   }
 

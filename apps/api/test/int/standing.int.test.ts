@@ -98,11 +98,21 @@ describe("stored standing (B14)", () => {
     while ((await t.app.get(OutboxWorker).drain()) > 0);
     sms.mockRestore();
     expect((await agrees(id, "a text failed")).noContact).toBe(true);
+
+    // A text born failed (no mobile number to send to) settles too: "no contact" without a send attempt.
+    const lone = await t.register();
+    const landline = await inDemo(async () => {
+      const p = await t.app.get(PatientsService).one(lone);
+      return { ...p, guardians: p.guardians.map((g) => ({ ...g, phone: "02 8123 4567" })) };
+    });
+    await inDemo(() => runInTransaction(t.prisma, (tx) => t.app.get(MessageQueueService).queue(tx, { kind: "birthday", patientId: lone, sendAt: clock.now().toISOString() }, landline)));
+    while ((await t.app.get(OutboxWorker).drain()) > 0);
+    expect((await agrees(lone, "a text born failed")).noContact).toBe(true);
   });
 
   it("the reconcile finds nothing to correct twice over, and corrects a row that drifted", async () => {
     const standing = t.app.get(PatientStandingService);
-    await reconcileAll(t.prisma, standing);
+    expect(await reconcileAll(t.prisma, standing)).toBe(0); // the seed and every write above kept it: nothing to correct
     expect(await reconcileAll(t.prisma, standing)).toBe(0);
     await inDemo(() => t.prisma.patient.update({ where: { id: "load_p1" }, data: { balance: 123_456 } }));
     expect(await reconcileAll(t.prisma, standing)).toBe(1);
