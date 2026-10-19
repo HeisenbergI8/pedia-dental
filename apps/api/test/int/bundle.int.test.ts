@@ -1,5 +1,10 @@
+import { spawnSync } from "node:child_process";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { useBundle } from "../support/bundle";
+import { buildBundle, removeBundle, useBundle } from "../support/bundle";
+
+const API_DIR = fileURLToPath(new URL("../..", import.meta.url));
 
 /** B13a Step 6.2: the bundle on MySQL. A model query runs Prisma 7's query compiler, which raw SQL doesn't. */
 describe("the production bundle on MySQL", { timeout: 90_000 }, () => {
@@ -18,5 +23,16 @@ describe("the production bundle on MySQL", { timeout: 90_000 }, () => {
     const res = await fetch(`${api.url}/api/operator/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
     expect(res.status).toBe(400);
     expect(Array.isArray(await res.json())).toBe(true);
+  });
+
+  it("runs the clinic data script from the bundle (usage without arguments)", () => {
+    const dir = buildBundle();
+    try {
+      const run = spawnSync(process.execPath, [join(dir, "clinic-data.mjs")], { cwd: API_DIR, encoding: "utf8" });
+      expect(run.status, run.stderr).toBe(2);
+      expect(run.stderr.startsWith("Usage: clinic-data")).toBe(true);
+    } finally {
+      removeBundle(dir);
+    }
   });
 });

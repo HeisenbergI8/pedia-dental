@@ -28,3 +28,16 @@ Open questions settled by the session's safe defaults (user rule: deleting parts
 - Int test: the seed is called with `app.get(FileStorage)` (as `photos.int.test.ts` does) so the photo files exist and case 4 proves their deletion; the `StoredFile` count in case 4 runs inside the clinic context (a tenant model). Case 7 picks the second child as one with no upcoming appointment and a last activity before today (so `{0, 0}` periods have ended for it).
 **Gate:** `pnpm run check` exit 0 (api 560 tests / 86 files, shared 251, web 415, infra 41, seed 31). `pnpm run check -- privacy-routes.test` exit 0 (8 tests: AppModule resolves `PrivacyModule`). `TEST_DATABASE_URL=…/pedia_dental_b13c2b2_test pnpm --filter api test:int test/int/erasure.int.test.ts`: 8/8 passed.
 **Notes:** inventory regenerated with the plan's `node --import @swc-node/register/esm-register -e …` one-liner and pasted between the markers.
+
+## Phase 4: The clinic's data at cancellation — 2026-10-19
+
+**Steps completed:** 4.1, 4.2, 4.3, 4.4, 4.5
+**Files changed:** `apps/api/src/privacy/clinic-data.ts` (new), `apps/api/src/privacy/clinic-data.test.ts` (new), `apps/api/src/privacy/privacy.module.ts`, `apps/api/prisma/clinic-data.ts` (new), `apps/api/package.json`, `apps/api/tsconfig.json`, `apps/api/build.mjs`, `apps/api/src/subscription-records/subscription-records.service.ts`, `apps/api/src/privacy/retention-schedule.ts`, `apps/api/src/privacy/retention-schedule.test.ts`, `PRIVACY_OPERATIONS.md` (inventory only), `apps/api/test/int/clinic-data.int.test.ts` (new), `apps/api/test/int/bundle.int.test.ts`
+**Deviations from plan:**
+- The `Retention` doc comment rewrite deferred from Step 3.3 lands here (see Phase 3).
+- `EXPORT_MODELS` literal pasted from the first failing run: 31 names, StoredFile and IdempotencyKey excluded, checked by eye against `references/model-scope-review.ts` (33 clinic models minus those two).
+- Int case 3: the seeded Ipin clinic has **no patients**, so the "counts unchanged after each refusal" check uses Ipin's staff + patient rows (staff > 0) instead of `Patient` alone. Ipin has no files in the seed either, so case 4 first stores one file for Ipin via `StorageService.put` so the purge queues and case 5 deletes a real file.
+- The purged-clinic Subscription is set to anchor 2020-01-01, 1 paid month, cancelled 2020-01-15 (so `subscriptionStatus` → ended).
+- `ClinicDataService` relies on `OperatorAuditService` from the `@Global` `OperatorAuditModule`, so `PrivacyModule`'s imports are exactly the plan's.
+**Gate:** `pnpm run check` exit 0 (api 563 tests / 87 files, shared 251, web 415, infra 41, seed 31). `TEST_DATABASE_URL=…/pedia_dental_b13c2b2_test pnpm --filter api test:int test/int/clinic-data.int.test.ts test/int/bundle.int.test.ts`: 12/12 passed (8 clinic-data + 4 bundle, incl. the new "runs the clinic data script from the bundle"). `pnpm --filter api build` exit 0; `dist/clinic-data.mjs` exists (1.7 MB, `dist/` is git-ignored).
+**Notes:** the bundle is about 1.7 MB (not ~1 MB as the plan estimated): it carries the whole AppModule, like `main.mjs`. Neither script was run against any database other than the `_test` one (only through the int tests).

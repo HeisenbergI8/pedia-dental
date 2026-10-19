@@ -33,22 +33,22 @@ an erasure's anonymisation (B13c2b-2, not built yet; the request register and re
 <!-- inventory:start -->
 | Table | Holds | Kept | Enforced by | Confirm with counsel |
 | --- | --- | --- | --- | --- |
-| Branch | account | While the clinic subscribes, then with its records | B13c2b |  |
-| Chair | account | While the clinic subscribes, then with its records | B13c2b |  |
-| ClinicAccount | account | While the clinic subscribes, then as the DPA says (confirm with counsel) | B13c2b | yes |
-| Credential | account | Until the login is removed | kept |  |
-| MessageTemplate | account | While the clinic subscribes, then with its records | B13c2b |  |
-| NoteTemplate | account | While the clinic subscribes, then with its records | B13c2b |  |
+| Branch | account | While the clinic subscribes, then with its records; returned with the clinic's data and then deleted at its written request (db:clinic-purge) | db:clinic-purge |  |
+| Chair | account | While the clinic subscribes, then with its records; returned with the clinic's data and then deleted at its written request (db:clinic-purge) | db:clinic-purge |  |
+| ClinicAccount | account | Kept: name, TIN and plan are Primolar's books; a purge removes the logo and sets purgedAt (confirm with counsel) | db:clinic-purge | yes |
+| Credential | account | Until the login is removed; returned with the clinic's data and then deleted at its written request (db:clinic-purge) | db:clinic-purge |  |
+| MessageTemplate | account | While the clinic subscribes, then with its records; returned with the clinic's data and then deleted at its written request (db:clinic-purge) | db:clinic-purge |  |
+| NoteTemplate | account | While the clinic subscribes, then with its records; returned with the clinic's data and then deleted at its written request (db:clinic-purge) | db:clinic-purge |  |
 | OperatorUser | account | While the person works for Primolar | kept |  |
-| PrivacyNotice | account | While the clinic subscribes, then with its records | B13c2b |  |
-| Procedure | account | While the clinic subscribes, then with its records | B13c2b |  |
+| PrivacyNotice | account | While the clinic subscribes, then with its records; returned with the clinic's data and then deleted at its written request (db:clinic-purge) | db:clinic-purge |  |
+| Procedure | account | While the clinic subscribes, then with its records; returned with the clinic's data and then deleted at its written request (db:clinic-purge) | db:clinic-purge |  |
 | Signup | account | Kept; a rejected sign-up's files go after 30 days | signups.purge-rejected-files |  |
-| Staff | account | While the clinic subscribes, then with its records | B13c2b |  |
-| Acknowledgement | audit trail | While the clinic subscribes, then with its records | B13c2b | yes |
+| Staff | account | While the clinic subscribes, then with its records; returned with the clinic's data and then deleted at its written request (db:clinic-purge) | db:clinic-purge |  |
+| Acknowledgement | audit trail | While the clinic subscribes, then with its records; returned with the clinic's data and then deleted at its written request (db:clinic-purge) | db:clinic-purge | yes |
 | Agreement | audit trail | As long as any obligation under it can be raised (confirm with counsel) | kept | yes |
-| AuditEvent | audit trail | While the clinic's records are kept (confirm with counsel) | kept | yes |
+| AuditEvent | audit trail | While the clinic's records are kept (confirm with counsel); returned with the clinic's data and then deleted at its written request (db:clinic-purge) | db:clinic-purge | yes |
 | OperatorAuditEvent | audit trail | OPERATOR_AUDIT_KEEP_DAYS once confirmed with counsel (proposed 5 years); unset keeps it forever | operator-audit.prune | yes |
-| PrivacyRequest | audit trail | While the clinic's records are kept: how each request was answered (confirm with counsel) | kept | yes |
+| PrivacyRequest | audit trail | While the clinic's records are kept: how each request was answered (confirm with counsel); returned with the clinic's data and then deleted at its written request (db:clinic-purge) | db:clinic-purge | yes |
 | ChartEntry | clinical record | While the clinic subscribes; after an approved erasure, anonymised once the record's retention ends (RECORD_RETENTION, confirm with counsel; privacy.anonymise ships off); returned or deleted with the clinic's data at its written request (db:clinic-purge) | privacy.anonymise | yes |
 | ClinicalNote | clinical record | While the clinic subscribes; after an approved erasure, anonymised once the record's retention ends (RECORD_RETENTION, confirm with counsel; privacy.anonymise ships off); returned or deleted with the clinic's data at its written request (db:clinic-purge) | privacy.anonymise | yes |
 | ClinicalPhoto | clinical record | While the clinic subscribes; after an approved erasure, anonymised once the record's retention ends (RECORD_RETENTION, confirm with counsel; privacy.anonymise ships off); returned or deleted with the clinic's data at its written request (db:clinic-purge) | privacy.anonymise | yes |
@@ -60,13 +60,13 @@ an erasure's anonymisation (B13c2b-2, not built yet; the request register and re
 | PlanItem | clinical record | While the clinic subscribes; after an approved erasure, anonymised once the record's retention ends (RECORD_RETENTION, confirm with counsel; privacy.anonymise ships off); returned or deleted with the clinic's data at its written request (db:clinic-purge) | privacy.anonymise | yes |
 | PrivacyChoice | clinical record | While the clinic subscribes; after an approved erasure, anonymised once the record's retention ends (RECORD_RETENTION, confirm with counsel; privacy.anonymise ships off); returned or deleted with the clinic's data at its written request (db:clinic-purge) | privacy.anonymise | yes |
 | Visit | clinical record | While the clinic subscribes; after an approved erasure, anonymised once the record's retention ends (RECORD_RETENTION, confirm with counsel; privacy.anonymise ships off); returned or deleted with the clinic's data at its written request (db:clinic-purge) | privacy.anonymise | yes |
-| Invoice | money | As the tax law requires for books and receipts (confirm with counsel; proposed 10 years) | kept | yes |
+| Invoice | money | As the tax law requires for books and receipts (confirm with counsel; proposed 10 years); returned with the clinic's data and then deleted at its written request (db:clinic-purge) | db:clinic-purge | yes |
 | InvoiceCounter | money | As the tax law requires for books and receipts (confirm with counsel; proposed 10 years) | kept | yes |
-| InvoiceLine | money | As the tax law requires for books and receipts (confirm with counsel; proposed 10 years) | kept | yes |
-| Payment | money | As the tax law requires for books and receipts (confirm with counsel; proposed 10 years) | kept | yes |
+| InvoiceLine | money | As the tax law requires for books and receipts (confirm with counsel; proposed 10 years); returned with the clinic's data and then deleted at its written request (db:clinic-purge) | db:clinic-purge | yes |
+| Payment | money | As the tax law requires for books and receipts (confirm with counsel; proposed 10 years); returned with the clinic's data and then deleted at its written request (db:clinic-purge) | db:clinic-purge | yes |
 | PaymentReceipt | money | As the tax law requires for books and receipts (confirm with counsel; proposed 10 years) | kept | yes |
 | PriceChange | money | Kept: the prices Primolar's invoices were billed at (confirm with counsel) | kept | yes |
-| ReceiptCounter | money | As the tax law requires for books and receipts (confirm with counsel; proposed 10 years) | kept | yes |
+| ReceiptCounter | money | As the tax law requires for books and receipts (confirm with counsel; proposed 10 years); returned with the clinic's data and then deleted at its written request (db:clinic-purge) | db:clinic-purge | yes |
 | Subscription | money | As the tax law requires for books and receipts (confirm with counsel; proposed 10 years) | kept | yes |
 | SubscriptionLine | money | As the tax law requires for books and receipts (confirm with counsel; proposed 10 years) | kept | yes |
 | SubscriptionPayment | money | As the tax law requires for books and receipts (confirm with counsel; proposed 10 years) | kept | yes |
@@ -76,7 +76,7 @@ an erasure's anonymisation (B13c2b-2, not built yet; the request register and re
 | Message | personal data | While the clinic subscribes; after an approved erasure, anonymised once the record's retention ends (RECORD_RETENTION, confirm with counsel; privacy.anonymise ships off); returned or deleted with the clinic's data at its written request (db:clinic-purge) | privacy.anonymise | yes |
 | PatientGuardian | personal data | While the clinic subscribes; after an approved erasure, anonymised once the record's retention ends (RECORD_RETENTION, confirm with counsel; privacy.anonymise ships off); returned or deleted with the clinic's data at its written request (db:clinic-purge) | privacy.anonymise | yes |
 | PortalAccount | personal data | While the clinic subscribes; after an approved erasure, anonymised once the record's retention ends (RECORD_RETENTION, confirm with counsel; privacy.anonymise ships off); returned or deleted with the clinic's data at its written request (db:clinic-purge) | privacy.anonymise | yes |
-| DemoLogin | system | Demo deployments only; reset nightly | kept |  |
+| DemoLogin | system | Demo deployments only; reset nightly; returned with the clinic's data and then deleted at its written request (db:clinic-purge) | db:clinic-purge |  |
 | IdempotencyKey | system | 24 hours | idempotency.sweep |  |
 | JobLock | system | Kept (one row per job) | kept |  |
 | OperatorSession | system | 30 minutes idle, 8 hours at most | auth.sweep |  |

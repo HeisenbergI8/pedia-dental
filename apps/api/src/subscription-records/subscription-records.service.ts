@@ -266,6 +266,9 @@ export class SubscriptionRecordsService {
 
   /** S3: why the operator's Reactivate can't work now (the next settle would pause it again). Under both locks. */
   async reactivateRefusal(tx: Tx, clinicId: string): Promise<string | undefined> {
+    // B13c2b-2 D13: a purged clinic has no staff, patients or files left; reactivating it would open an empty shell.
+    const { purgedAt } = await tx.clinicAccount.findUniqueOrThrow({ where: { id: clinicId }, select: { purgedAt: true } });
+    if (purgedAt) return "This clinic's data was deleted at its request. It can't be reactivated.";
     const sub = await this.read(tx, clinicId);
     const state = sub && subscriptionStatus(sub, this.clock.today()).state;
     if (state === "lapsed") return "This clinic's Primolar payment is past its grace period. Record the payment to reactivate it.";

@@ -48,9 +48,7 @@ const swcTypescript = {
   },
 };
 
-await build({
-  entryPoints: ["src/main.ts"],
-  outfile: `${outdir}/main.mjs`,
+const options = {
   bundle: true,
   platform: "node",
   target: "node22",
@@ -62,4 +60,7 @@ await build({
   banner: { js: "import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);" },
   plugins: [externalNpm, swcTypescript],
   logLevel: "warning",
-});
+};
+await build({ ...options, entryPoints: ["src/main.ts"], outfile: `${outdir}/main.mjs` });
+// B13c2b-2: the operator's clinic data scripts ship in the image (dist/clinic-data.mjs), run as a one-off release task.
+await build({ ...options, entryPoints: ["prisma/clinic-data.ts"], outfile: `${outdir}/clinic-data.mjs` });

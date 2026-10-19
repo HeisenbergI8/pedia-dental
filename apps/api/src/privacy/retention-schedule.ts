@@ -2,17 +2,20 @@ import type { Prisma } from "../generated/prisma/client.ts";
 
 export type Holds = "clinical record" | "personal data" | "money" | "audit trail" | "account" | "system";
 /**
- * `keep`: in plain words. `enforcedBy`: a Job's name, "kept" (never deleted by the system), or "B13c2b" (erasure and
- * the clinic's return at cancellation, not built yet). `counsel`: the period is a legal threshold to confirm.
+ * `keep`: in plain words. `enforcedBy`: a Job's name, an operator script's name (`db:clinic-purge`, B13c2b-2), or
+ * "kept" (never deleted by the system). `counsel`: the period is a legal threshold to confirm.
  */
 export type Retention = { holds: Holds; keep: string; enforcedBy: string; counsel?: true };
 
 const RECORD = "While the clinic subscribes; after an approved erasure, anonymised once the record's retention ends (RECORD_RETENTION, confirm with counsel; privacy.anonymise ships off); returned or deleted with the clinic's data at its written request (db:clinic-purge)";
 const MONEY = "As the tax law requires for books and receipts (confirm with counsel; proposed 10 years)";
+const PURGED = "; returned with the clinic's data and then deleted at its written request (db:clinic-purge)";
 const CLINIC: Retention = { holds: "clinical record", keep: RECORD, enforcedBy: "privacy.anonymise", counsel: true };
 const PERSONAL: Retention = { holds: "personal data", keep: RECORD, enforcedBy: "privacy.anonymise", counsel: true };
-const BOOKS: Retention = { holds: "money", keep: MONEY, enforcedBy: "kept", counsel: true };
-const SETUP: Retention = { holds: "account", keep: "While the clinic subscribes, then with its records", enforcedBy: "B13c2b" };
+const BOOKS: Retention = { holds: "money", keep: MONEY, enforcedBy: "kept", counsel: true }; // Primolar's own
+/** The clinic's books: kept for it while it subscribes; they are its records to keep after it leaves (D12). */
+const CLINIC_BOOKS: Retention = { holds: "money", keep: MONEY + PURGED, enforcedBy: "db:clinic-purge", counsel: true };
+const SETUP: Retention = { holds: "account", keep: "While the clinic subscribes, then with its records" + PURGED, enforcedBy: "db:clinic-purge" };
 
 /**
  * B13c2a: the retention schedule as data. Total over the Prisma models (the `satisfies` fails tsc, the test fails
@@ -26,22 +29,22 @@ export const RETENTION_SCHEDULE = {
   Message: PERSONAL, PortalAccount: PERSONAL,
   StoredFile: { holds: "system", keep: "While its file exists", enforcedBy: "kept" },
   // Money
-  Invoice: BOOKS, InvoiceLine: BOOKS, Payment: BOOKS, ReceiptCounter: BOOKS,
+  Invoice: CLINIC_BOOKS, InvoiceLine: CLINIC_BOOKS, Payment: CLINIC_BOOKS, ReceiptCounter: CLINIC_BOOKS,
   // Audit
-  AuditEvent: { holds: "audit trail", keep: "While the clinic's records are kept (confirm with counsel)", enforcedBy: "kept", counsel: true },
+  AuditEvent: { holds: "audit trail", keep: "While the clinic's records are kept (confirm with counsel)" + PURGED, enforcedBy: "db:clinic-purge", counsel: true },
   OperatorAuditEvent: { holds: "audit trail", keep: "OPERATOR_AUDIT_KEEP_DAYS once confirmed with counsel (proposed 5 years); unset keeps it forever", enforcedBy: "operator-audit.prune", counsel: true },
-  PrivacyRequest: { holds: "audit trail", keep: "While the clinic's records are kept: how each request was answered (confirm with counsel)", enforcedBy: "kept", counsel: true },
+  PrivacyRequest: { holds: "audit trail", keep: "While the clinic's records are kept: how each request was answered (confirm with counsel)" + PURGED, enforcedBy: "db:clinic-purge", counsel: true },
   // The clinic's setup and logins
   Branch: SETUP, Staff: SETUP, Chair: SETUP, Procedure: SETUP, NoteTemplate: SETUP, MessageTemplate: SETUP,
   Acknowledgement: { ...SETUP, holds: "audit trail", counsel: true }, PrivacyNotice: SETUP,
-  Credential: { holds: "account", keep: "Until the login is removed", enforcedBy: "kept" },
+  Credential: { holds: "account", keep: "Until the login is removed" + PURGED, enforcedBy: "db:clinic-purge" },
   Session: { holds: "system", keep: "30 minutes idle, 8 hours at most", enforcedBy: "auth.sweep" },
   PortalLink: { holds: "system", keep: "30 days after the link expires", enforcedBy: "portal.prune-links" },
   RateLimitCounter: { holds: "system", keep: "Until its window ends", enforcedBy: "auth.sweep" },
   IdempotencyKey: { holds: "system", keep: "24 hours", enforcedBy: "idempotency.sweep" },
-  DemoLogin: { holds: "system", keep: "Demo deployments only; reset nightly", enforcedBy: "kept" },
+  DemoLogin: { holds: "system", keep: "Demo deployments only; reset nightly" + PURGED, enforcedBy: "db:clinic-purge" },
   // Primolar's own
-  ClinicAccount: { holds: "account", keep: "While the clinic subscribes, then as the DPA says (confirm with counsel)", enforcedBy: "B13c2b", counsel: true },
+  ClinicAccount: { holds: "account", keep: "Kept: name, TIN and plan are Primolar's books; a purge removes the logo and sets purgedAt (confirm with counsel)", enforcedBy: "db:clinic-purge", counsel: true },
   Agreement: { holds: "audit trail", keep: "As long as any obligation under it can be raised (confirm with counsel)", enforcedBy: "kept", counsel: true },
   Signup: { holds: "account", keep: "Kept; a rejected sign-up's files go after 30 days", enforcedBy: "signups.purge-rejected-files" },
   Subscription: BOOKS, SubscriptionPayment: BOOKS, SubscriptionLine: BOOKS, InvoiceCounter: BOOKS, PaymentReceipt: BOOKS,
