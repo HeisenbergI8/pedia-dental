@@ -8,6 +8,7 @@ import {
   LEGAL_DOCUMENTS,
   PatientFilter,
   PatientListQuery,
+  PATIENT_SEARCH_LIMIT,
   ChangePrivacyChoicesInput,
   QuickUpdatePatientInput,
   RecordPrivacyConsentInput,
@@ -108,7 +109,8 @@ export const patientHandlers = [
       // A parent: their children only.
       // B13c2b E6: a restricted child leaves every list and search (the API's PatientsService.where).
       .filter((p) => !p.restrictedAt && inScope(session, "patients.view", p.id) && matchesSearch(p, q, { phones: !!session && rolesCan(session.roles, "patients.contact") }))
-      .sort((a, b) => a.lastName.localeCompare(b.lastName))
+      .sort((a, b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName) || a.id.localeCompare(b.id)) // the API's order
+      .slice(0, q ? PATIENT_SEARCH_LIMIT : undefined) // B14: a search is capped; the directory isn't
       .map((p) => visibleTo(session, p));
     return HttpResponse.json(rows);
   }),

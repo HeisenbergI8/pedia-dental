@@ -71,18 +71,22 @@ export class ReportsService {
     const branchIds = await this.branchesFor(who, branch);
     const monday = format(startOfWeek(parseISO(today), { weekStartsOn: 1 }), "yyyy-MM-dd");
     const [from, to] = [manilaMidnight(today), addDays(manilaMidnight(today), 1)];
-    const [todays, weekDone, weekVisitors, patients, staff, pending, refs] = await Promise.all([
+    const [todays, weekDone, weekVisitors, staff, pending, refs] = await Promise.all([
       this.records.inWindow(branchIds, from, to),
       this.records.inWindow(branchIds, manilaMidnight(monday), to).then((xs) => xs.filter((a) => a.status === "done")),
       this.visitDays.visitorsBetween(monday, today),
-      this.patients.basics(),
       this.clinic.staffNames(),
       this.requests.pending(),
       this.clinic.scheduleRefs(),
     ]);
     // The week's patients: visitMix counts only their days, and "new" needs each one's whole history (visits + done).
     const week = [...new Set([...weekVisitors, ...weekDone.map((a) => a.patientId)])];
-    const facts = await this.visitDays.facts(week, branchIds);
+    // B14: only the patients the summary can name or count: visitMix counts only this week's, names come from today's
+    // appointments, birthdays from basicsFor. The same summary as over every patient (today.int).
+    const [facts, patients] = await Promise.all([
+      this.visitDays.facts(week, branchIds),
+      this.patients.basicsFor([...new Set([...week, ...todays.map((a) => a.patientId)])], today),
+    ]);
     // Today's done appointments are in both lists: one row each.
     const appointments = [...new Map([...todays, ...facts.done].map((a) => [a.id, a])).values()].sort(byStartThenChair(refs.chairOrder));
     // Only this year's greetings of today's birthday children: all Today's tick reads (birthdayGreeting).

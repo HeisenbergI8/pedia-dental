@@ -1,10 +1,11 @@
 import type { INestApplication } from "@nestjs/common";
-import { DEMO_CLINIC_ID, seedPlatform } from "@pedia/seed";
+import { DEMO_CLINIC_ID, seedPlatform, type Platform } from "@pedia/seed";
 import { Patient, Visit, type RegisterPatientInput } from "@pedia/shared";
 import request from "supertest";
 import { z } from "zod";
 import { expect } from "vitest";
 import { Hasher } from "../../src/auth/hashing";
+import type { FixedClock } from "../../src/common/clock";
 import { SessionService } from "../../src/auth/session.service";
 import { PrismaService } from "../../src/prisma/prisma.service";
 import { seedDatabase } from "../../src/seed/seed-database";
@@ -17,9 +18,8 @@ export const ADMIN: Login = [DEMO_CLINIC_ID, "staff_delacruz"];
 export const FRONT_DESK: Login = [DEMO_CLINIC_ID, "staff_cruz"];
 export const NGITI_OWNER: Login = ["clinic_ngiti", "ngiti_staff_lim"];
 
-export async function clinicalApp() {
-  const platform = seedPlatform();
-  const app: INestApplication = await createIntApp();
+export async function clinicalApp({ platform = seedPlatform(), clock }: { platform?: Platform; clock?: FixedClock } = {}) {
+  const app: INestApplication = await createIntApp({ clock });
   const prisma = app.get(PrismaService);
   const sessions = app.get(SessionService);
   await resetDatabase(prisma);

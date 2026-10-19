@@ -4,6 +4,7 @@ import { ownClinicId } from "../clinic/account-lock";
 import { Clock } from "../common/clock";
 import { Prisma } from "../generated/prisma/client.ts";
 import { OutboxService } from "../outbox/outbox.service";
+import { STANDING_REFRESH } from "../patients/standing-refresh";
 import { PrismaService } from "../prisma/prisma.service";
 import type { Tx } from "../prisma/transaction";
 import { MESSAGE_COLUMNS, MESSAGE_SEND, messageData, toMessage } from "./message.rows";
@@ -16,6 +17,9 @@ const WITHDRAWABLE = { status: "queued", dispatchedAt: null } as const;
  * write runs in the caller's transaction, after the caller's locks (E8). To render a body it reads one template, the
  * dentist's name and the account's name (E1's flagged exception: reads only, never a write to another feature's table).
  */
+/** What composeMessage needs besides the patient (B14: read once per booking). */
+type Refs = Omit<Parameters<typeof composeMessage>[1], "patients">;
+
 @Injectable()
 export class MessageQueueService {
   constructor(
@@ -30,17 +34,26 @@ export class MessageQueueService {
    */
   async queue(tx: Tx, e: MessageEvent, patient: Patient, extra: { greetingYear?: number } = {}): Promise<Message | undefined> {
     if (choiceDeclined(patient, "reminders")) return undefined;
-    const now = this.clock.now();
-    const sendAt = nextSendingTime(new Date(Math.max(Date.parse(e.sendAt), now.getTime())));
-    const [template, dentist, account] = await Promise.all([
-      tx.messageTemplate.findFirst({ where: { kind: e.kind }, select: { kind: true, body: true } }),
-      e.dentistId ? tx.staff.findFirst({ where: { id: e.dentistId }, select: { id: true, fullName: true } }) : null,
+    return this.write(tx, e, patient, await this.refs(tx, [e.kind], e.dentistId), extra);
+  }
+
+  /** The templates, dentist and clinic name a text is composed from. One read each, however many texts share them. */
+  private async refs(tx: Tx, kinds: readonly MessageEvent["kind"][], dentistId: string | undefined): Promise<Refs> {
+    const [templates, dentist, account] = await Promise.all([
+      tx.messageTemplate.findMany({ where: { kind: { in: [...kinds] } }, select: { kind: true, body: true } }),
+      dentistId ? tx.staff.findFirst({ where: { id: dentistId }, select: { id: true, fullName: true } }) : null,
       // A platform table: the tenant extension doesn't scope it, so the read names the clinic itself.
       tx.clinicAccount.findUniqueOrThrow({ where: { id: ownClinicId() }, select: { name: true } }),
     ]);
+    return { templates, staff: dentist ? [dentist] : [], clinicName: account.name };
+  }
+
+  private async write(tx: Tx, e: MessageEvent, patient: Patient, refs: Refs, extra: { greetingYear?: number }): Promise<Message | undefined> {
+    const now = this.clock.now();
+    const sendAt = nextSendingTime(new Date(Math.max(Date.parse(e.sendAt), now.getTime())));
     const composed = composeMessage(
       { ...e, sendAt: sendAt.toISOString() },
-      { templates: template ? [template] : [], patients: [patient], staff: dentist ? [dentist] : [], clinicName: account.name },
+      { ...refs, patients: [patient] },
       { id: "", clinicId: ownClinicId(), createdAt: now.toISOString() },
     );
     if (!composed) return undefined;
@@ -48,6 +61,9 @@ export class MessageQueueService {
     const { id: _, ...data } = messageData(usable ? composed : { ...composed, status: "failed", failureReason: FAILURE.noPhone }, extra);
     const row = await tx.message.create({ data, select: MESSAGE_COLUMNS });
     if (usable) await this.outbox.enqueue(tx, { kind: MESSAGE_SEND, payload: { messageId: row.id }, availableAt: sendAt });
+    // B14: born failed (no usable number) is a text settling too: the child's "no contact" is recomputed, as the send
+    // handler's failures are.
+    else await this.outbox.enqueue(tx, { kind: STANDING_REFRESH, payload: { patientId: patient.id } });
     return toMessage(row);
   }
 
@@ -82,10 +98,16 @@ export class MessageQueueService {
     const base = { patientId: a.patientId, appointmentId: a.id, startsAt: a.startsAt, dentistId: a.dentistId };
     const now = this.clock.now();
     const remindAt = reminderSendAt(a.startsAt, now);
-    await this.queue(tx, { ...base, kind: "appointment_confirmation", sendAt: now.toISOString() }, patient);
-    await this.queue(tx, { ...base, kind: "appointment_reminder", sendAt: remindAt }, patient);
     const pre = preVisitMessageFor(a.procedureCode);
-    if (pre) await this.queue(tx, { ...base, kind: pre, sendAt: remindAt }, patient);
+    const events: MessageEvent[] = [
+      { ...base, kind: "appointment_confirmation", sendAt: now.toISOString() },
+      { ...base, kind: "appointment_reminder", sendAt: remindAt },
+      ...(pre ? [{ ...base, kind: pre, sendAt: remindAt }] : []),
+    ];
+    if (choiceDeclined(patient, "reminders")) return;
+    // B14: one read of the templates, dentist and clinic for all of them (this runs inside the clinic's lock).
+    const refs = await this.refs(tx, events.map((e) => e.kind), a.dentistId);
+    for (const e of events) await this.write(tx, e, patient, refs, {});
   }
 
   /** mocks/outbox.ts `cancelQueued`: a cancelled, moved or missed appointment withdraws what it queued and hasn't sent. */
@@ -119,9 +141,9 @@ export class MessageQueueService {
    * time a sent text wins, as `hasNoContact` breaks the tie. One query: raw SQL for the window function, so it names the
    * clinic itself (the tenant extension doesn't see raw SQL).
    */
-  async lastTried(patientIds: readonly string[]): Promise<Pick<Message, "patientId" | "status" | "sendAt">[]> {
+  async lastTried(patientIds: readonly string[], tx: Tx = this.prisma): Promise<Pick<Message, "patientId" | "status" | "sendAt">[]> {
     if (!patientIds.length) return [];
-    const rows = await this.prisma.$queryRaw<{ patientId: string; status: "sent" | "failed"; sendAt: Date }[]>`
+    const rows = await tx.$queryRaw<{ patientId: string; status: "sent" | "failed"; sendAt: Date }[]>`
       SELECT patientId, status, sendAt FROM (
         SELECT patientId, status, sendAt, ROW_NUMBER() OVER (PARTITION BY patientId ORDER BY sendAt DESC, status = 'sent' DESC, id DESC) AS rn
         FROM Message

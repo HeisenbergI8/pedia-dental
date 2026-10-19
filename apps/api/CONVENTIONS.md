@@ -6,13 +6,14 @@ The Primolar backend. It replaces the browser mocks (MSW) in `apps/web` **endpoi
 feature code in the web app**. The product, the users and the domain are the ones in the root `CONVENTIONS.md`
 and `ROADMAP.md`; read those first. This file covers only how the API is built.
 
-**Current phase: B1–B12, B13a, B13b, B13c1, B13c2a, B13c2b-1 and B13c2b-2 done** (B13c2b-2: anonymisation of a
+**Current phase: B1–B12, B13a, B13b, B13c1, B13c2a, B13c2b-1, B13c2b-2 and B14 done** (B14: the patient list, search and
+Today at scale, `load:run` at 5,000 patients meeting every target; B13c2b-2: anonymisation of a
 restricted child when retention ends, shipped off until counsel gives the periods, and the operator's clinic export and
 purge scripts with their runbook; B13c2b-1: the privacy request register and
 restriction on an approved erasure; B13c2a: the copy of records, the audit-log reader, the
 retention schedule with two prunes, `PRIVACY_OPERATIONS.md`; B13c1: mocks off everywhere, the port ledger, the API-backed
 demo with its nightly reset, and the load test; B13b: AWS CDK in `packages/infra`; the AWS deploy itself is the owner's).
-"Patient list and search at scale" is next. B13a added the production
+B13a added the production
 build (`build.mjs`), the image (`Dockerfile`), `APP_ENV`, helmet and `trust proxy`, liveness and readiness probes,
 EMF metrics, error fingerprints and the operator's audit trail. The runtime core (request context, `Clock`, logs, tenant scoping,
 transactions, audit), `@pedia/seed`, the `test:int` suite on MySQL and CI, identity, sessions and the access guard,
@@ -99,7 +100,7 @@ Run from the repo root.
 | Audit trail | `src/audit/` | `AuditService.record` (import `AuditModule`) |
 | Identity and access | `src/auth/` | `auth.controller.ts` / `operator-auth.controller.ts` and `auth.service.ts` (sign-in, sign-out, switch, password, acknowledgement), `rate-limit.ts` (`RATE_LIMITS`), `access-rules.ts` (the route → permission map, held to the mock's `RULES` by a test), `access.guard.ts` (the global guard), `record-owners.ts` (`RecordOwners`: features register who owns an `owner: "record"` route's record; the guard asks for parents, and since B13c2b for anyone without `privacy.manage` while the clinic has a restricted child), `patient-restrictions.ts` (`PatientRestrictions`: B13c2b, the restricted children's ids, a slot `PatientsService` fills), `session.service.ts` (sessions), `identity.service.ts` (who a session is, PINs), `hashing.ts` (argon2id), `cookies.ts` |
 | Clinic | `src/clinic/` | The account and its setup: `ClinicService` (context, profile, branding, logo, usage, chairs, procedures), `BranchesService`, `StaffService`; `limits.ts` (tier limits, from `TIER_LIMITS`), `account-lock.ts` (`ownClinicId`, `lockAccount`), `logo.ts` (`cleanLogo`: type sniffing and the SVG sanitiser), row shaping in `clinic.views.ts` |
-| Patients | `src/patients/` | `PatientsService` (reads: `records`/`one` for other features, search, the list, the header summary, duplicates, the photo), `PatientWritesService` (register, edit, quick update, consents, privacy consent and choices, the photo swap), `patient.views.ts` (`visibleTo`: **the only producer of `PatientView`**; `toPatient`, `toSummary`, `viewerOf`), `patient.rows.ts` (contract → rows, the edit rules), `patient-search.ts` (the search as SQL), `patient-photo.ts`, `patient-lock.ts` (`lockPatient`, `lockPatientIfExists`). `FamilyService` (a parent's children) sits in its own `FamilyModule`, imported by `AuthModule` and `PatientsModule` |
+| Patients | `src/patients/` | `PatientsService` (reads: `records`/`one` for other features, search, the list, the header summary, duplicates, the photo), `PatientWritesService` (register, edit, quick update, consents, privacy consent and choices, the photo swap), `patient.views.ts` (`visibleTo`: **the only producer of `PatientView`**; `toPatient`, `toSummary`, `viewerOf`), `patient.rows.ts` (contract → rows, the edit rules), `patient-search.ts` (the search as SQL), `patient-photo.ts`, `patient-lock.ts` (`lockPatient`, `lockPatientIfExists`). B14: `PatientStandingService` (the only writer of the stored standing: `refresh`, `compute`), `standing-refresh.ts` (`StandingRefresh`: the global slot the record services call; `STANDING_REFRESH`), `standing-refresh.handler.ts` (the outbox kind a settled text queues), `standing.jobs.ts` (`standing.reconcile`, 03:35 Manila and at start-up), `patient-standing.ts` (the list's filter, sort and counts as SQL). `FamilyService` (a parent's children) sits in its own `FamilyModule`, imported by `AuthModule` and `PatientsModule` |
 | Visits | `src/visits/` | B5: `VisitsService` (list, start, complete, `forPatient` for the chart; B7 seats and finishes the appointment), `visit.rows.ts` (rows ↔ `Visit`), `VisitDaysService` (the days patients were seen: completed visits and done appointments) in its own `VisitDaysModule`, imported by `PatientsModule` |
 | Appointments | `src/appointments/` | B7: `AppointmentRecordsService` in its own `AppointmentRecordsModule` (**the only reader and writer of `Appointment`**, Prisma only, so any feature can import it), `AppointmentsService` (calendar, book, move, status), `AppointmentRequestsService` (parents' requests), `appointment.rules.ts` (the mock's refusals: slot, move, status, request), `appointment.rows.ts`, `request.rows.ts` |
 | Recalls | `src/recalls/` | B7: `DueItemsService` (owns `DueItem`: the due list, `afterSign`, `takeFor`, `backfill`), `due-item.rules.ts` (`signChange`, `bookedItem`, `dueBackfill`), `due-item.rows.ts`; `prisma/backfill-due-items.ts` |
@@ -245,7 +246,7 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   left out without `patients.contact`.
 - **Append-only:** chart entries, payments and agreements are never updated or deleted. A correction is a new row
   (`supersedes`). Use no `update`/`delete` on those tables.
-- **Money** is integer centavos (`Int`), never `Decimal` or `Float`. Balances are computed, never stored.
+- **Money** is integer centavos (`Int`), never `Decimal` or `Float`. Balances are computed from bills and payments; `Patient.balance` is only their cache (B14).
 - **Age** is computed from date of birth, never stored.
 - **Dates:** "today" for billing comes from one clock, never `new Date()` scattered through services (the mock's is
   `mocks/clock.ts`).
@@ -343,8 +344,17 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **"Ported" is the ledger** (`test/port-ledger.ts`, checked in `pnpm run check`): every case of the web's handler tests
   maps to an API test that exists (or a twin title). A new web handler test needs a ledger line or a twin.
 - **The load test's database name must end in `_load`** (`load:seed` refuses anything else). The targets are
-  `test/load/targets.ts`; the patient list and search miss them from a few hundred patients (p97.5 683–819 ms at ~560, B13c1 tester), and every target misses at 5,000 (B13c1
-  decisions.md L1, a Later chunk).
+  `test/load/targets.ts`; B14 meets every one at 5,000 patients (its plan's implementation log has the table). Stop the
+  API by its PID and confirm it exited (a draining process can keep running); never `pkill -f`.
+- **A write that changes visits, done/cancelled/no-show appointments, due items, bills or payments calls
+  `StandingRefresh.refresh` in its transaction, under the patient's lock** (B14). The record services already do; a new
+  writer of those tables must too. A text's status change enqueues `standing.refresh` instead (the send handler never
+  takes a patient lock, E8).
+- **The standing readers take `tx`** (`VisitDaysService.facts`, `DueItemsService.openFor`, `BillingRecordsService.billTotals`,
+  `MessageQueueService.lastTried`): inside a transaction, `this.prisma` reads on another connection and misses the
+  transaction's own rows.
+- **`standing.reconcile` logs its drift** ("Stored standing reconciled: n patient row(s) corrected"). Non-zero after the
+  start-up run means a write path is missing its hook. `db:backfill-standing` does the same from a shell.
 - **Every operator route that changes something carries `@OperatorAudited`** (`test/operator-audit-coverage.test.ts`
   fails otherwise). The row is written after the handler succeeds (B13a E9).
 - **Prisma 7's `migrate dev` doesn't regenerate the client.** Run `pnpm --filter api db:generate` after it.
@@ -566,8 +576,9 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
     PATCH's phone follows the guardian id to every child.
   - **Photos** are JPEG, PNG or WebP by their bytes (the mock takes any `image/*`): nothing that can carry script is
     served from the API's origin.
-  - **Paging** stays the contract's `page`/`pageSize`, and `GET /patients` is unpaged, both as the mock. A cursor needs
-    the shared schema and the mock changed first.
+  - **Paging** stays the contract's `page`/`pageSize`. `GET /patients` with a search is capped at `PATIENT_SEARCH_LIMIT`
+    (B14); with an empty `q` (the directory 8 screens load) it is still unpaged, a later chunk. A cursor needs the shared
+    schema and the mock changed first.
 - **Visits and the chart** (B5, decisions in the B5 plan):
   - `ChartEntry` is in `APPEND_ONLY`: no update or delete path; a correction is a new row with `supersedes`, unique per
     `(clinicId, supersedes)` as the backstop. The chart, "as of a visit" and per-tooth history are `deriveChart()` in the
@@ -601,7 +612,8 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
     refund (`billing.collect`). Payments are always dated now.
   - Every POST that records a bill or money needs an `Idempotency-Key` (400 without); a retry replays the stored answer
     with `Idempotent-Replayed: true`, another request with the key is 422, a refusal frees the key; keys last 24 hours.
-  - Balances are computed, never stored: the list and header sum live bills in one aggregate query (`billTotals`), the
+  - Balances are computed from bills and payments; B14 caches each patient's in `Patient.balance` for the list (recomputed
+    by the writes, never incremented). The header sums live bills in one aggregate query (`billTotals`), the
     dashboard from six bounded SQL sums fed to the shared `summarizeFinance` (no rule re-derived; parity tested).
   - An appointment billed twice is judged by its first bill, as the demo (changed later everywhere at once). The
     daily list and the dashboard aren't audited (B7 decision 6); each child's bills and payments are.
@@ -690,7 +702,7 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   - The demo is API-backed and reset nightly; four guards keep the reset off real data (E5).
   - "Ported" is the ledger, enforced in `check`, with `test:int` proving the mapped tests pass (E7).
   - The load test uses autocannon on the production bundle, with thresholds on p97.5 and p99 (E9, E10). Its misses
-    were accepted for the first clinics and moved to "Patient list and search at scale" (L1).
+    were accepted for the first clinics and fixed in B14 (L1).
 - **Privacy requests** (B13c2b-1, its `decisions.md` E1–E14):
   - `privacy.manage` is the Owner's and admins' (E1); staff log a request on the parent's behalf (E2); the deadline is
     `addWorkingDays(receivedOn, PRIVACY_REQUEST_DUE_WORKING_DAYS)`, stored when logged, holidays not skipped (E3, C4:

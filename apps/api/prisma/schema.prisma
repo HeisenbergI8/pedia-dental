@@ -617,6 +617,12 @@ model Patient {
   restrictedAt      DateTime?
   /// B13c2b-2 (D4): when ErasureService.anonymise de-identified this restricted record. Set once; restrictedAt stays set.
   anonymisedAt      DateTime?
+  /// B14 (D2): stored standing, a cache recomputed from source (never incremented) by PatientStandingService inside
+  /// the writes' own transactions. Today-independent: the list's flags come from these and today (standingOn).
+  lastVisitOn       DateTime? @db.Date
+  nextDueOn         DateTime? @db.Date
+  balance           Int       @default(0)
+  noContact         Boolean   @default(false)
 
   @@unique([clinicId, patientNo])
   /// The list's order (lastName, firstName, id) and name lookups.
@@ -625,6 +631,8 @@ model Patient {
   @@index([clinicId, birthDate])
   /// B13c2b: the guard's "which children are restricted here" (PatientRestrictions), one small read per patient route.
   @@index([clinicId, restrictedAt])
+  /// B14: the list's "balance due, by balance".
+  @@index([clinicId, restrictedAt, balance])
 }
 
 /// One guardian of one child (Guardian in @pedia/shared). Siblings carry the same guardianId, each in their own row:
@@ -774,6 +782,8 @@ model Visit {
   @@index([clinicId, patientId, startedAt])
   /// The last visit's day per patient (VisitDaysService): completed only, MAX(date).
   @@index([clinicId, patientId, status, date])
+  /// B14: Today's week of visitors (visitorsBetween) without scanning every visit.
+  @@index([clinicId, status, date])
 }
 
 /// Mirrors ToothCondition in packages/shared/src/schemas/chart.ts (tenant-scope.test.ts checks they match).
@@ -917,6 +927,8 @@ model Appointment {
   cancelReason  String?           @db.Text
   sourceRuleId  String?           @db.VarChar(64)
 
+  /// B14: the booking's clash check (near: chair OR dentist within a day), a range on startsAt, not the clinic's every row.
+  @@index([clinicId, startsAt])
   @@index([clinicId, branchId, startsAt])
   @@index([clinicId, chairId, startsAt])
   @@index([clinicId, dentistId, startsAt])

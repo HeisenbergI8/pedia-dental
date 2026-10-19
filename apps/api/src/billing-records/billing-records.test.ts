@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { requestContext } from "../common/request-context";
+import type { StandingRefresh } from "../patients/standing-refresh";
 import type { PrismaService } from "../prisma/prisma.service";
 import type { Tx } from "../prisma/transaction";
 import { BillingRecordsService } from "./billing-records.service";
 
 /** The shaping around the queries; their behaviour on MySQL is idempotency.int (receipts) and billing.int. */
 describe("BillingRecordsService", () => {
-  const records = new BillingRecordsService({} as PrismaService);
+  const records = new BillingRecordsService({} as PrismaService, {} as StandingRefresh);
   const inClinic = <T>(fn: () => Promise<T>) => requestContext.run({ requestId: "t", clinicId: "c1", operator: false }, fn);
 
   it("formats the counter's number, a bigint from the driver, as a receipt", async () => {

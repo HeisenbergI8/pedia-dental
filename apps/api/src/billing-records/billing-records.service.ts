@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { receiptNo, type Appointment, type BillTotals, type FinanceFacts, type Invoice, type PaidRow, type Payment, type ReceiptSeries } from "@pedia/shared";
 import { requireContext } from "../common/request-context";
 import { Prisma } from "../generated/prisma/client.ts";
+import { StandingRefresh } from "../patients/standing-refresh";
 import { PrismaService } from "../prisma/prisma.service";
 import { clinicData } from "../prisma/tenant-scope";
 import type { Tx } from "../prisma/transaction";
@@ -19,7 +20,7 @@ export type NewPayment = Omit<Payment, "id" | "clinicId"> & { receiptLeg: number
  */
 @Injectable()
 export class BillingRecordsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly standing: StandingRefresh) {}
 
   /** A patient's bills, oldest first, voided included. */
   async invoicesOf(patientId: string, db: Tx = this.prisma): Promise<Invoice[]> {
@@ -45,9 +46,9 @@ export class BillingRecordsService {
    * Each live bill of these patients with its line sum and payment sum (E8): one aggregate query, shaped for the shared
    * rules (one line carrying the sum; one payment row per bill). Voided bills are left out, as accountSummary would.
    */
-  async billTotals(patientIds: readonly string[]): Promise<BillTotalsOf> {
+  async billTotals(patientIds: readonly string[], tx: Tx = this.prisma): Promise<BillTotalsOf> {
     if (!patientIds.length) return { invoices: [], payments: [] };
-    const rows = await this.prisma.$queryRaw<{ id: string; patientId: string; discount: number; billed: unknown; paid: unknown }[]>`
+    const rows = await tx.$queryRaw<{ id: string; patientId: string; discount: number; billed: unknown; paid: unknown }[]>`
       SELECT i.id, i.patientId, i.discount,
         (SELECT COALESCE(SUM(l.amount), 0) FROM InvoiceLine l WHERE l.clinicId = i.clinicId AND l.invoiceId = i.id) AS billed,
         (SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.clinicId = i.clinicId AND p.invoiceId = i.id) AS paid
@@ -163,6 +164,7 @@ export class BillingRecordsService {
     const { id: _, ...data } = row;
     const created = await tx.invoice.create({ data: { ...clinicData(), ...data }, select: INVOICE_COLUMNS });
     await tx.invoiceLine.createMany({ data: lines.map((l) => ({ ...clinicData(), ...l, invoiceId: created.id })) });
+    await this.standing.refresh(tx, invoice.patientId, ["balance"]); // B14, under the patient's lock (B8 E1)
     return toInvoice(created, lines.map((l) => ({ ...l, invoiceId: created.id })));
   }
 
@@ -170,7 +172,9 @@ export class BillingRecordsService {
   async voidInvoice(tx: Tx, id: string, v: { at: Date; by: string; reason: string }): Promise<Invoice> {
     await tx.invoice.updateMany({ where: { id }, data: { voidedAt: v.at, voidedBy: v.by, voidReason: v.reason } });
     await tx.invoiceLine.updateMany({ where: { invoiceId: id }, data: { livePlanItemId: null } });
-    return (await this.lockInvoice(tx, id))!;
+    const voided = (await this.lockInvoice(tx, id))!;
+    await this.standing.refresh(tx, voided.patientId, ["balance"]); // B14
+    return voided;
   }
 
   /** Inserts rows one by one (createMany returns nothing on MySQL); returns them in order. */
@@ -186,6 +190,7 @@ export class BillingRecordsService {
         select: PAYMENT_COLUMNS,
       })));
     }
+    for (const patientId of new Set(rows.map((r) => r.patientId))) await this.standing.refresh(tx, patientId, ["balance"]); // B14, under the payer's lock
     return out;
   }
 

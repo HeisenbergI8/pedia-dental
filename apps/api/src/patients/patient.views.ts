@@ -1,6 +1,5 @@
-import { DuplicateMatch, Patient, PatientSummary, PatientView, permissionScopeFor, type Permission, type Role } from "@pedia/shared";
+import { DuplicateMatch, Patient, PatientSummary, PatientView, permissionScopeFor, type Permission, type Role, type PatientFlags } from "@pedia/shared";
 import type { ClinicIdentity } from "../auth/identity.service";
-import type { Standing } from "./patient-standing";
 import type {
   Patient as PatientRow, PatientConsent, PatientGuardian, PatientPrivacyConsent, PrivacyChoice,
 } from "../generated/prisma/client.ts";
@@ -98,8 +97,8 @@ export function visibleTo(viewer: Viewer, p: Patient): PatientView {
 export const toDuplicate = ({ id, patientNo, firstName, lastName, birthDate }: Patient): DuplicateMatch =>
   DuplicateMatch.parse({ id, patientNo, firstName, lastName, birthDate });
 
-/** One row of GET /patient-summaries: last visit, recall and balance from B5/B7/B8 (standingPage); noContact from the last tried text (B9). */
-export function toSummary(viewer: Viewer, p: Patient, siblings: string[], money: boolean, s: Pick<Standing, "lastVisitOn" | "recallDueOn" | "balance" | "flags">): PatientSummary {
+/** One row of GET /patient-summaries: last visit, recall, balance and flags from the stored standing (B14, standingOn). */
+export function toSummary(viewer: Viewer, p: Patient, siblings: string[], money: boolean, s: { lastVisitOn?: string; recallDueOn?: string; balance: number; flags: PatientFlags }): PatientSummary {
   const g = p.guardians.find((x) => x.isPrimary) ?? p.guardians[0]!;
   return PatientSummary.parse({
     id: p.id, firstName: p.firstName, lastName: p.lastName, birthDate: p.birthDate,

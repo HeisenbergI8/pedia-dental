@@ -12,8 +12,11 @@ import { VisitDaysModule } from "../visits/visit-days.module";
 import { FamilyModule } from "./family.module";
 import { PatientWritesService } from "./patient-writes.service";
 import { PatientsController } from "./patients.controller";
+import { PatientStandingService } from "./patient-standing.service";
+import { StandingRefreshHandler } from "./standing-refresh.handler";
+import { StandingJobs } from "./standing.jobs";
 import { PatientsService } from "./patients.service";
 
 /** The child's record (B4). B5–B8 read patients through PatientsService, never its tables. */
-@Module({ imports: [AuditModule, AuthModule, PortalModule, FamilyModule, LegalModule, StorageModule, OutboxModule, VisitDaysModule, RecallsModule, BillingRecordsModule, MessageQueueModule], controllers: [PatientsController], providers: [PatientsService, PatientWritesService], exports: [PatientsService, PatientWritesService] }) // B13c2b: declineAll
+@Module({ imports: [AuditModule, AuthModule, PortalModule, FamilyModule, LegalModule, StorageModule, OutboxModule, VisitDaysModule, RecallsModule, BillingRecordsModule, MessageQueueModule], controllers: [PatientsController], providers: [PatientsService, PatientWritesService, PatientStandingService, StandingRefreshHandler, StandingJobs], exports: [PatientsService, PatientWritesService, PatientStandingService] }) // B13c2b: declineAll
 export class PatientsModule {}

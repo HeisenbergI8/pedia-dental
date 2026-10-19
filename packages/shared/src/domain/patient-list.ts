@@ -1,4 +1,4 @@
-import { differenceInCalendarDays, format, parseISO } from "date-fns";
+import { addDays, differenceInCalendarDays, format, parseISO } from "date-fns";
 import type { Appointment } from "../schemas/appointment";
 import type { Invoice } from "../schemas/billing";
 import type { Message } from "../schemas/message";
@@ -12,6 +12,11 @@ import { dueBucket, isDueItemOpen, type DueBucket } from "./recall";
 
 /** "Recent visit": seen within this many days, today included. Data, not an `if` (CONVENTIONS, Domain rules). */
 export const RECENT_VISIT_DAYS = 30;
+/**
+ * B14: a search (non-empty `q` on GET /patients) answers at most this many children, by name. ⌘K and the pickers show
+ * 8, so 50 leaves room for the picker's "booked soon first" ranking. An empty `q` (the directory) is unchanged.
+ */
+export const PATIENT_SEARCH_LIMIT = 50;
 /** "Recall due": the two most urgent sections of /recall. "This month" is not yet due. */
 export const RECALL_DUE_BUCKETS: readonly DueBucket[] = ["overdue", "this_week"];
 
@@ -78,6 +83,35 @@ export function patientStanding(patientId: string, facts: PatientFacts, today: s
   const due = recallDueOn(patientId, facts.dueItems, facts.appointments, today);
   const flags: PatientFlags = { recallDue: !!due, balanceDue: balance > 0, noContact: hasNoContact(patientId, facts.messages) };
   return { balance, recallDueOn: due, lastVisitOn: lastVisitOn(patientId, facts.visits, facts.appointments), flags };
+}
+
+/** B14: what the API stores per patient (today-independent). The flags come from it and `today` (standingOn). */
+export type StoredStanding = { lastVisitOn?: string; nextDueOn?: string; balance: number; noContact: boolean };
+
+/** B14: the stored standing from source facts: the same rules as patientStanding, with no `today`. */
+export function storedStanding(patientId: string, facts: PatientFacts): StoredStanding {
+  const open = facts.dueItems.filter((i) => i.patientId === patientId && isDueItemOpen(i, facts.appointments)).map((i) => i.dueOn).sort();
+  return {
+    lastVisitOn: lastVisitOn(patientId, facts.visits, facts.appointments),
+    nextDueOn: open[0],
+    balance: accountSummary(facts.invoices.filter((i) => i.patientId === patientId), facts.payments).balance,
+    noContact: hasNoContact(patientId, facts.messages),
+  };
+}
+
+/**
+ * B14: the list's day bounds for `today`: recent visit ⇔ lastVisitOn ≥ recentFrom; recall due ⇔ nextDueOn ≤ recallBy
+ * (dueBucket's overdue and this_week are exactly "within 7 days", so the earliest open item decides).
+ */
+export function listBounds(today: string): { recentFrom: string; recallBy: string } {
+  const t = parseISO(today);
+  return { recentFrom: format(addDays(t, -(RECENT_VISIT_DAYS - 1)), "yyyy-MM-dd"), recallBy: format(addDays(t, 7), "yyyy-MM-dd") };
+}
+
+/** B14: patientStanding's answer from what is stored (patient-list.test.ts proves they agree). */
+export function standingOn(s: StoredStanding, today: string): ReturnType<typeof patientStanding> {
+  const recallDueOn = s.nextDueOn && s.nextDueOn <= listBounds(today).recallBy ? s.nextDueOn : undefined;
+  return { balance: s.balance, recallDueOn, lastVisitOn: s.lastVisitOn, flags: { recallDue: !!recallDueOn, balanceDue: s.balance > 0, noContact: s.noContact } };
 }
 
 export const needsAttention = (f: PatientFlags) => f.recallDue || f.balanceDue || f.noContact;

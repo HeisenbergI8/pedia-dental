@@ -109,7 +109,10 @@ the NestJS API through Next's `/api` rewrite (or, offline in `enabled` mode, an 
 - Teeth use FDI numbering (11–48 permanent, 51–85 primary). Use `domain/teeth.ts`, never hard-code lists.
 - Chart entries and payments are append-only. Corrections are new rows (`supersedes`), never edits.
 - Money is integer centavos everywhere. Format only at display time with `formatPeso`.
-- Balances are computed from payments, never stored.
+- Balances are computed from payments. The API caches each patient's in `Patient.balance` (B14), recomputed from the
+  bills and payments (never incremented) by the write that changes them; payments stay the source of truth.
+- A patient search (`GET /patients?q=`, non-empty) answers at most `PATIENT_SEARCH_LIMIT` (50) children, by name; the
+  empty-`q` directory is unpaged (B14).
 - A bill made by mistake is voided (a reason, nothing ever paid or applied on it), never deleted; a voided bill counts
   in no balance or total (`liveInvoices`, `isVoided`) and is hidden from parents. Refunds and voids need
   `billing.adjust` (the Owner and admins); front desk records payments, deposits and deposit credit.

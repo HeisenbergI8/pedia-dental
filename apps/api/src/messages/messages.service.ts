@@ -105,7 +105,7 @@ export class MessagesService implements OnModuleInit {
   /** The daily job's part for one clinic (mocks/outbox.ts runDailyJobs): each birthday child once a year, each in its own short transaction. */
   async greetAll(today: string): Promise<number> {
     const year = Number(today.slice(0, 4));
-    const born = (await this.patients.basics()).filter((p) => isBirthdayOn(p.birthDate, today));
+    const born = (await this.patients.basicsFor([], today)).filter((p) => isBirthdayOn(p.birthDate, today));
     let queued = 0;
     for (const p of born) {
       const done = await runInTransaction(this.prisma, async (tx) => {

@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { lastVisitOn, type Appointment, type Visit } from "@pedia/shared";
 import { AppointmentRecordsService } from "../appointments/appointment-records.service";
 import { PrismaService } from "../prisma/prisma.service";
+import type { Tx } from "../prisma/transaction";
 
 export type VisitFacts = { visits: Pick<Visit, "patientId" | "status" | "date">[]; done: Appointment[] };
 
@@ -14,11 +15,11 @@ export type VisitFacts = { visits: Pick<Visit, "patientId" | "status" | "date">[
 export class VisitDaysService {
   constructor(private readonly prisma: PrismaService, private readonly appointments: AppointmentRecordsService) {}
 
-  async facts(patientIds: readonly string[], branchIds?: readonly string[]): Promise<VisitFacts> {
+  async facts(patientIds: readonly string[], branchIds?: readonly string[], tx: Tx = this.prisma): Promise<VisitFacts> {
     if (!patientIds.length) return { visits: [], done: [] };
     const [rows, done] = await Promise.all([
-      this.prisma.visit.findMany({ where: { patientId: { in: [...patientIds] }, status: "completed" }, select: { patientId: true, status: true, date: true } }),
-      this.appointments.forPatients(patientIds, { status: "done", ...(branchIds && { branchId: { in: [...branchIds] } }) }),
+      tx.visit.findMany({ where: { patientId: { in: [...patientIds] }, status: "completed" }, select: { patientId: true, status: true, date: true } }),
+      this.appointments.forPatients(patientIds, { status: "done", ...(branchIds && { branchId: { in: [...branchIds] } }) }, tx),
     ]);
     return { visits: rows.map((r) => ({ patientId: r.patientId, status: r.status, date: r.date.toISOString().slice(0, 10) })), done };
   }
