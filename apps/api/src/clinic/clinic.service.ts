@@ -63,13 +63,13 @@ export class ClinicService {
     return this.prisma.staff.findMany({ select: { id: true, fullName: true }, orderBy: [{ position: "asc" }, { id: "asc" }] });
   }
 
-  /** The account's tier (the reports' cross-branch rule). */
   /** The signed-in clinic's name, for a copy of records' heading (B13c2a). */
   async name(): Promise<string> {
     const { name } = await this.prisma.clinicAccount.findUniqueOrThrow({ where: { id: ownClinicId() }, select: { name: true } });
     return name;
   }
 
+  /** The account's tier (the reports' cross-branch rule). */
   async tier(): Promise<Tier> {
     return (await this.prisma.clinicAccount.findUniqueOrThrow({ where: { id: ownClinicId() }, select: { tier: true } })).tier;
   }
