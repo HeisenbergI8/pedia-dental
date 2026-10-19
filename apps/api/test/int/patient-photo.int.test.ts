@@ -112,6 +112,19 @@ describe("the child's photo", () => {
     const missing = await put(cookie, "nobody", JPEG);
     expect([missing.status, missing.text]).toEqual([404, "Patient not found"]);
   });
+
+  it("stores the same photo on a bigger plan, counting it once however often it is replaced", async () => {
+    const cookie = await as(FRONT_DESK);
+    const id = db.patients[6]!.id;
+    expect(await photoRef(id)).toBeNull(); // a first photo, so the baseline holds no file of this child's
+    const used = () => inClinic(DEMO_CLINIC_ID, async () => (await prisma.storedFile.aggregate({ _sum: { bytes: true } }))._sum.bytes ?? 0);
+    await app.get(OutboxWorker).drain(); // earlier cases' pending deletions settle before the baseline
+    const before = await used();
+    expect((await put(cookie, id, JPEG)).status).toBe(200);
+    expect((await put(cookie, id, JPEG)).status).toBe(200);
+    await app.get(OutboxWorker).drain(); // the replaced file (and its ledger row) goes after commit
+    expect(await used()).toBe(before + JPEG.length);
+  });
 });
 
 describe("audit, access and tenancy", () => {

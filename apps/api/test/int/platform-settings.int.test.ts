@@ -105,6 +105,7 @@ describe("Primolar's payment QR on MySQL (B12 decisions 5, 23)", () => {
     expect(first.status).toBe(302);
     const image = await http().get(first.headers.location!).buffer(true).parse(binary);
     expect([image.status, (image.body as Buffer).equals(PNG)]).toEqual([200, true]);
+    expect(image.headers["content-type"]).toBe("image/png");
   });
 
   it("deletes the old image once a replacement commits (the worker, through the outbox)", async () => {
