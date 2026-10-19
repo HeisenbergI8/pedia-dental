@@ -1,6 +1,6 @@
 import type { INestApplication } from "@nestjs/common";
 import { DEMO_CLINIC_ID, childrenOf, seedPlatform } from "@pedia/seed";
-import { AcknowledgementPrompt, Appointment, ClinicalNote, Patient, PatientView, PrivacyNoticeView, SessionUser, Visit, type RegisterPatientInput } from "@pedia/shared";
+import { AcknowledgementPrompt, Appointment, ClinicalNote, LEGAL_DOCUMENTS, Patient, PatientView, PrivacyNoticeView, SessionUser, Visit, type RegisterPatientInput } from "@pedia/shared";
 import request from "supertest";
 import { z } from "zod";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -95,7 +95,7 @@ describe("consent and choices", () => {
     expect(after.privacyChoices!.slice(0, before)).toEqual(own.privacyChoices ?? []);
     expect(after.privacyChoices!.slice(before)).toEqual([
       expect.objectContaining({ photos: false, by: "staff", byName: "Liza Cruz" }),
-      expect.objectContaining({ photos: false, reminders: false, by: "parent" }),
+      expect.objectContaining({ photos: false, reminders: false, by: "parent", byName: own.guardians.find((g) => g.id === parentGuardianId)!.fullName }),
     ]);
     const theirs = await choices(parent, another.id, { photos: false });
     expect([theirs.status, theirs.text]).toEqual([403, "This isn't one of your children's records"]);
@@ -119,6 +119,7 @@ describe("consent and choices", () => {
     await ok(choices(cookie, another.id, { photos: false }), PatientView);
     const after = await ok(choices(cookie, another.id, { reminders: true }), PatientView);
     expect(after.privacyChoices!.at(-1)).toMatchObject({ photos: false, reminders: true });
+    expect((await choices(cookie, another.id, {})).status).toBe(400);
   });
 
   it("withdraws reminders already queued when the family says no (B9: queued messages)", async () => {
@@ -146,8 +147,13 @@ describe("the clinic's privacy notice", () => {
   it("lets a parent acknowledge version 1 first", async () => {
     const parent = await as(PARENT);
     expect((await ok(call("get", "/auth/me", parent), SessionUser)).mustAcknowledge).toBe("notice");
+    const prompt = await ok(call("get", "/auth/acknowledgement", parent), AcknowledgementPrompt);
+    expect(prompt).toMatchObject({ kind: "notice", version: 1, contact: { name: "Dr. Paolo Villanueva" } });
+    expect(prompt.children).toHaveLength(childrenOf(db, parentGuardianId).length);
+    expect((await call("post", "/auth/acknowledgement", parent, { kind: "notice", version: 2 })).status).toBe(409);
     await ok(call("post", "/auth/acknowledgement", parent, { kind: "notice", version: 1 }), z.unknown());
     expect((await ok(call("get", "/auth/me", parent), SessionUser)).mustAcknowledge).toBeUndefined();
+    expect(await inClinic(DEMO_CLINIC_ID, () => prisma.auditEvent.count({ where: { actorId: PARENT[1], record: "Privacy notice (acknowledged)" } }))).toBe(1);
   });
 
   it("serves version 1 to staff and the public, and only the Owner saves a new version", async () => {
@@ -194,5 +200,26 @@ describe("the clinic's privacy notice", () => {
     expect(p.privacyConsent!.noticeVersion).toBe(2);
     const earlier = await ok(call("get", `/patients/${unconsented.id}`, await as(FRONT_DESK)), Patient);
     expect(earlier.privacyConsent!.noticeVersion).toBe(1);
+  });
+});
+
+describe("Primolar's terms (privacy #9)", () => {
+  it("stops only the Owner when the Terms change, until they accept (#9)", async () => {
+    const newest = () => prisma.agreement.findFirstOrThrow({ where: { clinicId: DEMO_CLINIC_ID }, orderBy: [{ at: "desc" }, { id: "desc" }] });
+    const latest = await newest();
+    await prisma.agreement.create({
+      data: { clinicId: DEMO_CLINIC_ID, termsVersion: LEGAL_DOCUMENTS.terms.version - 1, dpaVersion: latest.dpaVersion, acceptedBy: latest.acceptedBy, method: latest.method, signedOn: latest.signedOn, at: new Date() },
+    });
+    const accepted = () => inClinic(DEMO_CLINIC_ID, () => prisma.auditEvent.count({ where: { actorId: OWNER[1], record: "Terms and DPA (accepted)" } }));
+    const before = await accepted();
+    const owner = await as(OWNER);
+    const stopped = await call("get", "/patients", owner);
+    expect([stopped.status, stopped.text]).toEqual([403, "Accept Primolar's updated terms to continue"]);
+    expect((await call("get", "/patients", await as(ADMIN))).status).toBe(200); // other staff keep working
+    expect((await ok(call("get", "/auth/acknowledgement", owner), AcknowledgementPrompt)).kind).toBe("terms");
+    await ok(call("post", "/auth/acknowledgement", owner, { kind: "terms", version: LEGAL_DOCUMENTS.terms.version }), z.unknown());
+    expect((await ok(call("get", "/auth/me", owner), SessionUser)).mustAcknowledge).toBeUndefined();
+    expect(await newest()).toMatchObject({ method: "online", acceptedBy: "Dr. Paolo Villanueva", termsVersion: LEGAL_DOCUMENTS.terms.version });
+    expect(await accepted()).toBe(before + 1);
   });
 });

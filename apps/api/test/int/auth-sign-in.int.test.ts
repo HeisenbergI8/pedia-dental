@@ -75,7 +75,17 @@ describe("POST /auth/login on MySQL", () => {
       // dentist@gmail.com goes straight into the one active clinic: no chooser.
       expect(Session.parse((await login({ email: "dentist@gmail.com" })).body).user.clinicId).toBe("clinic_demo");
       expect((await me(tan)).status).toBe(401); // the live staff session ended
-      expect(Session.parse((await login({ email: parent.email, clinicId: "clinic_ngiti" })).body).user).toMatchObject({ role: "parent", readOnly: true });
+      const signedIn = await login({ email: parent.email, clinicId: "clinic_ngiti" });
+      expect(Session.parse(signedIn.body).user).toMatchObject({ role: "parent", readOnly: true });
+      const family = cookieOf(signedIn).split(";")[0]!;
+      const reads = await http().get("/api/patients").set("Cookie", family);
+      expect(reads.status).toBe(200); // reads work
+      const [child] = reads.body as { id: string }[];
+      const paused = [403, "Your clinic's account is paused, so you can view records but not make changes. Contact your clinic."];
+      const confirm = await http().post("/api/appointments/ngiti_appointment_1/status").set("Cookie", family).send({ status: "confirmed" });
+      expect([confirm.status, confirm.text]).toEqual(paused);
+      const ask = await http().post(`/api/patients/${child!.id}/appointment-requests`).set("Cookie", family).send({});
+      expect([ask.status, ask.text]).toEqual(paused);
     } finally {
       await prisma.clinicAccount.update({ where: { id: "clinic_ngiti" }, data: { status: "active" } });
     }

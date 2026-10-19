@@ -51,6 +51,16 @@ describe("the console's accounts on MySQL (decision #25)", () => {
     for (const p of platform.tenants[DEMO_CLINIC_ID]!.patients.slice(0, 5)) expect(text).not.toContain(p.lastName);
   });
 
+  it("has every clinic signed on file and current, and one Bulilit child without consent, as a count", async () => {
+    const rows = AccountOverview.array().parse((await http().get("/api/operator/accounts").set("Cookie", op)).body);
+    expect(rows.map((r) => r.account.id).sort()).toEqual(platform.accounts.map((a) => a.id).sort());
+    for (const r of rows) expect(r.privacy, r.account.id).toMatchObject({ current: true, agreement: { method: "on_file" } });
+    expect(rows.find((r) => r.account.id === DEMO_CLINIC_ID)!.privacy.patientsWithoutConsent).toBe(1);
+    const demo = platform.tenants[DEMO_CLINIC_ID]!;
+    expect(demo.patients.filter((p) => !p.privacyConsent).map((p) => p.id)).toEqual([demo.patients[5]!.id]); // the one counted
+    expect(demo.patients[11]!.privacyChoices![0]!.photos).toBe(false);
+  });
+
   it("answers 404 for an unknown account on every account route", async () => {
     for (const [method, path] of [["get", "subscription"], ["get", "staff"], ["post", "suspend"]] as const) {
       const res = await http()[method](`/api/operator/accounts/nope/${path}`).set("Cookie", op);
@@ -68,9 +78,15 @@ describe("the console's accounts on MySQL (decision #25)", () => {
       signedOnFile: true,
       signedOn: "2026-10-17",
     };
+    const { signedOnFile: _ticked, ...unticked } = data;
+    const { signedOn: _date, ...undated } = data;
+    for (const without of [unticked, undated]) {
+      expect((await http().post("/api/operator/accounts").set("Cookie", op).field("data", JSON.stringify(without))).status).toBe(400);
+    }
     const res = await http().post("/api/operator/accounts").set("Cookie", op).field("data", JSON.stringify(data));
     expect(res.status).toBe(201);
     const made = CreateAccountResult.parse(res.body);
+    expect(made.overview.privacy.agreement).toMatchObject({ method: "on_file", signedOn: "2026-10-17", acceptedBy: "Dr. Direct" });
     const login = await signIn(app, "owner@direct.demo", undefined, made.temporaryPassword);
     expect(Session.parse(login.res.body).user).toMatchObject({ clinicId: made.overview.account.id, mustChangePassword: true });
     const agreement = await prisma.agreement.findFirstOrThrow({ where: { clinicId: made.overview.account.id } });

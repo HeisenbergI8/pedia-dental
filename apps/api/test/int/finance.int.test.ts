@@ -112,6 +112,34 @@ describe("the financial dashboard matches the mock's financeSummary (done-when)"
     expect(all.outstanding.map((o) => o.patientId)).not.toContain(voided.id);
   });
 
+  it("takes a deposit used at another branch off the branch that received it", async () => {
+    const dasma = `${owner}; pd_branch=${DASMA}`;
+    const keyed = (path: string, cookie: string, body: object) =>
+      request(t.app.getHttpServer()).post(`/api${path}`).set("Cookie", cookie).set("Idempotency-Key", crypto.randomUUID()).send(body);
+    const held = async () => ({
+      imus: (await report(owner, `?today=${today}&branch=${IMUS}`)).depositsHeld,
+      dasma: (await report(owner, `?today=${today}&branch=${DASMA}`)).depositsHeld,
+    });
+    // An Imus bill of ₱800 for a new child with nothing on deposit.
+    const id = await t.register();
+    await t.call("post", `/patients/${id}/plan`, admin, { procedureCode: "fluoride", fee: pesos(800) });
+    const visit = await t.start(id, admin);
+    const note = (await t.call("post", `/patients/${id}/notes`, admin, { visitId: visit.id, templateId: "tpl_fluoride", values: { agent: "5% NaF varnish", teeth: [] }, behavior: [] })).body as { id: string };
+    await t.call("post", `/notes/${note.id}/sign`, admin);
+    await t.complete(visit.id, admin);
+    const [item] = (await t.call("get", `/patients/${id}/plan`, admin)).body as { id: string }[];
+    const bill = await t.ok(keyed(`/patients/${id}/invoices`, admin, { planItemIds: [item!.id] }), Invoice, 201);
+    expect(bill.branchId).toBe(IMUS);
+
+    const before = await held();
+    await t.ok(keyed(`/patients/${id}/deposits`, dasma, { amount: pesos(500), method: "cash", receivedBy: "staff_cruz" }), Payment, 201);
+    expect(await held()).toEqual({ ...before, dasma: before.dasma + pesos(500) });
+    await t.ok(keyed(`/invoices/${bill.id}/apply-credit`, admin, { amount: pesos(500), receivedBy: "staff_cruz" }), Payment, 201); // used at Imus
+    expect(await held()).toEqual(before); // used up, at Dasmariñas
+    await t.ok(keyed(`/invoices/${bill.id}/apply-credit`, admin, { amount: -pesos(500), receivedBy: "staff_cruz" }), Payment, 201);
+    expect(await held()).toEqual({ ...before, dasma: before.dasma + pesos(500) }); // back to Dasmariñas, where it was handed over
+  });
+
   it("totals what SQL sums: collected this month, the six months, outstanding and deposits (done-when)", async () => {
     const s = await report(owner, `?today=${today}&branch=all`);
     const sum = (sql: Promise<{ n: unknown }[]>) => sql.then((r) => Number(r[0]?.n ?? 0));

@@ -124,6 +124,8 @@ describe("photos (apps/web handlers.test.ts → photos)", () => {
     const refusal = await said(upload(dentist, declinedChild.id, {}, JPEG));
     expect(refusal).toEqual([409, `${declinedChild.firstName}'s family declined clinical photos. Staff can change this under Privacy on the child's Overview; parents on the portal's Home page.`]);
     expect((await upload(dentist, declinedChild.id, { type: "xray" }, JPEG)).status).toBe(201); // only photos need consent
+    expect((await http().post(`/api/patients/${declinedChild.id}/privacy-choices`).set("Cookie", await as(FRONT_DESK)).send({ photos: true })).status).toBe(200);
+    expect((await upload(dentist, declinedChild.id, {}, JPEG)).status).toBe(201); // photos are back on
     expect(await said(upload(parent, own.id, { type: "xray" }, JPEG))).toEqual([400, "Upload a photo or a medical document"]);
     expect(await said(upload(parent, own.id, { tooth: 74 }, JPEG))).toEqual([400, "Upload a photo or a medical document"]);
     expect(ClinicalPhoto.parse((await upload(parent, own.id, { type: "document" }, PDF, "application/pdf")).body).uploadedBy).toBe("parent");

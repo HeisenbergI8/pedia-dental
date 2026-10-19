@@ -94,6 +94,8 @@ describe("appointments (apps/web handlers.test.ts → appointments)", () => {
     expect([santos.status, santos.text]).toEqual([400, "Dr. Miguel Santos doesn't work at this branch"]);
     const chair = await book(slot(id, { chairId: "chair_4", startsAt: day("11:00") }));
     expect([chair.status, chair.text]).toEqual([400, "Choose a chair at this branch"]);
+    const late = await book(slot(id, { chairId: "chair_4", startsAt: day("17:00") }), dasma(owner));
+    expect([late.status, late.text]).toEqual([400, "Book between 9:00 AM and 5:00 PM."]); // Dasmariñas's own hours, not Imus's 6 PM
   });
 
   it("keeps each branch's calendar to its own bookings, in a half-open window", async () => {
@@ -109,6 +111,11 @@ describe("appointments (apps/web handlers.test.ts → appointments)", () => {
     for (const query of ["", `?from=${encodeURIComponent(at("2030-01-14", "00:00"))}`, `?to=${encodeURIComponent("+275000-01-01T00:00:00Z")}`]) {
       expect((await calendar(admin, query)).map((a) => a.id), query).toContain(imus.id);
     }
+    // A dentist at both branches sees each device branch's own bookings, the whole day (tenancy.test.ts).
+    const reyes = await t.as([DEMO_CLINIC_ID, "staff_reyes"] as Login);
+    const wholeDay = `?from=${encodeURIComponent(at("2030-01-14", "00:00"))}&to=${encodeURIComponent(at("2030-01-15", "00:00"))}`;
+    expect((await calendar(`${reyes}; pd_branch=branch_dasma`, wholeDay)).map((a) => a.id)).toEqual([there.id]);
+    expect((await calendar(`${reyes}; pd_branch=branch_imus`, wholeDay)).map((a) => a.id)).toEqual([imus.id]);
   });
 
   it("lists a child's appointments at every branch, by start, and audits the read", async () => {
