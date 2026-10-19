@@ -30,3 +30,13 @@ Branch `feature/b13c2a-privacy-operations`, from master (B1–B13c1 merged). Pla
 **Deviations from plan:** none. The plan's suggested direct tenancy proof (`every entry's clinicId is the demo clinic`) is in the first case.
 **Gate:** `pnpm run check` → exit 0 (api 82 files / 540 tests; web 36 / 402; shared 30 / 242; seed 1 / 31; infra 5 / 41). `privacy-routes.test.ts` 5 passed. MySQL: `privacy-operations.int.test.ts` + `operator-console.int.test.ts` 16 passed; full `pnpm --filter api test:int` → 54 files / 615 tests passed.
 **Notes:** the name join stays in the controller (plan Q8 default). The API writes "Audit log" after the read, MSW's gate before it; no test asserts the first row.
+
+## Phase 4: MSW: the handlers, `API_ROUTES` and the web's cases — 2026-10-19
+
+**Steps completed:** 4.1, 4.2, 4.3, 4.4
+**Files changed:** `apps/web/src/features/patients/mocks.ts` (`visibleTo` exported), `apps/web/src/features/patients/export-mocks.ts` (new), `apps/web/src/features/audit/mocks.ts` (new), `apps/web/src/mocks/handlers.ts`, `apps/web/src/mocks/passthrough.ts`, `apps/web/src/mocks/passthrough.test.ts`, `apps/web/src/mocks/privacy.test.ts`
+**Deviations from plan:**
+- Web twins (Step 4.4): the parent's account id is `guardian.<patient_sibling's first guardian id>`, read from the seeded tenant as the file's "parent consent" block already does (the plan's placeholder; there is no helper in `portal.test.ts`). Two assertions added so each twin checks what its API case checks: the parent's photos are their own uploads, and the first page is newest first; the child's name is compared exactly. Titles are the API's, character for character (the port ledger passes with no new line).
+- The describe goes last in `privacy.test.ts`: the cases only add rows, and the earlier "notices" block restores what it changes.
+**Gate:** `pnpm run check` → exit 0 (web 36 files / 407 tests, +5; api 82 / 540; shared 30 / 242; seed 1 / 31; infra 5 / 41). Ran directly: `privacy.test.ts` 17 passed, `passthrough.test.ts` 7 passed, `port-ledger.test.ts` 16 passed.
+**Notes:** `mock-db` key unchanged (no `Db` or seed change). The passthrough sweep now expects no rule left unserved.

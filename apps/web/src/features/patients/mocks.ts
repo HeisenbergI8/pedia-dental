@@ -79,7 +79,7 @@ const photoKey = (patientId: string) => `patient-photo:${patientId}`;
  * patients.contact (front desk, admin; a parent for their own children). The stored record is never changed; JSON
  * drops the undefined keys. NestJS: the response DTO's serialisation group, applied to every endpoint returning a patient.
  */
-const visibleTo = (session: MockSession | undefined, p: Patient): PatientView =>
+export const visibleTo = (session: MockSession | undefined, p: Patient): PatientView =>
   inScope(session, "patients.contact", p.id)
     ? p
     : { ...p, address: undefined, emergencyContact: undefined, guardians: p.guardians.map((g) => ({ ...g, phone: undefined, email: undefined })) };

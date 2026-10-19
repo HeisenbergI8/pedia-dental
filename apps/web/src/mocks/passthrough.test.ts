@@ -8,6 +8,8 @@ import { API_ROUTES, apiPassthrough, servedBy } from "./passthrough";
 
 /** B12: every operator route, the five public sign-up routes and the Owner's three bill routes (swept below). */
 const B12_ROUTES = 25 + 5 + 3;
+/** B13c2a: the copy of records and the audit-log reader. */
+const B13C2A_ROUTES = 2;
 
 const routes = [{ method: "GET", path: "/branches" }, { method: "POST", path: "/staff/:id/deactivate" }];
 
@@ -87,9 +89,9 @@ describe("which routes the API serves", () => {
       ["POST", "/auth/password-link"], ["POST", "/auth/password-link/accept"], ["POST", "/auth/password-reset"], ["GET", "/auth/demo-texts"],
     ] as const;
     for (const [method, path] of b11) expect(api(method, path), `${method} ${path}`).toBe(true);
-    expect(API_ROUTES).toHaveLength(14 + b3.length + b4.length + b5.length + b6.length + b7.length + b8.length + b9.length + b10.length + b11.length + B12_ROUTES);
-    // POST /patients/:id/exports is B13c2's (no handler, no controller yet). DELETE /notes/:id isn't a route (exact method).
-    expect([api("POST", "/patients/p1/exports"), api("DELETE", "/notes/n1")]).toEqual([false, false]);
+    expect(API_ROUTES).toHaveLength(14 + b3.length + b4.length + b5.length + b6.length + b7.length + b8.length + b9.length + b10.length + b11.length + B12_ROUTES + B13C2A_ROUTES);
+    // B13c2a serves the copy; DELETE /notes/:id isn't a route (exact method).
+    expect([api("POST", "/patients/p1/exports"), api("DELETE", "/notes/n1")]).toEqual([true, false]);
     expect(api("DELETE", "/appointments/a1")).toBe(false);
     expect(api("DELETE", "/branches/b1")).toBe(false); // B12 serves /operator/accounts now (swept below)
   });
@@ -104,18 +106,18 @@ describe("no route is MSW's alone (B13c1 E2)", () => {
       ? [{ method: String(h.info.method), path: new URL(h.info.path, "http://x").pathname.slice(prefix.length) }]
       : [],
   );
-  /** Measured 2026-10-18: 133 handlers, one per route. A new handler without its API route fails the sweep below. */
-  it("reads every feature handler", () => expect(routes.length).toBeGreaterThanOrEqual(133));
+  /** Measured 2026-10-18: 133 handlers; B13c2a adds 2. A new handler without its API route fails the sweep below. */
+  it("reads every feature handler", () => expect(routes.length).toBeGreaterThanOrEqual(135));
 
   it("serves every route MSW answers from the API", () => {
     expect(routes.filter((r) => !API_ROUTES.some((a) => a.method === r.method && a.path === r.path)).map((r) => `${r.method} ${r.path}`)).toEqual([]);
   });
 
-  // Two rules have no handler, no controller and no screen yet: the copy of records and the audit-log reader (B13c2).
-  it("serves every clinic, operator and public rule from the API, but B13c2's two", () => {
+  // Since B13c2a every rule is served: nothing is left for MSW alone.
+  it("serves every clinic, operator and public rule from the API", () => {
     const rules = [...ACCESS_RULES, ...OPERATOR_RULES, ...PUBLIC_RULES].map((r) => `${r.method} ${r.path}`);
     const served = new Set(API_ROUTES.map((r) => `${r.method} ${r.path}`));
-    expect(rules.filter((r) => !served.has(r)).sort()).toEqual(["GET /audit-log", "POST /patients/:id/exports"]);
+    expect(rules.filter((r) => !served.has(r))).toEqual([]);
   });
 });
 

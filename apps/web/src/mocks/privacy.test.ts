@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   AccountOverview,
   AcknowledgementPrompt,
+  AuditLogPage,
   Appointment,
   ClinicalPhoto,
   CreateAccountResult,
@@ -12,6 +13,7 @@ import {
   Patient,
   PatientView,
   PrivacyNoticeView,
+  RecordsCopy,
   Session,
   Signup,
   SignupStatusView,
@@ -236,5 +238,63 @@ describe("notices and acknowledgements (privacy #9, #20, #21, #23)", () => {
     expect(prompt.paragraphs[0]).toContain("every access is logged");
     await api("/auth/acknowledgement", Session, send("POST", { kind: "confidentiality", version: prompt.version }));
     expect((await api("/patients", z.array(z.unknown()))).length).toBeGreaterThan(0); // a dentist sees no contacts, so not the full Patient shape
+  });
+});
+
+// Twins of apps/api/test/int/privacy-operations.int.test.ts (identical titles: the port ledger). Last: they only add rows.
+describe("copy of records and the audit log (B13c2a)", () => {
+  const exportOf = (id: string) => api(`/patients/${id}/exports`, RecordsCopy, send("POST"));
+  const demo = () => platform.tenants.clinic_demo!;
+  const parentId = () => `guardian.${demo().patients.find((p) => p.id === "patient_sibling")!.guardians[0]!.id}`;
+
+  it("gives staff a copy of the child's whole record, signed notes only, audited as an export", async () => {
+    asStaff("staff_villanueva");
+    const child = demo().patients.find((p) => demo().notes.some((n) => n.patientId === p.id && n.signedAt))!;
+    const copy = await exportOf(child.id);
+    expect(copy).toMatchObject({ kind: "primolar.records-copy", omitted: [], patient: { id: child.id } });
+    expect(copy.notes!.every((n) => n.signedAt)).toBe(true);
+    expect(demo().auditEvents.filter((e) => e.patientId === child.id && e.record === "Copy of records" && e.action === "export")).toHaveLength(1);
+  });
+
+  it("leaves guardian contacts and the message log out of a dentist's copy", async () => {
+    asStaff("staff_reyes");
+    const copy = await exportOf("patient_sibling");
+    expect(copy.omitted).toEqual(["messages"]);
+    expect(copy.patient.guardians.every((g) => g.phone === undefined)).toBe(true);
+  });
+
+  it("gives a parent their own child's copy without clinical sections, and refuses another family's", async () => {
+    asStaff(parentId());
+    const copy = await exportOf("patient_sibling");
+    expect(copy.omitted).toEqual(["visits", "chart", "notes", "growth", "documents"]);
+    expect(copy.photos!.every((p) => p.uploadedBy === "parent")).toBe(true);
+    const other = demo().patients.find((p) => !p.guardians.some((g) => `guardian.${g.id}` === parentId()))!;
+    await expect(exportOf(other.id)).rejects.toMatchObject({ status: 403, message: "This isn't one of your children's records" });
+  });
+
+  it("lists the clinic's audit trail newest first, a page at a time, filtered by action and person, naming the child", async () => {
+    asStaff("staff_cruz");
+    await api("/patients/patient_sibling", PatientView);
+    asStaff("staff_villanueva");
+    const first = await api("/audit-log?limit=2", AuditLogPage);
+    expect(first.entries).toHaveLength(2);
+    expect(first.entries[0]!.at >= first.entries[1]!.at).toBe(true);
+    const second = await api(`/audit-log?limit=2&before=${encodeURIComponent(first.next!)}`, AuditLogPage);
+    expect(second.entries.map((e) => e.id)).not.toContain(first.entries[0]!.id);
+    const views = await api("/audit-log?action=view&actorId=staff_cruz", AuditLogPage);
+    expect(views.entries.every((e) => e.action === "view" && e.actorId === "staff_cruz")).toBe(true);
+    const sibling = demo().patients.find((p) => p.id === "patient_sibling")!;
+    expect(views.entries.find((e) => e.patientId === "patient_sibling")!.patientName).toBe(`${sibling.firstName} ${sibling.lastName}`);
+    expect(await status(api("/audit-log?before=nonsense", AuditLogPage))).toBe(400);
+  });
+
+  it("shows the audit trail only to the Owner and admins, and logs that it was read", async () => {
+    for (const id of ["staff_cruz", "staff_reyes", parentId()]) {
+      asStaff(id);
+      expect(await status(api("/audit-log", AuditLogPage))).toBe(403);
+    }
+    asStaff("staff_delacruz");
+    expect(await status(api("/audit-log", AuditLogPage))).toBe(200);
+    expect(demo().auditEvents.some((e) => e.record === "Audit log" && e.action === "view")).toBe(true);
   });
 });
