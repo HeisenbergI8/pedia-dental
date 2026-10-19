@@ -26,3 +26,41 @@
 **Gate:**
 - `pnpm run check`: exit 0. `@pedia/infra`: 41 tests.
 - `vitest --config vitest.int.config.ts test/int/seed.int.test.ts`: 17 passed on MySQL.
+
+## Phase 6: The load test — 2026-10-19
+
+**Steps completed:** 6.1, 6.2, 6.3, 6.4
+**Files changed:** `apps/api/test/load/{targets,targets.test,load-data,load-data.test,run}.ts` (new), `apps/api/prisma/load-seed.ts` (new), `apps/api/package.json` (autocannon 8.0.0, @types/autocannon; `load:seed`, `load:run`), `tsconfig.json`, `README.md` (Load test), `src/patients/patient-standing.ts` (the fix below), `pnpm-lock.yaml`
+**Deviations from plan:**
+- **`loadPlatform`'s builders** copy the seeded records' field sets (Q7):
+  - Patient numbers are `KS-90000…`, because the contract's regex is `KS-\d{5}`; the plan's `LD-…` would fail `Patient.parse`.
+  - Dates come from the patient's index, not faker: `@faker-js/faker` is a dependency of `@pedia/seed`, not of the API.
+  - `loadPlatform(extra, today)` takes the day, so the unit test is fixed in time.
+- **`run.ts`** imports `clinic-time` first, signs in with `DEMO_PASSWORD` from `@pedia/seed`, and picks Imus by name. Autocannon 8's `Result` has `latency.p97_5`, `requests.average`, `non2xx`, `errors` and `timeouts`, as the plan assumed.
+- **A fix found by the first run (`patient-standing.ts`):** `standingPage` passed every invoice, payment and text in the clinic to `patientStanding` for each patient, O(patients × rows). Each patient now gets its own rows, grouped once, with payments grouped by their invoice's owner. The answer is unchanged, because `patientStanding` filtered by patient and `invoiceBalance` by invoice; `src/patients`' 31 tests pass. One warm request at 5,000 patients went from 1,011 ms to 641 ms.
+**Run (4 vCPU, 15 GB, MySQL 8.0.46 here; production runs 8.4), production bundle, `BACKGROUND_WORK=true`, 10 connections, 30 s after 5 s warm-up:**
+
+At 5,000 extra patients (5,061 in Bulilit), after the fix:
+
+| Target | Requests | req/s | p50 | p97.5 | p99 | Result |
+| --- | --- | --- | --- | --- | --- | --- |
+| Today (Imus) | 551 | 18.4 | 513 | 842 | 877 | missed |
+| Today (all branches) | 638 | 21.3 | 459 | 605 | 641 | missed |
+| Patient list | 19 | 0.6 | 8458 | 9197 | 9197 | missed, 22 timeouts |
+| Patient list: balance due | 0 | 0 | — | — | — | missed, 60 timeouts |
+| Search | 175 | 5.8 | 1448 | 5750 | 6186 | missed |
+| Book | 842 | 28.1 | 348 | 436 | 453 | missed (p97.5) |
+
+At 1,000 extra patients:
+
+| Target | Requests | req/s | p50 | p97.5 | p99 | Result |
+| --- | --- | --- | --- | --- | --- | --- |
+| Today (Imus) | 1908 | 63.6 | 152 | 206 | 223 | OK |
+| Today (all branches) | 1768 | 58.9 | 161 | 235 | 301 | OK |
+| Patient list | 249 | 8.3 | 1156 | 2279 | 2284 | missed |
+| Patient list: balance due | 250 | 8.3 | 1137 | 1551 | 1573 | missed |
+| Search | 1034 | 34.5 | 280 | 396 | 428 | missed (p97.5) |
+| Book | 948 | 31.6 | 311 | 373 | 390 | OK |
+
+**Gate:** `load:run` exits 1 at both sizes. The misses are accepted by the user and moved to a Later chunk (decisions.md L1); the thresholds are unchanged. `pnpm run check` before the commit, exit code below.
+**Why the list is slow:** every page computes the standing of every patient who matches. With no search, that is the whole clinic: four `IN (5,000 ids)` queries plus the JS. One request takes about 0.6 s; under 10 connections they queue. `GET /patients` (search) returns every match unpaged: "ma" returned 762 KB at 5,000 patients.

@@ -56,6 +56,21 @@ A hosted deployment (B13b) sets these variables:
 `STORAGE_LINK_SECRET` is unused with S3. B13b sets these in `packages/infra/src/service-stack.ts`; its settings live in
 `packages/infra/cdk.json`.
 
+## Load test (B13c1)
+
+```bash
+mysql -h127.0.0.1 -P3307 -uroot -proot -e "CREATE DATABASE pedia_dental_load; GRANT ALL ON pedia_dental_load.* TO 'pedia'@'%'"
+export DATABASE_URL=mysql://pedia:pedia@127.0.0.1:3307/pedia_dental_load
+pnpm --filter api db:deploy && pnpm --filter api load:seed           # 5,000 extra patients (LOAD_PATIENTS=n for another size)
+pnpm --filter api build
+(cd apps/api && DEMO_LOGINS=true COOKIE_SECURE=false BACKGROUND_WORK=true pnpm start:prod > /dev/null &)
+pnpm --filter api load:run                                           # exits 1 on a missed target
+```
+
+It runs on the production bundle with the outbox worker on, so each booking's texts are queued and sent (log driver)
+while the load runs. The targets and thresholds are in `test/load/targets.ts`. `load:seed` refuses any database whose
+name doesn't end in `_load`. `LOAD_BASE_URL` points it elsewhere; `LOAD_RECORD_ONLY=1` prints without failing.
+
 ## How it's built
 
 Read [CONVENTIONS.md](CONVENTIONS.md) before adding an endpoint. It covers the layout, how to port a feature from

@@ -22,15 +22,19 @@
     "lint": "echo 'no lint in api'",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "test:int": "vitest run --config vitest.int.config.ts"
+    "test:int": "vitest run --config vitest.int.config.ts",
+    "load:seed": "node --import @swc-node/register/esm-register prisma/load-seed.ts",
+    "load:run": "node --import @swc-node/register/esm-register test/load/run.ts"
   },
   "devDependencies": {
     "@nestjs/testing": "^12",
+    "@types/autocannon": "^7.12.7",
     "@types/busboy": "^1.5.5",
     "@types/express": "^5",
     "@types/jsdom": "28.0.3",
     "@types/node": "^22",
     "@types/supertest": "^7.2.1",
+    "autocannon": "^8.0.0",
     "esbuild": "^0.25",
     "supertest": "^7.3.1",
     "typescript": "^5",

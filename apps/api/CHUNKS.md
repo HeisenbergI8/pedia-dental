@@ -451,6 +451,10 @@ restoring last night's backup to a fresh database works; the load test meets its
 - Per-clinic web addresses; operator impersonation with an audit trail.
 - Patient merge (after duplicate detection in B4).
 - Operator two-step sign-in (B12 decisions 10 and 36; B13a decisions.md D3).
+- **Patient list and search at scale (next, B13c1 decisions.md L1).** The load test (2026-10-19) missed on the list and
+  search: about 1–2 s at 1,000 patients and 8 s at 5,000 under 10 connections. Store each patient's standing (last visit,
+  recall, balance, flags) in columns kept by the writes, so filter, sort and page run in SQL; page `GET /patients`; then
+  `pnpm --filter api load:run` at 5,000 must meet `test/load/targets.ts`.
 
 ---
 
