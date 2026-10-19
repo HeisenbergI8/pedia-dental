@@ -13,7 +13,8 @@ import { useActiveBranch, useBranches } from "@/features/clinic/api";
 
 const UPCOMING = new Set(["booked", "confirmed", "arrived", "in_chair"]);
 
-export function PatientAppointments({ patientId }: { patientId: string }) {
+/** `restricted`: an erasure was approved (B13c2b E7), so the child can't be booked; their past appointments still show. */
+export function PatientAppointments({ patientId, restricted = false }: { patientId: string; restricted?: boolean }) {
   const { data, isLoading, error, refetch, isRefetching } = usePatientAppointments(patientId);
   const [draft, setDraft] = useState<AppointmentDraft | null>(null);
   // "Save and book appointment" on New patient lands here with ?book=1: open booking once, then drop the param.
@@ -22,11 +23,11 @@ export function PatientAppointments({ patientId }: { patientId: string }) {
   const pathname = usePathname();
   useEffect(() => {
     if (params.get("book") !== "1") return;
-    setDraft({ patientId });
+    if (!restricted) setDraft({ patientId });
     const q = new URLSearchParams(params);
     q.delete("book");
     router.replace(q.size ? `${pathname}?${q}` : pathname, { scroll: false });
-  }, [params, patientId, pathname, router]);
+  }, [params, patientId, pathname, restricted, router]);
   // A child's record is account-wide, but a booking belongs to its branch: name the branch when it isn't this one.
   const activeBranchId = useActiveBranch()?.id;
   const branches = useBranches().data;
@@ -45,9 +46,11 @@ export function PatientAppointments({ patientId }: { patientId: string }) {
             </Badge>
           )}
         </h2>
-        <Button variant="outline" size="sm" onClick={() => setDraft({ patientId })}>
-          Book appointment
-        </Button>
+        {!restricted && (
+          <Button variant="outline" size="sm" onClick={() => setDraft({ patientId })}>
+            Book appointment
+          </Button>
+        )}
       </div>
       {isLoading && <Loading label="Loading appointments" />}
       {error && <ErrorState compact what="the appointments" onRetry={() => refetch()} retrying={isRefetching} />}

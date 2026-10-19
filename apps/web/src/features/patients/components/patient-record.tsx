@@ -135,7 +135,7 @@ export function PatientRecord({ patientId }: { patientId: string }) {
           {/* Side by side only from 1280px; below that the reference column would be too narrow. */}
           <div className="grid gap-5 xl:grid-cols-3">
             <div className="space-y-5 xl:col-span-2">
-              <PatientAppointments patientId={patientId} />
+              <PatientAppointments patientId={patientId} restricted={!!patient?.restrictedAt} />
               <VisitList patientId={patientId} />
               <BehaviorTrend patientId={patientId} />
               <GrowthCard patient={patient} />
