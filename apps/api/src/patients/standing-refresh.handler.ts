@@ -22,6 +22,13 @@ export class StandingRefreshHandler implements OutboxHandler, OnModuleInit {
 
   async handle({ payload }: OutboxEnvelope): Promise<void> {
     const { patientId } = payload as { patientId: string };
+    // Most settled texts change nothing: check without the lock first (the text that queued this has committed, and a
+    // later one queues its own refresh), and lock only to write. Keeps the patient's lock off the booking path.
+    const [should, row] = await Promise.all([
+      this.standing.compute(this.prisma, [patientId], ["contact"]),
+      this.prisma.patient.findUnique({ where: { id: patientId }, select: { noContact: true } }),
+    ]);
+    if (!row || row.noContact === should.get(patientId)!.noContact) return;
     await runInTransaction(this.prisma, async (tx) => {
       if (!(await lockPatientIfExists(tx, patientId))) return; // purged: nothing to keep
       await this.standing.refresh(tx, [patientId], ["contact"]);

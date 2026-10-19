@@ -41,10 +41,8 @@ export class AuditService {
       if (repeat) return;
     }
 
-    await tx.auditEvent.create({
-      data: { ...clinicData(), at, actorId: user.id, actorName: user.name, actorRole: user.role, action, record, patientId },
-      select: { id: true },
-    });
+    // createMany: one INSERT, no read-back (B14: most writes record inside the clinic's or the patient's lock).
+    await tx.auditEvent.createMany({ data: [{ ...clinicData(), at, actorId: user.id, actorName: user.name, actorRole: user.role, action, record, patientId }] });
   }
 
   /**

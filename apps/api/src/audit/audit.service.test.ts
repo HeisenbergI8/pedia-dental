@@ -15,7 +15,7 @@ const signedIn: RequestContext = {
 };
 
 function setup(repeat: { id: string } | null = null) {
-  const auditEvent = { findFirst: vi.fn(async () => repeat), create: vi.fn(async () => ({ id: "a1" })) };
+  const auditEvent = { findFirst: vi.fn(async () => repeat), createMany: vi.fn(async () => ({ count: 1 })) };
   const service = new AuditService({ auditEvent } as unknown as PrismaService, new FixedClock(NOW));
   return { service, auditEvent };
 }
@@ -24,8 +24,8 @@ describe("AuditService", () => {
   it("writes the actor, clinic and time from the context and the clock", async () => {
     const { service, auditEvent } = setup();
     await requestContext.run(signedIn, () => service.record("view", "Dental chart", "pat_1"));
-    expect(auditEvent.create).toHaveBeenCalledWith({
-      data: {
+    expect(auditEvent.createMany).toHaveBeenCalledWith({
+      data: [{
         clinicId: "clinic_a",
         at: NOW,
         actorId: "staff_reyes",
@@ -34,8 +34,7 @@ describe("AuditService", () => {
         action: "view",
         record: "Dental chart",
         patientId: "pat_1",
-      },
-      select: { id: true },
+      }],
     });
   });
 
@@ -45,21 +44,21 @@ describe("AuditService", () => {
     expect(auditEvent.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ at: { gt: new Date(NOW.getTime() - 5 * 60_000) } }) }),
     );
-    expect(auditEvent.create).not.toHaveBeenCalled();
+    expect(auditEvent.createMany).not.toHaveBeenCalled();
   });
 
   it("always writes a change, without looking for a repeat", async () => {
     const { service, auditEvent } = setup({ id: "earlier" });
     await requestContext.run(signedIn, () => service.record("update", "Dental chart", "pat_1"));
     expect(auditEvent.findFirst).not.toHaveBeenCalled();
-    expect(auditEvent.create).toHaveBeenCalledOnce();
+    expect(auditEvent.createMany).toHaveBeenCalledOnce();
   });
 
   it("writes through the caller's transaction when given one", async () => {
     const { service } = setup();
-    const tx = { auditEvent: { findFirst: vi.fn(async () => null), create: vi.fn(async () => ({ id: "a2" })) } };
+    const tx = { auditEvent: { findFirst: vi.fn(async () => null), createMany: vi.fn(async () => ({ count: 1 })) } };
     await requestContext.run(signedIn, () => service.record("create", "Payment", undefined, tx as never));
-    expect(tx.auditEvent.create).toHaveBeenCalledOnce();
+    expect(tx.auditEvent.createMany).toHaveBeenCalledOnce();
   });
 
   it("refuses without a signed-in user, or outside a request", async () => {

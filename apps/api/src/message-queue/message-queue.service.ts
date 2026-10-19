@@ -16,6 +16,9 @@ const WITHDRAWABLE = { status: "queued", dispatchedAt: null } as const;
  * write runs in the caller's transaction, after the caller's locks (E8). To render a body it reads one template, the
  * dentist's name and the account's name (E1's flagged exception: reads only, never a write to another feature's table).
  */
+/** What composeMessage needs besides the patient (B14: read once per booking). */
+type Refs = Omit<Parameters<typeof composeMessage>[1], "patients">;
+
 @Injectable()
 export class MessageQueueService {
   constructor(
@@ -30,17 +33,26 @@ export class MessageQueueService {
    */
   async queue(tx: Tx, e: MessageEvent, patient: Patient, extra: { greetingYear?: number } = {}): Promise<Message | undefined> {
     if (choiceDeclined(patient, "reminders")) return undefined;
-    const now = this.clock.now();
-    const sendAt = nextSendingTime(new Date(Math.max(Date.parse(e.sendAt), now.getTime())));
-    const [template, dentist, account] = await Promise.all([
-      tx.messageTemplate.findFirst({ where: { kind: e.kind }, select: { kind: true, body: true } }),
-      e.dentistId ? tx.staff.findFirst({ where: { id: e.dentistId }, select: { id: true, fullName: true } }) : null,
+    return this.write(tx, e, patient, await this.refs(tx, [e.kind], e.dentistId), extra);
+  }
+
+  /** The templates, dentist and clinic name a text is composed from. One read each, however many texts share them. */
+  private async refs(tx: Tx, kinds: readonly MessageEvent["kind"][], dentistId: string | undefined): Promise<Refs> {
+    const [templates, dentist, account] = await Promise.all([
+      tx.messageTemplate.findMany({ where: { kind: { in: [...kinds] } }, select: { kind: true, body: true } }),
+      dentistId ? tx.staff.findFirst({ where: { id: dentistId }, select: { id: true, fullName: true } }) : null,
       // A platform table: the tenant extension doesn't scope it, so the read names the clinic itself.
       tx.clinicAccount.findUniqueOrThrow({ where: { id: ownClinicId() }, select: { name: true } }),
     ]);
+    return { templates, staff: dentist ? [dentist] : [], clinicName: account.name };
+  }
+
+  private async write(tx: Tx, e: MessageEvent, patient: Patient, refs: Refs, extra: { greetingYear?: number }): Promise<Message | undefined> {
+    const now = this.clock.now();
+    const sendAt = nextSendingTime(new Date(Math.max(Date.parse(e.sendAt), now.getTime())));
     const composed = composeMessage(
       { ...e, sendAt: sendAt.toISOString() },
-      { templates: template ? [template] : [], patients: [patient], staff: dentist ? [dentist] : [], clinicName: account.name },
+      { ...refs, patients: [patient] },
       { id: "", clinicId: ownClinicId(), createdAt: now.toISOString() },
     );
     if (!composed) return undefined;
@@ -82,10 +94,16 @@ export class MessageQueueService {
     const base = { patientId: a.patientId, appointmentId: a.id, startsAt: a.startsAt, dentistId: a.dentistId };
     const now = this.clock.now();
     const remindAt = reminderSendAt(a.startsAt, now);
-    await this.queue(tx, { ...base, kind: "appointment_confirmation", sendAt: now.toISOString() }, patient);
-    await this.queue(tx, { ...base, kind: "appointment_reminder", sendAt: remindAt }, patient);
     const pre = preVisitMessageFor(a.procedureCode);
-    if (pre) await this.queue(tx, { ...base, kind: pre, sendAt: remindAt }, patient);
+    const events: MessageEvent[] = [
+      { ...base, kind: "appointment_confirmation", sendAt: now.toISOString() },
+      { ...base, kind: "appointment_reminder", sendAt: remindAt },
+      ...(pre ? [{ ...base, kind: pre, sendAt: remindAt }] : []),
+    ];
+    if (choiceDeclined(patient, "reminders")) return;
+    // B14: one read of the templates, dentist and clinic for all of them (this runs inside the clinic's lock).
+    const refs = await this.refs(tx, events.map((e) => e.kind), a.dentistId);
+    for (const e of events) await this.write(tx, e, patient, refs, {});
   }
 
   /** mocks/outbox.ts `cancelQueued`: a cancelled, moved or missed appointment withdraws what it queued and hasn't sent. */

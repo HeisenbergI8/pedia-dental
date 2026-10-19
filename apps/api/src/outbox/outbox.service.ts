@@ -28,13 +28,10 @@ export class OutboxService {
    * caused it commits, and a rerun of the transaction (runInTransaction on a deadlock) rolls the first try's row back.
    * Pass the `tx` from runInTransaction, never the root client. A kind without a handler is refused here, at write time.
    */
-  async enqueue(tx: Tx, { kind, payload, availableAt, clinicId = currentContext()?.clinicId ?? null }: OutboxInput): Promise<string> {
+  async enqueue(tx: Tx, { kind, payload, availableAt, clinicId = currentContext()?.clinicId ?? null }: OutboxInput): Promise<void> {
     if (!this.handlers.get(kind)) throw new Error(`No outbox handler for "${kind}".`);
     const now = this.clock.now();
-    const row = await tx.outboxMessage.create({
-      data: { kind, payload, clinicId, availableAt: availableAt ?? now, createdAt: now },
-      select: { id: true },
-    });
-    return row.id;
+    // createMany: one INSERT, no read-back (B14: the booking's queued texts run inside the clinic's lock).
+    await tx.outboxMessage.createMany({ data: [{ kind, payload, clinicId, availableAt: availableAt ?? now, createdAt: now }] });
   }
 }

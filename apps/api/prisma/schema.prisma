@@ -927,6 +927,8 @@ model Appointment {
   cancelReason  String?           @db.Text
   sourceRuleId  String?           @db.VarChar(64)
 
+  /// B14: the booking's clash check (near: chair OR dentist within a day), a range on startsAt, not the clinic's every row.
+  @@index([clinicId, startsAt])
   @@index([clinicId, branchId, startsAt])
   @@index([clinicId, chairId, startsAt])
   @@index([clinicId, dentistId, startsAt])

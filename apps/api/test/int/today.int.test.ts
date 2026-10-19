@@ -22,9 +22,14 @@ afterAll(() => t.app.close());
 const tenant = (clinicId: string): Db => t.platform.tenants[clinicId]!;
 /** The mock's answer (dashboard/mocks.ts:20–25, 38–47), greetings included (B9). */
 const expected = (db: Db, branchIds: string[], day = today) =>
-  todaySummary({ ...db, appointments: db.appointments.filter((a) => branchIds.includes(a.branchId)) }, day);
+  byChild(todaySummary({ ...db, appointments: db.appointments.filter((a) => branchIds.includes(a.branchId)) }, day));
+/**
+ * Birthdays in one order on both sides: the mock lists them in its array's order, the API by id (the seed's roster
+ * ids and numbers don't follow its array, so two birthdays on one day could differ by the date the suite runs).
+ */
+const byChild = (s: TodaySummary): TodaySummary => ({ ...s, birthdays: [...s.birthdays].sort((a, b) => a.patientId.localeCompare(b.patientId)) });
 const report = (cookie: string, query = `?today=${today}`) => t.call("get", `/reports/today${query}`, cookie);
-const summary = async (cookie: string, query?: string) => t.ok(report(cookie, query), TodaySummary);
+const summary = async (cookie: string, query?: string) => byChild(await t.ok(report(cookie, query), TodaySummary));
 const refused = async (cookie: string, query: string) => { const r = await report(cookie, query); return [r.status, r.text]; };
 
 describe("Today matches the mock (done-when)", () => {
@@ -171,7 +176,7 @@ describe("Today at scale (B14)", () => {
       appointments: (await t.prisma.appointment.findMany({ where: { status: "done" } })).map((a) => ({ ...a, startsAt: a.startsAt.toISOString() })),
       messages: (await t.prisma.message.findMany({ where: { kind: "birthday" } })).map((m) => ({ ...m, createdAt: m.createdAt.toISOString() })),
     }));
-    const oracle = todaySummary({ ...all, staff: [], appointmentRequests: [] } as unknown as Parameters<typeof todaySummary>[0], today);
+    const oracle = byChild(todaySummary({ ...all, staff: [], appointmentRequests: [] } as unknown as Parameters<typeof todaySummary>[0], today));
     const got = await summary(owner, `?today=${today}&branch=all`);
     expect(got.birthdays).toEqual(oracle.birthdays);
     expect(got.visitMix).toEqual(oracle.visitMix);
