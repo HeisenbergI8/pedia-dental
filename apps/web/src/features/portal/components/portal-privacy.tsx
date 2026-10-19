@@ -18,7 +18,11 @@ export function PortalPrivacy() {
           <Can permission="consents.manage" fallback={<p className="text-sm text-ink-muted">Your clinic&apos;s account is paused, so these can&apos;t change right now.</p>}>
             <PrivacyChoiceEditor patient={child} />
           </Can>
-          <p className="text-sm text-ink-muted">To withdraw consent to treatment records, contact the clinic.</p>
+          {/* B13c2b E11: no number of days here; the period is a counsel placeholder (C4). */}
+          <p className="text-sm text-ink-muted">
+            To ask the clinic to correct or erase {child.firstName}&apos;s records, or to object to how they&apos;re used, contact the clinic.
+            They&apos;ll answer within the time the law allows.
+          </p>
         </div>
       ) : (
         <p>The clinic hasn&apos;t recorded your consent yet. They&apos;ll ask at your next visit.</p>

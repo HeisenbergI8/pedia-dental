@@ -94,3 +94,36 @@ the whole `pnpm --filter api test:int` 56 files / 628 tests passed.
 - The mock gate's existing audit line reuses the `patientId` it now computes (same value as before).
 **Gate:** `pnpm run check` exit 0 (web 414, api 553, shared 246, seed 31, infra 41);
 `pnpm --filter web exec vitest run src/mocks/privacy.test.ts` 24/24; `port-ledger` 16/16.
+
+## Phase 5: Web screens — 2026-10-19
+
+**Steps completed:** 5.1, 5.2, 5.3 (`ui-ux-design` loaded with `interaction-patterns.md` and `accessibility.md`)
+**Files changed:** `apps/web/src/features/privacy-requests/api.ts` (new),
+`apps/web/src/features/privacy-requests/components/{privacy-requests,request-dialogs}.tsx` (new),
+`apps/web/src/features/clinic/components/settings-screen.tsx`, `apps/web/src/features/patients/components/patient-header.tsx`,
+`apps/web/src/features/portal/components/portal-privacy.tsx`
+**Deviations from plan:**
+- `useClosedPrivacyRequests` takes no `enabled` flag: the closed list mounts only when "Closed" is chosen, so the
+  query starts with it. `useLogPrivacyRequest` also refreshes the audit log (the log entry is new).
+- The open list's row action sits in `DataList`'s `actions` slot (table's last column; a card's foot on phones);
+  the access request's copy button is labelled "Copy of records".
+- Close dialog: the outcome is a two-chip radio group (`ChoiceChips`, Radix RadioGroup) labelled "Approve / Decline" for
+  an erasure and "Done / Decline" otherwise, mapped to `done` / `declined`. The erasure warning panel uses the
+  danger tokens (the action is the destructive one); the 409 refusal shows inline in the warning tokens with
+  `role="alert"` and a link to the child's record (Overview: the record has no Appointments tab).
+- Restricted banner: warning tokens, `role="status"`, under the alerts row, date via `formatDate` (local day).
+**Gate:** `pnpm run check` exit 0 (web 414, api 553, shared 246, seed 31, infra 41); `pnpm run check -- design` 100/100.
+**Visual check** (MSW, `NEXT_PUBLIC_API_MOCKING=enabled`, `next dev` on its own `NEXT_DIST_DIR=.next-shots`,
+Playwright/Chromium screenshots; `apps/web/tsconfig.json` reverted afterwards):
+- Looked at: Settings → Privacy at 1440, 1280, 768 and 375 with three open requests (one received four weeks back
+  shows "Overdue" with the clock icon in danger), the Closed list, the Log dialog (empty submit shows the erasure
+  child message and "Enter who asked" inline), the close dialog for an erasure (typed first name: the
+  "Restrict {name}'s record" button is disabled with a wrong name and enabled with the right one), a refused
+  approval (child with an upcoming appointment: the server's words inline, form kept), the close dialog at 375, and
+  a restricted record as the Owner (banner under the allergy chip, identity and alerts unchanged).
+- Keyboard: in the close dialog, Tab cycles outcome radios → outcome text → (confirm input) → Keep it open → the
+  primary → the dialog's Close; Esc closes.
+- Fixed while looking: the Open/Closed control stretched across the card; now `w-max`, as the audit log's.
+- Left: the Due column has no "Due soon" example in the walkthrough (unit-tested in `requestStanding`); dark mode
+  and 200% zoom were not looked at (tokens only, the design guards pass).
+- Not verified: screen reader announcement of the inline refusal (`role="alert"`).

@@ -2,6 +2,7 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { AuditLog } from "@/features/audit/components/audit-log";
+import { PrivacyRequests } from "@/features/privacy-requests/components/privacy-requests";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCan } from "@/features/auth/access";
 import { BranchesPanel } from "./branches-panel";
@@ -67,7 +68,7 @@ export function SettingsScreen() {
         <TabsContent value="staff" className="pt-4"><StaffPanel /></TabsContent>
         <TabsContent value="plan" className="pt-4"><PlanPanel /></TabsContent>
         <TabsContent value="reference" className="pt-4"><ClinicSettings embedded /></TabsContent>
-        <TabsContent value="privacy" className="pt-4"><AuditLog /></TabsContent>
+        <TabsContent value="privacy" className="space-y-6 pt-4"><PrivacyRequests /><AuditLog /></TabsContent>
       </Tabs>
     </div>
   );
