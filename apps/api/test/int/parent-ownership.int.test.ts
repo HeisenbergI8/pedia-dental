@@ -29,6 +29,8 @@ const NOT_SERVED = new Set(["POST /patients/:id/exports"]);
 const PARENT_ROUTES = CLINIC_RULES.filter(
   (r) => r.owner && r.owner !== "filtered" && !NOT_SERVED.has(`${r.method} ${r.path}`) && [r.permission].flat().some((p) => rolesCan(["parent"], p) && !rolesCan(["parent"], p, "all")),
 );
+/** Hoisted so the `.each(...)` argument holds no parentheses: the port ledger's title reader stops at the first `)`. */
+const PARENT_CASES = PARENT_ROUTES.map((r) => [`${r.method} ${r.path}`, r] as const);
 
 let app: INestApplication;
 let cookie = "";
@@ -67,7 +69,7 @@ describe("a parent's ownership on every route they can pass (B11 E12)", () => {
     expect(PARENT_ROUTES.filter((r) => r.owner === "record").filter((r) => !owners.has(r.path)).map((r) => r.path)).toEqual([]);
   });
 
-  it.each(PARENT_ROUTES.map((r) => [`${r.method} ${r.path}`, r] as const))("%s: 403 for another family's child, never for their own", async (_, rule) => {
+  it.each(PARENT_CASES)("%s: 403 for another family's child, never for their own", async (_, rule) => {
     const theirs = await call(rule.method, pathFor(rule, "theirs"));
     expect([theirs.status, theirs.text]).toEqual([403, "This isn't one of your children's records"]);
     // Their own: past the guard (a 400 for the empty body, a 404 for a child with no profile photo), never refused or broken.
@@ -77,5 +79,20 @@ describe("a parent's ownership on every route they can pass (B11 E12)", () => {
 
   it("refuses the message log without a child named", async () => {
     expect((await call("GET", "/messages")).status).toBe(403);
+  });
+
+  it("shows a parent only their own children, and 403 for another child's (Chunk 17 done-when)", async () => {
+    const listed = ((await call("GET", "/patients")).body as { id: string }[]).map((p) => p.id);
+    expect(listed.sort()).toEqual([...ours].sort());
+    expect(listed).toContain("patient_sibling");
+    expect(listed).toHaveLength(2);
+    for (const path of ["", "/plan", "/appointments", "/invoices", "/payments", "/photos", "/appointment-requests"]) {
+      expect([path, (await call("GET", `/patients/${mine}${path}`)).status]).toEqual([path, 200]);
+      expect([path, (await call("GET", `/patients/${other}${path}`)).status]).toEqual([path, 403]);
+    }
+    expect((await call("GET", `/messages?patientId=${mine}`)).status).toBe(200);
+    for (const path of [`/messages?patientId=${other}`, "/messages", "/appointments", `/patients/${mine}/chart`, `/patients/${mine}/notes`, "/reports/finance"]) {
+      expect([path, (await call("GET", path)).status]).toEqual([path, 403]);
+    }
   });
 });

@@ -205,6 +205,19 @@ describe("appointments (apps/web handlers.test.ts → appointments)", () => {
       expect(after.filter((m) => m.status === "queued").map((m) => m.kind)).toEqual(["missed_appointment"]);
     });
 
+    it("re-queues pre-treatment instructions when an extraction is moved, and withdraws them on a no-show", async () => {
+      const id = await t.register();
+      const appt = await t.ok(book(slot(id, { procedureCode: "extraction", startsAt: at("2030-04-09", "09:00") })), Appointment, 201);
+      const moved = await t.ok(move(appt.id, { dentistId: "staff_reyes", chairId: "chair_1", procedureCode: "extraction", startsAt: at("2030-04-10", "10:00"), durationMin: 30 }), Appointment);
+      const pre = () => texts({ appointmentId: appt.id, kind: "pre_treatment" });
+      expect((await pre()).map((m) => [m.status, m.sendAt.toISOString()])).toEqual([
+        ["cancelled", reminderSendAt(appt.startsAt)],
+        ["queued", reminderSendAt(moved.startsAt)],
+      ]);
+      await t.ok(status(appt.id, { status: "no_show" }), Appointment);
+      expect((await pre()).map((m) => m.status)).toEqual(["cancelled", "cancelled"]);
+    });
+
     it("saves a booking and its texts together, or neither (same transaction)", async () => {
       const id = await t.register();
       // The reminder's outbox row fails after the appointment and the confirmation were written.

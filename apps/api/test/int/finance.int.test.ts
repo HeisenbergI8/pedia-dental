@@ -1,5 +1,5 @@
 import { DEMO_CLINIC_ID } from "@pedia/seed";
-import { FinanceSummary, Invoice, Payment, financeFacts, financeSummary, pesos, type Appointment } from "@pedia/shared";
+import { Appointment, ClinicalNote, FinanceSummary, Invoice, Payment, PlanItem, Visit, financeFacts, financeSummary, isClosedWeekday, pesos } from "@pedia/shared";
 import { format, parseISO, startOfMonth, subDays, subMonths } from "date-fns";
 import request from "supertest";
 import { z } from "zod";
@@ -110,6 +110,48 @@ describe("the financial dashboard matches the mock's financeSummary (done-when)"
     for (const c of choices()) expect(await report(c.cookie, `?today=${today}${c.query}`), c.name).toEqual(await expected(c.clinic, c.branches));
     const all = await report(owner, `?today=${today}&branch=all`);
     expect(all.outstanding.map((o) => o.patientId)).not.toContain(voided.id);
+  });
+
+  it("lists an appointment as unpaid until its invoice is paid", async () => {
+    const post = (path: string, body: object, key: string | null = crypto.randomUUID()) => {
+      const req = request(t.app.getHttpServer()).post(`/api${path}`).set("Cookie", admin);
+      return t.ok(key === null ? req.send(body) : req.set("Idempotency-Key", key).send(body), z.unknown(), key === null ? 200 : 201);
+    };
+    const id = await t.register();
+    // The last open day before today, in clinic hours, in the past, inside the 30-day window.
+    const hours = t.platform.tenants[DEMO_CLINIC_ID]!.branches.find((b) => b.id === IMUS)!.openingHours;
+    let day = subDays(parseISO(today), 1);
+    while (isClosedWeekday(day, hours)) day = subDays(day, 1);
+    const startsAt = new Date(`${format(day, "yyyy-MM-dd")}T17:30:00+08:00`).toISOString();
+    const appt = await t.ok(t.call("post", "/appointments", admin, { patientId: id, dentistId: "staff_reyes", chairId: "chair_3", startsAt, durationMin: 15, reason: "Fluoride application" }), Appointment, 201);
+    for (const status of ["confirmed", "arrived"]) await t.ok(t.call("post", `/appointments/${appt.id}/status`, admin, { status }), Appointment);
+    await t.ok(t.call("post", `/patients/${id}/plan`, admin, { procedureCode: "fluoride", fee: pesos(800) }), PlanItem, 201);
+    const visit = await t.ok(t.call("post", `/patients/${id}/visits`, admin, { dentistId: "staff_reyes", appointmentId: appt.id }), Visit, 201);
+    const note = await t.ok(t.call("post", `/patients/${id}/notes`, admin, { visitId: visit.id, templateId: "tpl_fluoride", values: { agent: "5% NaF varnish", teeth: [] }, behavior: [] }), ClinicalNote, 201);
+    await t.ok(t.call("post", `/notes/${note.id}/sign`, admin), ClinicalNote);
+    await t.complete(visit.id, admin);
+
+    const summary = () => report(admin, `?today=${today}`);
+    const unpaid = async () => (await summary()).unpaidAppointments.find((a) => a.appointmentId === appt.id);
+    expect(await unpaid()).toMatchObject({ appointmentId: appt.id }); // done, not billed
+    expect((await unpaid())?.invoiceId).toBeUndefined();
+
+    const [item] = await t.ok(t.call("get", `/patients/${id}/plan`, admin), z.array(PlanItem));
+    const bill = Invoice.parse(await post(`/patients/${id}/invoices`, { planItemIds: [item!.id] }));
+    expect(bill.appointmentId).toBe(appt.id); // derived from the visit, not sent by the client
+    expect(await unpaid()).toMatchObject({ invoiceId: bill.id, balance: pesos(800) });
+
+    // Voided, it no longer bills the appointment or counts in revenue (B8 decision 2); billed again, it does.
+    const fluoride = async () => (await summary()).revenueByProcedure.find((r) => r.procedureCode === "fluoride")?.count ?? 0;
+    const before = await fluoride();
+    await post(`/invoices/${bill.id}/void`, { reason: "Billed the wrong discount" }, null);
+    expect((await unpaid())?.invoiceId).toBeUndefined();
+    expect(await fluoride()).toBe(before - 1);
+    const rebilled = Invoice.parse(await post(`/patients/${id}/invoices`, { planItemIds: [item!.id] }));
+    expect(await unpaid()).toMatchObject({ invoiceId: rebilled.id, balance: pesos(800) });
+
+    await post(`/invoices/${rebilled.id}/payments`, { amount: pesos(800), method: "cash", receivedBy: "staff_cruz" });
+    expect(await unpaid()).toBeUndefined();
   });
 
   it("totals what SQL sums: collected this month, the six months, outstanding and deposits (done-when)", async () => {

@@ -1,5 +1,5 @@
 import { DEMO_CLINIC_ID, type Db } from "@pedia/seed";
-import { Appointment, AppointmentRequest, Message, TodaySummary, Visit, todaySummary } from "@pedia/shared";
+import { Appointment, AppointmentRequest, Message, TodaySummary, Visit, inStatusGroup, todaySummary } from "@pedia/shared";
 import { addDays, format, parseISO, startOfWeek } from "date-fns";
 import { z } from "zod";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -89,6 +89,8 @@ describe("Today's refusals and agreements (apps/web handlers.test.ts → today)"
     expect(first.counts.total).toBe(calendar.length);
     expect(first.appointments.map((a) => a.id).sort()).toEqual(calendar.map((a) => a.id).sort());
     expect(first.counts.requests).toBe(inbox.length);
+    for (const g of ["upcoming", "waiting", "done", "missed"] as const) expect(first.counts[g], g).toBe(calendar.filter((a) => inStatusGroup(g, a.status)).length);
+    expect(inbox.length).toBeGreaterThan(0); // the roster seeds two: not vacuous
     expect(await summary(desk)).toEqual(first);
   });
 
@@ -113,6 +115,9 @@ describe("Today's refusals and agreements (apps/web handlers.test.ts → today)"
     for (const login of [OWNER, ADMIN, REYES, FRONT_DESK]) expect((await report(await t.as(login))).status).toBe(200);
     const guardianId = tenant(DEMO_CLINIC_ID).patients.find((p) => p.id === "patient_sibling")!.guardians[0]!.id;
     expect(await refused(await t.as([DEMO_CLINIC_ID, `guardian.${guardianId}`]), "")).toEqual([403, "You don't have access to this"]);
+    const anyone = tenant(DEMO_CLINIC_ID).patients[0]!.id; // any patient: the 403 comes first
+    const greet = await t.call("post", `/patients/${anyone}/birthday-greeting`, await t.as(REYES));
+    expect([greet.status, greet.text]).toEqual([403, "You don't have access to this"]);
   });
 });
 

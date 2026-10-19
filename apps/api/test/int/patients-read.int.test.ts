@@ -190,6 +190,7 @@ describe("parents (decision 5)", () => {
   it("lists exactly a parent's children, with their contacts", async () => {
     const cookie = await as(PARENT);
     expect(ids(await directory(cookie, "")).sort()).toEqual([...parentsChildren].sort());
+    expect((await directory(cookie, "")).every((p) => p.guardians.every((g) => g.phone))).toBe(true); // patients.contact at "own"
     const page = await ok(get("/patient-summaries", cookie), PatientPage);
     expect(ids(page.rows).sort()).toEqual([...parentsChildren].sort());
     expect(page.rows.every((r) => r.guardianPhone)).toBe(true);
