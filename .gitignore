@@ -1,5 +1,7 @@
 node_modules
 .next
+# a custom NEXT_DIST_DIR (.next-hybrid, .next-shots…)
+.next-*/
 out
 cdk.out
 dist
