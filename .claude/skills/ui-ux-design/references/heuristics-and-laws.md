@@ -43,6 +43,7 @@ wrong-patient, wrong-tooth or wrong-amount error is **4** no matter how rare.
 - **Fitts's law.** Time to hit a target depends on its size and distance. Make frequent targets big and
   near the cursor's natural path: primary action near the end of the form, row actions on the row.
   Screen edges are infinitely deep, so use them for nav.
+  The hit area can be larger than the visible element (see `motion.md`, Hit areas).
 - **Jakob's law.** Users spend most of their time in *other* software. Use conventions: search top-left
   or top-center, user menu top-right, tables sort on header click, `Esc` closes.
 - **Miller's law / working memory / chunking.** Don't make users hold information across screens.

@@ -99,6 +99,9 @@ The palette is a calm teal brand on a cool neutral ground. Keep it that way.
 
 ## Motion
 
+The full guidance (the twelve animation principles for UI, the frequency-of-use budget, hit areas) is in
+`motion.md`. These are the short rules.
+
 - **Purposeful only:** orient (where did this sheet come from), give feedback (it saved), or show a
   relationship (an expanded row). No decoration.
 - **Durations:** 100–150 ms for micro feedback (hover, press), 200–250 ms for overlays entering, faster

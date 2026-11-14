@@ -15,6 +15,7 @@ This file is the process. The depth is in `references/`. Load only the ones the 
 | --- | --- |
 | `references/heuristics-and-laws.md` | Diagnosing *why* a screen feels wrong; justifying a change |
 | `references/visual-system.md` | Hierarchy, type, spacing, color, density, motion, tokens |
+| `references/motion.md` | Adding, changing or reviewing any animation or transition |
 | `references/interaction-patterns.md` | Forms, tables, navigation, overlays, states, feedback, destructive actions |
 | `references/accessibility.md` | Always before calling UI work done (WCAG 2.2 AA checklist) |
 | `references/clinical-domain.md` | Any patient-facing or chart/billing/visit screen — i.e. almost always here |
