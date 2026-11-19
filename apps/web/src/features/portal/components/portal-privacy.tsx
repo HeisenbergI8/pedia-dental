@@ -11,7 +11,8 @@ export function PortalPrivacy() {
   const child = useActiveChild();
   const clinicId = useSession()?.user.clinicId;
   return (
-    <SectionCard title="Privacy and consent" description={`What you agreed to for ${child.firstName}`}>
+    // wrap-anywhere: a long one-word name breaks rather than push the page sideways on a phone (issue 25).
+    <SectionCard title="Privacy and consent" description={`What you agreed to for ${child.firstName}`} className="wrap-anywhere">
       {child.privacyConsent ? (
         <div className="space-y-3">
           <p>Treatment records: consented by {child.privacyConsent.guardianName}.</p>
@@ -34,7 +35,7 @@ export function PortalPrivacy() {
       )}
       {/* Not behind consents.manage: a paused clinic's parent may still download (decision #44). */}
       <div className="mt-4 space-y-1.5">
-        <RecordsCopyButton patientId={child.id} label={`Download ${child.firstName}'s records`} className="h-11" />
+        <RecordsCopyButton patientId={child.id} label={`Download ${child.firstName}'s records`} className="h-auto min-h-11 max-w-full py-2 whitespace-normal" />
         <p className="text-sm text-ink-muted">A file with {child.firstName}&apos;s details, visits booked, bills and messages, to keep or take to another dentist. For dental charts and notes, ask the clinic.</p>
       </div>
     </SectionCard>

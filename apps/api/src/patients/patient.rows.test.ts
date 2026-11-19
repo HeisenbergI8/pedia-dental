@@ -2,7 +2,7 @@ import { Patient, patientSearchText } from "@pedia/shared";
 import { DEMO_CLINIC_ID, seedPlatform } from "@pedia/seed";
 import { describe, expect, it } from "vitest";
 import { Prisma } from "../generated/prisma/client.ts";
-import { consentFrom, dropsConsenter, mergeEdit, patientRows, refusedTag, tidy, withStoredContacts } from "./patient.rows";
+import { consentFrom, contactChanged, contactsBefore, dropsConsenter, mergeEdit, patientRows, refusedTag, tidy, withStoredContacts } from "./patient.rows";
 import { toPatient } from "./patient.views";
 
 const patients = seedPlatform().tenants[DEMO_CLINIC_ID]!.patients;
@@ -79,5 +79,27 @@ describe("the edit rules (the mock's, as pure functions)", () => {
     expect([r.privacyConsent.guardianName, r.privacyConsent.relationship, r.privacyConsent.noticeVersion, r.privacyConsent.recordedById]).toEqual(["Guardian g1", "Mother", 3, "staff_cruz"]);
     expect(r.choice).toEqual({ photos: true, reminders: false, by: "staff", byName: "Liza Cruz", at: "2026-10-16T00:00:00.000Z" });
     expect(consentFrom(current, { ...(input as object), guardianId: "nobody" } as never, { id: "s", name: "S" }, 1, "x")).toBeUndefined();
+  });
+});
+
+describe("a guardian's contact before a full edit (bot test #2)", () => {
+  const mine = [{ id: "g_ana", phone: "09171110601", email: "ana@example.com" }];
+  const kin = [
+    { guardianId: "g_ana", phone: "09171110601", email: "ana@example.com" },
+    { guardianId: "g_lola", phone: "09180000000", email: null },
+  ];
+  it("is this child's row, or a sibling's for a guardian new to this child", () => {
+    const before = contactsBefore(mine, kin);
+    expect(before.get("g_ana")).toEqual({ id: "g_ana", phone: "09171110601", email: "ana@example.com" });
+    expect(before.get("g_lola")).toEqual({ id: "g_lola", phone: "09180000000", email: null });
+    expect(before.get("g_new")).toBeUndefined();
+  });
+  it("counts a changed phone or email, exactly as written, and never a guardian with no row anywhere", () => {
+    const was = contactsBefore(mine, kin).get("g_ana");
+    expect(contactChanged(was, { phone: "09171110601", email: "ana@example.com" })).toBe(false);
+    expect(contactChanged(was, { phone: "09171110611", email: "ana@example.com" })).toBe(true);
+    expect(contactChanged(was, { phone: "0917 111 0601", email: "ana@example.com" })).toBe(true); // siblings' rows stay identical
+    expect(contactChanged(was, { phone: "09171110601", email: undefined })).toBe(true);
+    expect(contactChanged(undefined, { phone: "09171110601" })).toBe(false);
   });
 });

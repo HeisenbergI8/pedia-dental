@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ClinicScoped, Id, IsoDateTime, YearMonth } from "./common";
+import { ClinicScoped, Id, IsoDateTime, TEXT_COLUMN_MAX, YearMonth, nameText, tooLong } from "./common";
 
 /** What the clinic account is on. Limits per tier are TIER_LIMITS (domain/tenancy.ts), never `if` statements. */
 export const Tier = z.enum(["small", "mid", "big"]);
@@ -53,16 +53,18 @@ export const ClinicAccount = z.object({
 });
 export type ClinicAccount = z.infer<typeof ClinicAccount>;
 
+/** A landline or a mobile: digits, spaces, ( ) + and -, and at least 7 digits (the branch phone rule). */
+export const isPhoneNumber = (p: string) => /^[\d\s()+-]+$/.test(p) && p.replace(/\D/g, "").length >= 7;
+const PHONE_MESSAGE = "Enter a phone number, like (046) 471 2580 or 0917 123 4567";
+/** The longest phone number kept (the guardian and support-contact columns). */
+export const PHONE_MAX = 32;
+
 /** One physical location. Archived, never deleted: it leaves the switcher and booking, its history stays (decision #22). */
 export const Branch = ClinicScoped.extend({
   id: Id,
   name: z.string().trim().min(1, "Enter the branch name"),
   address: z.string().trim().min(1, "Enter the branch address"),
-  phone: z
-    .string()
-    .trim()
-    .min(1, "Enter the branch phone number")
-    .refine((p) => /^[\d\s()+-]+$/.test(p) && p.replace(/\D/g, "").length >= 7, "Enter a phone number, like (046) 471 2580 or 0917 123 4567"),
+  phone: z.string().trim().min(1, "Enter the branch phone number").refine(isPhoneNumber, PHONE_MESSAGE),
   openingHours: OpeningHours,
   archived: z.boolean(),
 });
@@ -82,7 +84,8 @@ export type ClinicContext = z.infer<typeof ClinicContext>;
 
 /** PUT /clinic: what the Owner edits about the account (decision #18). Tier and status are the operator's. */
 /** Audit #4: a name typed now is capped (it starts every text); a stored name is read as it is, so old rows never fail. */
-export const ClinicNameInput = z.string().trim().min(1, "Enter the clinic's name").max(CLINIC_NAME_MAX, `Keep the clinic's name under ${CLINIC_NAME_MAX} characters`);
+// Issue 26: invisible characters removed and lookalikes folded (nameText), so two names that look alike are one.
+export const ClinicNameInput = nameText("Enter the clinic's name", CLINIC_NAME_MAX, "the clinic's name");
 export const UpdateClinicProfileInput = ClinicAccount.pick({ name: true, contactEmail: true, tin: true }).extend({ name: ClinicNameInput });
 export type UpdateClinicProfileInput = z.infer<typeof UpdateClinicProfileInput>;
 
@@ -91,7 +94,12 @@ export const UpdateBrandingInput = z.object({ brandColor: HexColor, headingFont:
 export type UpdateBrandingInput = z.infer<typeof UpdateBrandingInput>;
 
 /** POST /branches and PUT /branches/:id. Archiving is its own action (decision #22), never a field. */
-export const BranchInput = Branch.pick({ name: true, address: true, phone: true, openingHours: true });
+// Typed text is capped at the columns' size (issue 5); stored branches are read as they are.
+export const BranchInput = Branch.pick({ name: true, address: true, phone: true, openingHours: true }).extend({
+  name: nameText("Enter the branch name", TEXT_COLUMN_MAX, "the branch name"),
+  address: Branch.shape.address.max(TEXT_COLUMN_MAX, tooLong(TEXT_COLUMN_MAX, "the address")),
+  phone: Branch.shape.phone.max(PHONE_MAX, tooLong(PHONE_MAX, "the phone number")),
+});
 export type BranchInput = z.infer<typeof BranchInput>;
 
 export const Allowance = z.object({ inUse: z.number().int().nonnegative(), limit: z.number().int().positive().nullable() });
@@ -127,6 +135,16 @@ export const SupportContact = z.object({
 });
 export type SupportContact = z.infer<typeof SupportContact>;
 
+/**
+ * The PUT's body (issue 9): the same, with the phone checked like a branch's and the name cleaned. The read stays
+ * SupportContact, so a contact saved before this check still shows.
+ */
+export const SupportContactInput = SupportContact.extend({
+  name: nameText("Enter the contact's name", 120),
+  phone: z.string().trim().max(PHONE_MAX, tooLong(PHONE_MAX, "the phone number")).refine(isPhoneNumber, PHONE_MESSAGE).nullable(),
+});
+export type SupportContactInput = z.infer<typeof SupportContactInput>;
+
 /** GET /clinic/support (the Owner, D12, decision 21): what "Contact support" shows for this clinic's plan. */
 export const ClinicSupportView = z.object({
   tier: Tier,
@@ -144,11 +162,11 @@ export type LetterheadMode = z.infer<typeof LetterheadMode>;
 /** PUT /clinic/letterhead: the Owner's choice and the text lines (the image has its own route). */
 export const UpdateLetterheadInput = z.object({
   mode: LetterheadMode,
-  tagline: z.string().trim().max(80, "Keep the tagline under 80 characters").nullable(),
+  tagline: z.string().trim().max(80, tooLong(80, "the tagline")).nullable(),
   listBranches: z.boolean(), // every open branch's address in the footer, from the branches (never retyped)
-  socialLinks: z.array(z.string().trim().min(1).max(80, "Keep each link under 80 characters")).max(3, "Add up to 3 links"),
-  dentistLine: z.string().trim().max(120, "Keep it under 120 characters").nullable(), // decision 25: free text
-  footerNote: z.string().trim().max(160, "Keep the note under 160 characters").nullable(),
+  socialLinks: z.array(z.string().trim().min(1).max(80, tooLong(80, "each link"))).max(3, "Add up to 3 links"),
+  dentistLine: z.string().trim().max(120, tooLong(120, "it")).nullable(), // decision 25: free text
+  footerNote: z.string().trim().max(160, tooLong(160, "the note")).nullable(),
 });
 export type UpdateLetterheadInput = z.infer<typeof UpdateLetterheadInput>;
 

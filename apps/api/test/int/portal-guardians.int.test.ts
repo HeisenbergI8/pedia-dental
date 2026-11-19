@@ -36,7 +36,7 @@ describe("a guardian's new number (B11)", () => {
     // Another seeded parent with a mobile sign-in, on a child of a different family.
     const other = await prisma.credential.findFirstOrThrow({ where: { clinicId: "clinic_demo", guardianId: { not: mother.guardianId! }, phone: { not: null } }, select: { phone: true } });
     const res = await patch(desk, sibling.id, `0${other.phone!.slice(2)}`);
-    expect([res.status, res.text]).toEqual([409, expect.stringContaining("already signs in to the portal as")]);
+    expect([res.status, res.text]).toEqual([409, expect.stringContaining("is already used for the portal by")]);
     const rows = await inClinic("clinic_demo", () => prisma.patientGuardian.findMany({ where: { guardianId: mother.guardianId! }, select: { phone: true } }));
     expect(new Set(rows.map((r) => r.phone))).toEqual(new Set([sibling.guardians.find((g) => g.isPrimary)!.phone]));
   });

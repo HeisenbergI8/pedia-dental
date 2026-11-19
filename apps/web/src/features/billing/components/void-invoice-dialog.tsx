@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { formatDate } from "@/lib/format";
+import { manilaDate } from "../manila-time";
 import { useVoidInvoice } from "../api";
 
 /** Decision 2: void a bill made by mistake. Offered only while nothing was ever paid or applied on it (the server checks too). */
@@ -37,7 +37,7 @@ export function VoidInvoiceDialog({ invoice, onClose }: { invoice: Invoice; onCl
         <DialogHeader>
           <DialogTitle>Void this bill?</DialogTitle>
           <DialogDescription>
-            The invoice of {formatDate(invoice.issuedAt)} ({formatPeso(invoiceTotal(invoice))}) stays on record, marked voided, and no longer
+            The invoice of {manilaDate(invoice.issuedAt)} ({formatPeso(invoiceTotal(invoice))}) stays on record, marked voided, and no longer
             counts in the balance. Its treatments can be billed again.
           </DialogDescription>
         </DialogHeader>

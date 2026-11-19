@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { addMinutes, format, parseISO } from "date-fns";
@@ -14,6 +14,7 @@ import { useChairs, useProcedures, useStaff } from "@/features/clinic/api";
 import { usePatient } from "@/features/patients/api";
 import { useStartVisit } from "@/features/visits/api";
 import { STATUS_LABEL, useChangeAppointmentStatus } from "../api";
+import { canMarkNoShow } from "../booking";
 import { StatusChip } from "./status-chip";
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -44,6 +45,16 @@ function Details({ appointment: a, onReschedule }: { appointment: Appointment; o
   const setStatus = (input: ChangeAppointmentStatusInput) =>
     change.mutate({ id: a.id, ...input }, { onSuccess: () => toast.success(`Marked ${STATUS_LABEL[input.status].toLowerCase()}`), onError });
   const busy = change.isPending || startVisit.isPending;
+  // A double-click lands both clicks before isPending disables the button: one request, not a second refused one (#32).
+  const starting = useRef(false);
+  const onStartVisit = () => {
+    if (starting.current) return;
+    starting.current = true;
+    startVisit.mutate(
+      { dentistId: a.dentistId, appointmentId: a.id },
+      { onSuccess: () => router.push(`/patients/${a.patientId}`), onError, onSettled: () => (starting.current = false) },
+    );
+  };
 
   return (
     <>
@@ -104,15 +115,7 @@ function Details({ appointment: a, onReschedule }: { appointment: Appointment; o
             <Button disabled={busy} onClick={() => setStatus({ status: "arrived" })}>Check in</Button>
           )}
           {canTransition(a.status, "in_chair") && can("clinical.write") && (
-            <Button
-              disabled={busy}
-              onClick={() =>
-                startVisit.mutate(
-                  { dentistId: a.dentistId, appointmentId: a.id },
-                  { onSuccess: () => router.push(`/patients/${a.patientId}`), onError },
-                )
-              }
-            >
+            <Button disabled={busy} onClick={onStartVisit}>
               Start visit
             </Button>
           )}
@@ -124,7 +127,8 @@ function Details({ appointment: a, onReschedule }: { appointment: Appointment; o
           {canReschedule(a.status) && (
             <Button variant="outline" disabled={busy} onClick={onReschedule}>Reschedule</Button>
           )}
-          {canTransition(a.status, "no_show") && (
+          {/* Only from the start time on (#7): before it the child can still come. */}
+          {canTransition(a.status, "no_show") && canMarkNoShow(a) && (
             <Button variant="outline" disabled={busy} onClick={() => setConfirmNoShow(true)}>No-show</Button>
           )}
           {canTransition(a.status, "cancelled") && (

@@ -1,7 +1,7 @@
-import { format } from "date-fns";
+import { addYears, format } from "date-fns";
 import {
-  canReschedule, canTransition, findConflict, holdsRole, outsideClinicHours, worksAt,
-  type Appointment, type AppointmentStatus, type Branch, type Chair, type ChangeAppointmentStatusInput, type StaffMember,
+  DEFAULT_FOLLOW_UP_RULES, canReschedule, canTransition, findConflict, holdsRole, outsideClinicHours, requestDayClosed, worksAt,
+  type Appointment, type AppointmentStatus, type Branch, type Chair, type ChangeAppointmentStatusInput, type OpeningHours, type StaffMember,
 } from "@pedia/shared";
 import type { Refusal } from "../common/refusal";
 
@@ -37,22 +37,64 @@ export function slotRefusal(slot: Slot, refs: SlotRefs): Refusal | undefined {
   return { status: 409, message: `${who} is already booked at ${format(new Date(conflict.appointment.startsAt), "h:mm a")}` };
 }
 
+/**
+ * How far ahead a booking may go: long enough for the int tests' dates far from the seeded fortnight (2030–2031),
+ * short enough to stop a typo like 9999 (#6). The web's booking.ts keeps the same number.
+ */
+export const BOOKING_HORIZON_YEARS = 5;
+export const PAST_START = "That time has already passed. Pick a later time.";
+export const TOO_FAR_AHEAD = `Book no more than ${BOOKING_HORIZON_YEARS} years ahead.`;
+
+/** A new or moved start: not before now, not past the horizon (#6). `now` is Clock.now(). */
+export function whenRefusal(startsAt: string, now: Date): Refusal | undefined {
+  const at = new Date(startsAt);
+  if (at < now) return { status: 400, message: PAST_START };
+  if (at > addYears(now, BOOKING_HORIZON_YEARS)) return { status: 400, message: TOO_FAR_AHEAD };
+  return undefined;
+}
+
+/** A booking's procedure and follow-up rule must exist (#28). `procedureKnown`: ClinicService.procedure found the code. */
+export function linkRefusal(input: { procedureCode?: string; sourceRuleId?: string }, procedureKnown: boolean): Refusal | undefined {
+  if (input.procedureCode !== undefined && !procedureKnown) return { status: 400, message: "Unknown procedure" };
+  if (input.sourceRuleId !== undefined && !DEFAULT_FOLLOW_UP_RULES.some((r) => r.id === input.sourceRuleId)) {
+    return { status: 400, message: "Unknown follow-up rule" };
+  }
+  return undefined;
+}
+
+export const EARLY_NO_SHOW = "Wait until the appointment time to mark a no-show.";
+
 /** PUT's 409 (mocks.ts:102–104), after the 404 and the body. */
 export const moveRefusal = (status: AppointmentStatus): Refusal | undefined =>
   canReschedule(status) ? undefined : { status: 409, message: "Only booked or confirmed appointments can be moved" };
 
-/** The status route's 403 then 409 (mocks.ts:120–127). `manages`: the caller holds appointments.manage. */
-export function statusRefusal(from: AppointmentStatus, input: ChangeAppointmentStatusInput, manages: boolean): Refusal | undefined {
+/**
+ * The status route's 403 then 409s (mocks.ts:120–127). `manages`: the caller holds appointments.manage. A no-show only
+ * from the start time on (#7): before it the child can still come, and the parent would be texted "we missed you".
+ */
+export function statusRefusal(
+  current: Pick<Appointment, "status" | "startsAt">,
+  input: ChangeAppointmentStatusInput,
+  manages: boolean,
+  now: Date,
+): Refusal | undefined {
+  const from = current.status;
   if (input.status !== "confirmed" && !manages) {
     return { status: 403, message: "You can confirm this appointment. To change it, call the clinic." };
   }
   if (!canTransition(from, input.status)) return { status: 409, message: `Can't go from ${from} to ${input.status}` };
+  if (input.status === "no_show" && now < new Date(current.startsAt)) return { status: 409, message: EARLY_NO_SHOW };
   return undefined;
 }
 
-/** The request route's 400 then 409 (mocks.ts:156–161), after the 404 and the body. `today` is Clock.today(). */
-export function requestRefusal(preferredDate: string, today: string, hasPending: boolean): Refusal | undefined {
+/**
+ * The request route's 400s then 409 (appointments/mocks.ts), after the 404 and the body. `today` is Clock.today();
+ * `hours` each active branch's (issue 13: a weekday none of them opens is refused).
+ */
+export function requestRefusal(preferredDate: string, today: string, hasPending: boolean, hours: OpeningHours[]): Refusal | undefined {
   if (preferredDate < today) return { status: 400, message: "Pick today or a later date" };
+  const closed = requestDayClosed(preferredDate, hours);
+  if (closed) return { status: 400, message: closed };
   if (hasPending) return { status: 409, message: "You already have a request waiting. The clinic will call you to book it." };
   return undefined;
 }

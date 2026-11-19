@@ -18,7 +18,7 @@ import { clinicData } from "../prisma/tenant-scope";
 import { runInTransaction, type Tx } from "../prisma/transaction";
 import { AppointmentRecordsService } from "./appointment-records.service";
 import { byStartThenChair } from "./appointment.rows";
-import { APPOINTMENT_NOT_FOUND, moveRefusal, slotRefusal, statusRefusal } from "./appointment.rules";
+import { APPOINTMENT_NOT_FOUND, linkRefusal, moveRefusal, slotRefusal, statusRefusal, whenRefusal } from "./appointment.rules";
 
 const FAR_FUTURE = 8.64e15; // the mock's default `to` (mocks.ts:60)
 // MySQL's DATETIME range: a bound outside it matches nothing there, where the mock's comparison matches everything.
@@ -68,7 +68,7 @@ export class AppointmentsService implements OnModuleInit {
     return rows;
   }
 
-  /** POST /appointments: 400 body (pipe) → lock → 404 → 409 restricted → slot refusals → 409 → write. 201. */
+  /** POST /appointments: 400 body (pipe) → lock → 404 → 409 restricted → 400 procedure, rule, time → slot refusals → 409 → write. 201. */
   async book(input: BookAppointmentInput): Promise<Appointment> {
     const branchId = requireContext().branchId!; // the device's branch (the mock's activeBranch)
     return runInTransaction(this.prisma, async (tx) => {
@@ -77,6 +77,8 @@ export class AppointmentsService implements OnModuleInit {
       const patient = await this.patients.one(input.patientId, tx);
       // B13c2b E7: the body names the child, so the guard's restricted check can't (the due list's Book still offers them).
       if (patient.restrictedAt) throw new ConflictException(RESTRICTED_BOOKING_MESSAGE);
+      refuse(linkRefusal(input, !!input.procedureCode && !!(await this.clinic.procedure(input.procedureCode, tx))));
+      refuse(whenRefusal(input.startsAt, this.clock.now()));
       const slot = { ...input, id: "", branchId, status: "booked" as const };
       const refs = await this.clinic.scheduleRefs(tx);
       refuse(slotRefusal(slot, { ...refs, existing: await this.records.near(tx, slot) }));
@@ -91,7 +93,7 @@ export class AppointmentsService implements OnModuleInit {
     });
   }
 
-  /** PUT /appointments/:id: lock → 404 (also another branch's, #10) → 400 body → 409 status → slot refusals → write. */
+  /** PUT /appointments/:id: lock → 404 (also another branch's, #10) → 400 body → 409 status → 400 a new time → slot refusals → write. */
   async move(id: string, body: unknown, who: BranchCaller): Promise<Appointment> {
     const patientId = await this.records.patientOf(id); // outside the transaction (B6 decision 3)
     if (!patientId) throw new NotFoundException(APPOINTMENT_NOT_FOUND);
@@ -102,6 +104,8 @@ export class AppointmentsService implements OnModuleInit {
       if (!current || !reachesBranch(who, current.branchId)) throw new NotFoundException(APPOINTMENT_NOT_FOUND);
       const input = new ZodValidationPipe(RescheduleAppointmentInput).transform(body);
       refuse(moveRefusal(current.status));
+      // Only a new time is checked: a booked one whose hour has come can still change chair or dentist.
+      if (new Date(input.startsAt).getTime() !== new Date(current.startsAt).getTime()) refuse(whenRefusal(input.startsAt, this.clock.now()));
       const moved = { ...current, ...input };
       refuse(slotRefusal(moved, { ...(await this.clinic.scheduleRefs(tx)), existing: await this.records.near(tx, moved) }));
       const row = await this.records.update(tx, id, input);
@@ -114,8 +118,8 @@ export class AppointmentsService implements OnModuleInit {
   }
 
   /**
-   * POST /appointments/:id/status: 404 (also another branch's, #10) → 400 body → 403 confirm-only → 409 transition.
-   * Patient lock, not the clinic's (E1).
+   * POST /appointments/:id/status: 404 (also another branch's, #10) → 400 body → 403 confirm-only → 409 transition →
+   * 409 early no-show. Patient lock, not the clinic's (E1).
    */
   async setStatus(id: string, body: unknown, who: BranchCaller): Promise<Appointment> {
     const patientId = await this.records.patientOf(id); // outside the transaction (B6 decision 3)
@@ -125,7 +129,7 @@ export class AppointmentsService implements OnModuleInit {
       const current = (await this.records.one(tx, id))!;
       if (!reachesBranch(who, current.branchId)) throw new NotFoundException(APPOINTMENT_NOT_FOUND);
       const input = new ZodValidationPipe(ChangeAppointmentStatusInput).transform(body);
-      refuse(statusRefusal(current.status, input, rolesCan(who.user.roles, "appointments.manage")));
+      refuse(statusRefusal(current, input, rolesCan(who.user.roles, "appointments.manage"), this.clock.now()));
       const row = await this.records.update(tx, id, { status: input.status, ...(input.status === "cancelled" && { cancelReason: input.cancelReason }) });
       // Decision 7: a cancelled or missed visit withdraws what it queued; a no-show also queues the missed text (mocks.ts:129–132).
       if (row.status === "cancelled" || row.status === "no_show") await this.messages.withdrawAppointment(tx, id);

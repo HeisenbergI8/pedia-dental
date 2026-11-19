@@ -1,5 +1,5 @@
 import { ConflictException, Injectable, NotFoundException, type OnModuleInit } from "@nestjs/common";
-import { AppointmentRequestStatus, CreateAppointmentRequestInput, REQUESTS_NOT_ON_PLAN, TIER_LIMITS, type AppointmentRequest } from "@pedia/shared";
+import { AppointmentRequestStatus, CreateAppointmentRequestInput, OpeningHours, REQUESTS_NOT_ON_PLAN, TIER_LIMITS, type AppointmentRequest } from "@pedia/shared";
 import { AuditService } from "../audit/audit.service";
 import { RecordOwners } from "../auth/record-owners";
 import { ownClinicId } from "../clinic/account-lock";
@@ -69,7 +69,9 @@ export class AppointmentRequestsService implements OnModuleInit {
       if (!TIER_LIMITS[tier].appointmentRequests) throw new ConflictException(REQUESTS_NOT_ON_PLAN);
       const input = new ZodValidationPipe(CreateAppointmentRequestInput).transform(body);
       const pending = await tx.appointmentRequest.findFirst({ where: { patientId, status: "pending" }, select: { id: true } });
-      refuse(requestRefusal(input.preferredDate, this.clock.today(), !!pending));
+      const branches = await tx.branch.findMany({ where: { archived: false }, select: { openingHours: true } });
+      const hours = branches.map((b) => OpeningHours.parse(b.openingHours));
+      refuse(requestRefusal(input.preferredDate, this.clock.today(), !!pending, hours));
       const row = await tx.appointmentRequest.create({
         data: {
           ...clinicData(), patientId, guardianId: guardianId ?? (await this.patients.primaryGuardianId(tx, patientId)),

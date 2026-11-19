@@ -87,6 +87,20 @@ describe("the message log (GET /messages)", () => {
     expect(mine.every((m) => m.patientId === own.id)).toBe(true);
   });
 
+  it("pages the log newest first, a limit at a time after the last one shown (BotC-9)", async () => {
+    clock.set(at("2026-03-16T10:00:00"));
+    const desk = await as(FRONT_DESK);
+    const all = await ok(call("get", "/messages", desk), z.array(Message));
+    const first = await ok(call("get", "/messages?limit=3", desk), z.array(Message));
+    expect(first).toEqual(all.slice(0, 3));
+    const second = await ok(call("get", `/messages?limit=3&before=${first[2]!.id}`, desk), z.array(Message));
+    expect(second).toEqual(all.slice(3, 6));
+    const failed = (await ok(call("get", "/messages?status=failed", desk), z.array(Message))).slice(0, 2);
+    expect(await ok(call("get", "/messages?status=failed&limit=2", desk), z.array(Message))).toEqual(failed);
+    expect(await ok(call("get", "/messages?limit=3&before=msg_unknown", desk), z.array(Message))).toEqual([]);
+    expect(await ok(call("get", "/messages?limit=0", desk), z.array(Message))).toHaveLength(all.length); // a bad limit: the whole list
+  });
+
   it("lets staff read it, a parent only their own child's, and no other clinic", async () => {
     clock.set(at("2026-03-16T10:00:00"));
     for (const login of [FRONT_DESK, ADMIN]) expect((await call("get", "/messages", await as(login))).status).toBe(200);
@@ -160,6 +174,14 @@ describe("the birthday greeting (POST /patients/:id/birthday-greeting)", () => {
     expect(await ok(call("post", `/patients/${id}/birthday-greeting`, desk), Message, 201)).toMatchObject({ kind: "birthday", status: "queued" });
     expect(await refused(call("post", `/patients/${id}/birthday-greeting`, desk))).toEqual([409, "Bea already has a birthday greeting this year"]);
     expect(await inClinic(DEMO_CLINIC_ID, () => prisma.auditEvent.count({ where: { record: "Birthday greeting", patientId: id } }))).toBe(1);
+  });
+
+  it("never greets a child born this year, by hand or by the daily job (BotC-10)", async () => {
+    clock.set(at("2026-04-03T10:00:00"));
+    const baby = await register("2026-04-03");
+    expect(await refused(call("post", `/patients/${baby}/birthday-greeting`, await as(FRONT_DESK)))).toEqual([409, "It isn't Bea's birthday today"]);
+    await a.get(MessagesJobs).runOnce();
+    expect(await greetingsOf(DEMO_CLINIC_ID, baby)).toEqual([]);
   });
 
   it("greets once when 10 taps race", async () => {

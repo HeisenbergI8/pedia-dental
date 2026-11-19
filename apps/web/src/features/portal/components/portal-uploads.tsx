@@ -11,7 +11,7 @@ import { SectionCard } from "@/components/section-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { isPdf, uploadProblem } from "@pedia/shared";
+import { isPdf, tooLong, uploadProblem } from "@pedia/shared";
 import { photoFileUrl, usePhotos, useUploadPhoto } from "@/features/photos/api";
 import { FileCard } from "@/features/photos/components/file-card";
 import { Can } from "@/features/auth/access";
@@ -23,7 +23,7 @@ const KIND = { document: "Medical document (clearance, lab result)", intraoral: 
 const UploadForm = z.object({
   file: z.instanceof(File, { message: "Choose a photo or a PDF" }),
   type: z.enum(["document", "intraoral"]),
-  caption: z.string().trim().min(1, "Say what this is, like “Medical clearance from Dr. Cruz”").max(200, "Keep it under 200 characters"),
+  caption: z.string().trim().min(1, "Say what this is, like “Medical clearance from Dr. Cruz”").max(200, tooLong(200, "it")),
 }).superRefine((v, ctx) => {
   // The server's rule: a medical document may be a PDF, a photo of the teeth must be an image.
   const why = uploadProblem(v.type, v.file);

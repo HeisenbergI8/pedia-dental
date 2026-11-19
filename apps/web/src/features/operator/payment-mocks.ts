@@ -1,7 +1,8 @@
 import { http, HttpResponse } from "msw";
-import { ConfirmReceiptInput, PaymentQrInput, QR_RULES, RejectReceiptInput } from "@pedia/shared";
+import { ConfirmReceiptInput, PaymentQrInput, QR_RULES, RejectReceiptInput, paidOnProblem } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { deleteBlob } from "@/mocks/blob-store";
+import { today } from "@/mocks/clock";
 import { persist, platform } from "@/mocks/db";
 import { confirmReceipt, findReceipt, imageResponse, keepImage, paymentQrView, readImageForm, receiptsToCheck, rejectReceipt, toCheck } from "@/mocks/receipts";
 
@@ -42,6 +43,8 @@ export const operatorPaymentHandlers = [
     if (!receipt) return refuse(404, "Receipt not found");
     const parsed = ConfirmReceiptInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
+    const late = paidOnProblem(parsed.data.paidOn, today()); // issue 13, as the API
+    if (late) return refuse(400, late);
     const refused = confirmReceipt(receipt, parsed.data);
     if (refused) return refuse(409, refused);
     return HttpResponse.json(toCheck(receipt));

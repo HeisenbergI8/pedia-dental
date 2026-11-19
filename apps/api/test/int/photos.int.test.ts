@@ -270,18 +270,16 @@ describe("B10's guarantees", () => {
 
   it("limits a parent's uploads per child each month and in all (audit #5)", async () => {
     const parent = await as(PARENT);
-    const theirs = async () => inClinic(DEMO_CLINIC_ID, () => prisma.clinicalPhoto.count({ where: { patientId: own.id, uploadedBy: "parent", createdAt: { gte: new Date(Date.now() - 20 * 86_400_000) } } }));
-    // Fill this month's allowance with rows (the limit counts rows, not files), then one more is refused.
+    // The month counts files sent: a parent's "Photo" uploads in the trail (BotF-8). Fill it, then one more is refused.
     const template = await inClinic(DEMO_CLINIC_ID, () => prisma.clinicalPhoto.findFirstOrThrow({ where: { patientId: own.id, uploadedBy: "parent" } }));
-    const fill = PARENT_UPLOAD_LIMITS.perMonth; // a full month's worth dated now (older seeded uploads may be last month's)
-    const { id: _id, ...row } = template;
-    await inClinic(DEMO_CLINIC_ID, async () => await prisma.clinicalPhoto.createMany({ data: Array.from({ length: fill }, () => ({ ...row, createdAt: new Date(), bytes: 1 })) }));
-    expect(await theirs()).toBeGreaterThanOrEqual(PARENT_UPLOAD_LIMITS.perMonth);
+    const sent = { clinicId: DEMO_CLINIC_ID, actorId: PARENT[1], actorName: "Parent", actorRole: "parent" as const, action: "create" as const, record: "Photo", patientId: own.id };
+    await inClinic(DEMO_CLINIC_ID, async () => await prisma.auditEvent.createMany({ data: Array.from({ length: PARENT_UPLOAD_LIMITS.perMonth }, () => ({ ...sent, at: new Date() })) }));
     const before = await used(DEMO_CLINIC_ID);
     const res = await upload(parent, own.id, { type: "extraoral" }, JPEG);
     expect([res.status, res.text]).toEqual([409, parentUploadRefusal(own.firstName, { thisMonth: PARENT_UPLOAD_LIMITS.perMonth, storedBytes: 0 }, 0)]);
     expect(await used(DEMO_CLINIC_ID)).toBe(before); // refused before storing
-    // Last year's uploads count toward the total only.
+    // Last year's sends count toward the total only.
+    await prisma.$executeRaw`UPDATE AuditEvent SET at = '2025-01-15 02:00:00' WHERE clinicId = ${DEMO_CLINIC_ID} AND patientId = ${own.id} AND record = 'Photo' AND actorRole = 'parent'`;
     await prisma.$executeRaw`UPDATE ClinicalPhoto SET createdAt = '2025-01-15 02:00:00', bytes = 1 WHERE clinicId = ${DEMO_CLINIC_ID} AND patientId = ${own.id} AND uploadedBy = 'parent'`;
     await prisma.$executeRaw`UPDATE ClinicalPhoto SET bytes = ${PARENT_UPLOAD_LIMITS.totalBytes} WHERE clinicId = ${DEMO_CLINIC_ID} AND id = ${template.id}`;
     const full = await upload(parent, own.id, { type: "extraoral" }, JPEG);
@@ -307,6 +305,18 @@ describe("B10's guarantees", () => {
     expect(await used(DEMO_CLINIC_ID)).toBe(before - PNG.length);
     expect(await inClinic(DEMO_CLINIC_ID, () => prisma.auditEvent.count({ where: { patientId: own.id, record: "Photo (removed a parent's upload)" } }))).toBe(1);
     expect((await http().delete(`/api/photos/${theirs.id}`).set("Cookie", dentist)).status).toBe(404);
+  });
+
+  it("keeps a removed upload in the month's count of files sent (BotF-8)", async () => {
+    const [dentist, parent] = [await as(DENTIST), await as(PARENT)];
+    const monthStart = new Date(Date.now() - 86_400_000 * 40); // older than any Manila month start
+    await prisma.$executeRaw`UPDATE AuditEvent SET at = ${monthStart} WHERE clinicId = ${DEMO_CLINIC_ID} AND patientId = ${own.id} AND record = 'Photo' AND actorRole = 'parent'`;
+    const sent = { clinicId: DEMO_CLINIC_ID, actorId: PARENT[1], actorName: "Parent", actorRole: "parent" as const, action: "create" as const, record: "Photo", patientId: own.id };
+    await inClinic(DEMO_CLINIC_ID, async () => await prisma.auditEvent.createMany({ data: Array.from({ length: PARENT_UPLOAD_LIMITS.perMonth - 1 }, () => ({ ...sent, at: new Date() })) }));
+    const last = ClinicalPhoto.parse((await upload(parent, own.id, { type: "extraoral" }, JPEG)).body); // the 20th
+    expect((await http().delete(`/api/photos/${last.id}`).set("Cookie", dentist)).status).toBe(200);
+    const res = await upload(parent, own.id, { type: "extraoral" }, JPEG);
+    expect([res.status, res.text]).toEqual([409, parentUploadRefusal(own.firstName, { thisMonth: PARENT_UPLOAD_LIMITS.perMonth, storedBytes: 0 }, 0)]);
   });
 
   // Last: it re-seeds with the app's storage driver, so the seed's photo files exist (the other cases seed rows only).

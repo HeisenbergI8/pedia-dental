@@ -38,7 +38,7 @@ export function ClinicProfileForm() {
               onChange={(e) => form.setValue("tin", formatTin(e.target.value), { shouldValidate: form.formState.isSubmitted, shouldDirty: true })}
             />
           </FormField>
-          {save.error && <p className="text-sm text-danger">{save.error.message}</p>}
+          {save.error && <p role="alert" className="text-sm text-danger">{save.error.message}</p>}
           <Button type="submit" disabled={save.isPending} className="justify-self-start">
             {save.isPending ? "Saving" : "Save details"}
           </Button>

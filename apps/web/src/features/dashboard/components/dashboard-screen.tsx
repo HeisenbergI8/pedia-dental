@@ -1,5 +1,5 @@
 "use client";
-import { format } from "date-fns";
+import { manilaDay } from "@/features/billing/manila-time";
 import { Can } from "@/features/auth/access";
 import { useReportBranch } from "../api";
 import { BranchFilter } from "./branch-filter";
@@ -12,7 +12,7 @@ import { TodayGlance } from "./today-glance";
  */
 export function DashboardScreen() {
   const now = new Date();
-  const today = format(now, "yyyy-MM-dd");
+  const today = manilaDay(now); // the clinic's day, as the reports read it (bot report #27)
   const { filter, value, branch, choose } = useReportBranch();
   return (
     <div className="space-y-5">

@@ -26,6 +26,10 @@ describe("documentRefusal (documents/mocks.ts:54–63, in its order)", () => {
       status: 400,
       message: "Pick the signed treatment note for this patient",
     });
+    // BotD-12: a visit's words end in "for", so they are their own ("for for" before).
+    for (const type of ["dental_certificate", "dental_clearance"] as const) {
+      expect(documentRefusal({ type, sourceId: "v1", issuedBy: "staff_reyes" }, facts({ sourceFits: false }))).toEqual({ status: 400, message: "Pick one of this patient's finished visits" });
+    }
   });
 
   it("stops a prescription that clashes with a recorded allergy, in the mock's words, and lets a safe one through", () => {

@@ -31,6 +31,11 @@ describe("readUpload (B10 E1)", () => {
     }
   });
 
+  it("refuses a text part over 64 KB as too long, not as a missing field (bot regression of #5)", async () => {
+    await expect(readUpload(await request([["meta", "x".repeat(70_000)], ["file", blob(jpeg(100))]]), { maxBytes: 10_000 }))
+      .rejects.toMatchObject({ message: "Some of the text is too long. Shorten it and try again." });
+  });
+
   it("stops at the limit and says so; exactly the limit is fine", async () => {
     const over = await readUpload(await request([["file", blob(jpeg(10_001))]]), { maxBytes: 10_000 });
     expect(over.file).toMatchObject({ tooLarge: true, bytes: 10_001 });
@@ -54,10 +59,10 @@ describe("readUpload (B10 E1)", () => {
     await upload.dispose();
   });
 
-  it("drops a second file, other file fields and an over-long field; a JSON body has neither", async () => {
-    const upload = await readUpload(await request([["other", blob(jpeg(10))], ["file", blob(jpeg(20))], ["file", blob(jpeg(30))], ["meta", "x".repeat(70_000)]]), { maxBytes: 1_000 });
+  it("drops a second file and other file fields (an over-long field is refused, above); a JSON body has neither", async () => {
+    const upload = await readUpload(await request([["other", blob(jpeg(10))], ["file", blob(jpeg(20))], ["file", blob(jpeg(30))], ["meta", "{}"]]), { maxBytes: 1_000 });
     expect(upload.file?.bytes).toBe(20);
-    expect(upload.fields.has("meta")).toBe(false);
+    expect(upload.fields.get("meta")).toBe("{}");
     await upload.dispose();
     const json = Object.assign(Readable.from([Buffer.from("{}")]), { headers: { "content-type": "application/json" } });
     const none = await readUpload(json, { maxBytes: 1_000 });

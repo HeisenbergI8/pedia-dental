@@ -41,8 +41,12 @@ const toast = (page: Page, text: string | RegExp) => page.getByRole("region", { 
  * The demo data is laid out around today, so which slots are taken and which texts are queued change with the day of
  * the week. Tests book only where the seed never does, and make the state they need through the UI.
  */
-const withdrawnCount = async (page: Page) =>
-  Number((await page.getByRole("button", { name: /^Withdrawn/ }).textContent())?.match(/\((\d+)\)/)?.[1]);
+/** On Messages: shows the withdrawn texts (the log is paged, BotC-9) and gives this child's withdrawn recall rows. */
+async function withdrawnRecalls(page: Page, child: string) {
+  await page.getByRole("button", { name: "Withdrawn" }).click();
+  await page.getByText(/^Showing (all|the latest) \d+$|^No withdrawn messages$/).first().waitFor();
+  return page.getByRole("tabpanel", { name: "Message log" }).getByRole("listitem").filter({ hasText: "Recall" }).filter({ hasText: child });
+}
 
 /** From Recalls: queues a recall reminder for this child, so a "no" to reminders has a text to withdraw. */
 async function queueRecallReminder(page: Page, child: string) {
@@ -439,7 +443,7 @@ test.describe("happy paths", () => {
     await signInFrontDesk(page);
     await queueRecallReminder(page, "Medhurst, Coby");
     await openNav(page, "Messages");
-    const withdrawnBefore = await withdrawnCount(page);
+    const withdrawnBefore = await (await withdrawnRecalls(page, "Coby")).count();
     await findPatient(page, "Coby", /Medhurst, Coby/);
     const reminders = page.getByRole("tabpanel", { name: "Overview" }).getByRole("checkbox", { name: "Reminder messages allowed" });
     await expect(reminders).toBeChecked();
@@ -454,14 +458,14 @@ test.describe("happy paths", () => {
     await openNav(page, "Messages");
     await expect(page).toHaveURL(/\/messages/); // reload Messages, not the page the click was leaving
     await page.reload();
-    await expect(page.getByRole("button", { name: /^Withdrawn/ })).toHaveText(`Withdrawn (${withdrawnBefore + 1})`);
+    await expect(await withdrawnRecalls(page, "Coby")).toHaveCount(withdrawnBefore + 1);
   });
 
   test("BUG: the message log is stale after a family says no to reminders (withdrawn text still shows as queued)", async ({ page }) => {
     await signInFrontDesk(page);
     await queueRecallReminder(page, "Medhurst, Coby");
     await openNav(page, "Messages");
-    const withdrawnBefore = await withdrawnCount(page);
+    const withdrawnBefore = await (await withdrawnRecalls(page, "Coby")).count();
     await findPatient(page, "Coby", /Medhurst, Coby/);
     const reminders = page.getByRole("tabpanel", { name: "Overview" }).getByRole("checkbox", { name: "Reminder messages allowed" });
     await reminders.click();
@@ -469,7 +473,7 @@ test.describe("happy paths", () => {
     await expect(toast(page, "Consent updated")).toBeVisible();
     // Back to Messages through the menu, no reload: Coby's queued reminder must now read as withdrawn.
     await openNav(page, "Messages");
-    await expect(page.getByRole("button", { name: /^Withdrawn/ })).toHaveText(`Withdrawn (${withdrawnBefore + 1})`);
+    await expect(await withdrawnRecalls(page, "Coby")).toHaveCount(withdrawnBefore + 1);
   });
 
   test("front desk takes payments but sees no Refund or Void, which are the Owner's and admins' (B8)", async ({ page }) => {
@@ -628,7 +632,7 @@ test.describe("failed paths", () => {
     await expect(page.getByRole("button", { name: "Save template" })).toBeDisabled();
   });
 
-  test("front desk changes her mind: cancelling no-show and cancel steps keeps the appointment", async ({ page }) => {
+  test("front desk changes her mind: cancelling the cancel step keeps the appointment, and No-show waits for the start time", async ({ page }) => {
     await signInFrontDesk(page);
     const day = openDay(4);
     const dialog = await startBooking(page, { patientQuery: "Gerlach", patientOption: /Gerlach, Savanna/, procedure: "Oral examination", dentist: "Dr. Ana Reyes" });
@@ -636,9 +640,9 @@ test.describe("failed paths", () => {
     await dialog.getByRole("button", { name: /^Book / }).click();
     await expect(toast(page, "Appointment booked")).toBeVisible();
     const sheet = await openAppointment(page, day, "Savanna Gerlach", "5:30 PM");
-    await sheet.getByRole("button", { name: "No-show" }).click();
-    await expect(sheet.getByText("Mark as a no-show?")).toBeVisible();
-    await sheet.getByRole("button", { name: "Keep it" }).click();
+    // #7: a booking days ahead can't be a no-show yet (the child can still come), so the button isn't offered.
+    await expect(sheet.getByRole("button", { name: "Cancel appointment" })).toBeVisible();
+    await expect(sheet.getByRole("button", { name: "No-show" })).toHaveCount(0);
     await sheet.getByRole("button", { name: "Cancel appointment" }).click();
     await sheet.getByLabel("Why is it cancelled?").fill("oops");
     await sheet.getByRole("button", { name: "Keep it" }).click();
@@ -667,7 +671,7 @@ test.describe("failed paths", () => {
   test("front desk can't see the Owner's staff, plan or privacy-notice settings", async ({ page }) => {
     await signInFrontDesk(page);
     await openNav(page, "Settings");
-    await expect(page.getByText("The clinic's procedures, staff and chairs. Read-only in this prototype.")).toBeVisible();
+    await expect(page.getByText("The clinic's procedures, staff and chairs. Only the Owner can change these.")).toBeVisible();
     await expect(page.getByRole("tab", { name: "Staff" })).toHaveCount(0);
     await expect(page.getByRole("tab", { name: "Plan" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /Add staff/ })).toHaveCount(0);
@@ -783,7 +787,7 @@ test.describe("edge cases", () => {
     await fillNewChild(page, { first: "Bea", last: "Lim", born: "2019-05-05", sex: "Female", guardian: "Grace Lim", phone: "9170001111" });
     await page.getByLabel("Nickname").fill("B".repeat(31));
     await saveBar(page).click();
-    await expect(page.getByText("Keep the nickname under 30 characters")).toBeVisible();
+    await expect(page.getByText("Keep the nickname to 30 characters or fewer")).toBeVisible();
     await page.getByLabel("Nickname").fill("B".repeat(30));
     await saveBar(page).click();
     await expect(page.getByRole("dialog", { name: "Parent's consent" })).toBeVisible();

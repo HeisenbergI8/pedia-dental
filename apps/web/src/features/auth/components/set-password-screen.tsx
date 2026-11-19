@@ -7,6 +7,7 @@ import { z } from "zod";
 import { NewPassword } from "@pedia/shared";
 import { Loading } from "@/components/brand";
 import { Button } from "@/components/ui/button";
+import { ApiError } from "@/lib/api-client";
 import { usePasswordLink, useSetPassword } from "@/features/portal/api";
 import { PasswordField } from "./password-field";
 
@@ -52,10 +53,13 @@ export function SetPasswordScreen() {
     );
   }
   if (!link.data) {
+    // Issue 35: a link whose token is missing or malformed (the server's 400) is incomplete; a well-formed one it
+    // doesn't take (410: unknown, used or expired) has expired. One message each, title and text agreeing.
+    const incomplete = !token || (link.error instanceof ApiError && link.error.status === 400);
     return (
-      <AuthCard title="This link has expired or was already used">
+      <AuthCard title={incomplete ? "This link isn't complete" : "This link has expired or was already used"}>
         <p className="text-sm text-ink-muted">
-          {token ? "Links work once, for a limited time." : "This link isn't complete. Open it again from the text."} Forgot your password?{" "}
+          {incomplete ? "Open it again from the text." : "Links work once, for a limited time."} Forgot your password?{" "}
           <Link href="/forgot-password" className={linkClass}>Get a new reset link</Link>. Never signed in? Ask your clinic for a new invite.
         </p>
         <Link href="/login" className={linkClass}>Go to sign in</Link>

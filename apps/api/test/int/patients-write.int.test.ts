@@ -179,6 +179,34 @@ describe("edit (PUT, PATCH) and consents", () => {
     expect((await found("1112222")).map((p) => p.id)).not.toContain(younger.id);
   });
 
+  it("copies a phone or email changed in the full edit (PUT) to siblings, so a resent invite goes to the new number (bot test #2)", async () => {
+    const cookie = await as(ADMIN);
+    const ana = { ...newPatient.guardians[0]!, id: "g_put_kin", fullName: "Ana Kin", phone: "09171110601", email: "ana@example.com" };
+    const consent = { ...newPatient.privacyConsent, guardianId: ana.id };
+    const ben = await register(cookie, { ...newPatient, firstName: "Ben", guardians: [ana], privacyConsent: consent });
+    const bea = await register(cookie, { ...newPatient, firstName: "Bea", guardians: [ana], privacyConsent: consent });
+    const invite = (patientId: string, guardianId: string) => call("post", `/patients/${patientId}/guardians/${guardianId}/portal-invite`, cookie);
+    expect((await invite(bea.id, ana.id)).status).toBe(200);
+
+    const moved = { ...ana, phone: "09171110611", email: "ana.new@example.com" };
+    await ok(call("put", `/patients/${ben.id}`, cookie, { ...editable, firstName: "Ben", guardians: [moved] }), Patient);
+    expect((await ok(call("get", `/patients/${bea.id}`, cookie), Patient)).guardians[0]).toMatchObject({ phone: "09171110611", email: "ana.new@example.com" });
+    const found = async (q: string) => (await ok(call("get", `/patients?q=${q}`, cookie), z.array(PatientView))).map((p) => p.id);
+    expect(await found("1110611")).toEqual(expect.arrayContaining([ben.id, bea.id]));
+    expect(await found("1110601")).toEqual([]);
+    // The invite texted to the old number stops working; one resent from the sibling's page goes to the new number.
+    const links = await inClinic(DEMO_CLINIC_ID, () => prisma.portalLink.findMany({ where: { guardianId: ana.id }, select: { cancelledAt: true } }));
+    expect(links.every((l) => l.cancelledAt)).toBe(true);
+    expect((await invite(bea.id, ana.id)).status).toBe(200);
+    const sent = await inClinic(DEMO_CLINIC_ID, () => prisma.message.findFirst({ where: { patientId: bea.id, kind: "portal_invite", status: "queued" }, select: { to: true } }));
+    expect(sent?.to.replace(/\D/g, "")).toMatch(/1110611$/);
+    // The number clash check reads the new number on every child: another invited parent can't take it.
+    const carl = { ...ana, id: "g_put_carl", fullName: "Carl Other", phone: "09171110699", email: undefined };
+    const cara = await register(cookie, { ...newPatient, firstName: "Cara", guardians: [carl], privacyConsent: { ...consent, guardianId: carl.id } });
+    expect((await invite(cara.id, carl.id)).status).toBe(200);
+    expect((await call("patch", `/patients/${cara.id}`, cookie, { phone: "09171110611", nickname: "", tags: [], alerts: [] })).status).toBe(409);
+  });
+
   it("lets a dentist quick-update everything but the phone", async () => {
     const p = await register(await as(ADMIN));
     const dentist = await as(DENTIST);

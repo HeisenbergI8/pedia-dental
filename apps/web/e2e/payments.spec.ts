@@ -125,7 +125,7 @@ test("Bulilit's Owner sees storage and this month's texts on the plan", async ({
   await expect(panel.getByText("Storage", { exact: true })).toBeVisible(SLOW);
   await expect(panel.getByText(/ of 100 GB$/)).toBeVisible(); // the Clinic plan's storage (feature 16, revised)
   await expect(panel.getByText(/^Texts in \w+$/)).toBeVisible();
-  await expect(panel.getByText(/ of 1000$/)).toBeVisible();
+  await expect(panel.getByText(/ of 1500$/)).toBeVisible(); // the Clinic plan's 1,500 texts a month
 });
 
 test("the Owner of a clinic paused for non-payment signs in to pay, and only that (decision 25)", async ({ page }) => {

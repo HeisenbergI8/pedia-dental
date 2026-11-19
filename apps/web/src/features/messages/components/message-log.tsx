@@ -2,7 +2,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
-import { MessageSquareIcon } from "lucide-react";
+import { LoaderCircleIcon, MessageSquareIcon } from "lucide-react";
 import { MessageStatus } from "@pedia/shared";
 import { EmptyState } from "@/components/empty-state";
 import { SectionCard } from "@/components/section-card";
@@ -22,8 +22,6 @@ const STATUS_TONE: Record<MessageStatus, string> = {
   cancelled: "bg-ground text-ink-muted",
 };
 
-const PAGE = 25;
-
 /** Two lines of the SMS by default: the log is for scanning; the full text is one tap away. */
 function MessageBody({ body }: { body: string }) {
   const [open, setOpen] = useState(false);
@@ -41,47 +39,42 @@ function MessageBody({ body }: { body: string }) {
 }
 
 export function MessageLog() {
-  const { data: rows = [], isLoading, error, refetch, isRefetching } = useMessages();
+  const [status, setStatus] = useState<MessageStatus | "all">("all");
+  const log = useMessages(status === "all" ? undefined : status);
   const patientsQuery = usePatients();
   const patients = patientsQuery.data ?? [];
-  const [status, setStatus] = useState<MessageStatus | "all">("all");
-  const [limit, setLimit] = useState(PAGE);
 
-  if (isLoading) return <Loading label="Loading messages" />;
-  if (error) return <ErrorState what="the messages" onRetry={() => refetch()} retrying={isRefetching} />;
-  const shown = status === "all" ? rows : rows.filter((m) => m.status === status);
-  const options = [
-    ["all", "All", rows.length] as const,
-    ...MessageStatus.options.map((s) => [s, MESSAGE_STATUS_LABEL[s], rows.filter((m) => m.status === s).length] as const),
-  ];
+  const options = [["all", "All"] as const, ...MessageStatus.options.map((s) => [s, MESSAGE_STATUS_LABEL[s]] as const)];
+  const shown = log.data?.pages.flat() ?? [];
 
   return (
     <SectionCard>
       {/* One scrolling row of filters on a phone (fading at the edge), wrapping from md. */}
       <div role="group" aria-label="Show messages" className="scroll-fade-x -mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:flex-wrap md:px-0">
-        {options.map(([value, label, count]) => (
+        {options.map(([value, label]) => (
           <Button
             key={value}
             size="sm"
             className="shrink-0 rounded-full"
             variant={status === value ? "default" : "outline"}
             aria-pressed={status === value}
-            onClick={() => {
-              setStatus(value);
-              setLimit(PAGE);
-            }}
+            onClick={() => setStatus(value)}
           >
-            {label} <span className="tabular-nums">({count})</span>
+            {label}
           </Button>
         ))}
       </div>
-      {shown.length === 0 ? (
+      {log.isLoading ? (
+        <Loading label="Loading messages" />
+      ) : log.error ? (
+        <ErrorState what="the messages" onRetry={() => log.refetch()} retrying={log.isRefetching} />
+      ) : shown.length === 0 ? (
         <EmptyState icon={MessageSquareIcon} title={status === "all" ? "No messages yet" : `No ${MESSAGE_STATUS_LABEL[status].toLowerCase()} messages`}>
           Booking an appointment, a no-show or a signed extraction note queues a message here. Booking an extraction or pulpotomy also queues pre-treatment instructions.
         </EmptyState>
       ) : (
         <ul className="divide-y divide-line">
-          {shown.slice(0, limit).map((m) => {
+          {shown.map((m) => {
             const p = patients.find((x) => x.id === m.patientId);
             return (
               <li key={m.id} className="space-y-1 py-3">
@@ -103,13 +96,16 @@ export function MessageLog() {
           })}
         </ul>
       )}
-      {shown.length > limit && (
+      {shown.length > 0 && (
         <div className="flex flex-wrap items-center gap-3">
-          <Button variant="outline" onClick={() => setLimit(limit + PAGE)}>
-            Show {Math.min(PAGE, shown.length - limit)} more
-          </Button>
-          <span className="text-sm text-ink-muted tabular-nums">
-            Showing {limit} of {shown.length}
+          {log.hasNextPage && (
+            <Button variant="outline" disabled={log.isFetchingNextPage} aria-busy={log.isFetchingNextPage} onClick={() => log.fetchNextPage()}>
+              {log.isFetchingNextPage && <LoaderCircleIcon aria-hidden className="motion-safe:animate-spin" />}
+              Load older
+            </Button>
+          )}
+          <span className="text-sm text-ink-muted tabular-nums" aria-live="polite">
+            {log.hasNextPage ? `Showing the latest ${shown.length}` : `Showing all ${shown.length}`}
           </span>
         </div>
       )}

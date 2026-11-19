@@ -71,8 +71,12 @@ export function reminderSendAt(startsAt: string, now = new Date()): string {
   return (at < now ? now : at).toISOString();
 }
 
-/** A birthday today: month and day match. 29 February matches only in leap years (the daily job's rule). */
-export const isBirthdayOn = (birthDate: string, today: string) => birthDate.slice(5) === today.slice(5);
+/**
+ * A birthday today: month and day match, from the first birthday on (issue 31: a child born this year has none, so no
+ * "Turning 0" and no greeting). 29 February matches only in leap years (the daily job's rule).
+ */
+export const isBirthdayOn = (birthDate: string, today: string) =>
+  birthDate.slice(5) === today.slice(5) && birthDate.slice(0, 4) < today.slice(0, 4);
 
 /** This calendar year's birthday message for the child, if any. Once a year, whatever its status (outbox.ts). */
 export function birthdayGreeting<M extends Pick<Message, "patientId" | "kind" | "createdAt">>(

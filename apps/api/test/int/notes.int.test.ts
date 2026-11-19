@@ -90,7 +90,7 @@ describe("notes (apps/web handlers.test.ts → notes, treatment plan)", () => {
     expect((await t.ok(edit(note.id, { values: pulpotomy, behavior: [] }), ClinicalNote)).behaviorNote).toBe("Calmer with mother present");
     expect((await t.ok(edit(note.id, { values: pulpotomy, behavior: [], behaviorNote: "" }), ClinicalNote)).behaviorNote).toBe("");
     const long = await edit(note.id, { values: pulpotomy, behavior: [], behaviorNote: "x".repeat(301) });
-    expect([long.status, JSON.stringify(long.body)]).toEqual([400, expect.stringContaining("Keep the behavior note under 300 characters")]);
+    expect([long.status, JSON.stringify(long.body)]).toEqual([400, expect.stringContaining("Keep the behavior note to 300 characters or fewer")]);
   });
 
   it("writes the visit's dentist as author, and lets a draft be finished after the visit (decision 5)", async () => {

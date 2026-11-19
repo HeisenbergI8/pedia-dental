@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { usePatient, usePatients } from "@/features/patients/api";
 import { formatAge } from "@/features/patients/age";
 import { formatPhone } from "@/lib/format";
-import { COMMON_PROCEDURES, procedureHint, rankPatients, slotKey, whenLabel } from "../booking";
+import { COMMON_PROCEDURES, dateBounds, procedureHint, rankPatients, slotKey, whenLabel } from "../booking";
 import type { BookingValues } from "./appointment-form";
 
 const REGISTER = "__register";
@@ -191,7 +191,7 @@ export function TimeFields({ chairs }: { chairs: Chair[] }) {
     <>
       <div className="grid gap-4 sm:grid-cols-3">
         <FormField name="date" label="Date">
-          <Input type="date" {...register("date")} />
+          <Input type="date" {...dateBounds()} {...register("date")} />
         </FormField>
         <FormField name="time" label="Start">
           <Input type="time" step={900} {...register("time")} />

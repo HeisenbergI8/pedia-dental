@@ -10,13 +10,17 @@ export type DocumentFacts = {
   patient: { firstName: string; allergies: string[] };
 };
 
+/** A source that isn't this patient's (or not finished). A visit's own words end in "for", so it has its own (BotD-12). */
+const wrongSource = (type: GenerateDocumentInput["type"]) =>
+  DOCUMENT_SOURCE[type]?.kind === "visit" ? "Pick one of this patient's finished visits" : `${DOCUMENT_SOURCE[type]?.missing} for this patient`;
+
 /** The mock's refusals after the body parsed, in its order: issuer, dentist, source, allergy (decision 6). */
 export function documentRefusal(input: GenerateDocumentInput, facts: DocumentFacts): Refusal | undefined {
   if (!facts.issuer) return { status: 400, message: "Unknown staff member" };
   if (DENTIST_SIGNED.includes(input.type) && !holdsRole(facts.issuer, "dentist")) {
     return { status: 400, message: `A dentist has to issue the ${DOCUMENT_TYPE_LABEL[input.type].toLowerCase()}` };
   }
-  if (!facts.sourceFits) return { status: 400, message: `${DOCUMENT_SOURCE[input.type]?.missing} for this patient` };
+  if (!facts.sourceFits) return { status: 400, message: wrongSource(input.type) };
   const clash = allergyConflicts(facts.patient.allergies, input.items ?? []);
   if (clash.length) {
     const { firstName, allergies } = facts.patient;

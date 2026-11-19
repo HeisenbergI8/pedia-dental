@@ -80,7 +80,7 @@ describe("portal invitations (B11)", () => {
     const one = await family("Di", "09170000004");
     const two = await family("Ed", "0917 000 0004");
     await invite(one.id, "g_m_Di");
-    await expect(invite(two.id, "g_m_Ed")).rejects.toMatchObject({ status: 409, message: expect.stringContaining("already signs in to the portal as Rosa Di") });
+    await expect(invite(two.id, "g_m_Ed")).rejects.toMatchObject({ status: 409, message: expect.stringContaining("is already used for the portal by Rosa Di") });
     expect((await access(two.id))[0]!.blocked).toContain("Rosa Di");
     await expect(invite(sibling().id, sibling().guardians[0]!.id)).rejects.toMatchObject({ status: 409 });
   });
@@ -172,6 +172,15 @@ describe("forgot password (decisions 6, 19)", () => {
     await accept(token, pw(4));
     expect("user" in (await login("09170000011", pw(4)))).toBe(true);
   });
+  it("refuses a reset to the password it replaces, and the link still works (BotF-6e)", async () => {
+    await reset("0917 000 0011"); // Rosa Ha, on pw(4) since the case above
+    signIn(FRONT_DESK);
+    const token = await tokenOf("Rosa Ha");
+    signIn(null);
+    await expect(accept(token, pw(4))).rejects.toMatchObject({ status: 400, message: expect.stringContaining("Choose a new password, not the one you use now") });
+    await accept(token, pw(5));
+    expect("user" in (await login("09170000011", pw(5)))).toBe(true);
+  });
   it("allows 3 texts per number per hour, for unknown numbers too", async () => {
     for (let i = 0; i < 3; i++) await reset("09175550001");
     await expect(reset("09175550001")).rejects.toMatchObject({ status: 429 });
@@ -183,7 +192,7 @@ describe("a parent's own password (decision 7)", () => {
     signIn(`demo.clinic_demo.guardian.${sibling().guardians[0]!.id}`);
     await expect(api("/auth/password", Session, post({ current: DEMO_PASSWORD, next: pw(5) }))).rejects.toMatchObject({ status: 403 });
     signIn("demo.clinic_demo.guardian.g_m_Ha");
-    await api("/auth/password", Session, post({ current: pw(4), next: pw(6) }));
+    await api("/auth/password", Session, post({ current: pw(5), next: pw(6) })); // pw(5) since the BotF-6e case
     expect("user" in (await login("09170000011", pw(6)))).toBe(true);
   });
 });

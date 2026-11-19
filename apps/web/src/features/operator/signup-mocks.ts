@@ -1,5 +1,5 @@
 import { http, HttpResponse } from "msw";
-import { PriceList, SupportSettings, RecordUpfrontPaymentInput, RejectSignupInput, SignupInput, amountDue, type CreateAccountResult } from "@pedia/shared";
+import { PriceList, SupportSettings, RecordUpfrontPaymentInput, RejectSignupInput, SignupInput, amountDue, paidOnProblem, type CreateAccountResult } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { today } from "@/mocks/clock";
 import { persist, platform } from "@/mocks/db";
@@ -70,6 +70,8 @@ export const operatorSignupHandlers = [
     if (signup.payment) return refuse(409, "The setup fee is already recorded");
     const parsed = RecordUpfrontPaymentInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
+    const late = paidOnProblem(parsed.data.paidOn, today()); // issue 13, as the API
+    if (late) return refuse(400, late);
     signup.payment = { ...parsed.data, amount: signup.quote.total, recordedAt: new Date().toISOString() };
     persist();
     return HttpResponse.json(signup);

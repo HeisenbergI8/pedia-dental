@@ -29,6 +29,11 @@ export function PlanPanel() {
   if (!usage.data) return <ErrorState what="your plan" onRetry={() => void usage.refetch()} />;
   const { tier } = usage.data;
   const limits = TIER_LIMITS[tier];
+  // B12 E13: while a downgrade waits, branches and logins already count against the smaller plan (bot report #19).
+  const down = sub.data?.downgrade;
+  const smaller = down && TIER_LIMITS[down.tier];
+  const movingNote = (limit: "branches" | "staffLogins") =>
+    down && smaller && smaller[limit] !== limits[limit] ? `${TIER_LABEL[down.tier]}'s limit: your plan moves to ${TIER_LABEL[down.tier]} on ${formatBillingDate(down.on)}.` : undefined;
 
   return (
     <div className="space-y-5">
@@ -37,8 +42,8 @@ export function PlanPanel() {
         description={<>To change your plan, contact Primolar. An upgrade starts at once; a downgrade starts on your next due date. <ComparePlansLink /></>}
       >
         <div className="grid gap-4 sm:grid-cols-2">
-          <Allowance label="Open branches" allowance={usage.data.branches} />
-          <Allowance label="Staff logins" allowance={usage.data.staffLogins} />
+          <Allowance label="Open branches" allowance={usage.data.branches} note={movingNote("branches")} />
+          <Allowance label="Staff logins" allowance={usage.data.staffLogins} note={movingNote("staffLogins")} />
           <Allowance label="Storage" allowance={usage.data.storage} show={formatStorage} />
           <Allowance
             label={`Texts in ${format(parseISO(`${usage.data.month}-01`), "MMMM")}`}

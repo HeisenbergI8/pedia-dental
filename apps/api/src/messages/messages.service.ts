@@ -1,11 +1,13 @@
 import { ConflictException, Injectable, NotFoundException, type OnModuleInit } from "@nestjs/common";
 import { MessageKind, MessageStatus, MessageTemplate, UpdateMessageTemplateInput, choiceDeclined, isBirthdayOn, type Message } from "@pedia/shared";
+import { z } from "zod";
 import { AuditService } from "../audit/audit.service";
 import { RecordOwners } from "../auth/record-owners";
 import { Clock, manilaDate } from "../common/clock";
 import { ID_MAX } from "../common/ids";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { MessageQueueService } from "../message-queue/message-queue.service";
+import { MESSAGE_COLUMNS, toMessage } from "../message-queue/message.rows";
 import { lockPatient } from "../patients/patient-lock";
 import { PatientsService } from "../patients/patients.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -17,6 +19,12 @@ type TemplateRow = { clinicId: string; kind: MessageKind; name: string; body: st
 const toTemplate = (t: TemplateRow): MessageTemplate => MessageTemplate.parse({ ...t, updatedAt: t.updatedAt.toISOString() });
 
 const DECLINED = "This family declined reminder messages. Change it under Privacy on the child's Overview."; // mocks.ts:9
+/** GET /messages paging (BotC-9): `limit` 1–100, or absent for the whole list; a bad value is ignored, as a bad `status`. */
+const MessagePage = z.object({
+  limit: z.coerce.number().int().min(1).max(100).optional().catch(undefined),
+  before: z.string().min(1).max(ID_MAX).optional().catch(undefined),
+});
+
 const NO_GUARDIAN = "This patient has no primary guardian to message";
 
 /** features/messages/mocks.ts: the templates (B3), the log and the two manual texts (B9). The log itself is MessageQueueService's. */
@@ -54,16 +62,32 @@ export class MessagesService implements OnModuleInit {
   /**
    * GET /messages: newest first. An unknown `status` is ignored, as the mock's safeParse. Audited per child only (E12).
    * A repeated `patientId` is read as its first value, the one the guard checked (URLSearchParams.get); an id longer
-   * than any stored one matches nothing.
+   * than any stored one matches nothing. With `limit` (BotC-9) it answers that many, after the message `before` (the
+   * last one the screen has) in the same order; without it, the whole list (a child's messages, the portal).
    */
-  async list(query: unknown, status: unknown): Promise<Message[]> {
+  async list(query: unknown, status: unknown, paging: { limit?: unknown; before?: unknown } = {}): Promise<Message[]> {
     const first = Array.isArray(query) ? query[0] : query;
     const patientId = typeof first === "string" && first ? first : undefined;
     if (patientId && patientId.length > ID_MAX) return [];
     const s = MessageStatus.safeParse(status);
-    const rows = await this.queue.list({ ...(patientId && { patientId }), ...(s.success && { status: s.data }) });
+    const where = { ...(patientId && { patientId }), ...(s.success && { status: s.data }) };
+    const { limit, before } = MessagePage.parse(paging);
+    const rows = limit ? await this.page(where, limit, before) : await this.queue.list(where);
     if (patientId) await this.audit.record("view", "Messages", patientId);
     return rows;
+  }
+
+  /** One page of the log, newest first: keyset on (sendAt, id) after the `before` message; an unknown one answers none. */
+  private async page(where: { patientId?: string; status?: MessageStatus }, limit: number, before?: string): Promise<Message[]> {
+    const after = before ? await this.prisma.message.findFirst({ where: { id: before }, select: { id: true, sendAt: true } }) : undefined;
+    if (before && !after) return [];
+    const rows = await this.prisma.message.findMany({
+      where: { ...where, ...(after && { OR: [{ sendAt: { lt: after.sendAt } }, { sendAt: after.sendAt, id: { lt: after.id } }] }) },
+      select: MESSAGE_COLUMNS,
+      orderBy: [{ sendAt: "desc" }, { id: "desc" }],
+      take: limit,
+    });
+    return rows.map(toMessage);
   }
 
   /** POST /due-items/:id/message: 404 → 409 booked → 409 queued → 409 declined → 409 no guardian → 201 (mocks.ts:41–54). */

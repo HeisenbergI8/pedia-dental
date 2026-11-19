@@ -13,10 +13,14 @@ export const refundRefusal = (amount: number, roles: readonly Role[]) =>
 /** A bill lists each treatment once. */
 export const duplicateRefusal = (ids: string[]) => (new Set(ids).size !== ids.length ? no(400, "A treatment is listed twice") : undefined);
 
-/** Every id billable, and a discount within the subtotal (409 first, as the mock). */
+/** The most one bill can total, ₱10,000,000: the money columns are 32-bit, and a balance sums bills (bot report #23). */
+export const BILL_MAX = 1_000_000_000;
+
+/** Every id billable, a discount within the subtotal, and a total within BILL_MAX (409 first, as the mock). */
 export function invoiceRefusal(asked: string[], billable: string[], subtotal: number, discount: number): Refusal | undefined {
   if (asked.some((id) => !billable.includes(id))) return no(409, "Only this patient's completed, not yet billed treatments can be invoiced");
   if (discount > subtotal) return no(400, `The discount can't be more than ${formatPeso(subtotal)}`);
+  if (subtotal - discount > BILL_MAX) return no(400, `A bill can total at most ${formatPeso(BILL_MAX)}. Bill these treatments on two bills.`);
   return undefined;
 }
 

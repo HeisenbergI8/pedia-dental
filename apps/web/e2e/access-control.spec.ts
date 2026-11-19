@@ -126,7 +126,7 @@ test.describe("happy paths", () => {
       await signInAs(page, who);
       await mainNav(page).getByRole("link", { name: "Settings" }).click();
       await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible({ timeout: 30_000 });
-      await expect(page.getByText("Read-only in this prototype")).toBeVisible();
+      await expect(page.getByText(/Only the Owner can change (these|the clinic's set-up)\./)).toBeVisible();
       await expect(page.getByRole("tab", { name: "Staff" })).toHaveCount(0);
       await expect(page.getByRole("tab", { name: "Plan" })).toHaveCount(0);
       await expect(page.getByRole("button", { name: /Add staff/ })).toHaveCount(0);

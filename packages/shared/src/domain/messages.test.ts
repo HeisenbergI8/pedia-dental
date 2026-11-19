@@ -48,6 +48,7 @@ describe("birthday rule (shared by the daily job and Send greeting)", () => {
   it("matches month and day only", () => {
     expect(isBirthdayOn("2019-10-03", "2026-10-03")).toBe(true);
     expect(isBirthdayOn("2019-10-04", "2026-10-03")).toBe(false);
+    expect(isBirthdayOn("2026-10-03", "2026-10-03")).toBe(false); // issue 31: born this year, no birthday yet
   });
   it("finds this year's greeting, not last year's", () => {
     const m = (createdAt: string) => ({ patientId: "p", kind: "birthday" as const, createdAt });

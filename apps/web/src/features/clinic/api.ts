@@ -202,7 +202,7 @@ export const useRemoveLogo = () => useOwnerMutation(() => api("/clinic/logo", Cl
 export const useSaveBranch = () =>
   useOwnerMutation(
     ({ id, ...input }: BranchInput & { id?: string }) => api(id ? `/branches/${id}` : "/branches", Branch, json(id ? "PUT" : "POST", input)),
-    [clinicKeys.branches],
+    [clinicKeys.branches, ["chairs"]], // a new branch comes with its "Chair 1"
   );
 export const useBranchArchive = () =>
   useOwnerMutation(({ id, archive }: { id: string; archive: boolean }) => api(`/branches/${id}/${archive ? "archive" : "reopen"}`, Branch, { method: "POST" }), [clinicKeys.branches]);

@@ -3,7 +3,7 @@ import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { z } from "zod";
-import { SupportContact, SupportSettings, TIER_LABEL, TIER_SUPPORT, type Tier } from "@pedia/shared";
+import { SupportContactInput, SupportSettings, TIER_LABEL, TIER_SUPPORT, type Tier } from "@pedia/shared";
 import { Loading } from "@/components/brand";
 import { ErrorState } from "@/components/error-state";
 import { FormField } from "@/components/form-field";
@@ -56,7 +56,7 @@ export function SupportSettingsCard() {
 }
 
 const ContactForm = z.object({ name: z.string(), phone: z.string(), email: z.string() }).transform((f, ctx) => {
-  const parsed = SupportContact.safeParse({ name: f.name, phone: blank(f.phone), email: blank(f.email) });
+  const parsed = SupportContactInput.safeParse({ name: f.name, phone: blank(f.phone), email: blank(f.email) });
   if (!parsed.success) for (const i of parsed.error.issues) ctx.addIssue({ code: "custom", message: i.message, path: i.path });
   return parsed.success ? parsed.data : z.NEVER;
 });
@@ -65,7 +65,7 @@ const ContactForm = z.object({ name: z.string(), phone: z.string(), email: z.str
 export function SupportContactCard({ clinicId, tier }: { clinicId: string; tier: Tier }) {
   const contact = useSupportContact(clinicId);
   const save = useSaveSupportContact(clinicId);
-  const form = useForm<z.input<typeof ContactForm>, unknown, SupportContact>({
+  const form = useForm<z.input<typeof ContactForm>, unknown, SupportContactInput>({
     resolver: zodResolver(ContactForm),
     values: { name: contact.data?.name ?? "", phone: contact.data?.phone ?? "", email: contact.data?.email ?? "" },
   });

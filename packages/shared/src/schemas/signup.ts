@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { PaymentMethod } from "./billing";
 import { AddStaffInput } from "./clinic";
-import { Centavos, Id, IsoDateTime, isoDate } from "./common";
+import { Centavos, CentavosAmount, Id, IsoDateTime, isoDate, tooLong } from "./common";
 import { AgreementRecord } from "./legal";
 import { PaymentQrView, ReceiptView } from "./payments";
 import { BranchInput, ClinicAccount, ClinicNameInput, HeadingFont, HexColor, Tier } from "./tenancy";
@@ -29,7 +29,7 @@ export const BrandingInput = z.discriminatedUnion("choice", [
       .string()
       .trim()
       .min(1, "Tell us the feel you want, and any colours you like or don't")
-      .max(1000, "Keep the brief under 1,000 characters"),
+      .max(1000, tooLong(1000, "the brief")),
   }),
 ]);
 export type BrandingInput = z.infer<typeof BrandingInput>;
@@ -53,20 +53,21 @@ export const GetStartedInput = SignupInput.extend({
 export type GetStartedInput = z.infer<typeof GetStartedInput>;
 
 /** One plan's prices, VAT-inclusive centavos (billing #22, #23). */
-export const PlanPrice = z.object({ setupFee: Centavos.nonnegative(), monthlyFee: Centavos.nonnegative() });
+// Issue 23: a price is at most ₱10,000,000 (CentavosAmount), inside the database's money columns.
+export const PlanPrice = z.object({ setupFee: CentavosAmount.nonnegative(), monthlyFee: CentavosAmount.nonnegative() });
 export type PlanPrice = z.infer<typeof PlanPrice>;
 
 /** One text top-up pack (feature 16, revised): how many billed parts it adds and what it costs, VAT-inclusive. */
 export const TextPackPrice = z.object({
   parts: z.number().int().min(1, "A pack adds at least 1 text").max(100_000, "A pack adds at most 100,000 texts"),
-  price: Centavos.nonnegative(),
+  price: CentavosAmount.nonnegative(),
 });
 export type TextPackPrice = z.infer<typeof TextPackPrice>;
 
 /** GET /signups/prices, GET and PUT /operator/prices: the operator's price list (billing #23). */
 export const PriceList = z.object({
   plans: z.object({ small: PlanPrice, mid: PlanPrice, big: PlanPrice }),
-  designAddOn: Centavos.nonnegative(), // the same on every plan
+  designAddOn: CentavosAmount.nonnegative(), // the same on every plan
   textPack: TextPackPrice, // the same on every plan; bought at today's list, never priceOn (a top-up is not a month)
 });
 export type PriceList = z.infer<typeof PriceList>;
@@ -92,10 +93,17 @@ export type UpfrontMethod = z.infer<typeof UpfrontMethod>;
 /** POST /operator/signups/:id/payment, and part of a direct creation: the whole quoted total, in one payment (A4). */
 export const RecordUpfrontPaymentInput = z.object({
   method: UpfrontMethod,
-  reference: z.string().trim().max(60, "Keep the reference under 60 characters").optional(),
+  reference: z.string().trim().max(60, tooLong(60, "the reference")).optional(),
   paidOn: isoDate("Enter the date it was paid"),
 });
 export type RecordUpfrontPaymentInput = z.infer<typeof RecordUpfrontPaymentInput>;
+
+/**
+ * Issue 13: a payment's `paidOn` is today at the latest. Checked by the server against its own clock (the API's Clock,
+ * the mock's demo today), not in the schema: the operator's demo clock may run ahead of the real date.
+ */
+export const PAID_IN_FUTURE = "The date paid can't be in the future";
+export const paidOnProblem = (paidOn: string, today: string) => (paidOn > today ? PAID_IN_FUTURE : undefined);
 
 /** The recorded payment. Chunk 23's payment history starts from this shape. */
 export const UpfrontPayment = RecordUpfrontPaymentInput.extend({ amount: Centavos.nonnegative(), recordedAt: IsoDateTime });
@@ -152,7 +160,7 @@ export type SignupStatusView = z.infer<typeof SignupStatusView>;
 
 /** POST /operator/signups/:id/reject (billing #13): the reason is shown to the client as written. */
 export const RejectSignupInput = z.object({
-  reason: z.string().trim().min(1, "Tell the clinic why").max(500, "Keep the reason under 500 characters"),
+  reason: z.string().trim().min(1, "Tell the clinic why").max(500, tooLong(500, "the reason")),
 });
 export type RejectSignupInput = z.infer<typeof RejectSignupInput>;
 

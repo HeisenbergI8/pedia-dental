@@ -18,11 +18,14 @@ export async function countUsage(db: Pick<Tx, "branch" | "staff">): Promise<Reco
   return accountUsage({ branches, staff: staff.map((s) => ({ deactivatedAt: s.deactivatedAt?.toISOString() })) });
 }
 
-/** GET /clinic/usage: the mock's usage(). `null` limit = unlimited. */
-export const usageOf = (tier: Tier, inUse: Record<Limit, number>, use: AllowanceUse): ClinicUsage => ({
+/**
+ * GET /clinic/usage: the mock's usage(). `null` limit = unlimited. Branches and logins count against `limitTier` (B12
+ * E13): while a downgrade waits, the smaller plan's limit, the one assertRoomFor applies (bot report #19).
+ */
+export const usageOf = (tier: Tier, inUse: Record<Limit, number>, use: AllowanceUse, downgrade: { tier: Tier } | null = null): ClinicUsage => ({
   tier,
-  branches: { inUse: inUse.branches, limit: TIER_LIMITS[tier].branches },
-  staffLogins: { inUse: inUse.staffLogins, limit: TIER_LIMITS[tier].staffLogins },
+  branches: { inUse: inUse.branches, limit: TIER_LIMITS[limitTier(tier, downgrade)].branches },
+  staffLogins: { inUse: inUse.staffLogins, limit: TIER_LIMITS[limitTier(tier, downgrade)].staffLogins },
   storage: { inUse: use.storageBytes, limit: TIER_LIMITS[tier].storageBytes },
   texts: { inUse: use.textParts, limit: textAllowance(tier, use.textTopUp) },
   textTopUp: use.textTopUp,
@@ -30,8 +33,8 @@ export const usageOf = (tier: Tier, inUse: Record<Limit, number>, use: Allowance
 });
 
 /** The refusal when one more would go over the limit, else undefined. Only ever blocks the next one (decision #9). */
-export const limitRefusal = (tier: Tier, limit: Limit, inUse: number): string | undefined =>
-  canAddUnder(tier, limit, inUse) ? undefined : limitMessage(tier, limit);
+export const limitRefusal = (tier: Tier, limit: Limit, inUse: number, downgradeOn?: string): string | undefined =>
+  canAddUnder(tier, limit, inUse) ? undefined : limitMessage(tier, limit, downgradeOn);
 
 /**
  * 409 with the limit's words when the clinic is full. Call it inside runInTransaction, after lockAccount, right before
@@ -41,6 +44,9 @@ export const limitRefusal = (tier: Tier, limit: Limit, inUse: number): string | 
  */
 export async function assertRoomFor(tx: Tx, clinicId: string, limit: Limit, downgrade: { tier: Tier } | null = null): Promise<void> {
   const { tier } = await tx.clinicAccount.findUniqueOrThrow({ where: { id: clinicId }, select: { tier: true } });
-  const refused = limitRefusal(limitTier(tier, downgrade), limit, (await countUsage(tx))[limit]);
+  const applies = limitTier(tier, downgrade);
+  // The smaller plan counts: the refusal names it and its date (bot report #19), read under the same locks.
+  const on = applies !== tier ? (await tx.subscription.findUnique({ where: { clinicId }, select: { downgradeOn: true } }))?.downgradeOn : undefined;
+  const refused = limitRefusal(applies, limit, (await countUsage(tx))[limit], on?.toISOString().slice(0, 10));
   if (refused) throw new ConflictException(refused);
 }

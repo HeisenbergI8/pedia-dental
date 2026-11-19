@@ -31,7 +31,7 @@ function numberHolder(number: string, exceptGuardianId: string, states: PortalAc
     .find((g) => g && smsNumber(g.phone) === number);
 }
 const clashText = (g: Pick<Guardian, "phone">, holder: Guardian) =>
-  `${maskedNumber(g.phone)} already signs in to the portal as ${holder.fullName}. Each parent needs their own mobile number.`;
+  `${maskedNumber(g.phone)} is already used for the portal by ${holder.fullName}. Each parent needs their own mobile number.`;
 
 /** Why this guardian can't be invited now (decisions 1, 14), in the words the Overview shows. */
 function blockedReason(g: Guardian): string | undefined {
@@ -141,6 +141,7 @@ function usableLink(token: string) {
   return hit && guardian && liveLink(hit.link) && hit.account.state === wanted ? { ...hit, guardian } : undefined;
 }
 const GONE = () => new HttpResponse("This link has expired or was already used.", { status: 410 });
+const SAME_PASSWORD = "Choose a new password, not the one you use now";
 
 /** Decision 19: reset texts per sign-in value in the last hour, counted whether or not an account exists. In memory. */
 const resetTexts = new Map<string, number[]>();
@@ -205,6 +206,8 @@ export const portalHandlers = [
     const hit = usableLink(parsed.data.token);
     if (!hit) return GONE();
     const { account: a, link, guardian: g, clinicId } = hit;
+    // BotF-6e: a reset asks for a new password, as ChangePasswordInput does.
+    if (link.purpose === "reset" && a.password === parsed.data.password) return new HttpResponse(SAME_PASSWORD, { status: 400 });
     if (link.purpose === "invite") {
       const n = smsNumber(g.phone);
       if (!n) return new HttpResponse("Your clinic needs your mobile number first. Ask them to add it and send a new invite.", { status: 409 });

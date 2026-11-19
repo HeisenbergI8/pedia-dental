@@ -20,6 +20,17 @@ export function canTransition(from: AppointmentStatus, to: AppointmentStatus): b
 /** A weekday the branch never opens, whatever is booked. The booking rule; `isClosedDay` is the display rule. */
 export const isClosedWeekday = (day: Date, hours: OpeningHours) => hours.closedWeekdays.includes(day.getDay());
 
+/**
+ * Issue 13: a parent's booking request for a weekday no active branch of the clinic opens (`hours`: each active
+ * branch's). `preferredDate` is "yyyy-MM-dd", read as a Manila calendar day. Undefined when some branch is open.
+ */
+export function requestDayClosed(preferredDate: string, hours: OpeningHours[]): string | undefined {
+  const [y, m, d] = preferredDate.split("-").map(Number) as [number, number, number];
+  const day = new Date(y, m - 1, d);
+  if (!hours.length || hours.some((h) => !isClosedWeekday(day, h))) return undefined;
+  return `The clinic is closed on ${format(day, "EEEE")}s. Pick another day.`;
+}
+
 /** Closed only when nothing is booked: a day with appointments is never shown as closed. `hours` is the branch's. */
 export function isClosedDay(day: Date, appointmentCount: number, hours: OpeningHours): boolean {
   return appointmentCount === 0 && isClosedWeekday(day, hours);

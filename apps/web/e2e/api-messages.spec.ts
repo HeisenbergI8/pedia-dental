@@ -71,16 +71,17 @@ async function book(page: Page, patientId: string) {
   return (await json(await page.request.post("/api/appointments", { data }), 201)).id;
 }
 
-/** The log, from the API; a row for one child and kind, paging through "Show more" until it's there. */
+/** The log, from the API; a row for one child and kind, paging through "Load older" until it's there. */
 async function openLog(page: Page) {
   await viaApi(page, /^\/api\/messages$/, "GET", 200, () => page.goto("/messages"));
 }
 async function row(page: Page, child: string, kind: string) {
   const found = page.getByRole("listitem").filter({ hasText: kind }).filter({ hasText: child });
-  const more = page.getByRole("button", { name: /^Show \d+ more$/ });
+  const more = page.getByRole("button", { name: "Load older" });
   for (let i = 0; i < 40 && !(await found.first().isVisible()); i++) {
     if (!(await more.isVisible())) break;
     await more.click();
+    await expect(more.or(page.getByText(/^Showing all \d+$/)).first()).toBeEnabled();
   }
   await expect(found.first()).toBeVisible();
   return found;

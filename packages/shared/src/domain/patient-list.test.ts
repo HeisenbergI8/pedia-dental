@@ -3,6 +3,7 @@ import {
   comparePatients, hasNoContact, lastVisitOn, listBounds, matchesFilter, matchesSearch, paginate, patientSearchText, patientStanding, recallDueOn,
   searchWords, standingOn, storedStanding, type PatientFacts,
 } from "./patient-list";
+import { FAILURE } from "./sending";
 
 const today = "2026-10-03"; // a Saturday
 const flags = { recallDue: false, balanceDue: false, noContact: false };
@@ -48,6 +49,14 @@ describe("no contact", () => {
     expect(hasNoContact("p", [m("2026-09-05", "sent"), { ...m("2026-09-06", "failed"), kind: "portal_invite" as const }])).toBe(false);
     expect(hasNoContact("p", [m("2026-09-05", "failed"), m("2026-09-05", "sent")])).toBe(false);
     expect(hasNoContact("p", [])).toBe(false);
+  });
+  it("ignores a text refused for the clinic's monthly limit: the family's number wasn't tried", () => {
+    const limit = { ...m("2026-09-06", "failed"), failureReason: FAILURE.textLimit };
+    expect(hasNoContact("p", [m("2026-09-05", "sent"), limit])).toBe(false);
+    expect(hasNoContact("p", [limit])).toBe(false);
+    expect(hasNoContact("p", [m("2026-09-05", "sent"), { ...m("2026-09-07", "failed"), failureReason: FAILURE.clinicPaused }])).toBe(false);
+    // A real failure before it still counts.
+    expect(hasNoContact("p", [{ ...m("2026-09-05", "failed"), failureReason: FAILURE.rejected }, limit])).toBe(true);
   });
 });
 
@@ -108,6 +117,20 @@ describe("patientSearchText and searchWords (decision 1)", () => {
     expect(matchesSearch(p, "mendoza rosa", { phones: false })).toBe(true);
     expect(matchesSearch(p, "1234567", { phones: false })).toBe(false);
     expect(matchesSearch(p, "1234567", { phones: true })).toBe(true);
+  });
+  it("ignores accents on both sides, as sameText does", () => {
+    const nino = { firstName: "Niño", lastName: "Peñaflor", guardians: [{ fullName: "José Peñaflor", phone: "+63 917 555 0310" }] } as Parameters<typeof patientSearchText>[0];
+    expect(patientSearchText(nino).names).toBe("nino penaflor  jose penaflor");
+    expect(matchesSearch(nino, "nino", { phones: false })).toBe(true);
+    expect(matchesSearch(nino, "PENAFLOR josé", { phones: false })).toBe(true);
+    expect(matchesSearch(nino, "Niño", { phones: false })).toBe(true);
+  });
+  it("reads a leading 63 (+63) as 0, in the search and in the stored phone", () => {
+    expect(searchWords("+639175550310")).toEqual([{ text: "+639175550310", digits: "09175550310" }]);
+    expect(patientSearchText({ ...p, guardians: [{ fullName: "Rosa", phone: "+63 917 123 4567" }] } as typeof p).digits).toBe("09171234567");
+    expect(matchesSearch(p, "+639171234567", { phones: true })).toBe(true);
+    expect(matchesSearch(p, "63917-123", { phones: true })).toBe(true);
+    expect(matchesSearch({ ...p, guardians: [{ fullName: "Rosa", phone: "639171234567" }] } as typeof p, "0917 123", { phones: true })).toBe(true);
   });
 });
 

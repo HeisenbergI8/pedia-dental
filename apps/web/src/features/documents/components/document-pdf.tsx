@@ -1,5 +1,5 @@
 import { Document, Font, Image, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
-import type { DocBlock, DocContent } from "../content";
+import { pdfSafe, type DocBlock, type DocContent } from "../content";
 
 /** react-pdf can't read CSS variables: these mirror --color-ink, --color-ink-muted, --color-line, --color-line-strong. The brand ring comes from the clinic (letterhead.ring). */
 const INK = "#111c1e";
@@ -79,7 +79,8 @@ function Block({ block }: { block: DocBlock }) {
 }
 
 /** The PDF for any document. Returns the <Document> element so pdf() gets the type it expects. */
-export function documentPdf(content: DocContent, logo?: string, headerImage?: string) {
+export function documentPdf(raw: DocContent, logo?: string, headerImage?: string) {
+  const content = pdfSafe(raw); // BotD-7: emoji would print as junk
   const { letterhead } = content;
   const lines = letterhead.custom && "header" in letterhead.custom ? letterhead.custom : { header: [], footer: [] };
   return (

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ClinicScoped, Id, IsoDate, IsoDateTime } from "./common";
+import { ClinicScoped, Id, IsoDate, IsoDateTime, pastIsoDate, tooLong } from "./common";
 import { ALL_TEETH } from "../domain/teeth";
 
 /** `document`: a medical document photographed by a parent (a clearance, a lab result). */
@@ -30,7 +30,13 @@ export const ClinicalPhoto = ClinicScoped.extend({
 });
 export type ClinicalPhoto = z.infer<typeof ClinicalPhoto>;
 
-/** Sent as the `meta` JSON field of a multipart upload, next to `file`. */
+/** The longest caption typed (issue 5): a sensible length, well inside the column. */
+export const CAPTION_MAX = 500;
+
+/**
+ * Sent as the `meta` JSON field of a multipart upload, next to `file`. Inputs only (issues 5, 13): the photo was taken
+ * today in Manila at the latest; a photo stored before these checks is still read.
+ */
 export const UploadPhotoInput = ClinicalPhoto.pick({
   visitId: true,
   type: true,
@@ -38,5 +44,8 @@ export const UploadPhotoInput = ClinicalPhoto.pick({
   tooth: true,
   takenOn: true,
   caption: true,
+}).extend({
+  takenOn: pastIsoDate("Enter the date it was taken", "The date taken can't be in the future"),
+  caption: z.string().max(CAPTION_MAX, tooLong(CAPTION_MAX, "the caption")),
 });
 export type UploadPhotoInput = z.infer<typeof UploadPhotoInput>;

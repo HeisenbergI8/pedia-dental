@@ -49,14 +49,22 @@ const MONTHS = ["January", "February", "March", "April", "May", "June", "July", 
 const monthName = (month: string) => MONTHS[Number(month.slice(5, 7)) - 1]!;
 const nextMonthName = (month: string) => MONTHS[Number(month.slice(5, 7)) % 12]!;
 
-/** B12 decision 3: the Owner's warning at 80% and notice at 100% of the month's texts. Undefined below 80%. */
+/** Fewer parts than this left and a normal reminder no longer fits, so reminders are in effect already refused (BotC-7). */
+export const TEXT_PARTS_NEARLY_GONE = 5;
+
+/**
+ * B12 decision 3: the Owner's warning at 80% and notice at the limit. The notice shows once fewer than
+ * TEXT_PARTS_NEARLY_GONE parts are left, since a reminder needs more than that. Undefined below 80%.
+ */
 export function textAllowanceNotice(texts: { inUse: number; limit: number | null }, month: string): { level: "warning" | "limit"; text: string } | undefined {
   const { inUse, limit } = texts;
   if (!limit) return undefined;
-  if (inUse >= limit) {
+  if (limit - inUse < TEXT_PARTS_NEARLY_GONE) {
+    const forMonth = `for ${monthName(month)} ${month.slice(0, 4)}`;
+    const used = inUse >= limit ? `You've used all ${limit} texts ${forMonth}` : `You've used ${inUse} of your ${limit} texts ${forMonth}, too few for another reminder`;
     return {
       level: "limit",
-      text: `You've used all ${limit} texts for ${monthName(month)} ${month.slice(0, 4)}. Automatic reminders are not sent until 1 ${nextMonthName(month)} or until you buy more; portal invites and password resets still go. Buy more texts, or contact Primolar to upgrade.`,
+      text: `${used}. Automatic reminders are not sent until 1 ${nextMonthName(month)} or until you buy more; portal invites and password resets still go. Buy more texts, or contact Primolar to upgrade.`,
     };
   }
   if (inUse >= limit * 0.8) {

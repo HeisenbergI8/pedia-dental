@@ -25,8 +25,8 @@ export function SectionCard({
       {(title || action) && (
         <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
           <div className="min-w-0 space-y-0.5">
-            {title && <Heading className="font-title text-lg font-semibold">{title}</Heading>}
-            {description && <p className="text-sm text-ink-muted">{description}</p>}
+            {title && <Heading className="font-title text-lg font-semibold wrap-anywhere">{title}</Heading>}
+            {description && <p className="text-sm text-ink-muted wrap-anywhere">{description}</p>}
           </div>
           {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
         </div>

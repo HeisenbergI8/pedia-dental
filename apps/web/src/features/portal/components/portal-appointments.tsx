@@ -1,10 +1,10 @@
 "use client";
 import { Controller, FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { format, parseISO } from "date-fns";
+import { addDays, format, parseISO } from "date-fns";
 import { CheckCircle2Icon } from "lucide-react";
 import { toast } from "sonner";
-import { CreateAppointmentRequestInput, REQUESTS_NOT_ON_PLAN, TIER_LIMITS, TimeOfDay, canTransition, type Appointment } from "@pedia/shared";
+import { CreateAppointmentRequestInput, REQUESTS_NOT_ON_PLAN, TIER_LIMITS, TimeOfDay, canTransition, requestDayClosed, type Appointment } from "@pedia/shared";
 import { FormField } from "@/components/form-field";
 import { SectionCard } from "@/components/section-card";
 import { Button } from "@/components/ui/button";
@@ -124,9 +124,12 @@ function RequestAppointment() {
   const pending = (usePatientRequests(child.id).data ?? []).find((r) => r.status === "pending");
   const request = useRequestAppointment(child.id);
   const today = format(new Date(), "yyyy-MM-dd");
+  // Issue 13: a weekday no branch opens is refused, so the form starts on the first open day from today.
+  const hours = (useClinic().data?.branches ?? []).map((b) => b.openingHours);
+  const firstOpen = [0, 1, 2, 3, 4, 5, 6].map((n) => format(addDays(new Date(), n), "yyyy-MM-dd")).find((d) => !requestDayClosed(d, hours)) ?? today;
   const form = useForm<CreateAppointmentRequestInput>({
     resolver: zodResolver(CreateAppointmentRequestInput),
-    defaultValues: { preferredDate: today, timeOfDay: "any", reason: "", note: "" },
+    defaultValues: { preferredDate: firstOpen, timeOfDay: "any", reason: "", note: "" },
   });
 
   return (

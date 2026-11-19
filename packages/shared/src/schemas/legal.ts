@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Id, IsoDate, IsoDateTime } from "./common";
+import { Id, IsoDate, IsoDateTime, tooLong } from "./common";
 
 const Version = z.number().int().positive();
 
@@ -72,7 +72,7 @@ export type RecordPrivacyConsentInput = z.infer<typeof RecordPrivacyConsentInput
 export const PrivacyNotice = z.object({
   clinicId: Id,
   version: Version,
-  body: z.string().trim().min(1, "Write the notice, or start from Primolar's template").max(8000, "Keep the notice under 8,000 characters"),
+  body: z.string().trim().min(1, "Write the notice, or start from Primolar's template").max(8000, tooLong(8000, "the notice")),
   contactName: z.string().trim().min(1, "Name the clinic's privacy contact"),
   contactEmail: z.string().trim().toLowerCase().email("Enter the privacy contact's email, like privacy@clinic.ph"),
   savedByName: z.string(),

@@ -33,6 +33,12 @@ describe("text allowance (B12 decisions 3, 18, 19)", () => {
     expect(textAllowanceNotice({ inUse: 400, limit: 500 }, "2026-10")?.text).toContain("Buy more texts");
     expect(textAllowanceNotice({ inUse: 500, limit: 500 }, "2026-10")?.text).toContain("Buy more texts");
   });
+  it("says the limit is reached once fewer parts are left than a reminder needs (BotC-7)", () => {
+    expect(textAllowanceNotice({ inUse: 1495, limit: 1500 }, "2026-11")?.level).toBe("warning");
+    const nearly = textAllowanceNotice({ inUse: 1499, limit: 1500 }, "2026-11");
+    expect(nearly).toMatchObject({ level: "limit", text: expect.stringContaining("1499 of your 1500 texts for November 2026, too few for another reminder.") });
+    expect(nearly?.text).toContain("Automatic reminders are not sent until 1 December");
+  });
   it("adds the month's confirmed top-ups to the plan's texts (D1)", () => {
     expect([textAllowance("small", 0), textAllowance("small", 500), textAllowance("big", 100)]).toEqual([500, 1000, 5100]);
   });

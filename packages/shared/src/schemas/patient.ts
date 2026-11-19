@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { format } from "date-fns";
-import { Centavos, ClinicScoped, Id, IsoDate, IsoDateTime, isoDate } from "./common";
+import { Centavos, ClinicScoped, Id, IsoDate, IsoDateTime, TEXT_COLUMN_MAX, calendarDay, cleanName, isoDate, manilaToday, nameText, tooLong } from "./common";
+import { PHONE_MAX, isPhoneNumber } from "./tenancy";
+import { smsNumber } from "../domain/sending";
 import { PrivacyChoice, PrivacyConsent, RecordPrivacyConsentInput } from "./legal";
 
 export const Sex = z.enum(["male", "female"], { error: "Choose the child's sex" });
@@ -14,6 +15,28 @@ export const Guardian = z.object({
   isPrimary: z.boolean(),
 });
 export type Guardian = z.infer<typeof Guardian>;
+
+/**
+ * A guardian's phone as typed (issue 9): a Philippine mobile (smsNumber), or a landline by the branch phone rule. A
+ * landline stays allowed (B11: its family can't be invited, and its texts fail as "No phone number"). Inputs only: a
+ * number stored before this check is still read.
+ */
+export const GuardianPhone = z
+  .string()
+  .trim()
+  .min(1, "Enter the guardian's phone number, like 0917 123 4567")
+  .max(PHONE_MAX, tooLong(PHONE_MAX, "the phone number"))
+  .refine((p) => smsNumber(p) !== undefined || isPhoneNumber(p), "Enter a mobile number like 0917 123 4567, or a landline like (046) 471 2580");
+
+/** A guardian as typed (issue 5: at most the columns' size; issue 26: names cleaned). */
+export const GuardianInput = Guardian.extend({
+  id: Id.max(64),
+  fullName: nameText("Enter the guardian's full name", TEXT_COLUMN_MAX, "the guardian's name"),
+  relationship: Guardian.shape.relationship.max(TEXT_COLUMN_MAX, tooLong(TEXT_COLUMN_MAX, "the relationship")),
+  phone: GuardianPhone,
+  email: z.string().trim().email("Enter a valid email address, like name@example.com").max(TEXT_COLUMN_MAX, tooLong(TEXT_COLUMN_MAX, "the email address")).optional(),
+});
+export type GuardianInput = z.infer<typeof GuardianInput>;
 
 /**
  * A guardian as the API returns them. `phone` and `email` reach only callers holding patients.contact (front desk,
@@ -48,12 +71,12 @@ export type AddConsentInput = z.infer<typeof AddConsentInput>;
 export const PatientNo = z.string().regex(/^KS-\d{5}$/, "A patient number looks like KS-00042");
 
 /** A short admin label ("Anxious", "HMO"). Not clinical: clinical facts go in `alerts`, shown in the banner. */
-export const PatientTag = z.string().trim().min(1, "Type a tag").max(24, "Keep a tag under 24 characters");
+export const PatientTag = z.string().trim().min(1, "Type a tag").max(24, tooLong(24, "a tag"));
 
 export const BloodType = z.enum(["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]);
 export type BloodType = z.infer<typeof BloodType>;
 
-const detail = (max: number) => z.string().trim().max(max, `Keep this under ${max} characters`).optional();
+const detail = (max: number) => z.string().trim().max(max, tooLong(max)).optional();
 
 /** Optional background. Empty ones are never shown (see filledProfile). */
 export const PatientProfile = z.object({
@@ -71,6 +94,20 @@ export type PatientProfile = z.infer<typeof PatientProfile>;
 
 /** The longest first or last name of a child (audit #4). */
 export const PATIENT_NAME_MAX = 60;
+/** The earliest date of birth taken (issue 13): earlier is a typing mistake at a children's clinic. */
+export const EARLIEST_BIRTH_DATE = "1950-01-01";
+/**
+ * Issue 13: a photo's date taken and a habit's dates can't be before the child was born. Checked by the server against
+ * the stored birth date (the API and the mock), so the schema stays per-record.
+ */
+export const BEFORE_BIRTH = "The date can't be before the child was born";
+export const beforeBirthProblem = (date: string | undefined, birthDate: string): string | undefined =>
+  date && date < birthDate ? BEFORE_BIRTH : undefined;
+/** Free text kept as long text (a note, a list item): a sensible cap well inside the column (issue 5). */
+export const NOTE_MAX = 2000;
+export const ALERT_MAX = 200;
+/** Issue 5: a home address, typed (the column is TEXT; 66,000 characters was a 500). */
+export const ADDRESS_MAX = 500;
 
 export const Patient = ClinicScoped.extend({
   id: Id,
@@ -78,8 +115,8 @@ export const Patient = ClinicScoped.extend({
   firstName: z.string().trim().min(1, "Enter the child's first name"),
   lastName: z.string().trim().min(1, "Enter the child's last name"),
   /** What the child is called, shown next to the name: Lucas "Luke" Reyes. */
-  nickname: z.string().trim().max(30, "Keep the nickname under 30 characters").optional(),
-  birthDate: isoDate("Enter the date of birth").refine((d) => d <= format(new Date(), "yyyy-MM-dd"), "The date of birth can't be in the future"),
+  nickname: z.string().trim().max(30, tooLong(30, "the nickname")).optional(),
+  birthDate: isoDate("Enter the date of birth").refine((d) => d <= manilaToday(), "The date of birth can't be in the future"),
   sex: Sex,
   address: z.string().optional(),
   guardians: z.array(Guardian).min(1, "Add at least one guardian"),
@@ -136,6 +173,9 @@ const answersAgree = (p: MedicalAnswers, ctx: z.RefinementCtx) => {
     });
 };
 
+/** One alert as typed (the banner on every screen): at most ALERT_MAX characters. */
+const AlertText = z.string().trim().max(ALERT_MAX, tooLong(ALERT_MAX, "each alert"));
+
 // Unrefined, because zod 4 refuses .omit() on a refined object (the edit input below omits from it).
 const PatientInputBase = Patient.omit({
   id: true,
@@ -149,8 +189,28 @@ const PatientInputBase = Patient.omit({
   restrictedAt: true, // set only by closing an erasure request (B13c2b)
 }).extend({
   // Audit #4: names typed now go into invite texts, so they are capped; stored names are read as they are.
-  firstName: z.string().trim().min(1, "Enter the child's first name").max(PATIENT_NAME_MAX, `Keep the first name under ${PATIENT_NAME_MAX} characters`),
-  lastName: z.string().trim().min(1, "Enter the child's last name").max(PATIENT_NAME_MAX, `Keep the last name under ${PATIENT_NAME_MAX} characters`),
+  // Issue 26: invisible characters removed and lookalikes folded.
+  firstName: nameText("Enter the child's first name", PATIENT_NAME_MAX, "the first name"),
+  lastName: nameText("Enter the child's last name", PATIENT_NAME_MAX, "the last name"),
+  nickname: z.string().overwrite(cleanName).trim().max(30, tooLong(30, "the nickname")).optional(),
+  address: z.string().trim().max(ADDRESS_MAX, tooLong(ADDRESS_MAX, "the address")).optional(),
+  // Issue 13: not in the future (Manila) and not before EARLIEST_BIRTH_DATE, each with its own message.
+  birthDate: calendarDay("Enter the date of birth")
+    .refine((d) => d >= EARLIEST_BIRTH_DATE, `Check the year: the date of birth can't be before ${EARLIEST_BIRTH_DATE.slice(0, 4)}`)
+    .refine((d) => d <= manilaToday(), "The date of birth can't be in the future"),
+  // Issue 5: typed text capped at the columns' size, or a sensible length for long text. Stored rows are read as they are.
+  guardians: z.array(GuardianInput).min(1, "Add at least one guardian"),
+  emergencyContact: z
+    .object({
+      name: z.string().overwrite(cleanName).trim().max(TEXT_COLUMN_MAX, tooLong(TEXT_COLUMN_MAX, "the name")),
+      phone: z.string().trim().max(PHONE_MAX, tooLong(PHONE_MAX, "the phone number")),
+    })
+    .optional(),
+  alerts: z.array(AlertText),
+  dentalHistory: z.object({
+    previousClinic: z.string().max(TEXT_COLUMN_MAX, tooLong(TEXT_COLUMN_MAX, "the clinic's name")),
+    notes: z.string().max(NOTE_MAX, tooLong(NOTE_MAX, "the notes")),
+  }),
 });
 
 /** Used for create, and for edit by a caller holding patients.contact (PUT replaces the whole record except consents). */
@@ -179,7 +239,7 @@ export type RegisterPatientInput = z.infer<typeof RegisterPatientInput>;
  * a guardian it doesn't already have (a new guardian needs a phone). Anything extra in the body is stripped.
  */
 export const EditPatientWithoutContactsInput = PatientInputBase.omit({ address: true, emergencyContact: true })
-  .extend({ guardians: z.array(Guardian.omit({ phone: true, email: true })).min(1, "Add at least one guardian") })
+  .extend({ guardians: z.array(GuardianInput.omit({ phone: true, email: true })).min(1, "Add at least one guardian") })
   .refine(onePrimary, PRIMARY_RULE)
   .refine((p) => uniqueTags(p.tags), TAG_RULE)
   .superRefine(answersAgree);
@@ -192,10 +252,10 @@ export type EditPatientWithoutContactsInput = z.infer<typeof EditPatientWithoutC
  */
 export const QuickUpdatePatientInput = z
   .object({
-    phone: Guardian.shape.phone.optional(),
-    nickname: Patient.shape.nickname,
+    phone: GuardianPhone.optional(),
+    nickname: PatientInputBase.shape.nickname,
     tags: z.array(PatientTag).max(8, "Up to 8 tags"),
-    alerts: z.array(z.string().trim().min(1)),
+    alerts: z.array(AlertText.min(1)),
   })
   .refine((p) => uniqueTags(p.tags), { message: "That tag is already there", path: ["tags"] });
 export type QuickUpdatePatientInput = z.infer<typeof QuickUpdatePatientInput>;

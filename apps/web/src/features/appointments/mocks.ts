@@ -5,6 +5,7 @@ import {
   BookAppointmentInput,
   ChangeAppointmentStatusInput,
   CreateAppointmentRequestInput,
+  DEFAULT_FOLLOW_UP_RULES,
   REQUESTS_NOT_ON_PLAN,
   RESTRICTED_BOOKING_MESSAGE,
   TIER_LIMITS,
@@ -14,6 +15,7 @@ import {
   findConflict,
   isDueItemOpen,
   outsideClinicHours,
+  requestDayClosed,
   holdsRole,
   rolesCan,
   worksAt,
@@ -24,6 +26,7 @@ import { env } from "@/lib/env";
 import { activeBranch, sessionOf, usableBranchesOf } from "@/mocks/access";
 import { currentAccount, currentClinicId, db, persist } from "@/mocks/db";
 import { cancelQueued, queueBookingMessages, queueMessage } from "@/mocks/outbox";
+import { EARLY_NO_SHOW, canMarkNoShow, whenProblem } from "./booking";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 /**
@@ -88,6 +91,14 @@ export const appointmentHandlers = [
     const patient = db.patients.find((p) => p.id === parsed.data.patientId);
     if (!patient) return new HttpResponse("Patient not found", { status: 404 });
     if (patient.restrictedAt) return new HttpResponse(RESTRICTED_BOOKING_MESSAGE, { status: 409 }); // B13c2b E7
+    // A procedure and follow-up rule that exist (#28), then a start from now to the horizon (#6).
+    const { procedureCode, sourceRuleId, startsAt } = parsed.data;
+    if (procedureCode !== undefined && !db.procedures.some((p) => p.code === procedureCode)) return new HttpResponse("Unknown procedure", { status: 400 });
+    if (sourceRuleId !== undefined && !DEFAULT_FOLLOW_UP_RULES.some((r) => r.id === sourceRuleId)) {
+      return new HttpResponse("Unknown follow-up rule", { status: 400 });
+    }
+    const when = whenProblem(new Date(startsAt));
+    if (when) return new HttpResponse(when, { status: 400 });
     const branchId = activeBranch(request).id; // booked at the branch this device is on
     const appointment: Appointment = { ...parsed.data, id: crypto.randomUUID(), clinicId: currentClinicId(), branchId, status: "booked" };
     const rejected = rejectSlot(appointment);
@@ -113,6 +124,9 @@ export const appointmentHandlers = [
     if (!canReschedule(appointment.status)) {
       return new HttpResponse("Only booked or confirmed appointments can be moved", { status: 409 });
     }
+    // Only a new time is checked: a booked one whose hour has come can still change chair or dentist.
+    const when = new Date(parsed.data.startsAt).getTime() !== new Date(appointment.startsAt).getTime() && whenProblem(new Date(parsed.data.startsAt));
+    if (when) return new HttpResponse(when, { status: 400 });
     const moved = { ...appointment, ...parsed.data };
     const rejected = rejectSlot(moved);
     if (rejected) return rejected;
@@ -136,6 +150,7 @@ export const appointmentHandlers = [
     if (!canTransition(appointment.status, parsed.data.status)) {
       return new HttpResponse(`Can't go from ${appointment.status} to ${parsed.data.status}`, { status: 409 });
     }
+    if (parsed.data.status === "no_show" && !canMarkNoShow(appointment)) return new HttpResponse(EARLY_NO_SHOW, { status: 409 });
     Object.assign(appointment, parsed.data);
     if (appointment.status === "cancelled" || appointment.status === "no_show") cancelQueued(appointment.id);
     if (appointment.status === "no_show") {
@@ -168,6 +183,9 @@ export const appointmentHandlers = [
     if (parsed.data.preferredDate < format(new Date(), "yyyy-MM-dd")) {
       return new HttpResponse("Pick today or a later date", { status: 400 });
     }
+    // Issue 13, as the API: a weekday no active branch opens.
+    const closed = requestDayClosed(parsed.data.preferredDate, db.branches.filter((b) => !b.archived).map((b) => b.openingHours));
+    if (closed) return new HttpResponse(closed, { status: 400 });
     if (db.appointmentRequests.some((r) => r.patientId === patient.id && r.status === "pending")) {
       return new HttpResponse("You already have a request waiting. The clinic will call you to book it.", { status: 409 });
     }

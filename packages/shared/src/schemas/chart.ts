@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ClinicScoped, Id, IsoDateTime } from "./common";
+import { ClinicScoped, Id, IsoDateTime, tooLong } from "./common";
 import { ALL_TEETH, SURFACES, commonSurfaces } from "../domain/teeth";
 
 export const ToothCondition = z.enum([
@@ -45,6 +45,13 @@ export const ChartEntry = ClinicScoped.extend({
 });
 export type ChartEntry = z.infer<typeof ChartEntry>;
 
+/** The longest chart note typed (issue 5): a sensible length, well inside the column. */
+export const CHART_NOTE_MAX = 2000;
+// Issue 29: "Caries · OO" says nothing new, so a surface is picked once. Inputs only: stored entries are read as they are.
+const surfacesOnce = (e: { surfaces: string[] }) => new Set(e.surfaces).size === e.surfaces.length;
+const SURFACE_TWICE = { message: "A surface is picked twice", path: ["surfaces"] };
+const InputNote = z.string().max(CHART_NOTE_MAX, tooLong(CHART_NOTE_MAX, "the note")).optional();
+
 /** What the client sends. The server sets who recorded it and when, from the visit. */
 export const CreateChartEntryInput = ChartEntry.pick({
   visitId: true,
@@ -53,7 +60,10 @@ export const CreateChartEntryInput = ChartEntry.pick({
   condition: true,
   note: true,
   supersedes: true,
-}).refine((e) => e.surfaces.length === 0 || !WHOLE_TOOTH_CONDITIONS.includes(e.condition), {
+})
+  .extend({ note: InputNote })
+  .refine(surfacesOnce, SURFACE_TWICE)
+  .refine((e) => e.surfaces.length === 0 || !WHOLE_TOOTH_CONDITIONS.includes(e.condition), {
   message: "This condition applies to the whole tooth",
   path: ["surfaces"],
 });
@@ -65,7 +75,8 @@ export type CreateChartEntryInput = z.infer<typeof CreateChartEntryInput>;
  * a correction names one entry.
  */
 export const CreateChartBatchInput = ChartEntry.pick({ visitId: true, surfaces: true, condition: true, note: true })
-  .extend({ teeth: z.array(ChartEntry.shape.tooth).min(2, "Pick at least two teeth").max(32) })
+  .extend({ note: InputNote, teeth: z.array(ChartEntry.shape.tooth).min(2, "Pick at least two teeth").max(32) })
+  .refine(surfacesOnce, SURFACE_TWICE)
   .refine((e) => new Set(e.teeth).size === e.teeth.length, { message: "A tooth is picked twice", path: ["teeth"] })
   .refine((e) => e.surfaces.length === 0 || !WHOLE_TOOTH_CONDITIONS.includes(e.condition), {
     message: "This condition applies to the whole tooth",

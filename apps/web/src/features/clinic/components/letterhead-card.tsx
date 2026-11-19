@@ -20,8 +20,8 @@ import { letterheadImageUrl, useClinic, useLetterhead, useRemoveLetterheadImage,
 
 const MODES: { value: LetterheadMode; label: string }[] = [
   { value: "standard", label: "Standard" },
-  { value: "text", label: "Your own text" },
-  { value: "image", label: "Your own image" },
+  { value: "text", label: "Own text" }, // short: the three fit a phone's width (bot report #41)
+  { value: "image", label: "Own image" },
 ];
 
 /**

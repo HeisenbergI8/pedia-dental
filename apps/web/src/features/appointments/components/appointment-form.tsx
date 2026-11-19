@@ -16,7 +16,7 @@ import { useActiveBranch, useBranchChairs, useBranchStaff, useProcedures } from 
 import { usePatient } from "@/features/patients/api";
 import { useVisits } from "@/features/visits/api";
 import { useAppointments, useBookAppointment, useRescheduleAppointment } from "../api";
-import { bookLabel } from "../booking";
+import { bookLabel, whenProblem } from "../booking";
 import { DentistPicker, PatientPicker, ProcedurePicker, SelectField, SlotPicker, TimeFields } from "./booking-pickers";
 
 const FormValues = z
@@ -33,10 +33,14 @@ const FormValues = z
 type FormValues = z.infer<typeof FormValues>;
 export type BookingValues = FormValues;
 
-/** The server's rule (outsideClinicHours), checked here too so the reason shows before anything is sent. */
-const withinHours = (hours: OpeningHours | undefined) =>
+/**
+ * The server's rules (whenRefusal, outsideClinicHours), checked here too so the reason shows before anything is sent.
+ * `kept`: a moved appointment's own start, which may stay even once it has passed (the server checks only a new time).
+ */
+const withinHours = (hours: OpeningHours | undefined, kept?: string) =>
   FormValues.superRefine((v, ctx) => {
-    const why = hours && outsideClinicHours(new Date(`${v.date}T${v.time}`), v.durationMin, hours);
+    const at = new Date(`${v.date}T${v.time}`);
+    const why = (at.getTime() !== (kept ? new Date(kept).getTime() : NaN) && whenProblem(at)) || (hours && outsideClinicHours(at, v.durationMin, hours));
     if (why) ctx.addIssue({ code: "custom", message: why, path: ["time"] });
   });
 
@@ -71,7 +75,8 @@ export function AppointmentForm({ draft, onClose }: { draft: AppointmentDraft | 
   const branchStaff = useBranchStaff();
   const chairs = useBranchChairs();
   const hours = useActiveBranch()?.openingHours;
-  const resolver = useMemo(() => zodResolver(withinHours(hours)), [hours]);
+  const kept = draft?.appointment?.startsAt;
+  const resolver = useMemo(() => zodResolver(withinHours(hours, kept)), [hours, kept]);
   const procedures = useProcedures();
   const book = useBookAppointment();
   const reschedule = useRescheduleAppointment();

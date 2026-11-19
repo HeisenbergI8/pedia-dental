@@ -16,6 +16,8 @@ import {
   reportBranchFilter,
   rolesOf,
   transferProblem,
+  branchNameProblem,
+  canOwn,
   usableBranches,
   worksAt,
 } from "./tenancy";
@@ -140,12 +142,50 @@ describe("reportBranchFilter (decision #20)", () => {
 
 describe("transferProblem (decision #13)", () => {
   const staff = [
-    { id: "s_owner", fullName: "Dr. Owner", isOwner: true },
-    { id: "s_admin", fullName: "Ana Admin" },
-    { id: "s_gone", fullName: "Gil Gone", deactivatedAt: "2026-10-01T00:00:00.000Z" },
+    { id: "s_owner", fullName: "Dr. Owner", isOwner: true, role: "dentist" as const },
+    { id: "s_admin", fullName: "Ana Admin", role: "admin" as const },
+    { id: "s_gone", fullName: "Gil Gone", role: "admin" as const, deactivatedAt: "2026-10-01T00:00:00.000Z" },
+    { id: "s_desk", fullName: "Fe Desk", role: "front_desk" as const },
+    { id: "s_desk_dentist", fullName: "Dr. Desk", role: "front_desk" as const, alsoRoles: ["dentist" as const] },
   ];
-  it("allows an active staff login", () => expect(transferProblem(staff, "s_admin")).toBeUndefined());
+  it("allows an active admin login", () => expect(transferProblem(staff, "s_admin")).toBeUndefined());
+  it("refuses front desk (the Owner is an admin or a dentist, as at sign-up)", () =>
+    expect(transferProblem(staff, "s_desk")).toBe("The Owner must be an admin or a dentist. Fe Desk works at the front desk."));
+  it("allows front desk who is also a dentist", () => expect(transferProblem(staff, "s_desk_dentist")).toBeUndefined());
   it("refuses a deactivated login", () => expect(transferProblem(staff, "s_gone")).toMatch(/deactivated/));
   it("refuses the current Owner", () => expect(transferProblem(staff, "s_owner")).toMatch(/already the Owner/));
   it("refuses someone outside the account", () => expect(transferProblem(staff, "staff_elsewhere")).toMatch(/Choose/));
+});
+
+describe("canOwn", () => {
+  it("is admins and dentists, as a job or a second role, never front desk only", () => {
+    expect([canOwn({ role: "admin" }), canOwn({ role: "dentist" }), canOwn({ role: "front_desk" }), canOwn({ role: "front_desk", alsoRoles: ["admin"] })]).toEqual([
+      true, true, false, true,
+    ]);
+  });
+});
+
+describe("branchNameProblem (open branch names are unique)", () => {
+  const branches = [
+    { id: "b1", name: "Imus Branch", archived: false },
+    { id: "b2", name: "Old Site", archived: true },
+  ];
+  it("refuses an open branch's name, ignoring case and spaces", () => {
+    expect(branchNameProblem("  imus  BRANCH ", branches)).toBe("There is already an open branch called Imus Branch. Choose another name.");
+    expect(branchNameProblem("ImusBranch", branches)).toMatch(/already an open branch/);
+  });
+  it("allows a new name, an archived branch's name, and a branch keeping its own name", () => {
+    expect(branchNameProblem("Bacoor", branches)).toBeUndefined();
+    expect(branchNameProblem("Old Site", branches)).toBeUndefined();
+    expect(branchNameProblem("imus branch", branches, "b1")).toBeUndefined();
+  });
+});
+
+describe("limitMessage while a downgrade waits (bot report #19)", () => {
+  it("names the smaller plan and its date, so it agrees with a Plan page that still shows the current plan", () => {
+    expect(limitMessage("small", "branches", "2026-12-19")).toBe(
+      "Your plan moves to Starter on 19 December 2026, and Starter includes 1 branch. Contact Primolar to keep your current plan.",
+    );
+    expect(limitMessage("small", "branches")).toBe("Your Starter plan includes 1 branch. Contact Primolar to upgrade.");
+  });
 });

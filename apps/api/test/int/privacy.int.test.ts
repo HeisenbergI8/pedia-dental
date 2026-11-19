@@ -106,6 +106,8 @@ describe("consent and choices", () => {
     const id = await registerChild();
     await ok(choices(await as(FRONT_DESK), id, { reminders: false }), PatientView);
     const appt = await bookFor(id);
+    // A no-show needs the start time to have come (#7): move the booking back, to a 2020 time no other case uses.
+    await inClinic(DEMO_CLINIC_ID, () => prisma.appointment.update({ where: { id: appt.id }, data: { startsAt: new Date("2020-03-04T09:00:00+08:00") } }));
     await ok(call("post", `/appointments/${appt.id}/status`, await as(ADMIN), { status: "no_show" }), Appointment);
     const admin = await as(ADMIN);
     const visit = await ok(call("post", `/patients/${id}/visits`, admin, { dentistId: "staff_reyes" }), Visit, 201);

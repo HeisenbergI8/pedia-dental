@@ -54,6 +54,7 @@ const JOSE = kid("pt_jose", 2, { firstName: "José", lastName: "Ramos", guardian
 const LITERAL = kid("pt_literal", 3, { firstName: "Percent", lastName: "Sign", guardians: [guardian("g_lit", "Pat Sign", "09170000003")] });
 const TWIN_A = kid("pt_twin_a", 4, { firstName: "Tala", lastName: "Twin", guardians: [guardian("g_twin_a", "Mama Twin", "09175550101")] });
 const TWIN_B = kid("pt_twin_b", 5, { firstName: "Tino", lastName: "Twin", guardians: [guardian("g_twin_b", "Papa Twin", "09175550101")] });
+const NINO = kid("pt_nino", 6, { firstName: "Niño", lastName: "Peñaflor", guardians: [guardian("g_nino", "Maria Peñaflor", "+63 917 555 0310")] });
 
 async function insert(...patients: Patient[]) {
   await inClinic(DEMO_CLINIC_ID, async () => {
@@ -71,7 +72,7 @@ beforeAll(async () => {
   sessions = app.get(SessionService);
   await resetDatabase(prisma);
   await seedDatabase(prisma, new Hasher(), { DEMO_LOGINS: true }, platform);
-  await insert(BEA, JOSE, LITERAL, TWIN_A, TWIN_B);
+  await insert(BEA, JOSE, LITERAL, TWIN_A, TWIN_B, NINO);
 }, 60_000);
 afterAll(() => app.close());
 
@@ -87,12 +88,20 @@ describe("search (decision 1: the mock's matchesSearch)", () => {
     expect(ids(await directory(cookie, "Bea Zz"))).not.toContain(BEA.id);
   });
 
-  it("matches LIKE's wildcards literally and compares bytes, as the mock's includes", async () => {
+  it("matches LIKE's wildcards literally, and ignores accents on both sides, as the mock's matchesSearch", async () => {
     const cookie = await as(FRONT_DESK);
     expect(await directory(cookie, "_")).toEqual([]);
     expect(await directory(cookie, "%")).toEqual([]);
-    expect(ids(await directory(cookie, "josé"))).toEqual([JOSE.id]);
-    expect(ids(await directory(cookie, "jose"))).not.toContain(JOSE.id);
+    expect(ids(await directory(cookie, "josé"))).toContain(JOSE.id);
+    expect(ids(await directory(cookie, "jose"))).toContain(JOSE.id); // bot test #8
+  });
+
+  it("finds a row stored before accents came off, and a phone typed with +63 (bot test #8)", async () => {
+    const cookie = await as(FRONT_DESK);
+    // As an older write stored it: accents kept (the column's accent-insensitive collation still matches them).
+    await inClinic(DEMO_CLINIC_ID, () => prisma.patient.update({ where: { id: NINO.id }, data: { searchNames: "niño peñaflor  maria peñaflor" } }));
+    for (const q of ["nino", "penaflor", "Niño", "+639175550310", "09175550310", "639175550310"]) expect(ids(await directory(cookie, q)), q).toContain(NINO.id);
+    expect(ids(await directory(await as(DENTIST), "+639175550310"))).not.toContain(NINO.id); // phones: patients.contact only
   });
 
   it("a search answers at most PATIENT_SEARCH_LIMIT children, by name", async () => {
@@ -130,7 +139,7 @@ describe("the list (decision 3)", () => {
   it("pages with a total, and clamps a page past the end", async () => {
     const cookie = await as(ADMIN);
     const first = await ok(get("/patient-summaries?pageSize=10&page=1", cookie), PatientPage);
-    expect(first.total).toBe(db.patients.length + 5);
+    expect(first.total).toBe(db.patients.length + 6);
     const second = await ok(get("/patient-summaries?pageSize=10&page=2", cookie), PatientPage);
     expect(ids(first.rows).filter((id) => ids(second.rows).includes(id))).toEqual([]);
     const past = await ok(get("/patient-summaries?pageSize=10&page=99", cookie), PatientPage);

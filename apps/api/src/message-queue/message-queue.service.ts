@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { ACCOUNT_TEXT_KINDS, FAILURE, choiceDeclined, composeMessage, nextSendingTime, preVisitMessageFor, reminderSendAt, smsNumber, type Appointment, type Guardian, type Message, type MessageEvent, type MessageStatus, type Patient } from "@pedia/shared";
+import { ACCOUNT_TEXT_KINDS, CLINIC_SIDE_FAILURES, FAILURE, choiceDeclined, composeMessage, nextSendingTime, preVisitMessageFor, reminderSendAt, smsNumber, type Appointment, type Guardian, type Message, type MessageEvent, type MessageStatus, type Patient } from "@pedia/shared";
 import { ownClinicId } from "../clinic/account-lock";
 import { Clock } from "../common/clock";
 import { Prisma } from "../generated/prisma/client.ts";
@@ -139,7 +139,8 @@ export class MessageQueueService {
 
   /**
    * Each patient's last text that went out or was tried (sent/failed), the only one `hasNoContact` looks at; at one send
-   * time a sent text wins, as `hasNoContact` breaks the tie. One query: raw SQL for the window function, so it names the
+   * time a sent text wins, as `hasNoContact` breaks the tie. A failure in CLINIC_SIDE_FAILURES (the text limit, a paused
+   * clinic) was never tried, so it is left out (issue 11). One query: raw SQL for the window function, so it names the
    * clinic itself (the tenant extension doesn't see raw SQL).
    */
   async lastTried(patientIds: readonly string[], tx: Tx = this.prisma): Promise<Pick<Message, "patientId" | "status" | "sendAt">[]> {
@@ -150,6 +151,7 @@ export class MessageQueueService {
         FROM Message
         WHERE clinicId = ${ownClinicId()} AND status IN ('sent', 'failed') AND kind NOT IN (${Prisma.join([...ACCOUNT_TEXT_KINDS])})
           AND patientId IN (${Prisma.join([...patientIds])})
+          AND NOT (status = 'failed' AND failureReason IS NOT NULL AND failureReason IN (${Prisma.join([...CLINIC_SIDE_FAILURES])}))
       ) last WHERE rn = 1`;
     return rows.map((r) => ({ ...r, sendAt: r.sendAt.toISOString() }));
   }

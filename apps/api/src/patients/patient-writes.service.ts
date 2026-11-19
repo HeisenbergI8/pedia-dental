@@ -24,7 +24,7 @@ import type { Request } from "express";
 import { readUpload, tooLargeToRead } from "../storage/multipart";
 import { cleanPhoto, MAX_PHOTO_BYTES, PHOTO_TOO_LARGE } from "./patient-photo";
 import { PatientsService } from "./patients.service";
-import { consentFrom, dropsConsenter, guardianRows, mergeEdit, patientColumns, refusedTag, tidy, withStoredContacts } from "./patient.rows";
+import { consentFrom, contactChanged, contactsBefore, dropsConsenter, guardianRows, mergeEdit, patientColumns, refusedTag, tidy, withStoredContacts } from "./patient.rows";
 import { inScope, visibleTo, type Viewer } from "./patient.views";
 
 /** A body parsed after the route's own checks (404 before 400, the mock's order). */
@@ -51,13 +51,13 @@ export class PatientWritesService {
    * B11 decision 15: a guardian whose mobile this edit changed moves their portal sign-in with it (409 when another
    * parent signs in with, or was invited on, the new number: decision 14). The logins moved, for ending their sessions.
    */
-  private async followNumbers(tx: Tx, before: Patient, after: readonly Guardian[]): Promise<string[]> {
+  private async followNumbers(tx: Tx, patientId: string, before: readonly Pick<Guardian, "id" | "phone">[], after: readonly Guardian[]): Promise<string[]> {
     const moved: string[] = [];
     for (const g of after) {
-      const old = before.guardians.find((x) => x.id === g.id);
+      const old = before.find((x) => x.id === g.id);
       if (!old || smsNumber(old.phone) === smsNumber(g.phone)) continue; // the same number, written another way
       // Audit #21: the old number is told of the change (an account text), and resets wait a day.
-      const login = await this.portal.numberChanged(tx, { guardianId: g.id, fullName: g.fullName, phone: g.phone, email: g.email ?? null }, { oldPhone: old.phone, patientId: before.id });
+      const login = await this.portal.numberChanged(tx, { guardianId: g.id, fullName: g.fullName, phone: g.phone, email: g.email ?? null }, { oldPhone: old.phone, patientId });
       if (login) moved.push(login);
     }
     return moved;
@@ -110,11 +110,24 @@ export class PatientWritesService {
       if (refused) throw new BadRequestException(refused);
       if (dropsConsenter(current, input)) throw new ConflictException("A guardian who signed a consent can't be removed");
       const next = mergeEdit(current, input);
+      // These guardians on their other children, as stored before this edit (siblings share the guardian id).
+      const kin = await tx.patientGuardian.findMany({
+        where: { guardianId: { in: next.guardians.map((g) => g.id) }, patientId: { not: id } },
+        select: { guardianId: true, patientId: true, phone: true, email: true },
+      });
       const { id: _id, patientNo: _no, createdAt: _at, ...columns } = patientColumns(next);
       await tx.patient.update({ where: { id }, data: columns, select: { id: true } });
       await tx.patientGuardian.deleteMany({ where: { patientId: id } });
       await tx.patientGuardian.createMany({ data: guardianRows(id, next.guardians).map((g) => ({ ...clinicData(), ...g })) });
-      const moved = await this.followNumbers(tx, current, next.guardians);
+      // Bot test #2: one guardian, one phone and email, as PATCH. A changed contact goes to every child of theirs, so an
+      // invite or reset read from a sibling's record never goes to the old number.
+      const before = contactsBefore(current.guardians, kin);
+      const changed = next.guardians.filter((g) => contactChanged(before.get(g.id), g));
+      for (const g of changed) {
+        await tx.patientGuardian.updateMany({ where: { guardianId: g.id, patientId: { not: id } }, data: { phone: g.phone, email: g.email ?? null } });
+      }
+      await this.refreshSearch(tx, [...new Set(kin.filter((k) => changed.some((g) => g.id === k.guardianId)).map((k) => k.patientId))]);
+      const moved = await this.followNumbers(tx, id, [...before.values()], next.guardians);
       await this.audit.record("update", "Patient profile", id, tx);
       return { view: visibleTo(viewer, await this.patients.one(id, tx)), moved };
     });
@@ -140,7 +153,7 @@ export class PatientWritesService {
         await tx.patientGuardian.updateMany({ where: { guardianId: primary.id }, data: { phone: input.phone } });
         const kin = await tx.patientGuardian.findMany({ where: { guardianId: primary.id }, select: { patientId: true } });
         touched = [...new Set([id, ...kin.map((k) => k.patientId)])];
-        moved = await this.followNumbers(tx, current, [{ ...primary, phone: input.phone }]);
+        moved = await this.followNumbers(tx, id, current.guardians, [{ ...primary, phone: input.phone }]);
       }
       await tx.patient.update({ where: { id }, data: { nickname: input.nickname || null, tags: input.tags, alerts: input.alerts }, select: { id: true } });
       await this.refreshSearch(tx, touched);

@@ -3,6 +3,7 @@ import { setupServer } from "msw/node";
 import { z } from "zod";
 import {
   AccountOverview,
+  AddStaffResult,
   CONFIDENTIALITY_NOTICE,
   Branch,
   ClinicContext,
@@ -201,14 +202,16 @@ describe("operator account actions (chunk 21 done-when)", () => {
     const waiting = await api(`/operator/accounts/${id}/tier`, AccountOverview, send("PUT", { tier: "small" }));
     expect(waiting.account.tier).toBe("mid"); // billing #27: a downgrade waits for the next due date
     asStaff(ownerToken);
-    // B12 E13: while it waits, an addition is checked against the smaller plan.
-    await expect(api("/branches", Branch, send("POST", { ...branch, name: "Imus" }))).rejects.toMatchObject({ status: 409, message: limitMessage("small", "branches") });
+    // B12 E13: while it waits, an addition is checked against the smaller plan, and usage reports that limit (bot report #19).
+    const on = platform.subscriptions.find((s) => s.clinicId === id)!.downgrade!.on;
+    await expect(api("/branches", Branch, send("POST", { ...branch, name: "Imus" }))).rejects.toMatchObject({ status: 409, message: limitMessage("small", "branches", on) });
+    expect(await api("/clinic/usage", ClinicUsage)).toMatchObject({ tier: "mid", branches: { inUse: 1, limit: 1 }, staffLogins: { limit: 10 } });
     // Bring the date to today; subscriptions.test.ts walks the calendar itself.
     platform.subscriptions.find((s) => s.clinicId === id)!.downgrade!.on = today();
     expect(await api("/clinic/usage", ClinicUsage)).toMatchObject({ tier: "small", branches: { inUse: 1, limit: 1 } });
     // Logins are still under Small's 5, so adding staff still works.
     const open = (await api("/branches", z.array(Branch))).filter((b) => !b.archived);
-    await api("/staff", z.unknown(), send("POST", { fullName: "Lia Santos", email: "lia@tala.demo", role: "front_desk", branchIds: [open[0]!.id] }));
+    await api("/staff", z.unknown(), send("POST", { fullName: "Lia Santos", email: "lia@tala.demo", role: "admin", branchIds: [open[0]!.id] }));
     // And no cross-branch views on Small (decision #6).
     expect(await status(api(`/reports/finance?branch=all`, z.unknown()))).toBe(403);
   });
@@ -233,6 +236,15 @@ describe("operator account actions (chunk 21 done-when)", () => {
     const candidates = await api(`/operator/accounts/${id}/staff`, z.array(OwnerCandidate));
     const lia = candidates.find((c) => c.email === "lia@tala.demo")!;
     expect(candidates.map((c) => c.email)).not.toContain("owner@tala.demo");
+    // The Owner is an admin or a dentist, never front desk (sign-up's rule): not offered, and refused.
+    asStaff(ownerToken);
+    const open = (await api("/branches", z.array(Branch))).filter((b) => !b.archived);
+    const desk = await api("/staff", AddStaffResult, send("POST", { fullName: "Fe Desk", email: "fe@tala.demo", role: "front_desk", branchIds: [open[0]!.id] }));
+    asOperator();
+    expect((await api(`/operator/accounts/${id}/staff`, z.array(OwnerCandidate))).map((c) => c.email)).not.toContain("fe@tala.demo");
+    await expect(api(`/operator/accounts/${id}/owner`, AccountOverview, send("POST", { staffId: desk.staff.id }))).rejects.toMatchObject({
+      status: 400, message: "The Owner must be an admin or a dentist. Fe Desk works at the front desk.",
+    });
     expect(await status(api(`/operator/accounts/${id}/owner`, AccountOverview, send("POST", { staffId: "staff_villanueva" })))).toBe(400); // another account's
     platform.tenants[id]!.staff.find((s) => s.id === lia.staffId)!.deactivatedAt = new Date().toISOString();
     expect(await status(api(`/operator/accounts/${id}/owner`, AccountOverview, send("POST", { staffId: lia.staffId })))).toBe(400);

@@ -486,7 +486,7 @@ test.describe("edge cases", () => {
     await goTo(page, "Appointments");
     await reasonInput(page).fill("a".repeat(201));
     await page.getByRole("button", { name: "Send request" }).click();
-    await expect(page.getByText("Keep it under 200 characters")).toBeVisible();
+    await expect(page.getByText("Keep it to 200 characters or fewer")).toBeVisible();
     await reasonInput(page).fill("b".repeat(200));
     await page.getByRole("button", { name: "Send request" }).click();
     await expect(toast(page, "Request sent. The clinic will call you.")).toBeVisible();
@@ -498,7 +498,7 @@ test.describe("edge cases", () => {
     await reasonInput(page).fill("Check-up");
     await noteInput(page).fill("n".repeat(501));
     await page.getByRole("button", { name: "Send request" }).click();
-    await expect(page.getByText("Keep it under 500 characters")).toBeVisible();
+    await expect(page.getByText("Keep it to 500 characters or fewer")).toBeVisible();
     await expect(page.getByRole("button", { name: "Send request" })).toBeVisible();
   });
 
@@ -556,7 +556,7 @@ test.describe("edge cases", () => {
     await fileInput(page).setInputFiles({ name: "doc.pdf", mimeType: "application/pdf", buffer: PDF });
     await captionInput(page).fill("x".repeat(201));
     await page.getByRole("button", { name: "Upload" }).click();
-    await expect(page.getByText("Keep it under 200 characters")).toBeVisible();
+    await expect(page.getByText("Keep it to 200 characters or fewer")).toBeVisible();
     const long = "Mahabang_paglalarawan_".repeat(9) + "ab"; // 200 chars, no spaces to wrap on
     expect(long).toHaveLength(200);
     await captionInput(page).fill(long);

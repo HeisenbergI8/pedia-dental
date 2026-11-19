@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BranchScoped, Centavos, ClinicScoped, Id, IsoDateTime, StaffRole } from "./common";
+import { BranchScoped, Centavos, ClinicScoped, Id, IsoDateTime, StaffRole, TEXT_COLUMN_MAX, nameText, tooLong } from "./common";
 
 const StaffEmail = z.string().trim().toLowerCase().email("Enter their email address, like name@example.com");
 
@@ -22,12 +22,13 @@ export type StaffMember = z.infer<typeof StaffMember>;
  * Owner (#13) and only the operator transfers it.
  */
 export const AddStaffInput = z.object({
-  fullName: z.string().trim().min(1, "Enter their full name"),
-  email: StaffEmail,
+  // Issue 5: at most the columns' size; issue 26: invisible characters removed and lookalikes folded.
+  fullName: nameText("Enter their full name"),
+  email: StaffEmail.max(TEXT_COLUMN_MAX, tooLong(TEXT_COLUMN_MAX, "the email address")),
   role: StaffRole,
   alsoRoles: z.array(StaffRole).max(1).optional(),
   branchIds: z.array(Id).min(1, "Choose at least one branch"),
-  licenseNo: z.string().trim().optional(),
+  licenseNo: z.string().trim().max(TEXT_COLUMN_MAX, tooLong(TEXT_COLUMN_MAX, "the license number")).optional(),
 });
 export type AddStaffInput = z.infer<typeof AddStaffInput>;
 

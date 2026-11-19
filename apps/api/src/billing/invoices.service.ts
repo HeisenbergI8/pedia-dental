@@ -44,9 +44,11 @@ export class InvoicesService implements OnModuleInit {
 
   /**
    * GET /patients/:id/invoices: oldest first. Staff see voided ones too; a parent (billing.view only for their own
-   * children) doesn't (B8 question 3). Audited per child, as the mock.
+   * children) doesn't (B8 question 3). Audited per child, as the mock. A patient not in this clinic is a 404, never an
+   * empty list with an audit row naming that id (bot report #30).
    */
   async list(patientId: string, who: ClinicIdentity): Promise<Invoice[]> {
+    if (!(await this.patients.exists(patientId))) throw new NotFoundException(PATIENT_NOT_FOUND);
     const rows = await this.records.invoicesOf(patientId);
     await this.audit.record("view", "Invoices", patientId);
     return rolesCan(who.user.roles, "billing.view", "all") ? rows : liveInvoices(rows);

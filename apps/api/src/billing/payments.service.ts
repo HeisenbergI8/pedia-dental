@@ -28,8 +28,9 @@ export class PaymentsService {
     private readonly clock: Clock,
   ) {}
 
-  /** GET /patients/:id/payments: received order. Audited per child, as the mock. */
+  /** GET /patients/:id/payments: received order. Audited per child, as the mock. 404 for a patient not in this clinic, as list. */
   async history(patientId: string): Promise<Payment[]> {
+    if (!(await this.patients.exists(patientId))) throw new NotFoundException(PATIENT_NOT_FOUND);
     const rows = await this.records.paymentsOf(patientId);
     await this.audit.record("view", "Payments", patientId);
     return rows;

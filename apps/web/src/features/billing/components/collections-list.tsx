@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { usePatients } from "@/features/patients/api";
 import { PatientName } from "@/features/patients/components/patient-name";
 import { formatDate } from "@/lib/format";
+import { manilaDay, manilaTime } from "../manila-time";
 import { BranchFilter } from "@/features/dashboard/components/branch-filter";
 import { useReportBranch } from "@/features/dashboard/api";
 import { METHOD_LABEL, paymentLabel, useDailyPayments } from "../api";
@@ -22,7 +23,7 @@ import { ErrorState } from "@/components/error-state";
 
 /** Payments and refunds received on one day, with the day's total per method. */
 export function CollectionsList() {
-  const today = format(new Date(), "yyyy-MM-dd");
+  const today = manilaDay(); // the clinic's day, as the API's ?date= reads it
   const [date, setDate] = useState(today);
   const { filter, value, branch, choose } = useReportBranch();
   const { data: all = [], isLoading, error, refetch, isRefetching } = useDailyPayments(date, branch);
@@ -35,7 +36,7 @@ export function CollectionsList() {
   const name = (id: string) => <PatientName patient={patients.find((p) => p.id === id)} loading={patientsQuery.isLoading} />;
   // Phone card: patient and amount on top; time, method, reference and receipt below.
   const columns: DataColumn<Payment>[] = [
-    { key: "time", header: "Time", mobile: "meta", numeric: false, className: "whitespace-nowrap tabular-nums text-ink-muted", cell: (p) => format(parseISO(p.receivedAt), "h:mm a") },
+    { key: "time", header: "Time", mobile: "meta", numeric: false, className: "whitespace-nowrap tabular-nums text-ink-muted", cell: (p) => manilaTime(p.receivedAt) },
     {
       key: "patient",
       header: "Patient",

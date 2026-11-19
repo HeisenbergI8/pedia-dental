@@ -1,7 +1,7 @@
 "use client";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { ApplyCreditInput, appliedCredit, depositBalance, formatPeso, invoiceBalance, isActiveStaff, pesos, type Invoice, type Payment } from "@pedia/shared";
+import { ApplyCreditInput, appliedCredit, depositBalance, formatPeso, invoiceBalance, isActiveStaff, type Invoice, type Payment } from "@pedia/shared";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -9,9 +9,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSession } from "@/features/auth/access";
 import { useBranchStaff, useStaff } from "@/features/clinic/api";
-import { formatDate } from "@/lib/format";
+import { manilaDate } from "../manila-time";
 import { useIdempotencyKey } from "@/lib/idempotency";
-import { useApplyCredit } from "../api";
+import { AMOUNT_ABOVE_ZERO, typedCentavos, useApplyCredit } from "../api";
 
 /**
  * Moves deposit money onto an invoice, or back to the deposit. No money changes hands, so there is no method:
@@ -35,7 +35,8 @@ export function ApplyCreditDialog({ invoice, payments, mode, onClose }: { invoic
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    const centavos = Math.abs(pesos(Number(amount) || 0));
+    const centavos = typedCentavos(amount);
+    if (centavos === undefined) return setError(AMOUNT_ABOVE_ZERO); // a typed minus is refused, never dropped (bot report #15)
     const parsed = ApplyCreditInput.safeParse({ amount: mode === "apply" ? centavos : -centavos, receivedBy: by });
     if (!parsed.success) return setError(parsed.error.issues[0]?.message);
     if (centavos > most) return setError(`That's more than the ${formatPeso(most)} that can be ${mode === "apply" ? "applied" : "returned"}`);
@@ -62,8 +63,8 @@ export function ApplyCreditDialog({ invoice, payments, mode, onClose }: { invoic
           <DialogTitle>{mode === "apply" ? "Pay from the deposit" : "Return to the deposit"}</DialogTitle>
           <DialogDescription>
             {mode === "apply"
-              ? `Invoice of ${formatDate(invoice.issuedAt)} · balance ${formatPeso(balance)}. ${formatPeso(held)} on deposit.`
-              : `${formatPeso(applied)} of the deposit is on the invoice of ${formatDate(invoice.issuedAt)}.`}
+              ? `Invoice of ${manilaDate(invoice.issuedAt)} · balance ${formatPeso(balance)}. ${formatPeso(held)} on deposit.`
+              : `${formatPeso(applied)} of the deposit is on the invoice of ${manilaDate(invoice.issuedAt)}.`}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} noValidate className="space-y-4">

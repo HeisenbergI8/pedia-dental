@@ -1,4 +1,4 @@
-import { format, parseISO } from "date-fns";
+import { manilaDateTime } from "./manila-time";
 import { depositBalance, formatPeso, invoiceBalance, invoiceTotal, type Invoice, type PatientView, type Payment, type StaffMember } from "@pedia/shared";
 import { METHOD_LABEL } from "./api";
 
@@ -31,7 +31,7 @@ export function receiptContent({ patient, invoice, payment, payments, staff }: {
   return {
     refund,
     title: refund ? "Refund acknowledgment" : "Acknowledgment receipt",
-    subtitle: `No. ${payment.receiptNo} · ${format(parseISO(payment.receivedAt), "MMM d, yyyy h:mm a")}`,
+    subtitle: `No. ${payment.receiptNo} · ${manilaDateTime(payment.receivedAt)}`,
     rows,
     footnote: "This is an acknowledgment receipt, not an official receipt.",
   };

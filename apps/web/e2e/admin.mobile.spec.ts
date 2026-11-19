@@ -18,7 +18,7 @@ test.describe("happy paths", () => {
     await quickBar(page).getByRole("button", { name: "More" }).click();
     await page.getByRole("dialog").getByRole("link", { name: "Settings", exact: true }).click();
     await expect(page).toHaveURL(/\/settings$/);
-    await expect(page.getByText("Read-only in this prototype.", { exact: false })).toBeVisible();
+    await expect(page.getByText("Only the Owner can change the clinic's set-up.", { exact: false })).toBeVisible();
     await expect(page.getByRole("tab", { name: "Plan" })).toHaveCount(0);
   });
 

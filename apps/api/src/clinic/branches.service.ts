@@ -1,5 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import { Branch, BranchInput, archiveProblem } from "@pedia/shared";
+import { Branch, BranchInput, archiveProblem, branchNameProblem } from "@pedia/shared";
 import { z } from "zod";
 import { AppointmentRecordsService } from "../appointments/appointment-records.service";
 import { Clock } from "../common/clock";
@@ -28,24 +28,33 @@ export class BranchesService {
     private readonly subscriptions: SubscriptionRecordsService,
   ) {}
 
-  /** POST /branches: the limit first, so a full account says so whatever was typed; new branches go last. */
+  /**
+   * POST /branches: the limit first, so a full account says so whatever was typed; new branches go last. A new branch
+   * comes with "Chair 1", as a new clinic's first branch does (ClinicFactory), so it can be booked at straight away.
+   */
   create(body: unknown): Promise<Branch> {
     return runInTransaction(this.prisma, async (tx) => {
       const clinicId = await lockAccount(tx);
       await assertRoomFor(tx, clinicId, "branches", await this.subscriptions.waitingDowngrade(tx, clinicId));
       const input = new ZodValidationPipe(BranchInput).transform(body);
+      await this.assertNameFree(tx, input.name);
       const last = await tx.branch.findFirst({ orderBy: { position: "desc" }, select: { position: true } });
       const row = await tx.branch.create({ data: { ...clinicData(), ...input, archived: false, position: (last?.position ?? -1) + 1 }, select: BRANCH_COLUMNS });
+      await tx.chair.create({ data: { ...clinicData(), branchId: row.id, name: "Chair 1", position: 0 }, select: { id: true } });
       return Branch.parse(row);
     });
   }
 
   /** PUT /branches/:id: name, address, phone and hours. Archiving is its own action, never a field. */
-  async update(id: string, body: unknown): Promise<Branch> {
-    await this.find(this.prisma, id);
-    const input = new ZodValidationPipe(BranchInput).transform(body);
-    await this.prisma.branch.updateMany({ where: { id }, data: input });
-    return this.find(this.prisma, id);
+  update(id: string, body: unknown): Promise<Branch> {
+    return runInTransaction(this.prisma, async (tx) => {
+      await lockAccount(tx);
+      await this.find(tx, id);
+      const input = new ZodValidationPipe(BranchInput).transform(body);
+      await this.assertNameFree(tx, input.name, id);
+      await tx.branch.updateMany({ where: { id }, data: input });
+      return this.find(tx, id);
+    });
   }
 
   /** POST /branches/:id/archive: frees a branch slot (decision #10). Never the last open one, nor one that strands staff. */
@@ -72,9 +81,16 @@ export class BranchesService {
       const branch = await this.find(tx, id);
       if (!branch.archived) return branch;
       await assertRoomFor(tx, clinicId, "branches", await this.subscriptions.waitingDowngrade(tx, clinicId));
+      await this.assertNameFree(tx, branch.name, id);
       await tx.branch.updateMany({ where: { id }, data: { archived: false } });
       return { ...branch, archived: false };
     });
+  }
+
+  /** 409 when another open branch has this name, ignoring case and spaces (branchNameProblem). Call it after lockAccount. */
+  private async assertNameFree(tx: Tx, name: string, selfId?: string): Promise<void> {
+    const problem = branchNameProblem(name, await tx.branch.findMany({ select: { id: true, name: true, archived: true } }), selfId);
+    if (problem) throw new ConflictException(problem);
   }
 
   /** This clinic's branch (the extension scopes it), or 404 in the mock's words. Another clinic's id reads as missing. */

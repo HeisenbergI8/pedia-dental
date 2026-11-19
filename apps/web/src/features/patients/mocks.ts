@@ -225,11 +225,20 @@ export const patientHandlers = [
     const clash = input.guardians.map(portalNumberClash).find(Boolean);
     if (clash) return new HttpResponse(clash, { status: 409 });
     // patientNo and photoUpdatedAt aren't in the input, so the spread keeps the server's values.
+    // Each guardian as stored before: this child's row, or a sibling's for a guardian new to this child.
+    const kin = db.patients.filter((p) => p.id !== current.id).flatMap((p) => p.guardians);
+    const before = (id: string) => current.guardians.find((x) => x.id === id) ?? kin.find((x) => x.id === id);
     // Decision 15: a number changed for real (not just written another way) stops links texted to the old one.
     for (const g of input.guardians) {
-      const old = current.guardians.find((x) => x.id === g.id);
+      const old = before(g.id);
       if (old && smsNumber(old.phone) !== smsNumber(g.phone)) portalNumberMoved(g.id, current.id);
     }
+    // Bot test #2: one guardian, one phone and email, as PATCH. A changed contact goes to every child of theirs.
+    const changed = input.guardians.filter((g) => {
+      const old = before(g.id);
+      return old && (old.phone !== g.phone || (old.email ?? undefined) !== (g.email ?? undefined));
+    });
+    for (const g of changed) for (const k of kin) if (k.id === g.id) Object.assign(k, { phone: g.phone, email: g.email });
     const patient: Patient = { ...current, ...tidy(input) };
     db.patients[index] = patient;
     persist();

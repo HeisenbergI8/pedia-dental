@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { INestApplication } from "@nestjs/common";
 import { DEMO_PASSWORD, seedPlatform } from "@pedia/seed";
 import {
-  AddStaffResult, Branch, CONFIDENTIALITY_NOTICE, ClinicContext, ClinicUsage, DEFAULT_OPENING_HOURS, LetterheadSettings, Session, StaffMember,
+  AddStaffResult, Branch, CONFIDENTIALITY_NOTICE, Chair, ClinicContext, ClinicUsage, DEFAULT_OPENING_HOURS, LetterheadSettings, Session, StaffMember,
   featureMessage, type AddStaffInput, type BranchInput,
 } from "@pedia/shared";
 import request from "supertest";
@@ -197,7 +197,17 @@ describe("archiving frees a branch slot (Clinic, decisions #10, #22)", () => {
 
   it("adds a third branch, refuses a fourth, and allows it once one is archived", async () => {
     const owner = await as(DEMO_OWNER);
+    // Open branch names are unique, ignoring case and spaces (bot report #42).
+    const twin = await call("post", "/branches", owner, branch("  imus "));
+    expect([twin.status, twin.text]).toEqual([409, "There is already an open branch called Imus. Choose another name."]);
     third = await ok(call("post", "/branches", owner, branch("Bacoor")), Branch, 201);
+    // A new branch comes with "Chair 1", so it can be booked at straight away (bot report #3).
+    const chairs = await ok(call("get", "/chairs", owner), z.array(Chair));
+    expect(chairs.filter((c) => c.branchId === third.id).map((c) => c.name)).toEqual(["Chair 1"]);
+    const rename = await call("put", `/branches/${third.id}`, owner, branch("DASMARIÑAS"));
+    expect([rename.status, rename.text]).toEqual([409, "There is already an open branch called Dasmariñas. Choose another name."]);
+    expect((await ok(call("put", `/branches/${third.id}`, owner, branch("bacoor")), Branch)).name).toBe("bacoor"); // its own name, any case
+    await ok(call("put", `/branches/${third.id}`, owner, branch("Bacoor")), Branch);
     const fourth = await call("post", "/branches", owner, branch("Kawit"));
     expect([fourth.status, fourth.text]).toEqual([409, "Your Clinic plan includes 3 branches. Contact Primolar to upgrade."]);
     expect((await ok(call("post", `/branches/${third.id}/archive`, owner), Branch)).archived).toBe(true);

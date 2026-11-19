@@ -4,7 +4,7 @@ import { Controller, FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { PlusIcon } from "lucide-react";
 import { toast } from "sonner";
-import { AddStaffInput, StaffRole, canAddUnder, isActiveStaff, rolesOf, type AddStaffResult, type StaffMember } from "@pedia/shared";
+import { AddStaffInput, StaffRole, isActiveStaff, rolesOf, type AddStaffResult, type StaffMember } from "@pedia/shared";
 import { Loading } from "@/components/brand";
 import { DataList } from "@/components/data-list";
 import { ErrorState } from "@/components/error-state";
@@ -18,8 +18,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ROLE_LABEL, useSession } from "@/features/auth/access";
 import { formatDate } from "@/lib/format";
-import { useAddStaff, useBranches, useClinicUsage, useStaff, useStaffActive } from "../api";
-import { LimitNotice } from "./limit-notice";
+import { useAddStaff, useBranches, useClinicUsage, useStaff, useStaffActive, useSubscription } from "../api";
+import { LimitNotice, hasRoom } from "./limit-notice";
 
 const NO_SECOND_ROLE = "none"; // Radix Select can't hold ""
 
@@ -28,6 +28,7 @@ export function StaffPanel() {
   const staff = useStaff();
   const branches = useBranches();
   const usage = useClinicUsage();
+  const downgrade = useSubscription().data?.downgrade;
   const myId = useSession()?.user.staffId;
   const [adding, setAdding] = useState(false);
   const [deactivating, setDeactivating] = useState<StaffMember>();
@@ -38,7 +39,7 @@ export function StaffPanel() {
     return <ErrorState what="the staff list" onRetry={() => [staff, branches, usage].forEach((q) => void q.refetch())} />;
   }
   const { inUse, limit } = usage.data.staffLogins;
-  const room = canAddUnder(usage.data.tier, "staffLogins", inUse);
+  const room = hasRoom(usage.data.staffLogins);
   const branchName = new Map(branches.data.map((b) => [b.id, b.name]));
   // Active first, then by name: the people who can sign in are what the Owner is usually looking for.
   const rows = [...staff.data].sort((a, b) => Number(!isActiveStaff(a)) - Number(!isActiveStaff(b)) || a.fullName.localeCompare(b.fullName));
@@ -54,7 +55,7 @@ export function StaffPanel() {
       }
     >
       <div id="staff-limit">
-        <LimitNotice usage={usage.data} limit="staffLogins" />
+        <LimitNotice usage={usage.data} limit="staffLogins" downgrade={downgrade} />
       </div>
       <DataList
         bare

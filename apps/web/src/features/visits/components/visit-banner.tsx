@@ -1,6 +1,6 @@
 "use client";
 import { useRef } from "react";
-import { format, parseISO } from "date-fns";
+import { format, isToday, parseISO } from "date-fns";
 import { ChevronDownIcon, StethoscopeIcon } from "lucide-react";
 import { toast } from "sonner";
 import { holdsRole } from "@pedia/shared";
@@ -13,7 +13,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useCan, useSession } from "@/features/auth/access";
-import { useStaff } from "@/features/clinic/api";
+import { usePatientAppointments } from "@/features/appointments/api";
+import { useActiveBranch, useStaff } from "@/features/clinic/api";
 import { withoutTitle } from "@/lib/format";
 import { useCompleteVisit, useCurrentVisit, useStartVisit, useVisits } from "../api";
 
@@ -31,10 +32,14 @@ export function VisitBanner({ patientId }: { patientId: string }) {
   const me = dentists.find((d) => d.id === myId); // only a dentist can be the one-click default
   // A double-click lands both clicks before isPending disables the button: one request, not a second refused one.
   const starting = useRef(false);
+  // A child checked in today at this branch: the visit starts from that appointment, so it moves on to In chair and
+  // Done instead of staying Arrived (#14). Otherwise a walk-in.
+  const branchId = useActiveBranch()?.id;
+  const arrived = usePatientAppointments(patientId).data?.find((a) => a.status === "arrived" && a.branchId === branchId && isToday(parseISO(a.startsAt)));
   const startWith = (dentistId: string) => {
     if (starting.current) return;
     starting.current = true;
-    start.mutate({ dentistId }, { onSuccess: () => toast.success("Visit started"), onError, onSettled: () => (starting.current = false) });
+    start.mutate({ dentistId, ...(arrived && { appointmentId: arrived.id }) }, { onSuccess: () => toast.success("Visit started"), onError, onSettled: () => (starting.current = false) });
   };
 
   if (isLoading) return null;

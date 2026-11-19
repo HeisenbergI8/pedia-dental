@@ -1,7 +1,6 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import { format, parseISO } from "date-fns";
 import { ReceiptIcon } from "lucide-react";
 import { accountSummary, appliedCredit, depositBalance, formatPeso, invoiceBalance, invoiceTotal, isMoneyIn, isVoided, type Invoice, type Payment } from "@pedia/shared";
 import { EmptyState } from "@/components/empty-state";
@@ -11,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { useCan } from "@/features/auth/access";
 import { useStaff } from "@/features/clinic/api";
 import { usePlan } from "@/features/plan/api";
-import { formatDate } from "@/lib/format";
+import { manilaDate, manilaDateTime } from "../manila-time";
 import { cn } from "@/lib/utils";
 import { paymentLabel, useInvoices, usePayments } from "../api";
 import { ApplyCreditDialog } from "./apply-credit-dialog";
@@ -87,7 +86,7 @@ export function BillingTab({ patientId }: { patientId: string }) {
               key={inv.id}
               as="article"
               headingLevel={3}
-              title={`Invoice of ${formatDate(inv.issuedAt)}`}
+              title={`Invoice of ${manilaDate(inv.issuedAt)}`}
               description={balance === 0 ? "Paid in full" : `Balance ${formatPeso(balance)}`}
               action={
                 canCollect && (
@@ -158,8 +157,8 @@ function VoidedInvoice({ invoice, by }: { invoice: Invoice; by: string }) {
     <SectionCard
       as="article"
       headingLevel={3}
-      title={`Invoice of ${formatDate(invoice.issuedAt)} · Voided`}
-      description={`Voided by ${by} on ${formatDate(invoice.voided!.at)}: ${invoice.voided!.reason}`}
+      title={`Invoice of ${manilaDate(invoice.issuedAt)} · Voided`}
+      description={`Voided by ${by} on ${manilaDate(invoice.voided!.at)}: ${invoice.voided!.reason}`}
     >
       <table className="w-full text-sm text-ink-muted">
         <tbody className="divide-y divide-line">
@@ -186,12 +185,12 @@ function PaymentHistory({ rows, patientId, invoices }: { rows: Payment[]; patien
           <li key={p.id}>
             {/* What and how much first; when, reference and receipt on the line below. */}
             <div className="flex items-baseline justify-between gap-3">
-              <span>{to ? `${paymentLabel(p)} of ${formatDate(to.issuedAt)}` : paymentLabel(p)}</span>
+              <span>{to ? `${paymentLabel(p)} of ${manilaDate(to.issuedAt)}` : paymentLabel(p)}</span>
               <span className={cn("tabular-nums whitespace-nowrap", p.amount < 0 && isMoneyIn(p) && "text-danger")}>{formatPeso(p.amount)}</span>
             </div>
             <MetaLine
               items={[
-                <span key="at" className="tabular-nums">{format(parseISO(p.receivedAt), "MMM d, yyyy h:mm a")}</span>,
+                <span key="at" className="tabular-nums">{manilaDateTime(p.receivedAt)}</span>,
                 p.referenceNo && `ref ${p.referenceNo}`,
                 isMoneyIn(p) ? (
                   <Link key="receipt" href={`/patients/${patientId}/receipts/${p.id}`} className="text-brand underline">Receipt {p.receiptNo}</Link>

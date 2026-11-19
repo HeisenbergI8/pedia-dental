@@ -357,8 +357,8 @@ test.describe("failed paths", () => {
 
     await signInAsAdmin(page);
     await goTo(page, "Settings");
-    await expect(page.getByText("The clinic's procedures, staff and chairs. Read-only in this prototype.")).toBeVisible();
-    await expect(page.getByRole("tab")).toHaveCount(0);
+    await expect(page.getByText("The clinic's procedures, staff and chairs, its privacy requests and the audit log. Only the Owner can change the clinic's set-up.")).toBeVisible();
+    await expect(page.getByRole("tab")).toHaveText(["Procedures and chairs", "Privacy"]); // the admin's privacy work, never the Owner's tabs
     for (const action of [/Add staff/, /Save look/, /Add branch/, /Save new version/, /Deactivate/]) {
       await expect(page.getByRole("button", { name: action })).toHaveCount(0);
     }
@@ -573,7 +573,7 @@ test.describe("edge cases", () => {
     await expect(page).toHaveURL(/\/settings$/);
     await page.reload();
     await expect(page).toHaveURL(/\/settings$/);
-    await expect(page.getByText("Read-only in this prototype.", { exact: false })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("Only the Owner can change the clinic's set-up.", { exact: false })).toBeVisible({ timeout: 15_000 });
     await expect(accountMenu(page)).toBeVisible();
   });
 

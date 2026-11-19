@@ -17,6 +17,12 @@ describe("the search condition (decision 1)", () => {
     expect(c.sql.match(/searchPhones/g)).toHaveLength(1); // "bea" isn't a phone word
   });
 
+  it("searches without accents (rows stored with them still match: the column's accent-insensitive collation), and +63 as 0", () => {
+    const c = searchCondition(searchWords("Niño +639175550310"), true);
+    expect(c.values).toEqual(["%nino%", "%+639175550310%", "%09175550310%"]);
+    expect(c.sql).toContain("COLLATE utf8mb4_unicode_ci");
+  });
+
   it("matches everything for an empty search, and nothing for a parent with no children", () => {
     expect(searchCondition([], true).sql).toBe("TRUE");
     expect(scopeCondition(new Set()).sql).toBe("FALSE");

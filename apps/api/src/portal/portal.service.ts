@@ -29,11 +29,13 @@ import { RESET_ANSWER_MS, atLeast } from "./at-least";
 const DEMO_CLINIC_IDS: readonly string[] = [DEMO_CLINIC_ID, NGITI_ID, IPIN_ID];
 
 const GONE = "This link has expired or was already used.";
+/** ChangePasswordInput's words (BotF-6e): a reset link doesn't take back the password it replaces. */
+const SAME_PASSWORD = "Choose a new password, not the one you use now";
 /** B13c2a: an expired link is kept this long for support questions, then pruned (decisions.md E9: not a legal threshold). */
 export const KEEP_LINK_DAYS = 30;
 const parentId = (guardianId: string) => `guardian.${guardianId}`;
 const clashText = (g: Pick<FamilyGuardian, "phone">, holder: Pick<FamilyGuardian, "fullName">) =>
-  `${maskedNumber(g.phone)} already signs in to the portal as ${holder.fullName}. Each parent needs their own mobile number.`;
+  `${maskedNumber(g.phone)} is already used for the portal by ${holder.fullName}. Each parent needs their own mobile number.`;
 /** The state a link's purpose needs: an invite opens an invited account, a reset an active one. */
 const NEEDS = { invite: "invited", reset: "active" } as const satisfies Record<PortalLinkPurpose, string>;
 
@@ -274,6 +276,14 @@ export class PortalService implements OnModuleInit {
   // ── Signed out (/auth/*) ───────────────────────────────────────────────────────────────────────────────────────
 
   /** A link's row by its token, in its clinic, if it can still be used for its purpose. Read inside that clinic. */
+  /** The password a working reset link would replace; none for an invite or a link that doesn't work. */
+  private async currentHash(token: string): Promise<string | undefined> {
+    const hit = await this.usable(token);
+    if (hit?.link.purpose !== "reset") return undefined;
+    const cred = await this.prisma.credential.findFirst({ where: { clinicId: hit.link.clinicId, guardianId: hit.g.guardianId }, select: { passwordHash: true } });
+    return cred?.passwordHash ?? undefined;
+  }
+
   private async usable(token: string, tx: Tx = this.prisma): Promise<{ link: LinkRow; g: FamilyGuardian & { firstChildId: string } } | undefined> {
     const link = await tx.portalLink.findUnique({
       where: { tokenHash: hashToken(token) },
@@ -310,6 +320,9 @@ export class PortalService implements OnModuleInit {
     const clinicId = await this.clinicOf(token);
     if (!clinicId) throw new GoneException(GONE);
     const passwordHash = await this.hasher.hash(password); // slow work before the transaction (CONVENTIONS)
+    // BotF-6e: a reset asks for a new password, as ChangePasswordInput does. Compared before the transaction (slow work).
+    const current = await requestContext.within({ clinicId }, () => this.currentHash(token));
+    if (current && (await this.hasher.matches(current, password))) throw new BadRequestException(SAME_PASSWORD);
     const { accountId, purpose } = await requestContext.within({ clinicId }, () =>
       runInTransaction(this.prisma, async (tx) => {
         await lockAccount(tx);

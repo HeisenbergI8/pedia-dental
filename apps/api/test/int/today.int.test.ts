@@ -80,6 +80,9 @@ describe("Today's refusals and agreements (apps/web handlers.test.ts → today)"
     expect(await refused(desk, "?today=2026-1-1")).toEqual([400, "today must be YYYY-MM-DD"]);
     expect(await refused(desk, "?today=2026-1-1&branch=nope")).toEqual([400, "today must be YYYY-MM-DD"]);
     for (const day of ["2026-13-45", "2026-02-30"]) expect(await refused(desk, `?today=${day}`)).toEqual([400, "today must be YYYY-MM-DD"]);
+    for (const day of ["1900-01-01", "9999-12-31"]) { // bot report #24: was a 500
+      expect(await refused(desk, `?today=${day}`)).toEqual([400, expect.stringMatching(/^today must be a day from 2000-01-01 to \d{4}-12-31$/)]);
+    }
     expect(await refused(ngiti, "?branch=x")).toEqual([403, "Reports across branches come with the Clinic and Pro plans. Contact Primolar to upgrade."]);
     expect(await refused(desk, `?branch=${DASMA}`)).toEqual([403, "Reports across branches need two open branches you work at"]);
     expect(await refused(await t.as(REYES), "?branch=all")).toEqual([403, "Only the clinic's Owner sees all branches together"]);

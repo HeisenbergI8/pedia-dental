@@ -1,7 +1,7 @@
 "use client";
 import { useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { MONEY_METHODS, PaymentMethod, RecordPaymentInput, formatPeso, invoiceBalance, isActiveStaff, invoiceTotal, pesos, type Invoice, type Payment } from "@pedia/shared";
+import { MONEY_METHODS, PaymentMethod, RecordPaymentInput, formatPeso, invoiceBalance, isActiveStaff, invoiceTotal, type Invoice, type Payment } from "@pedia/shared";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useSession } from "@/features/auth/access";
 import { useBranchStaff, useStaff } from "@/features/clinic/api";
 import { useIdempotencyKey } from "@/lib/idempotency";
-import { METHOD_LABEL, useRecordDeposit, useRecordPayment } from "../api";
+import { AMOUNT_ABOVE_ZERO, METHOD_LABEL, typedCentavos, useRecordDeposit, useRecordPayment } from "../api";
 
 /** Money against an invoice, or held on the account as a deposit (refunds are negative in both). */
 export type PaymentTarget = { invoice: Invoice; refund: boolean } | { deposit: true; patientId: string; held: number; refund: boolean };
@@ -49,7 +49,9 @@ export function PaymentDialog({ target, payments, onClose }: { target: PaymentTa
   function submit(e: FormEvent) {
     e.preventDefault();
     if (sending.current) return;
-    const centavos = Math.abs(pesos(Number(amount) || 0));
+    // The form's mode gives the sign: a typed minus is refused, never dropped (bot report #15).
+    const centavos = typedCentavos(amount);
+    if (centavos === undefined) return setErrors({ amount: AMOUNT_ABOVE_ZERO });
     const parsed = RecordPaymentInput.safeParse({
       amount: refund ? -centavos : centavos,
       method,

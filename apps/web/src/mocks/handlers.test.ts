@@ -57,6 +57,7 @@ import {
   type RegisterPatientInput,
 } from "@pedia/shared";
 import { api, ApiError } from "@/lib/api-client";
+import { EARLY_NO_SHOW, PAST_START } from "@/features/appointments/booking";
 import { ACCESS_RULES } from "./access";
 import { db } from "./db";
 import { handlers } from "./handlers";
@@ -102,6 +103,13 @@ const newPatient: RegisterPatientInput = {
 /** Every POST carries a fresh Idempotency-Key (B8 E2); routes without one ignore it. `key` to send a chosen one. */
 const send = (method: string, body: unknown, key: string = crypto.randomUUID()) =>
   ({ method, body: JSON.stringify(body), headers: { [IDEMPOTENCY_HEADER]: key } });
+/**
+ * Moves a test's booking back in time, so its hour has come: a no-show needs that (#7), and a booking can't be made in
+ * the past (#6). A clock years ahead would outlive the demo session. Use a 2020 time no other case's booking uses.
+ */
+const startedAt = (id: string, startsAt: string) => {
+  db.appointments.find((a) => a.id === id)!.startsAt = startsAt;
+};
 
 describe("patients", () => {
   it("finds a patient by child name, guardian name or guardian phone", async () => {
@@ -185,6 +193,18 @@ describe("patients", () => {
     const updated = await api(`/patients/${older.id}`, Patient, send("PATCH", input));
     expect(updated).toMatchObject({ nickname: "Bebe", tags: ["Anxious"], alerts: ["Strong gag reflex"] });
     expect((await api(`/patients/${younger.id}`, Patient)).guardians[0].phone).toBe("09998887777");
+  });
+
+  it("copies a phone or email changed in the full edit (PUT) to siblings, so a resent invite goes to the new number (bot test #2)", async () => {
+    const ana = { ...newPatient.guardians[0], id: "g_put_kin", phone: "09171110601", email: "ana@example.com" };
+    const consent = { ...newPatient.privacyConsent, guardianId: ana.id };
+    const ben = await api("/patients", Patient, send("POST", { ...newPatient, firstName: "Ben", guardians: [ana], privacyConsent: consent }));
+    const bea = await api("/patients", Patient, send("POST", { ...newPatient, firstName: "Bea", guardians: [ana], privacyConsent: consent }));
+    const { privacyConsent: _c, ...editable } = newPatient;
+    await api(`/patients/${ben.id}`, Patient, send("PUT", { ...editable, firstName: "Ben", guardians: [{ ...ana, phone: "09171110611", email: "ana.new@example.com" }] }));
+    expect((await api(`/patients/${bea.id}`, Patient)).guardians[0]).toMatchObject({ phone: "09171110611", email: "ana.new@example.com" });
+    const found = await api("/patients?q=1110611", z.array(Patient));
+    expect(found.map((p) => p.id)).toEqual(expect.arrayContaining([ben.id, bea.id]));
   });
 
   it("lets a dentist quick-update everything but the phone", async () => {
@@ -593,6 +613,23 @@ describe("treatment plan", () => {
     await expect(api(`/plan-items/${r74.id}`, PlanItem, send("PATCH", { status: "planned" }))).rejects.toMatchObject({ status: 409 });
   });
 
+  it("plans a chart finding for its own child and tooth, once per procedure (#28)", async () => {
+    const patient = await api("/patients", Patient, send("POST", newPatient));
+    const visit = await api(`/patients/${patient.id}/visits`, Visit, send("POST", { dentistId: "staff_reyes" }));
+    const finding = await api(`/patients/${patient.id}/chart`, ChartEntry, send("POST", { visitId: visit.id, tooth: 74, surfaces: ["O"], condition: "caries" }));
+    const add = (patientId: string, over: object = {}) =>
+      api(`/patients/${patientId}/plan`, PlanItem, send("POST", { procedureCode: "restoration", tooth: 74, fee: 1, sourceChartEntryId: finding.id, ...over }));
+    const first = await add(patient.id);
+    await expect(add(patient.id)).rejects.toMatchObject({ status: 409, message: "Restoration for this finding is already on the plan" });
+    await add(patient.id, { procedureCode: "pulpotomy" }); // another procedure for the same finding
+    await expect(add(patient.id, { tooth: 75 })).rejects.toMatchObject({ status: 400, message: "This finding is on tooth 74" });
+    await expect(add(patient.id, { sourceChartEntryId: "entry_x" })).rejects.toMatchObject({ status: 400, message: "Unknown chart finding" });
+    const other = await api("/patients", Patient, send("POST", newPatient));
+    await expect(add(other.id)).rejects.toMatchObject({ status: 400, message: "Unknown chart finding" });
+    await api(`/plan-items/${first.id}`, PlanItem, send("PATCH", { status: "declined" }));
+    await add(patient.id); // a declined item can be planned again
+  });
+
   it("completes a follow-up item with a signed follow-up note", async () => {
     const patient = await api("/patients", Patient, send("POST", newPatient));
     const item = await api(`/patients/${patient.id}/plan`, PlanItem, send("POST", { procedureCode: "follow_up", fee: 50000 }));
@@ -649,6 +686,8 @@ describe("appointments", () => {
   it("records a no-show, needs a reason to cancel, and frees both slots", async () => {
     const patient = await api("/patients", Patient, send("POST", newPatient));
     const first = await api("/appointments", Appointment, send("POST", { ...slot, patientId: patient.id, startsAt: "2030-02-04T01:00:00.000Z" }));
+    await expect(status(first.id, { status: "no_show" })).rejects.toMatchObject({ status: 409, message: EARLY_NO_SHOW }); // #7
+    startedAt(first.id, "2020-02-04T01:00:00.000Z");
     expect((await status(first.id, { status: "no_show" })).status).toBe("no_show");
     await expect(status(first.id, { status: "arrived" })).rejects.toMatchObject({ status: 409 });
 
@@ -665,9 +704,29 @@ describe("appointments", () => {
     ).rejects.toMatchObject({ status: 409 });
   });
 
+  it("books from now to five years ahead, and checks only a new time on a move (#6)", async () => {
+    const patient = await api("/patients", Patient, send("POST", newPatient));
+    for (const startsAt of ["2020-01-07T01:00:00.000Z", "9999-01-04T01:00:00.000Z"]) {
+      await expect(api("/appointments", Appointment, send("POST", { ...slot, patientId: patient.id, startsAt }))).rejects.toMatchObject({ status: 400 });
+    }
+    const booked = await api("/appointments", Appointment, send("POST", { ...slot, patientId: patient.id, startsAt: "2030-03-05T01:00:00.000Z" }));
+    await expect(api(`/appointments/${booked.id}`, Appointment, send("PUT", { ...slot, startsAt: "2020-01-07T01:00:00.000Z" }))).rejects.toMatchObject({ status: 400, message: PAST_START });
+    // Its hour has come: a new chair at the same time is still a change the desk can make.
+    startedAt(booked.id, "2020-03-05T01:00:00.000Z");
+    expect((await api(`/appointments/${booked.id}`, Appointment, send("PUT", { ...slot, chairId: "chair_2", startsAt: "2020-03-05T01:00:00.000Z" }))).chairId).toBe("chair_2");
+  });
+
+  it("needs a known procedure and follow-up rule (#28)", async () => {
+    const patient = await api("/patients", Patient, send("POST", newPatient));
+    const at = { ...slot, patientId: patient.id, startsAt: "2030-03-06T01:00:00.000Z" };
+    await expect(api("/appointments", Appointment, send("POST", { ...at, procedureCode: "nope" }))).rejects.toMatchObject({ status: 400, message: "Unknown procedure" });
+    await expect(api("/appointments", Appointment, send("POST", { ...at, sourceRuleId: "nope" }))).rejects.toMatchObject({ status: 400, message: "Unknown follow-up rule" });
+    await api("/appointments", Appointment, send("POST", { ...at, procedureCode: "extraction", sourceRuleId: "extraction" }));
+  });
+
   it("seeds a schedule with no double-bookings", async () => {
     const all = await api("/appointments", z.array(Appointment));
-    const seeded = all.filter((a) => !a.startsAt.startsWith("2030"));
+    const seeded = all.filter((a) => !/^20[23]0/.test(a.startsAt)); // not the cases' own (2030, or moved back to 2020)
     expect(seeded.length).toBeGreaterThan(50);
     expect(seeded.filter((a) => findConflict(a, seeded))).toEqual([]);
   });
@@ -819,6 +878,7 @@ describe("parent messages", () => {
     expect(afterMove.map((m) => m.status).sort()).toEqual(["cancelled", "queued"]);
     expect(afterMove.find((m) => m.status === "queued")?.sendAt).toBe(reminderSendAt(moved.startsAt));
 
+    startedAt(appt.id, "2020-04-08T01:00:00.000Z");
     await api(`/appointments/${appt.id}/status`, Appointment, send("POST", { status: "no_show" }));
     expect((await pre()).every((m) => m.status === "cancelled")).toBe(true);
   });
@@ -830,6 +890,7 @@ describe("parent messages", () => {
     let reminders = byKind(await messagesFor(patient.id), "appointment_reminder");
     expect(reminders.map((m) => m.status).sort()).toEqual(["cancelled", "queued"]);
 
+    startedAt(appt.id, "2020-04-02T03:00:00.000Z");
     await api(`/appointments/${appt.id}/status`, Appointment, send("POST", { status: "no_show" }));
     const rows = await messagesFor(patient.id);
     reminders = byKind(rows, "appointment_reminder");
@@ -900,6 +961,17 @@ describe("parent messages", () => {
     for (const m of await messagesFor(patient.id)) expect(m).toMatchObject({ status: "failed", failureReason: "No phone number" });
   });
 
+  it("pages the log newest first, a limit at a time after the last one shown (BotC-9)", async () => {
+    const all = await api("/messages", z.array(Message));
+    const first = await api("/messages?limit=3", z.array(Message));
+    expect(first).toEqual(all.slice(0, 3));
+    expect(await api(`/messages?limit=3&before=${first[2]!.id}`, z.array(Message))).toEqual(all.slice(3, 6));
+    const failed = (await api("/messages?status=failed", z.array(Message))).slice(0, 2);
+    expect(await api("/messages?status=failed&limit=2", z.array(Message))).toEqual(failed);
+    expect(await api("/messages?limit=3&before=msg_unknown", z.array(Message))).toEqual([]);
+    expect(await api("/messages?limit=0", z.array(Message))).toHaveLength(all.length); // a bad limit: the whole list
+  });
+
   it("seeds a log whose messages are all filled in", async () => {
     const rows = await api("/messages", z.array(Message));
     const seeded = rows.filter((m) => m.id.startsWith("msg_"));
@@ -956,6 +1028,13 @@ describe("today at a glance", () => {
     if (format(new Date(), "MM-dd") === "07-02") return;
     await expect(api(`/patients/${patient.id}/birthday-greeting`, Message, { method: "POST" })).rejects.toMatchObject({ status: 409 });
   });
+
+  it("never greets a child born this year, by hand or by the daily job (BotC-10)", async () => {
+    const baby = await api("/patients", Patient, send("POST", { ...newPatient, birthDate: format(new Date(), "yyyy-MM-dd") }));
+    await expect(api(`/patients/${baby.id}/birthday-greeting`, Message, { method: "POST" })).rejects.toMatchObject({ status: 409 });
+    const log = await api(`/messages?patientId=${baby.id}`, z.array(Message)); // runs the daily job
+    expect(log.filter((m) => m.kind === "birthday")).toEqual([]);
+  });
 });
 
 describe("financial dashboard", () => {
@@ -964,6 +1043,15 @@ describe("financial dashboard", () => {
   const day = (iso: string) => format(new Date(iso), "yyyy-MM-dd");
   const total = (rows: { amount: number }[]) => rows.reduce((s, r) => s + r.amount, 0);
   const report = () => api(`/reports/finance?today=${today}`, FinanceSummary);
+
+  it("refuses far-off days with the range they must be in (bot report #24)", async () => {
+    for (const path of ["/reports/finance", "/reports/today"]) {
+      for (const day of ["0001-01-01", "1900-01-01", "9999-12-31"]) {
+        await expect(api(`${path}?today=${day}`, z.unknown())).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/^today must be a day from 2000-01-01 to \d{4}-12-31$/) });
+      }
+      await expect(api(`${path}?today=2026-02-30`, z.unknown())).rejects.toMatchObject({ status: 400, message: "today must be YYYY-MM-DD" });
+    }
+  });
 
   it("totals match the sum of seeded payments", async () => {
     expect(db.payments.length).toBeGreaterThan(0);
@@ -991,7 +1079,9 @@ describe("financial dashboard", () => {
     const imus = db.branches.find((b) => b.id === "branch_imus")!.openingHours;
     while (isClosedWeekday(day, imus)) day = subDays(day, 1);
     const startsAt = setMinutes(setHours(day, 17), 30).toISOString();
-    const appt = await api("/appointments", Appointment, send("POST", { patientId: patient.id, dentistId: "staff_reyes", chairId: "chair_3", startsAt, durationMin: 15, reason: "Fluoride application" }));
+    // A booking can't be made in the past (#6): book a free future slot, then move it back to that day.
+    const appt = await api("/appointments", Appointment, send("POST", { patientId: patient.id, dentistId: "staff_reyes", chairId: "chair_3", startsAt: "2030-05-06T09:30:00.000Z", durationMin: 15, reason: "Fluoride application" }));
+    startedAt(appt.id, startsAt);
     await api(`/appointments/${appt.id}/status`, Appointment, send("POST", { status: "confirmed" }));
     await api(`/appointments/${appt.id}/status`, Appointment, send("POST", { status: "arrived" }));
     await api(`/patients/${patient.id}/plan`, PlanItem, send("POST", { procedureCode: "fluoride", fee: pesos(800) }));
@@ -1243,6 +1333,27 @@ describe("billing", () => {
     expect(n(b.receiptNo)).toBe(n(a.receiptNo) + 1);
     const rows = (await api(`/patients/${patient.id}/payments`, z.array(Payment))).filter((p) => p.receiptNo === a.receiptNo);
     expect(rows.length).toBeGreaterThan(1); // the bill side and the deposit side share it
+  });
+
+  it("answers 404 for another clinic's patient's bills and payments, and audits nothing", async () => {
+    for (const path of ["/patients/nope/invoices", "/patients/nope/payments"]) {
+      await expect(api(path, z.array(z.unknown()))).rejects.toMatchObject({ status: 404, message: "Patient not found" });
+    }
+  });
+
+  it("refuses a bill whose total is over ₱10,000,000 (bot report #23)", async () => {
+    const patient = await api("/patients", Patient, send("POST", newPatient));
+    for (const tooth of [51, 74]) await api(`/patients/${patient.id}/plan`, PlanItem, send("POST", { procedureCode: "restoration", tooth, fee: pesos(6_000_000) }));
+    const visit = await api(`/patients/${patient.id}/visits`, Visit, send("POST", { dentistId: "staff_reyes" }));
+    const note = await api(`/patients/${patient.id}/notes`, ClinicalNote, send("POST", { visitId: visit.id, templateId: "tpl_restoration", values: { teeth: [51, 74], material: "Composite" }, behavior: [] }));
+    await api(`/notes/${note.id}/sign`, ClinicalNote, { method: "POST" });
+    const ids = (await api(`/patients/${patient.id}/plan`, z.array(PlanItem))).map((i) => i.id);
+    await expect(api(`/patients/${patient.id}/invoices`, Invoice, send("POST", { planItemIds: ids }))).rejects.toMatchObject({
+      status: 400,
+      message: "A bill can total at most ₱10,000,000.00. Bill these treatments on two bills.",
+    });
+    expect(await api(`/patients/${patient.id}/invoices`, z.array(Invoice))).toEqual([]);
+    await api(`/patients/${patient.id}/invoices`, Invoice, send("POST", { planItemIds: ids, discount: pesos(2_000_000) })); // within the cap after the discount
   });
 });
 
@@ -1552,12 +1663,17 @@ describe("parent portal", () => {
 
   it("takes one appointment request per child and puts it in the front desk's inbox", async () => {
     const { family, other } = await signInAsFamily();
-    const ask = (patientId: string) =>
+    // Issue 13: every seeded branch is closed on Sundays, so the request is for a day that isn't one.
+    const inThree = addDays(new Date(), 3);
+    const preferred = inThree.getDay() === 0 ? addDays(inThree, 1) : inThree;
+    const ask = (patientId: string, on = preferred) =>
       api(`/patients/${patientId}/appointment-requests`, AppointmentRequest, send("POST", {
-        preferredDate: format(addDays(new Date(), 3), "yyyy-MM-dd"),
+        preferredDate: format(on, "yyyy-MM-dd"),
         timeOfDay: "morning",
         reason: "Check-up",
       }));
+    const sunday = addDays(new Date(), 7 - new Date().getDay());
+    await expect(ask("patient_sibling", sunday)).rejects.toMatchObject({ status: 400, message: "The clinic is closed on Sundays. Pick another day." });
     const request = await ask("patient_sibling");
     expect(request).toMatchObject({ status: "pending", guardianId: family.id.replace(/^guardian\./, "") });
     await expect(ask("patient_sibling")).rejects.toMatchObject({ status: 409 });
@@ -1652,6 +1768,29 @@ describe("parent portal", () => {
     expect((await api("/patients/patient_sibling/photos", z.array(ClinicalPhoto))).map((p) => p.id)).not.toContain(theirs.id);
     expect(db.storedFiles.some((f) => f.key === theirs.id)).toBe(false);
     await expect(api(`/photos/${theirs.id}`, z.object({}), { method: "DELETE" })).rejects.toMatchObject({ status: 404 });
+    signIn(ADMIN);
+  });
+
+  it("keeps a removed upload in the month's count of files sent (BotF-8)", async () => {
+    const send = () => {
+      const body = new FormData();
+      body.set("file", new Blob(["fake-jpeg"], { type: "image/jpeg" }));
+      body.set("meta", JSON.stringify({ type: "extraoral", takenOn: "2026-10-02", caption: "" }));
+      return api(`/patients/${child.id}/photos`, ClinicalPhoto, { method: "POST", body });
+    };
+    // The family's other child (nothing removed for them yet), with earlier uploads moved to last year: an exact count.
+    const child = (await signInAsFamily()).mine.find((p) => p.id !== "patient_sibling")!;
+    for (const p of db.photos) if (p.patientId === child.id && p.uploadedBy === "parent") p.createdAt = "2025-01-15T02:00:00.000Z";
+    const firstName = child.firstName;
+    const template = { ...db.photos.find((p) => p.uploadedBy === "parent")!, patientId: child.id };
+    const now = new Date().toISOString();
+    db.photos.push(...Array.from({ length: PARENT_UPLOAD_LIMITS.perMonth - 1 }, (_, i) => ({ ...template, id: `sent_${i}`, createdAt: now })));
+    const last = await send(); // the 20th
+    signIn("demo.clinic_demo.staff_reyes"); // a dentist removes it
+    expect(await api(`/photos/${last.id}`, z.object({}), { method: "DELETE" })).toEqual({});
+    await signInAsFamily();
+    await expect(send()).rejects.toMatchObject({ status: 409, message: parentUploadRefusal(firstName, { thisMonth: PARENT_UPLOAD_LIMITS.perMonth, storedBytes: 0 }, 0) });
+    db.photos = db.photos.filter((p) => !p.id.startsWith("sent_"));
     signIn(ADMIN);
   });
 

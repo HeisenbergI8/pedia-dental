@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BranchScoped, Centavos, Id, IsoDateTime } from "./common";
+import { BranchScoped, Centavos, CentavosAmount, Id, IsoDateTime, tooLong } from "./common";
 
 /** `account_credit`: a transfer from the patient's deposit to an invoice. Set by the server only, never a way to pay. */
 export const PaymentMethod = z.enum(["cash", "gcash", "maya", "card", "bank_transfer", "account_credit"]);
@@ -48,9 +48,9 @@ export const Payment = BranchScoped.extend({
   appliedTo: Id.optional(),
   amount: Centavos,
   method: PaymentMethod,
-  referenceNo: z.string().max(100, "Keep the reference number under 100 characters").optional(),
+  referenceNo: z.string().max(100, tooLong(100, "the reference number")).optional(),
   /** Why, on a refund. */
-  note: z.string().max(500, "Keep the reason under 500 characters").optional(),
+  note: z.string().max(500, tooLong(500, "the reason")).optional(),
   /** Acknowledgment receipt number, AR-000001 (not a BIR official receipt, deferred). Credit applications share a CR-000001. */
   receiptNo: z.string(),
   receivedBy: Id,
@@ -61,12 +61,13 @@ export type Payment = z.infer<typeof Payment>;
 /** An invoice is built from done, unbilled plan items; the server copies names and fees onto the lines. */
 export const CreateInvoiceInput = z.object({
   planItemIds: z.array(Id).min(1, "Pick at least one completed treatment"),
-  discount: Centavos.nonnegative("A discount can't be negative").default(0),
+  discount: CentavosAmount.nonnegative("A discount can't be negative").default(0),
 });
 export type CreateInvoiceInput = z.input<typeof CreateInvoiceInput>;
 
 /** A positive amount is a payment, a negative one a refund. */
 export const RecordPaymentInput = Payment.pick({ amount: true, method: true, referenceNo: true, note: true, receivedBy: true })
+  .extend({ amount: CentavosAmount }) // issue 23: at most ₱10,000,000 either way
   .refine((p) => p.amount !== 0, { message: "Enter an amount", path: ["amount"] })
   .refine((p) => p.method !== "account_credit", { message: "Pick how the money was paid", path: ["method"] })
   .refine((p) => p.method === "cash" || !!p.referenceNo?.trim(), { message: "Enter the reference number", path: ["referenceNo"] })
@@ -75,7 +76,7 @@ export type RecordPaymentInput = z.infer<typeof RecordPaymentInput>;
 
 /** Voiding needs a reason (decision 2); only a bill with nothing ever paid or applied on it can be voided. */
 export const VoidInvoiceInput = z.object({
-  reason: z.string().trim().min(1, "Give a reason for voiding this bill").max(500, "Keep the reason under 500 characters"),
+  reason: z.string().trim().min(1, "Give a reason for voiding this bill").max(500, tooLong(500, "the reason")),
 });
 export type VoidInvoiceInput = z.infer<typeof VoidInvoiceInput>;
 
@@ -94,7 +95,7 @@ export const receiptNo = (series: ReceiptSeries, n: number) => `${series}-${Stri
 
 /** Move deposit money onto an invoice (+) or back to the deposit (−). */
 export const ApplyCreditInput = z.object({
-  amount: Centavos.refine((a) => a !== 0, "Enter an amount"),
+  amount: CentavosAmount.refine((a) => a !== 0, "Enter an amount"),
   receivedBy: Id,
 });
 export type ApplyCreditInput = z.infer<typeof ApplyCreditInput>;

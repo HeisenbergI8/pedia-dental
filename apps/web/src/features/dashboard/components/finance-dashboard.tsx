@@ -14,7 +14,7 @@ import { PatientName } from "@/features/patients/components/patient-name";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useFinanceSummary } from "../api";
-import { RankBars, TimeBars } from "./charts";
+import { RankBars, TimeBars, glancePeso } from "./charts";
 import { Loading } from "@/components/brand";
 import { ErrorState } from "@/components/error-state";
 import { DataList } from "@/components/data-list";
@@ -23,12 +23,17 @@ const PERIODS = { day: "Last 14 days", week: "Last 8 weeks", month: "Last 6 mont
 type Period = keyof typeof PERIODS;
 const tick: Record<Period, string> = { day: "MMM d", week: "'Wk of' MMM d", month: "MMM yyyy" };
 
-function Tile({ label, value, hint, className }: { label: string; value: string; hint?: string; className?: string }) {
+function Tile({ label, centavos, hint, className }: { label: string; centavos: number; hint?: string; className?: string }) {
+  const full = formatPeso(centavos);
+  const shown = glancePeso(centavos);
   return (
     <div className={cn("min-w-0 bg-surface p-4 sm:p-5", className)}>
       <dt className="text-sm text-ink-muted">{label}</dt>
-      {/* Two tiles share a 360px row: the figure steps down a size there so ₱34,550.00 fits. */}
-      <dd className="mt-1 font-title text-xl font-semibold tracking-tight break-words tabular-nums sm:text-2xl">{value}</dd>
+      {/* Two tiles share a 360px row: the figure steps down a size there so ₱34,550.00 fits, never breaking inside a
+          number; from ₱1M it is compact (₱21.5M) with the full amount for screen readers and on hover. */}
+      <dd className="mt-1 font-title text-xl font-semibold tracking-tight whitespace-nowrap tabular-nums sm:text-2xl" title={shown === full ? undefined : full}>
+        {shown === full ? full : <><span aria-hidden>{shown}</span><span className="sr-only">{full}</span></>}
+      </dd>
       {hint && <dd className="text-xs text-ink-muted">{hint}</dd>}
     </div>
   );
@@ -70,12 +75,12 @@ export function FinanceDashboard({ today, branch }: { today: string; branch?: st
       {header}
       {/* One strip: a gap-px grid over a line background draws the dividers at every column count. */}
       <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line bg-line shadow-card lg:grid-cols-5">
-        <Tile label="Collected today" value={formatPeso(s.collected.today)} />
-        <Tile label="This week" value={formatPeso(s.collected.week)} hint="Since Monday" />
-        <Tile label="This month" value={formatPeso(s.collected.month)} hint={`Since ${format(parseISO(today), "MMM 1")}`} />
-        <Tile label="Outstanding" value={formatPeso(s.outstandingTotal)} hint={`${owing} owe${s.outstanding.length === 1 ? "s" : ""} a balance`} />
+        <Tile label="Collected today" centavos={s.collected.today} />
+        <Tile label="This week" centavos={s.collected.week} hint="Since Monday" />
+        <Tile label="This month" centavos={s.collected.month} hint={`Since ${format(parseISO(today), "MMM 1")}`} />
+        <Tile label="Outstanding" centavos={s.outstandingTotal} hint={`${owing} owe${s.outstanding.length === 1 ? "s" : ""} a balance`} />
         {/* Owed to parents until applied, so shown beside Outstanding, never netted against it. Spans the phone row. */}
-        <Tile label="Deposits held" value={formatPeso(s.depositsHeld)} hint="Paid in advance, not yet applied" className="col-span-2 lg:col-span-1" />
+        <Tile label="Deposits held" centavos={s.depositsHeld} hint="Paid in advance, not yet applied" className="col-span-2 lg:col-span-1" />
       </dl>
 
       <SectionCard

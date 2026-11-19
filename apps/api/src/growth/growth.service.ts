@@ -1,5 +1,5 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import { SaveGrowthInput, type GrowthRecord } from "@pedia/shared";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { SaveGrowthInput, beforeBirthProblem, type GrowthRecord } from "@pedia/shared";
 import { AuditService } from "../audit/audit.service";
 import { Clock } from "../common/clock";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
@@ -37,6 +37,11 @@ export class GrowthService {
       const visit = await this.visits.one(tx, visitId);
       if (visit?.status !== "in_progress") throw new ConflictException("Growth is recorded during a visit in progress");
       const input = new ZodValidationPipe(SaveGrowthInput).transform(body);
+      // Issue 13: no habit date before the child was born.
+      const born = await tx.patient.findFirst({ where: { id: patientId }, select: { birthDate: true } });
+      const birthDate = born?.birthDate.toISOString().slice(0, 10) ?? "";
+      const beforeBirth = input.habits.flatMap((h) => [h.startedOn, h.stoppedOn]).map((d) => beforeBirthProblem(d, birthDate)).find(Boolean);
+      if (beforeBirth) throw new BadRequestException(beforeBirth);
       // A replace keeps the id and drops an unsent `speech`, as the mock's whole-record swap (growth/mocks.ts:28–36).
       const data = { habits: input.habits as Prisma.InputJsonArray, speech: input.speech ?? null, recordedAt: this.clock.now() };
       const existing = await tx.growthRecord.findFirst({ where: { visitId }, select: { id: true } });

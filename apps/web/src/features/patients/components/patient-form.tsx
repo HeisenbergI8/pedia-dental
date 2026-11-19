@@ -376,12 +376,18 @@ export function PatientForm({
                     if (s && v.trim().toLowerCase().endsWith(`${s} ${s}`.toLowerCase())) setValue("guardians.0.fullName", v.trim().slice(0, -(s.length + 1)));
                   },
                 })}
+                onPointerDown={(e) => {
+                  // A click would place the caret after focus (at the click, often the end): take the focus ourselves so
+                  // onFocus's caret stays, and the first key typed lands before the surname.
+                  if (!onlySurname || document.activeElement === e.currentTarget) return;
+                  e.preventDefault();
+                  e.currentTarget.focus();
+                }}
                 onFocus={(e) => {
-                  // Put the caret before the copied surname, so typing the first name reads "Maria Dela Rosa".
+                  // Put the caret before the copied surname at once, so typing the first name reads "Maria Dela Rosa".
                   if (!onlySurname) return;
-                  const input = e.currentTarget;
                   setValue("guardians.0.fullName", ` ${lastName.trim()}`);
-                  requestAnimationFrame(() => input.setSelectionRange(0, 0));
+                  e.currentTarget.setSelectionRange(0, 0);
                 }}
               />
             </FormField>

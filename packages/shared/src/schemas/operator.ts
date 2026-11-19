@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Id, Role, isoDate } from "./common";
+import { Id, Role, isoDate, pastIsoDate } from "./common";
 import { AgreementRecord } from "./legal";
 import { DesignStatus, RecordUpfrontPaymentInput, SignupInput } from "./signup";
 import { Allowance, ClinicAccount, HeadingFont, HexColor, Tier } from "./tenancy";
@@ -62,7 +62,7 @@ export type AccountOverview = z.infer<typeof AccountOverview>;
 export const CreateAccountInput = SignupInput.extend({
   payment: RecordUpfrontPaymentInput,
   signedOnFile: z.literal(true, { error: "Tick this once you hold the agreement the Owner signed" }),
-  signedOn: isoDate("Enter the date the agreement was signed"),
+  signedOn: pastIsoDate("Enter the date the agreement was signed", "The date signed can't be in the future"), // issue 13
 });
 export type CreateAccountInput = z.infer<typeof CreateAccountInput>;
 

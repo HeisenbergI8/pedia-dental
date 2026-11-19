@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Centavos, ClinicScoped, Id, IsoDateTime } from "./common";
+import { Centavos, CentavosAmount, ClinicScoped, Id, IsoDateTime } from "./common";
 import { isValidTooth } from "../domain/teeth";
 
 export const PlanItemStatus = z.enum(["planned", "in_progress", "done", "declined"]);
@@ -24,7 +24,10 @@ export const PlanItem = ClinicScoped.extend({
 });
 export type PlanItem = z.infer<typeof PlanItem>;
 
-export const AddPlanItemInput = PlanItem.pick({ procedureCode: true, tooth: true, fee: true, sourceChartEntryId: true });
+// Issue 23: a fee typed is at most ₱10,000,000; stored items are read as they are.
+export const AddPlanItemInput = PlanItem.pick({ procedureCode: true, tooth: true, fee: true, sourceChartEntryId: true }).extend({
+  fee: CentavosAmount.nonnegative(),
+});
 export type AddPlanItemInput = z.infer<typeof AddPlanItemInput>;
 
 /** Staff can start, decline or re-plan an item; `done` comes only from a signed note. */

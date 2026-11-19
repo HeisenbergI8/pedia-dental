@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_BRAND_COLOR, DEFAULT_OPENING_HOURS, DocumentType, deriveBrandPalette, formatPeso, pesos, type GenerateDocumentInput } from "@pedia/shared";
 import { formatDate } from "@/lib/format";
-import { buildDocument, type DocSources } from "./content";
+import { buildDocument, pdfSafe, type DocSources } from "./content";
 import { initialDraft } from "./components/documents-tab";
 
 const at = "2026-09-30T02:00:00.000Z";
@@ -126,5 +126,19 @@ describe("initialDraft", () => {
     const item = (id: string, procedureCode: string) => ({ ...src.plan[0], id, procedureCode, status: "planned" as const });
     expect(initialDraft("clearance", { ...src, plan: [item("i1", "extraction")] }).details).toEqual({ procedure: "extraction" });
     expect(initialDraft("clearance", { ...src, plan: [item("i1", "extraction"), item("i2", "pulpotomy")] }).details).toEqual({});
+  });
+});
+
+describe("pdfSafe (BotD-7)", () => {
+  it("removes what the PDF font can't draw, with the spaces before it, and keeps the rest", () => {
+    expect(pdfSafe("Reyes 😀, Ana")).toBe("Reyes, Ana");
+    expect(pdfSafe("Take 5 mL 👍🏽 after meals ✓")).toBe("Take 5 mL after meals");
+    expect(pdfSafe("Family: 👨‍👩‍👧 Dela Cruz ❤️")).toBe("Family: Dela Cruz");
+    expect(pdfSafe("Dasmariñas · ₱1,500.00 — “©” Ñ")).toBe("Dasmariñas · ₱1,500.00 — “©” Ñ");
+  });
+  it("cleans every string of a document and leaves its shape", () => {
+    const doc = buildDocument({ type: "dental_certificate", sourceId: "v1", issuedBy: "staff_reyes" }, src);
+    const withEmoji = { ...doc, title: `${doc.title} 🎉`, blocks: [{ kind: "text" as const, paragraphs: ["Brave 🦷 patient"] }] };
+    expect(pdfSafe(withEmoji)).toEqual({ ...doc, blocks: [{ kind: "text", paragraphs: ["Brave patient"] }] });
   });
 });

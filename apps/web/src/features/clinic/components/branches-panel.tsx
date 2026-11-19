@@ -4,7 +4,7 @@ import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { PlusIcon } from "lucide-react";
 import { toast } from "sonner";
-import { BranchInput, DEFAULT_OPENING_HOURS, canAddUnder, type Branch, type OpeningHours } from "@pedia/shared";
+import { BranchInput, DEFAULT_OPENING_HOURS, type Branch, type OpeningHours } from "@pedia/shared";
 import { Loading } from "@/components/brand";
 import { DataList } from "@/components/data-list";
 import { ErrorState } from "@/components/error-state";
@@ -14,13 +14,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { useBranchArchive, useBranches, useClinicUsage, useSaveBranch } from "../api";
-import { LimitNotice } from "./limit-notice";
+import { useBranchArchive, useBranches, useClinicUsage, useSaveBranch, useSubscription } from "../api";
+import { LimitNotice, hasRoom } from "./limit-notice";
 import { OpeningHoursFields, WEEKDAYS } from "./opening-hours-fields";
 
 const clock = (min: number) => new Date(2000, 0, 1, 0, min).toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" });
-const hoursLine = (h: OpeningHours) =>
-  `${clock(h.opensAt)}–${clock(h.closesAt)}${h.closedWeekdays.length ? `, closed ${h.closedWeekdays.map((d) => WEEKDAYS[d]).join(", ")}` : ""}`;
+/** "8:00 AM–6:00 PM, closed Sun"; midnight to midnight is "Open 24 hours", never "12:00 AM–12:00 AM". */
+export const hoursLine = (h: OpeningHours) =>
+  `${h.opensAt === 0 && h.closesAt >= 24 * 60 ? "Open 24 hours" : `${clock(h.opensAt)}–${clock(h.closesAt)}`}${h.closedWeekdays.length ? `, closed ${h.closedWeekdays.map((d) => WEEKDAYS[d]).join(", ")}` : ""}`;
 
 type Editing = { branch?: Branch } | undefined;
 
@@ -28,6 +29,7 @@ type Editing = { branch?: Branch } | undefined;
 export function BranchesPanel() {
   const branches = useBranches();
   const usage = useClinicUsage();
+  const downgrade = useSubscription().data?.downgrade;
   const [editing, setEditing] = useState<Editing>();
   const [archiving, setArchiving] = useState<Branch>();
   const reopen = useBranchArchive();
@@ -35,7 +37,7 @@ export function BranchesPanel() {
   if (branches.isLoading || usage.isLoading) return <Loading label="Loading branches" />;
   if (!branches.data || !usage.data) return <ErrorState what="the branches" onRetry={() => [branches, usage].forEach((q) => void q.refetch())} />;
   const { inUse, limit } = usage.data.branches;
-  const room = canAddUnder(usage.data.tier, "branches", inUse);
+  const room = hasRoom(usage.data.branches);
 
   return (
     <SectionCard
@@ -48,7 +50,7 @@ export function BranchesPanel() {
       }
     >
       <div id="branch-limit">
-        <LimitNotice usage={usage.data} limit="branches" />
+        <LimitNotice usage={usage.data} limit="branches" downgrade={downgrade} />
       </div>
       <DataList
         bare
@@ -56,9 +58,9 @@ export function BranchesPanel() {
         rows={branches.data}
         rowKey={(b) => b.id}
         columns={[
-          { key: "name", header: "Branch", mobile: "title", cell: (b) => b.name },
+          { key: "name", header: "Branch", mobile: "title", cell: (b) => <span className="[overflow-wrap:anywhere]">{b.name}</span> },
           { key: "status", header: "Status", mobile: "trailing", cell: (b) => (b.archived ? <Badge variant="outline">Archived</Badge> : <Badge variant="secondary">Open</Badge>) },
-          { key: "address", header: "Address and phone", mobile: "meta", cell: (b) => <>{b.address}<span className="block text-ink-muted">{b.phone}</span></> },
+          { key: "address", header: "Address and phone", mobile: "meta", cell: (b) => <span className="[overflow-wrap:anywhere]">{b.address}<span className="block text-ink-muted">{b.phone}</span></span> },
           { key: "hours", header: "Hours", mobile: "meta", cell: (b) => hoursLine(b.openingHours) },
         ]}
         actions={(b) => (

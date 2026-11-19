@@ -43,6 +43,26 @@ export function patientRows(p: Patient) {
   };
 }
 
+type Contact = { id: string; phone: string; email: string | null };
+
+/**
+ * Each guardian's phone and email before an edit (bot test #2): this child's row, or, for a guardian new to this child,
+ * their row on a sibling (`kin`: the same guardian id on other children).
+ */
+export function contactsBefore(
+  mine: readonly Pick<Patient["guardians"][number], "id" | "phone" | "email">[],
+  kin: readonly { guardianId: string; phone: string; email: string | null }[],
+): Map<string, Contact> {
+  const before = new Map<string, Contact>();
+  for (const k of kin) if (!before.has(k.guardianId)) before.set(k.guardianId, { id: k.guardianId, phone: k.phone, email: k.email });
+  for (const g of mine) before.set(g.id, { id: g.id, phone: g.phone, email: g.email ?? null });
+  return before;
+}
+
+/** True when an edit changed a guardian's stored phone or email (exactly as written, so siblings' rows stay identical). */
+export const contactChanged = (was: Contact | undefined, g: Pick<Patient["guardians"][number], "phone" | "email">): boolean =>
+  !!was && (was.phone !== g.phone || was.email !== (g.email ?? null));
+
 /** The mock's 400 for a computed label used as a tag (mocks.ts:69), or undefined. */
 export const refusedTag = (tags: string[] | undefined): string | undefined => {
   const tag = tags?.find(isReservedTag);

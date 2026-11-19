@@ -21,6 +21,15 @@ const manilaMidnight = (day: string) => new Date(`${day}T00:00:00+08:00`);
 /** The shape, and a real calendar day: 2026-02-30 would throw in date-fns (a 500) where a 400 is meant. */
 const BAD_DAY = "today must be YYYY-MM-DD";
 const isDay = (day: string) => DAY.test(day) && isValid(parseISO(day)) && format(parseISO(day), "yyyy-MM-dd") === day;
+/**
+ * Bot report #24: a real day the database can't window (1900, 9999) was a 500. Reports reach back to 2000 and up to
+ * the end of the sixth year ahead (past the 5-year booking horizon, so a booked day has a report); outside that is a 400 naming the range. `today` is the clinic's real day.
+ */
+export function dayRefusal(day: string, today: string): string | undefined {
+  if (!isDay(day)) return BAD_DAY;
+  const [first, last] = ["2000-01-01", `${Number(today.slice(0, 4)) + 6}-12-31`];
+  return day < first || day > last ? `today must be a day from ${first} to ${last}` : undefined;
+}
 
 /**
  * features/dashboard/mocks.ts:38–47: todaySummary over the branches' share of the account, computed on every request.
@@ -45,8 +54,7 @@ export class ReportsService {
    * Not audited (B8 question 4).
    */
   async finance(who: ClinicIdentity, day: string | undefined, branch: string | undefined): Promise<FinanceSummary> {
-    const today = day ?? this.clock.today();
-    if (!isDay(today)) throw new BadRequestException(BAD_DAY);
+    const today = this.day(day);
     const branchIds = await this.branchesFor(who, branch);
     const done = (await this.records.inWindow(branchIds, manilaMidnight(unpaidSince(today)), addDays(manilaMidnight(today), 1))).filter((a) => a.status === "done");
     return FinanceSummary.parse(summarizeFinance(await this.billing.financeFacts(branchIds, today, done), today));
@@ -60,14 +68,13 @@ export class ReportsService {
   async collections(who: ClinicIdentity, date: string | undefined, branch: string | undefined): Promise<Payment[]> {
     const day = date ?? this.clock.today();
     const branchIds = await this.branchesFor(who, branch);
-    if (!isDay(day)) return [];
+    if (dayRefusal(day, this.clock.today())) return [];
     return this.billing.paymentsBetween(branchIds, manilaMidnight(day), addDays(manilaMidnight(day), 1));
   }
 
   /** GET /reports/today: 400 day → 403 branches → the summary. */
   async today(who: ClinicIdentity, day: string | undefined, branch: string | undefined): Promise<TodaySummary> {
-    const today = day ?? this.clock.today();
-    if (!isDay(today)) throw new BadRequestException(BAD_DAY);
+    const today = this.day(day);
     const branchIds = await this.branchesFor(who, branch);
     const monday = format(startOfWeek(parseISO(today), { weekStartsOn: 1 }), "yyyy-MM-dd");
     const [from, to] = [manilaMidnight(today), addDays(manilaMidnight(today), 1)];
@@ -93,6 +100,14 @@ export class ReportsService {
     const born = patients.filter((p) => isBirthdayOn(p.birthDate, today)).map((p) => p.id);
     const messages = await this.messages.greetings(born, Number(today.slice(0, 4)));
     return TodaySummary.parse(todaySummary({ patients, staff, appointments, appointmentRequests: pending, visits: facts.visits, messages }, today));
+  }
+
+  /** The report's day: ?today= or the clinic's, checked before the branches (400 → 403). */
+  private day(asked: string | undefined): string {
+    const today = this.clock.today();
+    const refusal = dayRefusal(asked ?? today, today);
+    if (refusal) throw new BadRequestException(refusal);
+    return asked ?? today;
   }
 
   /** reportBranches with this caller's tier, roles, device branch and usable branches; a refusal is thrown as is. */

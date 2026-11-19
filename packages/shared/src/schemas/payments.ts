@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { PaymentMethod } from "./billing";
-import { Centavos, Id, IsoDate, IsoDateTime, isoDate } from "./common";
+import { Centavos, Id, IsoDate, IsoDateTime, isoDate, tooLong } from "./common";
 
 // B12: Primolar's payment QR and the receipts clinics send (decisions 5–8, 21–24). Manual payments: the operator checks
 // each receipt and confirms or rejects it; nothing is charged automatically (PayMongo waits for its own chunk).
@@ -11,7 +11,7 @@ export type PaymentQrView = z.infer<typeof PaymentQrView>;
 
 /** PUT /operator/payment-qr, the `data` part (the image is the `file` part). An empty caption is none. */
 export const PaymentQrInput = z.object({
-  caption: z.string().trim().max(120, "Keep the text under 120 characters").transform((s) => s || null),
+  caption: z.string().trim().max(120, tooLong(120, "the text")).transform((s) => s || null),
 });
 export type PaymentQrInput = z.infer<typeof PaymentQrInput>;
 
@@ -36,7 +36,7 @@ export function imageProblem(rules: ImageRules, file?: { type: string; size: num
 
 /** Both receipt uploads, the `data` part (the image is the `file` part). */
 export const ReceiptUploadInput = z.object({
-  reference: z.string().trim().min(1, "Enter the reference number on your receipt").max(60, "Keep the reference under 60 characters"),
+  reference: z.string().trim().min(1, "Enter the reference number on your receipt").max(60, tooLong(60, "the reference")),
 });
 export type ReceiptUploadInput = z.infer<typeof ReceiptUploadInput>;
 
@@ -93,13 +93,13 @@ export type ReceiptToCheck = z.infer<typeof ReceiptToCheck>;
 /** POST /operator/receipts/:id/confirm: how it was paid and when (decision 22: always the full amount due). */
 export const ConfirmReceiptInput = z.object({
   method: PaymentMethod.exclude(["account_credit"]),
-  paidOn: isoDate("Enter the date it was paid"),
+  paidOn: isoDate("Enter the date it was paid"), // issue 13: not after the server's today, paidOnProblem (signup.ts)
 });
 export type ConfirmReceiptInput = z.infer<typeof ConfirmReceiptInput>;
 
 /** POST /operator/receipts/:id/reject: the reason the payer reads (decisions 6, 22). */
 export const RejectReceiptInput = z.object({
-  reason: z.string().trim().min(1, "Tell them why the payment wasn't accepted").max(500, "Keep the reason under 500 characters"),
+  reason: z.string().trim().min(1, "Tell them why the payment wasn't accepted").max(500, tooLong(500, "the reason")),
 });
 export type RejectReceiptInput = z.infer<typeof RejectReceiptInput>;
 

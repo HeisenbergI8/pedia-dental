@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import {
-  OwnerCandidate, SetBrandingInput, StaffRole, brandColorProblem, isActiveStaff, rolesOf, suggestBrandColor, transferProblem,
+  OwnerCandidate, SetBrandingInput, StaffRole, brandColorProblem, canOwn, isActiveStaff, rolesOf, suggestBrandColor, transferProblem,
   type AccountOverview, type AccountStatus,
 } from "@pedia/shared";
 import type { Request } from "express";
@@ -76,15 +76,16 @@ export class OperatorAccountsService {
     return this.overview(clinicId);
   }
 
-  /** Decision #13: who ownership may go to: the account's active staff logins, the Owner left out, by name. */
+  /** Decision #13: who ownership may go to: the account's active admin and dentist logins, the Owner left out, by name. */
   async ownerCandidates(id: string): Promise<OwnerCandidate[]> {
     const clinicId = await this.exists(id);
     const staff = await requestContext.within({ clinicId }, () =>
       this.prisma.staff.findMany({ select: { id: true, fullName: true, email: true, role: true, alsoRoles: true, isOwner: true, deactivatedAt: true } }),
     );
     return staff
-      .filter((s) => !s.isOwner && isActiveStaff({ deactivatedAt: s.deactivatedAt?.toISOString() }))
-      .map((s) => OwnerCandidate.parse({ staffId: s.id, name: s.fullName, email: s.email ?? "", roles: rolesOf({ role: s.role, alsoRoles: StaffRole.array().parse(s.alsoRoles) }) }))
+      .map((s) => ({ ...s, alsoRoles: StaffRole.array().parse(s.alsoRoles) }))
+      .filter((s) => !s.isOwner && isActiveStaff({ deactivatedAt: s.deactivatedAt?.toISOString() }) && canOwn(s))
+      .map((s) => OwnerCandidate.parse({ staffId: s.id, name: s.fullName, email: s.email ?? "", roles: rolesOf(s) }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
@@ -98,8 +99,11 @@ export class OperatorAccountsService {
     await requestContext.within({ clinicId }, () =>
       runInTransaction(this.prisma, async (tx) => {
         await lockAccount(tx);
-        const staff = await tx.staff.findMany({ select: { id: true, fullName: true, isOwner: true, deactivatedAt: true, branchIds: true } });
-        const problem = transferProblem(staff.map((s) => ({ ...s, deactivatedAt: s.deactivatedAt?.toISOString() })), staffId);
+        const staff = await tx.staff.findMany({ select: { id: true, fullName: true, role: true, alsoRoles: true, isOwner: true, deactivatedAt: true, branchIds: true } });
+        const problem = transferProblem(
+          staff.map((s) => ({ ...s, alsoRoles: StaffRole.array().parse(s.alsoRoles), deactivatedAt: s.deactivatedAt?.toISOString() })),
+          staffId,
+        );
         if (problem) throw new BadRequestException(problem);
         const from = staff.find((s) => s.isOwner);
         if (from) {

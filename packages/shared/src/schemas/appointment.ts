@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BranchScoped, ClinicScoped, Id, IsoDateTime, isoDate } from "./common";
+import { BranchScoped, ClinicScoped, Id, IsoDateTime, addDaysTo, isoDate, manilaToday, tooLong } from "./common";
 
 export const AppointmentStatus = z.enum([
   "booked",
@@ -30,6 +30,10 @@ export const Appointment = BranchScoped.extend({
 });
 export type Appointment = z.infer<typeof Appointment>;
 
+/** The longest reason typed for a visit or a cancellation (issue 5): a sensible length, well inside the column. */
+export const APPOINTMENT_REASON_MAX = 500;
+const ReasonText = z.string().max(APPOINTMENT_REASON_MAX, tooLong(APPOINTMENT_REASON_MAX, "the reason"));
+
 export const BookAppointmentInput = Appointment.pick({
   patientId: true,
   dentistId: true,
@@ -39,7 +43,7 @@ export const BookAppointmentInput = Appointment.pick({
   reason: true,
   procedureCode: true,
   sourceRuleId: true,
-});
+}).extend({ reason: ReasonText });
 export type BookAppointmentInput = z.infer<typeof BookAppointmentInput>;
 
 /** Moving an appointment: new time, length, chair or dentist. The patient never changes. */
@@ -52,7 +56,7 @@ export type RescheduleAppointmentInput = z.infer<typeof RescheduleAppointmentInp
  */
 export const ChangeAppointmentStatusInput = z.discriminatedUnion("status", [
   z.object({ status: z.enum(["confirmed", "arrived", "no_show"]) }),
-  z.object({ status: z.literal("cancelled"), cancelReason: z.string().trim().min(1, "Give a reason") }),
+  z.object({ status: z.literal("cancelled"), cancelReason: ReasonText.trim().min(1, "Give a reason") }),
 ]);
 export type ChangeAppointmentStatusInput = z.infer<typeof ChangeAppointmentStatusInput>;
 
@@ -70,17 +74,24 @@ export const AppointmentRequest = ClinicScoped.extend({
   guardianId: Id,
   preferredDate: isoDate("Pick a date"),
   timeOfDay: TimeOfDay,
-  reason: z.string().trim().min(1, "Say what the visit is for").max(200, "Keep it under 200 characters"),
-  note: z.string().trim().max(500, "Keep it under 500 characters").optional(),
+  reason: z.string().trim().min(1, "Say what the visit is for").max(200, tooLong(200, "it")),
+  note: z.string().trim().max(500, tooLong(500, "it")).optional(),
   status: AppointmentRequestStatus,
   createdAt: IsoDateTime,
 });
 export type AppointmentRequest = z.infer<typeof AppointmentRequest>;
+
+/** How far ahead a parent may ask for a day (issue 13): about a year. Whether the branch is open that day is the API's. */
+export const REQUEST_DAYS_AHEAD = 365;
 
 export const CreateAppointmentRequestInput = AppointmentRequest.pick({
   preferredDate: true,
   timeOfDay: true,
   reason: true,
   note: true,
+}).extend({
+  // Inputs only: a request stored before this check is still read.
+  preferredDate: isoDate("Pick a date")
+    .refine((d) => d <= addDaysTo(manilaToday(), REQUEST_DAYS_AHEAD), "Pick a date within the next year"),
 });
 export type CreateAppointmentRequestInput = z.infer<typeof CreateAppointmentRequestInput>;

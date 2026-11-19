@@ -125,8 +125,11 @@ describe("the financial dashboard matches the mock's financeSummary (done-when)"
     const hours = t.platform.tenants[DEMO_CLINIC_ID]!.branches.find((b) => b.id === IMUS)!.openingHours;
     let day = subDays(parseISO(today), 1);
     while (isClosedWeekday(day, hours)) day = subDays(day, 1);
-    const startsAt = new Date(`${format(day, "yyyy-MM-dd")}T17:30:00+08:00`).toISOString();
-    const appt = await t.ok(t.call("post", "/appointments", admin, { patientId: id, dentistId: "staff_reyes", chairId: "chair_3", startsAt, durationMin: 15, reason: "Fluoride application" }), Appointment, 201);
+    const startsAt = new Date(`${format(day, "yyyy-MM-dd")}T17:30:00+08:00`);
+    // A booking in the past is refused (#7), so book a free future slot (a 2031 Monday, inside the 5-year booking horizon), then move it back to that day.
+    const booked = await t.ok(t.call("post", "/appointments", admin, { patientId: id, dentistId: "staff_reyes", chairId: "chair_3", startsAt: "2031-03-03T17:30:00+08:00", durationMin: 15, reason: "Fluoride application" }), Appointment, 201);
+    await inClinic(DEMO_CLINIC_ID, () => t.prisma.appointment.update({ where: { id: booked.id }, data: { startsAt } }));
+    const appt = { ...booked, startsAt: startsAt.toISOString() };
     for (const status of ["confirmed", "arrived"]) await t.ok(t.call("post", `/appointments/${appt.id}/status`, admin, { status }), Appointment);
     await t.ok(t.call("post", `/patients/${id}/plan`, admin, { procedureCode: "fluoride", fee: pesos(800) }), PlanItem, 201);
     const visit = await t.ok(t.call("post", `/patients/${id}/visits`, admin, { dentistId: "staff_reyes", appointmentId: appt.id }), Visit, 201);
@@ -222,6 +225,12 @@ describe("the financial dashboard matches the mock's financeSummary (done-when)"
     expect(await collections(day)).toContain("AR-990001");
     expect(await collections(nextDay(day))).toContain("AR-990002");
     expect(await collections(day)).not.toContain("AR-990002");
+  });
+
+  it("refuses far-off days with the range they must be in (bot report #24)", async () => {
+    for (const day of ["0001-01-01", "1900-01-01", "9999-12-31"]) { // were a 500
+      expect(await words(admin, `?today=${day}`)).toEqual([400, expect.stringMatching(/^today must be a day from 2000-01-01 to \d{4}-12-31$/)]);
+    }
   });
 
   it("refuses a bad day, other branches without the right, and staff without the dashboard", async () => {

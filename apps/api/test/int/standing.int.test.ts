@@ -89,6 +89,8 @@ describe("stored standing (B14)", () => {
     await t.ok(post(`/invoices/${first.id}/apply-credit`, admin, { amount: 2_000, receivedBy: "staff_cruz" }), Payment, 201);
     expect((await agrees(id, "credit applied")).balance).toBe(fee.fluoride! - 7_000);
 
+    // A no-show needs the start time to have come (#7): move the booking back, to a 2020 time no other case uses.
+    await inClinic(DEMO_CLINIC_ID, () => t.prisma.appointment.update({ where: { id: booked.id }, data: { startsAt: new Date("2020-03-03T10:00:00+08:00") } }));
     await t.ok(t.call("post", `/appointments/${booked.id}/status`, admin, { status: "no_show" }), Appointment);
     expect((await agrees(id, "no-show: the recall is open again")).nextDueOn).toBeDefined();
 

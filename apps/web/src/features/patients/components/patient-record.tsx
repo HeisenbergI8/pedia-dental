@@ -134,10 +134,13 @@ export function PatientRecord({ patientId }: { patientId: string }) {
         <TabsContent value="overview" className="pt-5">
           {/* Side by side only from 1280px; below that the reference column would be too narrow. */}
           <div className="grid gap-5 xl:grid-cols-3">
-            <div className="space-y-5 xl:col-span-2">
+            <div className="min-w-0 space-y-5 xl:col-span-2">
               <PatientAppointments patientId={patientId} restricted={!!patient?.restrictedAt} />
               <VisitList patientId={patientId} />
-              <BehaviorTrend patientId={patientId} />
+              {/* A long unbroken word in a behaviour note wraps instead of pushing the page sideways (bot test #25). */}
+              <div className="wrap-anywhere">
+                <BehaviorTrend patientId={patientId} />
+              </div>
               <GrowthCard patient={patient} />
             </div>
             <PatientOverview patient={patient} />
@@ -146,7 +149,7 @@ export function PatientRecord({ patientId }: { patientId: string }) {
         <TabsContent value="chart" className="pt-5">
           <ChartTab patient={patient} />
         </TabsContent>
-        <TabsContent value="notes" className="pt-5">
+        <TabsContent value="notes" className="min-w-0 pt-5 wrap-anywhere">
           <NotesTab patient={patient} />
         </TabsContent>
         <TabsContent value="plan" className="pt-5">

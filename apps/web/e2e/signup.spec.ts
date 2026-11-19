@@ -651,7 +651,7 @@ test.describe("edge cases", () => {
     await look(page, "Design it for me").click();
     await field(page, "Your brief").fill("a".repeat(1001));
     await submitAttempt(page);
-    await expectFieldError(page, "Your brief", "Keep the brief under 1,000 characters");
+    await expectFieldError(page, "Your brief", "Keep the brief to 1,000 characters or fewer");
     await field(page, "Your brief").fill("a".repeat(1000));
     await sendButton(page).click();
     await expect(page).toHaveURL(/\/get-started\/PRM-/, { timeout: 15_000 });

@@ -1,12 +1,13 @@
 import { http, HttpResponse } from "msw";
 import {
   manilaMonth,
+  paidOnProblem,
   ChangeTierInput,
   CreateAccountInput,
   OperatorLoginInput,
   RecordUpfrontPaymentInput,
   SetBrandingInput,
-  SupportContact,
+  SupportContactInput,
   TransferOwnershipInput,
   accountUsage,
   brandColorProblem,
@@ -15,6 +16,7 @@ import {
   suggestBrandColor,
   termsOutdated,
   transferProblem,
+  canOwn,
   type AccountOverview,
   type AccountStatus,
   type CreateAccountResult,
@@ -132,6 +134,8 @@ export const operatorHandlers = [
     const form = await readSignupForm(request, CreateAccountInput);
     if (form instanceof Response) return form;
     const { payment, signedOn, ...input } = form.data; // `signedOnFile` is already true (the schema requires it)
+    const late = paidOnProblem(payment.paidOn, today()); // issue 13, as the API
+    if (late) return refuse(400, late);
     const refused = brandingRefusal(input.branding, !!form.logo);
     if (refused) return refused;
     const clash = duplicateOf(input.account); // also stops a double-click making two copies
@@ -172,6 +176,8 @@ export const operatorHandlers = [
     if (!found) return notFound();
     const parsed = RecordUpfrontPaymentInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
+    const late = paidOnProblem(parsed.data.paidOn, today()); // issue 13, as the API
+    if (late) return refuse(400, late);
     const clinicId = found.account.id;
     return once(key, { route: "subscription payment", clinicId, body: parsed.data }, () => {
       if (paymentAlreadyRecorded(clinicId, parsed.data)) return refuse(409, "This payment is already recorded");
@@ -191,13 +197,13 @@ export const operatorHandlers = [
   http.post(url("/operator/accounts/:id/suspend"), ({ params }) => setStatus(params.id, "suspended")),
   http.post(url("/operator/accounts/:id/reactivate"), ({ params }) => setStatus(params.id, "active")),
 
-  // Who ownership may go to (decision #13): the account's active staff logins, the Owner left out. Names, emails and
+  // Who ownership may go to (decision #13): the account's active admin and dentist logins, the Owner left out. Names, emails and
   // roles: staff details, never patient data (#25).
   http.get(url("/operator/accounts/:id/staff"), ({ params }) => {
     const found = findAccount(params.id);
     if (!found) return notFound();
     const candidates: OwnerCandidate[] = found.tenant.staff
-      .filter((s) => isActiveStaff(s) && !s.isOwner)
+      .filter((s) => isActiveStaff(s) && !s.isOwner && canOwn(s))
       .map((s) => ({ staffId: s.id, name: s.fullName, email: staffEmail(s), roles: rolesOf(s) }))
       .sort((a, b) => a.name.localeCompare(b.name));
     return HttpResponse.json(candidates);
@@ -239,7 +245,7 @@ export const operatorHandlers = [
   http.put(url("/operator/accounts/:id/support-contact"), async ({ params, request }) => {
     const found = findAccount(params.id);
     if (!found) return notFound();
-    const parsed = SupportContact.safeParse(await request.json());
+    const parsed = SupportContactInput.safeParse(await request.json()); // issue 9, as the API
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
     platform.supportContacts[found.account.id] = parsed.data;
     persist();

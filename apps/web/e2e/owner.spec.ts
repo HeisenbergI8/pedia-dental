@@ -687,7 +687,7 @@ test.describe("failed paths", () => {
     await expect(page.getByRole("button", { name: /Account menu/ })).toBeVisible({ timeout: 45_000 });
     await page.goto("/settings");
     await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
-    await expect(page.getByText("Read-only in this prototype.", { exact: false })).toBeVisible();
+    await expect(page.getByText("Only the Owner can change the clinic's set-up.", { exact: false })).toBeVisible();
     await expect(page.getByRole("tab", { name: "Plan" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Add staff" })).toHaveCount(0);
     await expect(page.getByText("Payment history")).toHaveCount(0);
@@ -814,7 +814,7 @@ test.describe("edge cases", () => {
     await openSettings(page, "Clinic");
     await page.getByLabel("Notice to parents").fill("Ang inyong privacy ay mahalaga sa amin. ".repeat(205)); // 8,200 characters
     await page.getByRole("button", { name: "Save new version" }).click();
-    await expect(page.getByText("Keep the notice under 8,000 characters")).toBeVisible();
+    await expect(page.getByText("Keep the notice to 8,000 characters or fewer")).toBeVisible();
   });
 
   test("Start from Primolar's template fills the notice with the clinic's name", async ({ page }) => {

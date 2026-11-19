@@ -1,7 +1,7 @@
 import { pesos } from "@pedia/shared";
 import { describe, expect, it } from "vitest";
 import {
-  creditRefusal, depositRefusal, duplicateRefusal, invoiceAppointment, invoiceRefusal, paymentRefusal, refundRefusal, voidRefusal,
+  BILL_MAX, creditRefusal, depositRefusal, duplicateRefusal, invoiceAppointment, invoiceRefusal, paymentRefusal, refundRefusal, voidRefusal,
 } from "./billing.rules";
 
 const bill = (php: number, voided = false) => ({
@@ -22,6 +22,12 @@ describe("billing refusals (features/billing/mocks.ts)", () => {
     expect(words(invoiceRefusal(["a", "x"], ["a"], 100, 200))).toEqual([409, "Only this patient's completed, not yet billed treatments can be invoiced"]);
     expect(words(invoiceRefusal(["a"], ["a"], pesos(800), pesos(900)))?.[1]).toMatch(/^The discount can't be more than ₱800\.00$/);
     expect(invoiceRefusal(["a"], ["a"], 100, 100)).toBeUndefined();
+  });
+
+  it("refuses a bill whose total is over ₱10,000,000, counting the discount (bot report #23)", () => {
+    expect(words(invoiceRefusal(["a", "b"], ["a", "b"], BILL_MAX + 1, 0))).toEqual([400, "A bill can total at most ₱10,000,000.00. Bill these treatments on two bills."]);
+    expect(invoiceRefusal(["a", "b"], ["a", "b"], BILL_MAX + 1, 1)).toBeUndefined();
+    expect(invoiceRefusal(["a"], ["a"], BILL_MAX, 0)).toBeUndefined();
   });
 
   it("links a bill to an appointment only when all its visits share one", () => {

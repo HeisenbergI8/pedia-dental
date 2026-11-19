@@ -127,6 +127,8 @@ describe("due items (apps/web handlers.test.ts → recalls)", () => {
     const first = await t.ok(book(id, { sourceRuleId: "pulpotomy" }), Appointment, 201);
     const second = await t.ok(book(id, { sourceRuleId: "pulpotomy" }), Appointment, 201);
     expect((await rowsOf(id)).map((r) => r.appointmentId)).toEqual([first.id]);
+    // A no-show needs the start time to have come (#7): move the booking back, to a 2020 time no other case uses.
+    await inClinic(DEMO_CLINIC_ID, () => t.prisma.appointment.update({ where: { id: first.id }, data: { startsAt: new Date("2020-01-06T09:00:00+08:00") } }));
     await setStatus(first.id, { status: "no_show" });
     const third = await t.ok(book(id, { sourceRuleId: "pulpotomy" }), Appointment, 201);
     expect((await rowsOf(id)).map((r) => r.appointmentId)).toEqual([third.id]);

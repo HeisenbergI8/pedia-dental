@@ -20,12 +20,13 @@ function AlertChip({ icon: Icon, label, strong }: { icon: LucideIcon; label: str
   return (
     <li
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-sm",
+        "inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-md border px-2 py-1 text-sm",
         strong ? "border-alert-line bg-alert-bg font-semibold text-alert" : "border-transparent bg-selected text-ink",
       )}
     >
       <Icon className="size-3.5 shrink-0" aria-hidden />
-      {label}
+      {/* A long unbroken alert wraps inside the chip instead of pushing the page sideways (bot test #25). */}
+      <span className="min-w-0 wrap-anywhere">{label}</span>
     </li>
   );
 }
@@ -61,7 +62,7 @@ export function PatientHeader({ patientId }: { patientId: string }) {
           <div className="flex min-w-0 items-center gap-3">
             {canEdit ? <PatientPhotoDialog patient={p} /> : <PatientAvatar patient={p} />}
             <div className="min-w-0">
-              <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
+              <h1 className="text-xl font-semibold tracking-tight wrap-anywhere sm:text-2xl">
                 {p.firstName} {p.lastName}
                 {/* Next to the name, never instead of it: the legal name stays the identifier. */}
                 {p.nickname && <span className="font-normal text-ink-muted"> “{p.nickname}”</span>}

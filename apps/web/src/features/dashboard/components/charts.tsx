@@ -7,6 +7,11 @@ export type Point = { label: string; amount: number };
 /** Axis ticks only. Values people read use formatPeso. */
 const tickPeso = (centavos: number) =>
   new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", notation: "compact", maximumFractionDigits: 1 }).format(centavos / 100);
+/**
+ * Bot report #34: a figure people read at a glance, where ₱21,479,648.98 would wrap on a phone tile or be cut off
+ * past a bar. From ₱1,000,000 it is compact (₱21.5M); the full amount stays in the screen-reader table and title.
+ */
+export const glancePeso = (centavos: number) => (Math.abs(centavos) >= 100_000_000 ? tickPeso(centavos) : formatPeso(centavos));
 const AXIS = { tickLine: false, axisLine: false, tick: { fontSize: 12, fill: "var(--color-ink-muted)" } } as const;
 const fill = (amount: number) => (amount < 0 ? "var(--color-chart-negative)" : "var(--color-chart-bar)");
 
@@ -66,7 +71,7 @@ export function RankBars({ data, caption }: { data: Point[]; caption: string }) 
             <YAxis type="category" dataKey="label" {...AXIS} width={140} />
             <Bar dataKey="amount" radius={[0, 4, 4, 0]} isAnimationActive={false} barSize={18}>
               {data.map((d) => <Cell key={d.label} fill={fill(d.amount)} />)}
-              <LabelList dataKey="amount" position="right" formatter={(v: unknown) => formatPeso(Number(v))} style={{ fontSize: 12, fill: "var(--color-ink)" }} />
+              <LabelList dataKey="amount" position="right" formatter={(v: unknown) => glancePeso(Number(v))} style={{ fontSize: 12, fill: "var(--color-ink)" }} />
             </Bar>
           </BarChart>
         </ResponsiveContainer>

@@ -41,7 +41,7 @@ export function PatientOverview({ patient: p }: { patient: PatientView }) {
   const history = [p.dentalHistory.previousClinic, p.dentalHistory.notes].some(Boolean);
 
   return (
-    <div className="grid content-start gap-5 md:grid-cols-2 xl:grid-cols-1">
+    <div className="grid min-w-0 content-start gap-5 wrap-anywhere md:grid-cols-2 xl:grid-cols-1">
       <SectionCard
         title="Medical"
         action={

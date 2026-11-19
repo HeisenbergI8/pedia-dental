@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { config, middleware } from "./middleware";
+import nextConfig from "../next.config";
+import { config, MAX_PROXY_BODY_BYTES, middleware } from "./middleware";
 
 const ORIGIN_VALUE = "x".repeat(40); // a stand-in, not a real value
 const call = (url: string, headers: Record<string, string> = {}) => middleware(new NextRequest(url, { headers }));
@@ -27,6 +28,31 @@ describe("the /api proxy (#2: the origin lock)", () => {
     expect(res.headers.get("x-middleware-rewrite")).toBe("http://localhost:4100/api/auth/me");
     expect(res.headers.get("x-middleware-request-x-primolar-origin")).toBeNull();
     expect(res.headers.get("x-middleware-override-headers")).not.toContain("x-primolar-origin");
+  });
+
+  it("answers 413 itself above the body limit next.config sets, and passes anything up to it to the API (issue 16)", async () => {
+    vi.stubEnv("API_PROXY_TARGET", "http://localhost:4100");
+    expect(nextConfig.experimental?.middlewareClientMaxBodySize).toBe(MAX_PROXY_BODY_BYTES);
+    const over = call("http://localhost:3000/api/patients/p1/photos", { "content-length": String(MAX_PROXY_BODY_BYTES + 1) });
+    expect([over.status, await over.text()]).toEqual([413, "Files must be under 10 MB"]);
+    expect(over.headers.get("x-middleware-rewrite")).toBeNull();
+    const tenMbPlusOne = call("http://localhost:3000/api/patients/p1/photos", { "content-length": String(10 * 1024 * 1024 + 1) });
+    expect(tenMbPlusOne.headers.get("x-middleware-rewrite")).toBe("http://localhost:4100/api/patients/p1/photos"); // the API's own 413
+  });
+
+  it("never passes on a caller's own X-Forwarded-For (issue 17)", () => {
+    vi.stubEnv("API_PROXY_TARGET", "http://localhost:4100");
+    vi.stubEnv("VERCEL", "");
+    const local = call("http://localhost:3000/api/auth/login", { "x-forwarded-for": "10.77.7.82", "x-real-ip": "10.77.7.83" });
+    expect(local.headers.get("x-middleware-request-x-forwarded-for")).toBeNull();
+    expect(local.headers.get("x-middleware-override-headers")).not.toContain("x-forwarded-for");
+  });
+
+  it("on Vercel, sends the client address Vercel gives in x-real-ip as X-Forwarded-For", () => {
+    vi.stubEnv("API_PROXY_TARGET", "https://api.example.com");
+    vi.stubEnv("VERCEL", "1");
+    const res = call("https://app.example.com/api/auth/login", { "x-forwarded-for": "10.77.7.82, 198.51.100.4", "x-real-ip": "203.0.113.9" });
+    expect(res.headers.get("x-middleware-request-x-forwarded-for")).toBe("203.0.113.9");
   });
 
   it("proxies nothing without API_PROXY_TARGET (the MSW-only demo)", () => {

@@ -27,6 +27,9 @@ const move = (id: string, body: object, cookie = admin) => t.call("put", `/appoi
 const status = (id: string, body: object, cookie = admin) => t.call("post", `/appointments/${id}/status`, cookie, body);
 const calendar = async (cookie: string, query = "") => t.ok(t.call("get", `/appointments${query}`, cookie), z.array(Appointment));
 const rows = (where: object) => inClinic(DEMO_CLINIC_ID, () => t.prisma.appointment.count({ where }));
+/** Moves a case's booking back in time so its hour has come (a no-show needs it, #7). A 2020 time no other case uses. */
+const startedAt = (id: string, day: string, hhmm = "09:00") =>
+  inClinic(DEMO_CLINIC_ID, () => t.prisma.appointment.update({ where: { id }, data: { startsAt: new Date(at(day, hhmm)) } }));
 const audit = (patientId: string) =>
   inClinic(DEMO_CLINIC_ID, () => t.prisma.auditEvent.findMany({ where: { patientId, record: { startsWith: "Appointment" } }, orderBy: { at: "asc" }, select: { action: true, record: true } }));
 
@@ -62,6 +65,9 @@ describe("appointments (apps/web handlers.test.ts → appointments)", () => {
     const id = await t.register();
     const s = slot(id, { startsAt: at("2030-01-09", "09:00") });
     const a = await t.ok(book(s), Appointment, 201);
+    const early = await status(a.id, { status: "no_show" });
+    expect([early.status, early.text]).toEqual([409, "Wait until the appointment time to mark a no-show."]); // #7
+    await startedAt(a.id, "2020-01-09");
     await t.ok(status(a.id, { status: "no_show" }), Appointment);
     const back = await status(a.id, { status: "arrived" });
     expect([back.status, back.text]).toEqual([409, "Can't go from no_show to arrived"]);
@@ -154,6 +160,31 @@ describe("appointments (apps/web handlers.test.ts → appointments)", () => {
     expect([res.status, res.text]).toEqual([404, "Patient not found"]);
   });
 
+  it("books from now to five years ahead, and checks only a new time on a move (#6)", async () => {
+    const id = await t.register();
+    for (const [startsAt, words] of [[at("2020-01-07", "09:00"), "That time has already passed. Pick a later time."], [at("9999-01-04", "09:00"), "Book no more than 5 years ahead."]]) {
+      const res = await book(slot(id, { startsAt }));
+      expect([res.status, res.text], startsAt).toEqual([400, words]);
+    }
+    const a = await t.ok(book(slot(id, { startsAt: at("2030-01-22", "09:00") })), Appointment, 201);
+    const back = await move(a.id, { dentistId: "staff_reyes", chairId: "chair_1", startsAt: at("2020-01-07", "09:00"), durationMin: 30 });
+    expect([back.status, back.text]).toEqual([400, "That time has already passed. Pick a later time."]);
+    await startedAt(a.id, "2020-01-22");
+    const chair = await t.ok(move(a.id, { dentistId: "staff_reyes", chairId: "chair_2", startsAt: at("2020-01-22", "09:00"), durationMin: 30 }), Appointment);
+    expect(chair.chairId).toBe("chair_2"); // its hour has come, but the time didn't change
+    expect(await rows({ patientId: id })).toBe(1);
+  });
+
+  it("needs a known procedure and follow-up rule (#28)", async () => {
+    const id = await t.register();
+    const s = slot(id, { startsAt: at("2030-01-23", "09:00") });
+    for (const [over, words] of [[{ procedureCode: "nope" }, "Unknown procedure"], [{ sourceRuleId: "nope" }, "Unknown follow-up rule"]] as const) {
+      const res = await book({ ...s, ...over });
+      expect([res.status, res.text], words).toEqual([400, words]);
+    }
+    await t.ok(book({ ...s, procedureCode: "extraction", sourceRuleId: "extraction" }), Appointment, 201);
+  });
+
   it("lets front desk book but not a parent", async () => {
     const id = await t.register();
     expect((await book(slot(id, { startsAt: at("2030-01-21", "09:00") }), await t.as(FRONT_DESK))).status).toBe(201);
@@ -211,6 +242,7 @@ describe("appointments (apps/web handlers.test.ts → appointments)", () => {
       ]);
       // Sorted: booked outside sending hours, both confirmations go at the same 8 AM, so their order is a tie (decision 17).
       expect((await texts({ appointmentId: appt.id, kind: "appointment_confirmation" })).map((m) => m.status).sort()).toEqual(["cancelled", "queued"]);
+      await startedAt(appt.id, "2020-04-03", "10:00");
       await t.ok(status(appt.id, { status: "no_show" }), Appointment);
       const after = await texts({ appointmentId: appt.id });
       expect(after.filter((m) => m.status === "queued").map((m) => m.kind)).toEqual(["missed_appointment"]);
@@ -225,6 +257,7 @@ describe("appointments (apps/web handlers.test.ts → appointments)", () => {
         ["cancelled", reminderSendAt(appt.startsAt)],
         ["queued", reminderSendAt(moved.startsAt)],
       ]);
+      await startedAt(appt.id, "2020-04-09", "10:00");
       await t.ok(status(appt.id, { status: "no_show" }), Appointment);
       expect((await pre()).map((m) => m.status)).toEqual(["cancelled", "cancelled"]);
     });

@@ -92,6 +92,21 @@ function need<T>(value: T | undefined, what: string): T {
   return value;
 }
 
+/**
+ * What the PDF's Noto Sans can't draw (BotD-7), so it prints as junk: emoji and every other character past U+FFFF, the
+ * symbol blocks U+2190–U+2BFF (arrows, dingbats, ✓ ★), the emoji joiner, keycap and variation selectors. Checked
+ * against the font's glyphs; ₱, ñ, ©, ™ and the dashes and quotes stay.
+ */
+const UNDRAWABLE = /[ \t]*(?:[\u{10000}-\u{10FFFF}←-⯿‍⃣︎️])+/gu;
+
+/** The document with those characters removed (and the spaces before them, so "Reyes 😀, Ana" prints "Reyes, Ana"). */
+export function pdfSafe<T>(value: T): T {
+  if (typeof value === "string") return value.replace(UNDRAWABLE, "") as T;
+  if (Array.isArray(value)) return value.map(pdfSafe) as T;
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, pdfSafe(v)])) as T;
+  return value;
+}
+
 /** Builds one document from the record. Throws only when the chosen source record doesn't exist. */
 export function buildDocument(choice: GenerateDocumentInput, src: DocSources, now = new Date()): DocContent {
   const { patient } = src;

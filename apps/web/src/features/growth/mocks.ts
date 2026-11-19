@@ -1,5 +1,5 @@
 import { http, HttpResponse, delay } from "msw";
-import { SaveGrowthInput, type GrowthRecord } from "@pedia/shared";
+import { SaveGrowthInput, beforeBirthProblem, type GrowthRecord } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { currentClinicId, db, persist } from "@/mocks/db";
 
@@ -24,6 +24,10 @@ export const growthHandlers = [
     }
     const parsed = SaveGrowthInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
+    // Issue 13, as the API: no habit date before the child was born.
+    const birthDate = db.patients.find((p) => p.id === visit.patientId)?.birthDate ?? "";
+    const beforeBirth = parsed.data.habits.flatMap((h) => [h.startedOn, h.stoppedOn]).map((d) => beforeBirthProblem(d, birthDate)).find(Boolean);
+    if (beforeBirth) return new HttpResponse(beforeBirth, { status: 400 });
 
     const existing = db.growth.find((g) => g.visitId === visit.id);
     const record: GrowthRecord = {

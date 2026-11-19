@@ -1,6 +1,6 @@
 import { http, HttpResponse, delay } from "msw";
 import {
-  CONSENTED_PHOTO_TYPES, STAFF_PHOTO_KEPT, UPLOAD_RULES, UploadPhotoInput, choiceDeclined, parentUploadRefusal, photoFileName, rolesCan, uploadProblem,
+  CONSENTED_PHOTO_TYPES, STAFF_PHOTO_KEPT, UPLOAD_RULES, UploadPhotoInput, beforeBirthProblem, choiceDeclined, parentUploadRefusal, photoFileName, rolesCan, uploadProblem,
   type ClinicalPhoto, type PhotoType,
 } from "@pedia/shared";
 import { env } from "@/lib/env";
@@ -13,6 +13,11 @@ import { currentAccount, currentClinicId, db, persist } from "@/mocks/db";
 const url = (p: string) => `${env.apiUrl}${p}`;
 /** What a parent may upload from the portal. Clinical imaging (X-rays) is the clinic's. */
 const PARENT_TYPES: PhotoType[] = ["intraoral", "extraoral", "document"];
+/**
+ * BotF-8: the month counts files a parent sent, so one staff removed still counts (the API reads its audit trail).
+ * Kept in memory, as `resetTexts` in portal mocks: a reload forgets them, an offline-mode simplification.
+ */
+const removedParentUploads: Pick<ClinicalPhoto, "patientId" | "createdAt">[] = [];
 
 /** API contract for apps/api's PhotosController. */
 export const photoHandlers = [
@@ -61,6 +66,8 @@ export const photoHandlers = [
     if (visitId && db.visits.find((v) => v.id === visitId)?.patientId !== params.id) {
       return new HttpResponse("Visit not found", { status: 400 });
     }
+    const beforeBirth = beforeBirthProblem(parsed.data.takenOn, patient.birthDate); // issue 13, as the API
+    if (beforeBirth) return new HttpResponse(beforeBirth, { status: 400 });
 
     const photo: ClinicalPhoto = {
       ...parsed.data,
@@ -76,7 +83,7 @@ export const photoHandlers = [
       const mine = db.photos.filter((p) => p.patientId === params.id && p.uploadedBy === "parent");
       const month = manilaMonthOf(new Date().toISOString());
       const use = {
-        thisMonth: mine.filter((p) => manilaMonthOf(p.createdAt) === month).length,
+        thisMonth: [...mine, ...removedParentUploads.filter((p) => p.patientId === params.id)].filter((p) => manilaMonthOf(p.createdAt) === month).length,
         storedBytes: mine.reduce((n, p) => n + (db.storedFiles.find((f) => f.key === p.id)?.bytes ?? 0), 0),
       };
       const over = parentUploadRefusal(patient.firstName, use, file.size);
@@ -97,6 +104,7 @@ export const photoHandlers = [
     if (!photo) return new HttpResponse("Photo not found", { status: 404 });
     if (photo.uploadedBy !== "parent") return new HttpResponse(STAFF_PHOTO_KEPT, { status: 409 });
     db.photos = db.photos.filter((p) => p.id !== photo.id);
+    removedParentUploads.push({ patientId: photo.patientId, createdAt: photo.createdAt }); // BotF-8: still a file sent
     forgetStored(db, photo.id);
     await deleteBlob(photo.id);
     persist();

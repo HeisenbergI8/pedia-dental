@@ -25,15 +25,24 @@ export const messageHandlers = [
     return HttpResponse.json(template);
   }),
 
-  // The log, newest send time first. ?patientId= and ?status= narrow it.
+  // The log, newest send time first (ties by id). ?patientId= and ?status= narrow it; ?limit= (1–100) answers that many,
+  // after the message ?before= (BotC-9); an unknown `before` answers none. No limit: the whole list.
   http.get(url("/messages"), async ({ request }) => {
     await delay(100);
     if (runDailyJobs()) persist(); // stands in for the daily cron (birthdays)
     const params = new URL(request.url).searchParams;
     const status = MessageStatus.safeParse(params.get("status"));
     const patientId = params.get("patientId");
-    const rows = db.messages.filter((m) => (!patientId || m.patientId === patientId) && (!status.success || m.status === status.data));
-    return HttpResponse.json(rows.sort((a, b) => b.sendAt.localeCompare(a.sendAt)));
+    const rows = db.messages
+      .filter((m) => (!patientId || m.patientId === patientId) && (!status.success || m.status === status.data))
+      .sort((a, b) => b.sendAt.localeCompare(a.sendAt) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
+    const limit = Number(params.get("limit"));
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) return HttpResponse.json(rows);
+    const before = params.get("before");
+    const after = before ? db.messages.find((m) => m.id === before) : undefined;
+    if (before && !after) return HttpResponse.json([]);
+    const older = after ? rows.filter((m) => m.sendAt < after.sendAt || (m.sendAt === after.sendAt && m.id < after.id)) : rows;
+    return HttpResponse.json(older.slice(0, limit));
   }),
 
   // Feature 14's "recall message": one tap from the due list.

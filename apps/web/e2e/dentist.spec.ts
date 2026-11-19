@@ -509,7 +509,7 @@ test.describe("failed paths", () => {
   test("dentist can read Settings but cannot change the clinic", async ({ page }) => {
     await signInAt(page, BULILIT);
     await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Settings" }).click();
-    await expect(page.getByText("Read-only in this prototype.")).toBeVisible();
+    await expect(page.getByText("The clinic's procedures, staff and chairs. Only the Owner can change these.")).toBeVisible();
     await expect(page.getByRole("table", { name: "Procedure catalog" })).toBeVisible();
     for (const name of [/Save look/i, /Add staff/i, /Save new version/i]) {
       await expect(page.getByRole("button", { name })).toHaveCount(0);

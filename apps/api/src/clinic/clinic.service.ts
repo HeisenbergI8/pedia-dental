@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, PayloadTooLargeException } from "@nestjs/common";
 import {
-  Branch, Chair, ClinicContext, Procedure, StaffRole, duplicateNameMessage, holdsRole, isActiveStaff, manilaMonth, sameClinicName,
+  Branch, Chair, ClinicContext, DUPLICATE_EMAIL_MESSAGE, Procedure, StaffRole, duplicateNameMessage, holdsRole, isActiveStaff, manilaMonth, sameClinicName,
   type ClinicAccount, type ClinicUsage, type Role, type StaffMember, type Tier, type UpdateBrandingInput, type UpdateClinicProfileInput,
 } from "@pedia/shared";
 import { z } from "zod";
@@ -121,20 +121,33 @@ export class ClinicService {
   async usage(): Promise<ClinicUsage> {
     const month = manilaMonth(this.clock.today());
     const c = await this.usageCounts.forClinic(ownClinicId(), month);
-    return usageOf(await this.tier(), { branches: c.branches, staffLogins: c.staffLogins }, { storageBytes: c.storageBytes, textParts: c.textParts, textTopUp: c.textTopUp, month });
+    const sub = await this.prisma.subscription.findUnique({ where: { clinicId: ownClinicId() }, select: { downgradeTier: true } });
+    return usageOf(
+      await this.tier(),
+      { branches: c.branches, staffLogins: c.staffLogins },
+      { storageBytes: c.storageBytes, textParts: c.textParts, textTopUp: c.textTopUp, month },
+      sub?.downgradeTier ? { tier: sub.downgradeTier } : null, // B12 E13: the limit assertRoomFor applies
+    );
   }
 
-  /** PUT /clinic: name, contact email and TIN (decision #18). Tier and status are the operator's (B12). */
+  /**
+   * PUT /clinic: name, contact email and TIN (decision #18). Tier and status are the operator's (B12). Sign-up's duplicate
+   * rule (billing #10): another clinic's or a waiting sign-up's name or contact email is refused, checked under the
+   * platform lock as sign-up checks it, so a sign-up and a rename can't both take one.
+   */
   async updateProfile(input: UpdateClinicProfileInput): Promise<ClinicAccount> {
     return runInTransaction(this.prisma, async (tx) => {
-      // Audit #26: a new name another clinic (or a waiting sign-up) already has is refused in sign-up's words. Read under
-      // Primolar's platform lock (lockPlatform's row, taken first as B12 E6 orders it), so a sign-up or another rename
-      // can't take the same name at once. The two reads are read-only, one column each (Signup stays SignupsService's).
+      // Audit #26, bot report #40: a new name or contact email another clinic (or a waiting sign-up) already has is
+      // refused in sign-up's words. Read under Primolar's platform lock (lockPlatform's row, taken first as B12 E6 orders
+      // it), so a sign-up or another rename can't take the same one at once. Read-only reads (Signup stays SignupsService's).
       await tx.$queryRaw`SELECT id FROM PlatformSettings WHERE id = ${"primolar"} FOR UPDATE`;
       const id = ownClinicId();
-      const others = await tx.clinicAccount.findMany({ where: { id: { not: id } }, select: { name: true } });
-      const waiting = await tx.signup.findMany({ where: { status: "waiting" }, select: { name: true } });
-      if ([...others, ...waiting].some((a) => sameClinicName(a.name, input.name))) throw new ConflictException(duplicateNameMessage(input.name));
+      const others = await tx.clinicAccount.findMany({ where: { id: { not: id } }, select: { name: true, contactEmail: true } });
+      const waiting = await tx.signup.findMany({ where: { status: "waiting" }, select: { name: true, contactEmail: true } });
+      const taken = [...others, ...waiting];
+      if (taken.some((a) => sameClinicName(a.name, input.name))) throw new ConflictException(duplicateNameMessage(input.name));
+      const email = input.contactEmail.trim().toLowerCase();
+      if (taken.some((a) => a.contactEmail.toLowerCase() === email)) throw new ConflictException(DUPLICATE_EMAIL_MESSAGE);
       return toClinicAccount(await tx.clinicAccount.update({ where: { id }, data: input }));
     });
   }

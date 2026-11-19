@@ -74,8 +74,10 @@ export async function readUploads(req: Req, { parts }: { parts: PartRules }): Pr
   } catch {
     throw await refused(); // a multipart type with no usable boundary (B10 tester D1)
   }
+  let textTooLong = false;
   parser.on("field", (name, value, info) => {
-    if (!info.valueTruncated) fields.set(name, value);
+    if (info.valueTruncated) textTooLong = true; // said plainly below, not as a missing field (bot regression of #5)
+    else fields.set(name, value);
   });
   parser.on("file", (name, stream, info) => {
     const rule = Object.hasOwn(parts, name) ? parts[name] : undefined;
@@ -104,6 +106,10 @@ export async function readUploads(req: Req, { parts }: { parts: PartRules }): Pr
     await Promise.all(writes);
   } catch {
     throw await refused();
+  }
+  if (textTooLong) {
+    await dispose();
+    throw new BadRequestException("Some of the text is too long. Shorten it and try again.");
   }
   // Each whole image's size from its header, for the routes' pixel check (D #30). A file cut at its limit is refused anyway.
   const images = Object.values(files).flat().filter((f) => !f.tooLarge && IMAGE_EXTENSIONS.includes(sniff(f.head)!));

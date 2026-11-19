@@ -1,5 +1,5 @@
 "use client";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { Message, MessageTemplate, type LoggedMessageKind, type MessageKind, type MessageStatus, type UpdateMessageTemplateInput } from "@pedia/shared";
 import { api } from "@/lib/api-client";
@@ -35,9 +35,19 @@ export function usePatientMessages(patientId: string) {
   });
 }
 
-/** The whole log, newest first. Filtering by status is done on screen so the counts stay right. */
-export function useMessages() {
-  return useQuery({ queryKey: messageKeys.all, queryFn: () => api("/messages", z.array(Message)) });
+export const MESSAGE_PAGE = 50;
+
+/** The log, newest first, MESSAGE_PAGE at a time (BotC-9); `fetchNextPage` loads older, after the last one shown. */
+export function useMessages(status?: MessageStatus) {
+  return useInfiniteQuery({
+    queryKey: [...messageKeys.all, "log", status ?? "all"],
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => {
+      const q = new URLSearchParams({ limit: String(MESSAGE_PAGE), ...(status && { status }), ...(pageParam && { before: pageParam }) });
+      return api(`/messages?${q}`, z.array(Message));
+    },
+    getNextPageParam: (last) => (last.length === MESSAGE_PAGE ? last[last.length - 1]!.id : undefined),
+  });
 }
 
 export function useMessageTemplates() {

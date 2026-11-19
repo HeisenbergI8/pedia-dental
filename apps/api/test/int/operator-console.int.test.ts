@@ -47,6 +47,10 @@ describe("support details (feature 16, revised)", () => {
     const put = await http().put("/api/operator/support").set("Cookie", op).send(settings);
     expect([put.status, put.body]).toEqual([200, settings]);
     expect((await http().put("/api/operator/support").set("Cookie", op).send({ ...settings, chatUrl: "javascript:alert(1)" })).status).toBe(400); // https only
+    // A clinic with no contact yet answers JSON null, never an empty body the console can't read (bot report #4).
+    const none = await http().get(`/api/operator/accounts/${NGITI}/support-contact`).set("Cookie", op);
+    expect([none.status, none.type, none.text]).toEqual([200, "application/json", "null"]);
+    expect((await http().get("/api/operator/accounts/nope/support-contact").set("Cookie", op)).status).toBe(404);
     const contact = { name: "Ana Reyes", phone: "0917 555 0101", email: "ana@primolar.ph" };
     expect((await http().put(`/api/operator/accounts/${DEMO_CLINIC_ID}/support-contact`).set("Cookie", op).send(contact)).body).toEqual(contact);
     expect((await http().get(`/api/operator/accounts/${DEMO_CLINIC_ID}/support-contact`).set("Cookie", op)).body).toEqual(contact);
@@ -128,6 +132,9 @@ describe("the console's accounts on MySQL (decision #25)", () => {
   it("moves ownership to an active login; the old Owner keeps their job", async () => {
     const candidates = OwnerCandidate.array().parse((await http().get(`/api/operator/accounts/${NGITI}/staff`).set("Cookie", op)).body);
     expect(candidates.map((c) => c.name)).not.toContain("Dr. Bea Lim"); // the Owner
+    expect(candidates.map((c) => c.name)).not.toContain("Joy Tan"); // front desk: the Owner is an admin or a dentist
+    const desk = await http().post(`/api/operator/accounts/${NGITI}/owner`).set("Cookie", op).send({ staffId: "ngiti_staff_tan" });
+    expect([desk.status, desk.text]).toEqual([400, "The Owner must be an admin or a dentist. Joy Tan works at the front desk."]);
     const to = candidates.find((c) => c.name === "Dr. Ana Reyes")!;
     const oldOwner = await signIn(app, staffEmail(ngiti.staff.find((s) => s.isOwner)!), NGITI); // Dr. Bea Lim, signed in throughout
     expect((await http().post(`/api/operator/accounts/${NGITI}/owner`).set("Cookie", op).send({ staffId: "staff_villanueva" })).status).toBe(400); // another account's

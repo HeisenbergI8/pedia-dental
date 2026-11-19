@@ -21,7 +21,10 @@ beforeAll(async () => {
 afterAll(() => t.app.close());
 
 const day = (offset: number) => format(addDays(new Date(), offset), "yyyy-MM-dd"); // Manila: the process is pinned (E3)
-const body = (over: object = {}) => ({ preferredDate: day(3), timeOfDay: "morning", reason: "Check-up", ...over });
+/** Issue 13: every seeded branch is closed on Sundays, so a request for one is refused; a day from today, never a Sunday. */
+const openDay = (offset: number) => (new Date(`${day(offset)}T00:00:00`).getDay() === 0 ? day(offset + 1) : day(offset));
+const nextSunday = () => day(7 - new Date().getDay());
+const body = (over: object = {}) => ({ preferredDate: openDay(3), timeOfDay: "morning", reason: "Check-up", ...over });
 const ask = (patientId: string, cookie = parent, b: unknown = body()) => t.call("post", `/patients/${patientId}/appointment-requests`, cookie, b);
 const inbox = async (query = "") => t.ok(t.call("get", `/appointment-requests${query}`, desk), z.array(AppointmentRequest));
 const handled = (id: string, cookie = desk) => t.call("post", `/appointment-requests/${id}/handled`, cookie);
@@ -41,7 +44,7 @@ const theirChild = () => child([{ id: guardianId, fullName: "Same Parent", relat
 describe("appointment requests (apps/web handlers.test.ts → requests)", () => {
   it("takes one request per child from its parent and puts it in the front desk's inbox", async () => {
     const request = await t.ok(ask("patient_sibling"), AppointmentRequest, 201);
-    expect(request).toMatchObject({ status: "pending", guardianId, patientId: "patient_sibling", preferredDate: day(3) });
+    expect(request).toMatchObject({ status: "pending", guardianId, patientId: "patient_sibling", preferredDate: openDay(3) });
     const again = await ask("patient_sibling");
     expect([again.status, again.text]).toEqual([409, "You already have a request waiting. The clinic will call you to book it."]);
     const other = t.platform.tenants[DEMO_CLINIC_ID]!.patients.find((p) => !p.guardians.some((g) => g.id === guardianId))!;
@@ -52,7 +55,7 @@ describe("appointment requests (apps/web handlers.test.ts → requests)", () => 
     expect((await t.ok(handled(request.id), AppointmentRequest)).status).toBe("handled");
     expect((await t.ok(handled(request.id), AppointmentRequest)).status).toBe("handled"); // again: 200, as the mock
     expect((await inbox("?status=pending")).map((r) => r.id)).not.toContain(request.id);
-    await t.ok(ask("patient_sibling", parent, body({ preferredDate: day(5) })), AppointmentRequest, 201); // handled frees the child
+    await t.ok(ask("patient_sibling", parent, body({ preferredDate: openDay(5) })), AppointmentRequest, 201); // handled frees the child
   });
 
   it("checks in the mock's order: the body, then the date, then the pending one", async () => {
@@ -65,7 +68,9 @@ describe("appointment requests (apps/web handlers.test.ts → requests)", () => 
     expect(bad.status).toBe(400);
     const yesterday = await ask(id, parent, body({ preferredDate: day(-1) }));
     expect([yesterday.status, yesterday.text]).toEqual([400, "Pick today or a later date"]);
-    await t.ok(ask(id, parent, body({ preferredDate: day(0) })), AppointmentRequest, 201); // today passes
+    const sunday = await ask(id, parent, body({ preferredDate: nextSunday() })); // issue 13: no branch opens that weekday
+    expect([sunday.status, sunday.text]).toEqual([400, "The clinic is closed on Sundays. Pick another day."]);
+    await t.ok(ask(id, parent, body({ preferredDate: openDay(0) })), AppointmentRequest, 201); // today passes (Monday on a Sunday)
     const both = await ask(id, parent, body({ preferredDate: day(-1) })); // yesterday while one is pending: 400 before 409
     expect([both.status, both.text]).toEqual([400, "Pick today or a later date"]);
     expect((await ask(id)).status).toBe(409);

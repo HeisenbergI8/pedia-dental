@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { tooLong } from "./schemas/common";
 
 type Issue = Parameters<NonNullable<z.core.$ZodConfig["customError"]>>[0];
 
@@ -15,7 +16,7 @@ export function plainLanguageError(issue: Issue): string | undefined {
       if (issue.origin === "number") return issue.inclusive ? `Enter ${issue.minimum} or more` : `Enter a number above ${issue.minimum}`;
       return undefined;
     case "too_big":
-      if (issue.origin === "string") return `Keep this under ${Number(issue.maximum) + 1} characters`;
+      if (issue.origin === "string") return tooLong(Number(issue.maximum)); // issue 45: "Keep this to N characters or fewer"
       if (issue.origin === "number") return `Enter ${issue.maximum} or less`;
       return undefined;
     case "invalid_type":

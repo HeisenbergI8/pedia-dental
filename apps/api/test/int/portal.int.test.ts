@@ -167,7 +167,7 @@ describe("portal invitations on MySQL (B11)", () => {
     const two = await family("Fe", "0917-000-0005");
     const res = await Promise.all([invite(one.id, "g_m_Ed"), invite(two.id, "g_m_Fe")]);
     expect(res.map((r) => r.status).sort()).toEqual([200, 409]);
-    expect(res.find((r) => r.status === 409)!.text).toMatch(/already signs in to the portal as Rosa (Ed|Fe)/);
+    expect(res.find((r) => r.status === 409)!.text).toMatch(/is already used for the portal by Rosa (Ed|Fe)/);
     const blocked = res[0]!.status === 409 ? one : two;
     expect((await access(blocked.id))[0]!.blocked).toMatch(/Rosa (Ed|Fe)/);
     const sibling = seedPlatform().tenants.clinic_demo!.patients.find((p) => p.id === "patient_sibling")!;
@@ -288,6 +288,16 @@ describe("forgot password on MySQL (decisions 6, 19)", () => {
     expect((await accept(token, pw(7))).status).toBe(200);
     expect((await http().get("/api/auth/me").set("Cookie", old)).status).toBe(401); // every device on the old password
     expect([(await login("09170000009", pw(6))).status, (await login("09170000009", pw(7))).status]).toEqual([401, 200]);
+  });
+
+  it("refuses a reset to the password it replaces, and the link still works (BotF-6e)", async () => {
+    expect((await reset("0917 000 0009")).status).toBe(202); // Rosa Jo, on pw(7) since the case above
+    await drain();
+    const token = lastToken("639170000009");
+    const same = await accept(token, pw(7));
+    expect([same.status, same.text]).toEqual([400, expect.stringContaining("Choose a new password, not the one you use now")]);
+    expect((await accept(token, pw(8))).status).toBe(200);
+    expect((await login("09170000009", pw(8))).status).toBe(200);
   });
 
   it("allows 3 texts per number in any hour, unknown numbers too, and keeps only a hash of what was typed", async () => {

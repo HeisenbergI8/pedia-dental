@@ -1,5 +1,6 @@
 import type { AmountDue, BrandingChoice, PriceList, Signup } from "../schemas/signup";
 import type { Tier } from "../schemas/tenancy";
+import { cleanName } from "../schemas/common";
 import { differenceInCalendarDays, parseISO } from "date-fns";
 import { TIER_LIMITS } from "./tenancy";
 
@@ -18,8 +19,10 @@ export function amountDue(prices: PriceList, tier: Tier, choice: BrandingChoice)
   return { setupFee, firstMonth: monthlyFee, designAddOn, total, vat: vatPart(total) };
 }
 
-/** "Bulilit  Smiles " and "bulilit smiles" are one clinic: spaces collapsed, case ignored (platform #63, billing #10). */
-export const clinicNameKey = (name: string) => name.replace(/\s+/g, " ").trim().toLowerCase();
+/**
+ * "Bulilit  Smiles " and "bulilit smiles" are one clinic: spaces collapsed, case ignored (platform #63, billing #10), and
+ * invisible characters removed and lookalikes folded (cleanName, issue 26), so a hidden zero-width space is no new name. */
+export const clinicNameKey = (name: string) => cleanName(name).normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
 export const sameClinicName = (a: string, b: string) => clinicNameKey(a) === clinicNameKey(b);
 
 /** Billing #10, word for word the same in the form and the API. */

@@ -1,5 +1,5 @@
 import { DEMO_CLINIC_ID, childrenOf } from "@pedia/seed";
-import { PlanItem, planProgress } from "@pedia/shared";
+import { ChartEntry, PlanItem, planProgress } from "@pedia/shared";
 import { z } from "zod";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ADMIN, FRONT_DESK, NGITI_OWNER, clinicalApp } from "./clinical-support";
@@ -72,11 +72,28 @@ describe("treatment plan (apps/web handlers.test.ts → treatment plan)", () => 
     expect([missing.status, missing.text, missing.type]).toEqual([404, "Plan item not found", "text/plain"]);
   });
 
-  it("keeps the chart entry an item was planned from, as given (decision 4)", async () => {
+  it("plans a chart finding for its own child and tooth, once per procedure (#28)", async () => {
     const admin = await t.as(ADMIN);
     const id = await t.register();
-    expect((await t.ok(add(id, { procedureCode: "restoration", tooth: 74, fee: 1, sourceChartEntryId: "entry_x" }, admin), PlanItem, 201)).sourceChartEntryId).toBe("entry_x");
+    const visit = await t.start(id, admin);
+    const finding = await t.ok(t.call("post", `/patients/${id}/chart`, admin, { visitId: visit.id, tooth: 74, surfaces: ["O"], condition: "caries" }), ChartEntry, 201);
+    await t.complete(visit.id, admin);
+    const from = (over: object) => ({ procedureCode: "restoration", tooth: 74, fee: 1, sourceChartEntryId: finding.id, ...over });
+    const first = await t.ok(add(id, from({}), admin), PlanItem, 201);
+    expect(first.sourceChartEntryId).toBe(finding.id);
     expect(await t.ok(add(id, { procedureCode: "restoration", tooth: 84, fee: 1 }, admin), PlanItem, 201)).not.toHaveProperty("sourceChartEntryId");
+
+    const twice = await add(id, from({}), admin);
+    expect([twice.status, twice.text]).toEqual([409, "Restoration for this finding is already on the plan"]);
+    await t.ok(add(id, from({ procedureCode: "pulpotomy" }), admin), PlanItem, 201); // another procedure for the same finding
+    const otherTooth = await add(id, from({ tooth: 75 }), admin);
+    expect([otherTooth.status, otherTooth.text]).toEqual([400, "This finding is on tooth 74"]);
+    for (const [patient, entry] of [[id, "entry_x"], [await t.register(), finding.id]] as const) {
+      const res = await add(patient, from({ sourceChartEntryId: entry }), admin);
+      expect([res.status, res.text], entry).toEqual([400, "Unknown chart finding"]);
+    }
+    await t.ok(patch(first.id, { status: "declined" }, admin), PlanItem);
+    await t.ok(add(id, from({}), admin), PlanItem, 201); // a declined item can be planned again
   });
 
   it("lets front desk and a parent read a plan, and only staff with plan.write change it", async () => {

@@ -1,6 +1,6 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import {
-  RECEIPT_RULES, TOPUP_PAUSED, TextTopUpInput, manilaMonth, textTopUpQuote,
+  RECEIPT_RULES, TOPUP_PAUSED, TextTopUpInput, manilaMonth, paidOnProblem, textTopUpQuote,
   type ConfirmReceiptInput, type TextTopUp, type TextTopUpsView,
 } from "@pedia/shared";
 import type { Request } from "express";
@@ -93,6 +93,8 @@ export class TextTopUpsService {
 
   /** The operator's confirm: the receipt's own parts and amount (D3), to the Manila month of today (D7), on the books (D10). */
   async confirmReceipt(clinicId: string, receiptId: string, input: ConfirmReceiptInput): Promise<void> {
+    const late = paidOnProblem(input.paidOn, this.clock.today()); // issue 13
+    if (late) throw new BadRequestException(late);
     await runInTransaction(this.prisma, async (tx) => {
       if (!(await lockAccountById(tx, clinicId))) throw new NotFoundException(NOT_FOUND);
       const receipt = await this.receipts.lock(tx, receiptId);

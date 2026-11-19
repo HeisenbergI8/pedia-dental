@@ -1,12 +1,14 @@
 import { z } from "zod";
-import { format } from "date-fns";
-import { ClinicScoped, Id, IsoDate, IsoDateTime } from "./common";
+import { ClinicScoped, Id, IsoDateTime, pastIsoDate, tooLong } from "./common";
 
 export const OralHabit = z.enum(["thumb_sucking", "pacifier", "mouth_breathing", "bruxism"]);
 export type OralHabit = z.infer<typeof OralHabit>;
 
 /** Habit dates are what the parent reports, so they can't be later than today. */
-const PastDate = IsoDate.refine((d) => d <= format(new Date(), "yyyy-MM-dd"), "Can't be in the future");
+const PastDate = pastIsoDate("Enter a date", "Can't be in the future");
+
+/** The longest speech note typed (issue 5): a sensible length, well inside the column. */
+export const SPEECH_MAX = 2000;
 
 export const HabitObservation = z
   .object({ habit: OralHabit, startedOn: PastDate.optional(), stoppedOn: PastDate.optional() })
@@ -27,7 +29,9 @@ export const GrowthRecord = ClinicScoped.extend({
 });
 export type GrowthRecord = z.infer<typeof GrowthRecord>;
 
-export const SaveGrowthInput = GrowthRecord.pick({ habits: true, speech: true }).refine(
+export const SaveGrowthInput = GrowthRecord.pick({ habits: true, speech: true })
+  .extend({ speech: z.string().max(SPEECH_MAX, tooLong(SPEECH_MAX, "the speech notes")).optional() })
+  .refine(
   (r) => new Set(r.habits.map((h) => h.habit)).size === r.habits.length,
   { message: "Each habit once", path: ["habits"] },
 );

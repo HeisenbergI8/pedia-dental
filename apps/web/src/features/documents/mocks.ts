@@ -56,7 +56,11 @@ export const documentHandlers = [
     if (DENTIST_SIGNED.includes(input.type) && !holdsRole(issuer, "dentist")) {
       return new HttpResponse(`A dentist has to issue the ${DOCUMENT_TYPE_LABEL[input.type].toLowerCase()}`, { status: 400 });
     }
-    if (!sourceFits(input, patient.id)) return new HttpResponse(`${DOCUMENT_SOURCE[input.type]?.missing} for this patient`, { status: 400 });
+    if (!sourceFits(input, patient.id)) {
+      // A visit's own words end in "for" (BotD-12), so it has its own.
+      const words = DOCUMENT_SOURCE[input.type]?.kind === "visit" ? "Pick one of this patient's finished visits" : `${DOCUMENT_SOURCE[input.type]?.missing} for this patient`;
+      return new HttpResponse(words, { status: 400 });
+    }
     const clash = allergyConflicts(patient.allergies, input.items ?? []);
     if (clash.length) {
       return new HttpResponse(`${patient.firstName} is allergic to ${clash.map((d) => d.name).join(", ")} (recorded: ${patient.allergies.join(", ")})`, { status: 409 });

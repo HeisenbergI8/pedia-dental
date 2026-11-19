@@ -1,7 +1,7 @@
-import { ConflictException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import {
   RECEIPT_RULES, ReceiptUploadInput, billedTier, downgradeProblem, isTierUpgrade, keptPrice, nextBoundary,
-  settleStep, subscriptionDueOn, subscriptionMonthLine, subscriptionStatus, unpaidFrom, vatPart,
+  paidOnProblem, settleStep, subscriptionDueOn, subscriptionMonthLine, subscriptionStatus, unpaidFrom, vatPart,
   type AccountStatus, type AmountDue, type ConfirmReceiptInput, type RecordUpfrontPaymentInput, type Subscription,
   type SubscriptionPayment, type SubscriptionView, type Tier, type UpfrontPayment,
 } from "@pedia/shared";
@@ -208,12 +208,19 @@ export class SubscriptionRecordsService {
     }, receiptId);
   }
 
+  /** Issue 13: a payment is dated today at the latest, by the API's clock (400). */
+  private paidOnCheck(paidOn: string): void {
+    const problem = paidOnProblem(paidOn, this.clock.today());
+    if (problem) throw new BadRequestException(problem);
+  }
+
   /**
    * POST /operator/accounts/:id/subscription/payments: one month marked by hand (201 view). #18: once per
    * Idempotency-Key, claimed first in the clinic's own key space (the key, then account, subscription, counter), and
    * refused when this clinic already has a payment with the same reference on the same paid date.
    */
   async recordByHand(clinicId: string, input: RecordUpfrontPaymentInput, key: string): Promise<Answer<SubscriptionView>> {
+    this.paidOnCheck(input.paidOn);
     const actor = requireContext().operatorId ?? "operator";
     const request = { route: "POST /operator/accounts/:id/subscription/payments", params: { id: clinicId }, actor, body: input };
     return requestContext.within({ clinicId }, () =>
@@ -346,6 +353,7 @@ export class SubscriptionRecordsService {
    * lifts an overdue pause). Locks: account → subscription → receipt → (payment) → invoice counter.
    */
   async confirmReceipt(clinicId: string, receiptId: string, input: ConfirmReceiptInput): Promise<void> {
+    this.paidOnCheck(input.paidOn);
     await runInTransaction(this.prisma, async (tx) => {
       const account = await this.lockAccount(tx, clinicId);
       await this.lock(tx, clinicId);

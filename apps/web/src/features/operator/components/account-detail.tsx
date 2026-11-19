@@ -259,11 +259,11 @@ function TransferDialog({ row, onClose }: { row: AccountOverview; onClose: () =>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Transfer ownership of {row.account.name}</DialogTitle>
-          <DialogDescription>To one of the clinic&apos;s active staff logins. There is always exactly one Owner.</DialogDescription>
+          <DialogDescription>To one of the clinic&apos;s active admin or dentist logins. There is always exactly one Owner.</DialogDescription>
         </DialogHeader>
         {candidates.isLoading && <Loading compact label="Loading staff logins" />}
         {candidates.error && <ErrorState what="the staff logins" onRetry={() => void candidates.refetch()} />}
-        {candidates.data?.length === 0 && <p className="text-sm text-ink-muted">Add another staff login first. The Owner adds staff in Settings.</p>}
+        {candidates.data?.length === 0 && <p className="text-sm text-ink-muted">No admin or dentist login can take over yet. The Owner adds staff in Settings.</p>}
         {!!candidates.data?.length && (
           <div className="space-y-1.5">
             <Label htmlFor="new-owner">New Owner</Label>

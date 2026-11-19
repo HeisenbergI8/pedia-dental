@@ -1,6 +1,6 @@
 import type { INestApplication } from "@nestjs/common";
 import { DEMO_CLINIC_ID, SEED_PRICES, seedPlatform, staffEmail } from "@pedia/seed";
-import { BILLING_ONLY_MESSAGE, IDEMPOTENCY_KEY_MISSING, RECEIPT_PENDING, Session, SubscriptionView, amountDue, type PriceList } from "@pedia/shared";
+import { BILLING_ONLY_MESSAGE, ClinicUsage, IDEMPOTENCY_KEY_MISSING, RECEIPT_PENDING, Session, SubscriptionView, amountDue, limitMessage, type PriceList } from "@pedia/shared";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Hasher } from "../../src/auth/hashing";
@@ -215,7 +215,10 @@ describe("plan changes (billing #27, decision 12, E13)", () => {
     const owner = await signIn(app, NGITI_OWNER, NGITI);
     const cookie = owner.cookie;
     const add = await http().post("/api/branches").set("Cookie", cookie).send({ name: "Imus", address: "1 Imus", phone: "(046) 000 0000", openingHours: ngiti.branches[0]!.openingHours });
-    expect([add.status, add.text]).toEqual([409, "Your Starter plan includes 1 branch. Contact Primolar to upgrade."]);
+    expect([add.status, add.text]).toEqual([409, limitMessage("small", "branches", view.downgrade!.on)]); // names the move and its date
+    // Bot report #19: usage reports the limit that refusal applies, so the Plan page and the refusal agree.
+    const usage = ClinicUsage.parse((await http().get("/api/clinic/usage").set("Cookie", cookie)).body);
+    expect([usage.tier, usage.branches.limit, usage.staffLogins.limit]).toEqual(["mid", 1, 10]);
   });
 
   it("cancels once, pausing at the paid month's end; a cancelled subscription takes no more payments", async () => {

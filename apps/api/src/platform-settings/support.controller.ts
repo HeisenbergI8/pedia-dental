@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Param, Put } from "@nestjs/common";
-import { SupportContact, SupportSettings, type ClinicSupportView } from "@pedia/shared";
+import { Body, Controller, Get, Param, Put, Res } from "@nestjs/common";
+import type { Response } from "express";
+import { SupportContactInput, SupportSettings, type ClinicSupportView, type SupportContact } from "@pedia/shared";
 import { ownClinicId } from "../clinic/account-lock";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { OperatorAudited } from "../operator-audit/operator-audited";
@@ -26,14 +27,15 @@ export class SupportController {
     return this.settings.saveSupport(input);
   }
 
+  /** `null` before the first contact is saved, sent as JSON `null` (Nest would answer an empty body), as payment-qr does. */
   @Get("operator/accounts/:id/support-contact")
-  contact(@Param("id") id: string): Promise<SupportContact | null> {
-    return this.settings.supportContact(id);
+  async contact(@Param("id") id: string, @Res() res: Response): Promise<void> {
+    res.json(await this.settings.supportContact(id));
   }
 
   @Put("operator/accounts/:id/support-contact")
   @OperatorAudited({ action: "update", record: "Clinic account", detail: "Support contact saved" })
-  saveContact(@Param("id") id: string, @Body(new ZodValidationPipe(SupportContact)) input: SupportContact): Promise<SupportContact> {
+  saveContact(@Param("id") id: string, @Body(new ZodValidationPipe(SupportContactInput)) input: SupportContactInput): Promise<SupportContact> {
     return this.settings.saveSupportContact(id, input);
   }
 }

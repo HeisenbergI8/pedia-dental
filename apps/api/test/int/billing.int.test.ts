@@ -32,11 +32,11 @@ const paymentsOf = async (patientId: string) => t.ok(get(`/patients/${patientId}
 const invoicesOf = async (patientId: string) => t.ok(get(`/patients/${patientId}/invoices`), z.array(Invoice));
 const auditOf = (patientId: string, record: string) => t.auditOf(patientId, record).then((rows) => rows.length);
 
-/** The mock's patientWithDoneItems: plan items completed by signed notes in one visit. */
-async function doneItems(plan: [string, number?][], notes: [string, Record<string, unknown>][]) {
-  const fee = Object.fromEntries((await t.ok(get("/procedures"), z.array(Procedure))).map((p) => [p.code, p.fee]));
+/** The mock's patientWithDoneItems: plan items completed by signed notes in one visit. A third entry is the fee, else the catalog's. */
+async function doneItems(plan: [string, number?, number?][], notes: [string, Record<string, unknown>][]) {
+  const fees = Object.fromEntries((await t.ok(get("/procedures"), z.array(Procedure))).map((p) => [p.code, p.fee]));
   const id = await t.register();
-  for (const [procedureCode, tooth] of plan) await t.ok(t.call("post", `/patients/${id}/plan`, admin, { procedureCode, tooth, fee: fee[procedureCode] }), PlanItem, 201);
+  for (const [procedureCode, tooth, fee = fees[procedureCode]] of plan) await t.ok(t.call("post", `/patients/${id}/plan`, admin, { procedureCode, tooth, fee }), PlanItem, 201);
   const visit = await t.start(id, admin);
   for (const [templateId, values] of notes) {
     const note = await t.ok(t.call("post", `/patients/${id}/notes`, admin, { visitId: visit.id, templateId, values, behavior: [] }), ClinicalNote, 201);
@@ -248,6 +248,27 @@ describe("billing (apps/web handlers.test.ts → billing)", () => {
     }
     expect(await words(post(`/invoices/${theirs.id}/void`, ngiti, { reason: "x" }, null))).toEqual([404, "Invoice not found"]);
     expect(await words(post(`/patients/${theirs.patientId}/deposits`, ngiti, { amount: 1, method: "cash", receivedBy: "ngiti_staff_lim" }))).toEqual([404, "Patient not found"]);
+  });
+
+  it("answers 404 for another clinic's patient's bills and payments, and audits nothing", async () => {
+    const ngiti = await t.as(NGITI_OWNER);
+    const theirs = t.platform.tenants[DEMO_CLINIC_ID]!.patients[0]!.id;
+    for (const path of [`/patients/${theirs}/invoices`, `/patients/${theirs}/payments`, "/patients/nope/invoices", "/patients/nope/payments"]) {
+      expect(await words(get(path, ngiti))).toEqual([404, "Patient not found"]);
+    }
+    const named = await t.prisma.$queryRaw<{ n: bigint }[]>`SELECT COUNT(*) AS n FROM AuditEvent WHERE patientId = ${theirs} AND record IN ('Invoices', 'Payments') AND clinicId <> ${DEMO_CLINIC_ID}`;
+    expect(Number(named[0]!.n)).toBe(0);
+  });
+
+  it("refuses a bill whose total is over ₱10,000,000 (bot report #23)", async () => {
+    const { id, items } = await doneItems(
+      [["restoration", 51, pesos(6_000_000)], ["restoration", 74, pesos(6_000_000)]],
+      [["tpl_restoration", { teeth: [51, 74], material: "Composite" }]],
+    );
+    const ids = items.map((i) => i.id);
+    expect(await words(post(`/patients/${id}/invoices`, admin, { planItemIds: ids }))).toEqual([400, "A bill can total at most ₱10,000,000.00. Bill these treatments on two bills."]);
+    expect(await invoicesOf(id)).toEqual([]);
+    await bill(id, ids, pesos(2_000_000)); // within the cap after the discount
   });
 
   it("shows a parent their child's bills and payments without the voided ones, and lets them write none", async () => {

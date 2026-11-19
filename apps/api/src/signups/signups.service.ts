@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, HttpException, HttpStatus, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import {
   CreateAccountInput, DUPLICATE_EMAIL_MESSAGE, GetStartedInput, LEGAL_DOCUMENTS, RECEIPT_RULES, ReceiptUploadInput, SignupInput, SignupStatusView,
-  UNPAID_SIGNUP_DAYS, UNPAID_SIGNUP_REASON, amountDue, clinicNameKey, duplicateNameMessage, filesDueForDeletion, publicClashMessage, unpaidSignupExpired, SIGNUP_LIMIT_MESSAGE,
+  UNPAID_SIGNUP_DAYS, UNPAID_SIGNUP_REASON, amountDue, clinicNameKey, duplicateNameMessage, filesDueForDeletion, publicClashMessage, unpaidSignupExpired, SIGNUP_LIMIT_MESSAGE, paidOnProblem,
   type AgreementRecord, type ConfirmReceiptInput, type RecordUpfrontPaymentInput, type Signup,
 } from "@pedia/shared";
 import type { Request } from "express";
@@ -227,8 +227,15 @@ export class SignupsService {
     }
   }
 
+  /** Issue 13: a payment is dated today at the latest, by the API's clock (400). */
+  private paidOnCheck(paidOn: string): void {
+    const problem = paidOnProblem(paidOn, this.clock.today());
+    if (problem) throw new BadRequestException(problem);
+  }
+
   /** POST /operator/signups/:id/payment (billing #24, A4): the whole quoted total, in one payment, marked by hand. Once. */
   async recordPayment(id: string, input: RecordUpfrontPaymentInput): Promise<Signup> {
+    this.paidOnCheck(input.paidOn);
     return runInTransaction(this.prisma, async (tx) => {
       const s = await this.lockSignup(tx, id);
       SignupsService.waiting(s);
@@ -271,6 +278,7 @@ export class SignupsService {
     const form = await readSignupForm(req, CreateAccountInput);
     try {
       const { payment, signedOn, signedOnFile: _, ...input } = form.data;
+      this.paidOnCheck(payment.paidOn);
       const refused = brandingRefusal(input.branding, !!form.logo);
       if (refused) throw new BadRequestException(refused);
       const stored = await this.storeFiles(form);
@@ -350,6 +358,7 @@ export class SignupsService {
 
   /** Decisions 7, 22: the receipt records the setup fee, after which Approve works. Locks: sign-up → receipt. */
   async confirmReceipt(signupId: string, receiptId: string, input: ConfirmReceiptInput): Promise<void> {
+    this.paidOnCheck(input.paidOn);
     await runInTransaction(this.prisma, async (tx) => {
       const s = await this.lockSignup(tx, signupId);
       const receipt = await this.receipts.lock(tx, receiptId);

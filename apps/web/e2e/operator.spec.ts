@@ -521,7 +521,7 @@ test.describe("failed paths", () => {
     await dialog.getByLabel("Reference (optional)").fill("R".repeat(61));
     await dialog.getByLabel("Paid on").fill("");
     await dialog.getByRole("button", { name: "Record payment" }).click();
-    await expect(dialog.getByText("Keep the reference under 60 characters")).toBeVisible();
+    await expect(dialog.getByText("Keep the reference to 60 characters or fewer")).toBeVisible();
     await expect(dialog.getByText("Enter the date it was paid")).toBeVisible();
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(paymentRows(page)).toHaveCount(before);

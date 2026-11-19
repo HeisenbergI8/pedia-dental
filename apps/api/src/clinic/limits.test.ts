@@ -22,4 +22,13 @@ describe("tier limits as data (decisions #5–#10)", () => {
     });
     expect(usageOf("big", { branches: 4, staffLogins: 30 }, use).branches.limit).toBeNull();
   });
+
+  it("while a downgrade waits, reports the smaller plan's branch and login limits, the ones assertRoomFor applies (bot report #19)", () => {
+    const use = { storageBytes: 10, textParts: 3, textTopUp: 0, month: "2026-10" };
+    const u = usageOf("mid", { branches: 1, staffLogins: 5 }, use, { tier: "small" });
+    expect([u.tier, u.branches.limit, u.staffLogins.limit]).toEqual(["mid", 1, 10]);
+    expect(limitRefusal("small", "branches", 1, "2026-12-19")).toBe(
+      "Your plan moves to Starter on 19 December 2026, and Starter includes 1 branch. Contact Primolar to keep your current plan.",
+    );
+  });
 });

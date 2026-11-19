@@ -12,6 +12,7 @@ import {
   Signup,
   SubscriptionView,
   SupportContact,
+  SupportContactInput,
   SupportSettings,
   type ConfirmReceiptInput,
   type CreateAccountInput,
@@ -124,7 +125,7 @@ export const useSaveSupportSettings = () =>
 export const useSupportContact = (id: string) =>
   useQuery({ queryKey: operatorKeys.supportContact(id), queryFn: () => api(`/operator/accounts/${id}/support-contact`, SupportContact.nullable()) });
 export const useSaveSupportContact = (id: string) =>
-  useAccountAction((input: SupportContact) => api(`/operator/accounts/${id}/support-contact`, SupportContact, { method: "PUT", body: JSON.stringify(input) }));
+  useAccountAction((input: SupportContactInput) => api(`/operator/accounts/${id}/support-contact`, SupportContact, { method: "PUT", body: JSON.stringify(input) }));
 
 export const usePaymentQr = () => useQuery({ queryKey: operatorKeys.paymentQr(), queryFn: () => api("/operator/payment-qr", PaymentQrView.nullable()) });
 export const useSavePaymentQr = () =>

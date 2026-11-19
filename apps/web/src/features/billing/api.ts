@@ -1,7 +1,7 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
-import { Invoice, Payment, type ApplyCreditInput, type CreateInvoiceInput, type PaymentMethod, type RecordPaymentInput, type VoidInvoiceInput } from "@pedia/shared";
+import { Invoice, Payment, pesos, type ApplyCreditInput, type CreateInvoiceInput, type PaymentMethod, type RecordPaymentInput, type VoidInvoiceInput } from "@pedia/shared";
 import { branchParam } from "@/features/dashboard/api";
 import { api } from "@/lib/api-client";
 import { idempotent } from "@/lib/idempotency";
@@ -25,6 +25,14 @@ export const METHOD_LABEL: Record<PaymentMethod, string> = {
   bank_transfer: "Bank transfer",
   account_credit: "From deposit",
 };
+
+/** Bot report #15: a money form's mode gives the sign, so a typed minus or zero is refused, never dropped. */
+export const AMOUNT_ABOVE_ZERO = "Enter an amount above ₱0";
+/** A typed peso amount in centavos, or undefined when it isn't above zero. */
+export function typedCentavos(text: string): number | undefined {
+  const centavos = pesos(Number(text) || 0);
+  return centavos > 0 ? centavos : undefined;
+}
 
 /** Oldest first. */
 export function useInvoices(patientId: string, opts?: { enabled?: boolean }) {

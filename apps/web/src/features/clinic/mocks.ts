@@ -36,8 +36,10 @@ import {
   imageProblem,
   letterheadProblem,
   type LetterheadSettings,
+  DUPLICATE_EMAIL_MESSAGE,
   duplicateNameMessage,
   sameClinicName,
+  branchNameProblem,
 } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { branchOf, sessionOf, usableBranchesOf } from "@/mocks/access";
@@ -65,14 +67,23 @@ const letterheadView = (): LetterheadSettings => {
   const { imageRef: _, ...view } = db.letterhead;
   return view;
 };
-/** Decisions #8–#10: open branches and active logins against the tier. `null` limit = unlimited. */
-const usage = (): ClinicUsage => usageOf(db, currentAccount(), manilaMonth(today()));
+/**
+ * Decisions #8–#10: open branches and active logins against the tier. `null` limit = unlimited. While a downgrade
+ * waits, against the smaller plan (limitTier), the limit atLimit applies (bot report #19).
+ */
+const usage = (): ClinicUsage => {
+  const u = usageOf(db, currentAccount(), manilaMonth(today()));
+  const limits = TIER_LIMITS[limitTier(u.tier, subscriptionOf(currentClinicId())?.downgrade)];
+  return { ...u, branches: { ...u.branches, limit: limits.branches }, staffLogins: { ...u.staffLogins, limit: limits.staffLogins } };
+};
 
 /** 409 with the limit's wording when one more would go over it. Only ever blocks the next one (decision #9). */
 function atLimit(limit: "branches" | "staffLogins") {
   // B12 E13: while a downgrade waits, additions are checked against the smaller plan.
-  const tier = limitTier(currentAccount().tier, subscriptionOf(currentClinicId())?.downgrade);
-  return canAddUnder(tier, limit, accountUsage(db)[limit]) ? undefined : refuse(409, limitMessage(tier, limit));
+  const { tier: current } = currentAccount();
+  const downgrade = subscriptionOf(currentClinicId())?.downgrade;
+  const tier = limitTier(current, downgrade);
+  return canAddUnder(tier, limit, accountUsage(db)[limit]) ? undefined : refuse(409, limitMessage(tier, limit, tier !== current ? downgrade?.on : undefined));
 }
 
 
@@ -163,9 +174,14 @@ export const clinicHandlers = [
   http.put(url("/clinic"), async ({ request }) => {
     const parsed = UpdateClinicProfileInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
-    // Audit #26: another clinic's name, or a waiting sign-up's, is refused in sign-up's words (sameClinicName).
-    const others = [...platform.accounts.filter((a) => a.id !== currentClinicId()), ...platform.signups.filter((s) => s.status === "waiting").map((s) => s.account)];
-    if (others.some((a) => sameClinicName(a.name, parsed.data.name))) return refuse(409, duplicateNameMessage(parsed.data.name));
+    // Audit #26, bot report #40: another clinic's name or contact email, or a waiting sign-up's, is refused in sign-up's words.
+    const taken = [
+      ...platform.accounts.filter((a) => a.id !== currentClinicId()),
+      ...platform.signups.filter((s) => s.status === "waiting").map((s) => s.account),
+    ];
+    if (taken.some((a) => sameClinicName(a.name, parsed.data.name))) return refuse(409, duplicateNameMessage(parsed.data.name));
+    const email = parsed.data.contactEmail.trim().toLowerCase();
+    if (taken.some((a) => a.contactEmail.toLowerCase() === email)) return refuse(409, DUPLICATE_EMAIL_MESSAGE);
     const account = Object.assign(currentAccount(), parsed.data);
     persist();
     return HttpResponse.json(account);
@@ -291,8 +307,12 @@ export const clinicHandlers = [
     if (full) return full;
     const parsed = BranchInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
+    const taken = branchNameProblem(parsed.data.name, db.branches);
+    if (taken) return refuse(409, taken);
     const branch: Branch = { ...parsed.data, id: `branch_${crypto.randomUUID()}`, clinicId: currentClinicId(), archived: false };
     db.branches.push(branch);
+    // As a new clinic's first branch: "Chair 1", so the branch can be booked at straight away.
+    db.chairs.push({ id: `chair_${crypto.randomUUID()}`, clinicId: currentClinicId(), branchId: branch.id, name: "Chair 1" });
     persist();
     return HttpResponse.json(branch, { status: 201 });
   }),
@@ -302,6 +322,8 @@ export const clinicHandlers = [
     if (!branch) return refuse(404, "Branch not found");
     const parsed = BranchInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
+    const taken = branchNameProblem(parsed.data.name, db.branches, branch.id);
+    if (taken) return refuse(409, taken);
     Object.assign(branch, parsed.data);
     persist();
     return HttpResponse.json(branch);
@@ -325,6 +347,8 @@ export const clinicHandlers = [
     if (!branch.archived) return HttpResponse.json(branch);
     const full = atLimit("branches");
     if (full) return full;
+    const taken = branchNameProblem(branch.name, db.branches, branch.id);
+    if (taken) return refuse(409, taken);
     branch.archived = false;
     persist();
     return HttpResponse.json(branch);

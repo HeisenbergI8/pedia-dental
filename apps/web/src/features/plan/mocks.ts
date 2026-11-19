@@ -24,6 +24,17 @@ export const planHandlers = [
     if (procedure.perTooth && parsed.data.tooth === undefined) {
       return new HttpResponse(`${procedure.name} is planned per tooth`, { status: 400 });
     }
+    // From a chart finding: this child's, on the item's tooth, and the same procedure not open for it already (#28).
+    const { sourceChartEntryId: entryId, tooth, procedureCode } = parsed.data;
+    if (entryId) {
+      const finding = db.chartEntries.find((e) => e.id === entryId);
+      if (!finding || finding.patientId !== params.id) return new HttpResponse("Unknown chart finding", { status: 400 });
+      if (tooth !== undefined && tooth !== finding.tooth) return new HttpResponse(`This finding is on tooth ${finding.tooth}`, { status: 400 });
+      const open = (s: PlanItem["status"]) => s === "planned" || s === "in_progress";
+      if (db.planItems.some((i) => i.patientId === params.id && i.sourceChartEntryId === entryId && i.procedureCode === procedureCode && open(i.status))) {
+        return new HttpResponse(`${procedure.name} for this finding is already on the plan`, { status: 409 });
+      }
+    }
 
     const item: PlanItem = {
       ...parsed.data,

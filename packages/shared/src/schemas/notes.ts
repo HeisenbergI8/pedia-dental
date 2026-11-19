@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ClinicScoped, Id, IsoDateTime } from "./common";
+import { ClinicScoped, Id, IsoDateTime, tooLong } from "./common";
 
 /** `section` groups consecutive fields under one heading ("Bite and occlusion"). Absent = ungrouped. */
 const fieldBase = { key: z.string(), label: z.string(), required: z.boolean().optional(), section: z.string().optional() };
@@ -49,7 +49,7 @@ export type ClinicalNote = z.infer<typeof ClinicalNote>;
 export const BEHAVIOR_NOTE_MAX = 300;
 /** The limit is on input only: ClinicalNote also parses stored notes, which are never re-validated. */
 export const UpdateNoteInput = ClinicalNote.pick({ values: true, behavior: true }).extend({
-  behaviorNote: z.string().trim().max(BEHAVIOR_NOTE_MAX, `Keep the behavior note under ${BEHAVIOR_NOTE_MAX} characters`).optional(),
+  behaviorNote: z.string().trim().max(BEHAVIOR_NOTE_MAX, tooLong(BEHAVIOR_NOTE_MAX, "the behavior note")).optional(),
 });
 export type UpdateNoteInput = z.infer<typeof UpdateNoteInput>;
 

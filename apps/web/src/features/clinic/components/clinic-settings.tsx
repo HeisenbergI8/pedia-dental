@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { rulesFor, formatPeso, type FollowUpRule } from "@pedia/shared";
 import { DataList } from "@/components/data-list";
 import { PageHeader } from "@/components/page-header";
-import { useChairs, useProcedures, useStaff } from "../api";
+import { useBranches, useChairs, useProcedures, useStaff } from "../api";
 import { Loading } from "@/components/brand";
 import { ErrorState } from "@/components/error-state";
 
@@ -33,6 +33,7 @@ export function ClinicSettings({ embedded = false }: { embedded?: boolean }) {
   const procedures = useProcedures();
   const staff = useStaff();
   const chairs = useChairs();
+  const branches = useBranches(); // each branch has its own "Chair 1": say whose
 
   if (procedures.isLoading || staff.isLoading || chairs.isLoading) {
     return <Loading label="Loading settings" />;
@@ -43,7 +44,7 @@ export function ClinicSettings({ embedded = false }: { embedded?: boolean }) {
 
   return (
     <div className="space-y-6">
-      {!embedded && <PageHeader title="Settings" description="The clinic's procedures, staff and chairs. Read-only in this prototype." />}
+      {!embedded && <PageHeader title="Settings" description="The clinic's procedures, staff and chairs. Only the Owner can change these." />}
 
       <Section title="Procedure catalog">
         <DataList
@@ -101,7 +102,15 @@ export function ClinicSettings({ embedded = false }: { embedded?: boolean }) {
         </Section>
 
         <Section title="Chairs">
-          <DataList caption="Chairs" rows={chairs.data ?? []} rowKey={(c) => c.id} columns={[{ key: "name", header: "Name", mobile: "title", cell: (c) => c.name }]} />
+          <DataList
+            caption="Chairs"
+            rows={(chairs.data ?? []).filter((c) => !branches.data?.find((b) => b.id === c.branchId)?.archived)}
+            rowKey={(c) => c.id}
+            columns={[
+              { key: "name", header: "Name", mobile: "title", cell: (c) => c.name },
+              { key: "branch", header: "Branch", mobile: "meta", cell: (c) => <span className="break-words">{branches.data?.find((b) => b.id === c.branchId)?.name ?? ""}</span> },
+            ]}
+          />
         </Section>
       </div>
     </div>

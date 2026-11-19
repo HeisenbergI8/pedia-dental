@@ -9,6 +9,7 @@ import type { Visit } from "../schemas/visit";
 import { accountSummary, type BillTotals, type PaidRow } from "./money";
 import { isAccountText } from "./portal";
 import { dueBucket, isDueItemOpen, type DueBucket } from "./recall";
+import { FAILURE } from "./sending";
 
 /** "Recent visit": seen within this many days, today included. Data, not an `if` (CONVENTIONS, Domain rules). */
 export const RECENT_VISIT_DAYS = 30;
@@ -42,13 +43,24 @@ export const lastVisitOn = (...args: Parameters<typeof visitDays>): string | und
  * "No contact": the last message that actually went out (sent) or was tried (failed) failed. Queued and
  * cancelled messages say nothing about whether the number works. A later success clears it.
  */
-/** An account text (an invite, a reset: B11) goes to one guardian about their login, so it never decides "no contact". */
+/**
+ * Failures that are the clinic's, not the family's number: the text was never tried (the month's text limit, B12
+ * decision 19; a paused clinic, audit #24), so it says nothing about whether the family can be reached. The API's
+ * `lastTried` must leave these out too.
+ */
+export const CLINIC_SIDE_FAILURES: readonly string[] = [FAILURE.textLimit, FAILURE.clinicPaused];
+
+/**
+ * An account text (an invite, a reset: B11) goes to one guardian about their login, so it never decides "no contact";
+ * nor does a failure in CLINIC_SIDE_FAILURES.
+ */
 export function hasNoContact(
   patientId: string,
-  messages: (Pick<Message, "patientId" | "status" | "sendAt"> & { kind?: Message["kind"] })[],
+  messages: (Pick<Message, "patientId" | "status" | "sendAt"> & { kind?: Message["kind"]; failureReason?: string })[],
 ): boolean {
   const tried = messages
     .filter((m) => m.patientId === patientId && !isAccountText(m.kind) && (m.status === "sent" || m.status === "failed"))
+    .filter((m) => !(m.status === "failed" && m.failureReason && CLINIC_SIDE_FAILURES.includes(m.failureReason)))
     // Same send time: a sent text wins (the family was reached), so the demo and the API agree whatever the order.
     .sort((a, b) => a.sendAt.localeCompare(b.sendAt) || (a.status === b.status ? 0 : a.status === "sent" ? 1 : -1));
   return tried.at(-1)?.status === "failed";
@@ -74,7 +86,7 @@ export type PatientFacts = {
   dueItems: Pick<DueItem, "patientId" | "dueOn" | "appointmentId" | "closedAt" | "ruleId" | "createdAt">[];
   invoices: (BillTotals & Pick<Invoice, "patientId">)[];
   payments: PaidRow[];
-  messages: Pick<Message, "patientId" | "status" | "sendAt">[];
+  messages: (Pick<Message, "patientId" | "status" | "sendAt"> & Partial<Pick<Message, "failureReason">>)[];
 };
 
 /** Everything the list shows about one patient, from the same sources as /recall and the dashboard. */
@@ -140,24 +152,33 @@ export function comparePatients(sort: PatientSort) {
   };
 }
 
+/** Search text: lowercased with the accents off ("Niño" is found by "nino"), as `sameText` compares names. */
+const plainText = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+/** A phone's digits in the local form: a leading 63 (the country code, +63) reads as 0, so "+63917…" finds "0917…". */
+const localDigits = (s: string) => {
+  const d = s.replace(/\D/g, "");
+  return d.startsWith("63") ? `0${d.slice(2)}` : d;
+};
+
 /** What a patient is found by (decision 1): the API stores these two strings; the mock builds them per request. */
 export function patientSearchText(p: Pick<Patient, "firstName" | "lastName" | "nickname" | "guardians">): { names: string; digits: string } {
   return {
-    names: [`${p.firstName} ${p.lastName} ${p.nickname ?? ""}`, ...p.guardians.map((g) => g.fullName)].join(" ").toLowerCase(),
-    digits: p.guardians.map((g) => g.phone.replace(/\D/g, "")).join(" "),
+    names: plainText([`${p.firstName} ${p.lastName} ${p.nickname ?? ""}`, ...p.guardians.map((g) => g.fullName)].join(" ")),
+    digits: p.guardians.map((g) => localDigits(g.phone)).join(" "),
   };
 }
 
-/** A search, as words: each lowercased, with its digits when it reads as a phone number ("0917-123-4567", "1234567"). */
+/**
+ * A search, as words: each lowercased with the accents off, with its digits (local form) when it reads as a phone
+ * number ("0917-123-4567", "+639171234567", "1234567").
+ */
 export type SearchWord = { text: string; digits?: string };
 export function searchWords(q: string): SearchWord[] {
   const isPhone = (w: string) => /^[\d()+-]+$/.test(w) && /\d/.test(w);
-  return q
-    .trim()
-    .toLowerCase()
+  return plainText(q.trim())
     .split(/\s+/)
     .filter(Boolean)
-    .map((text) => (isPhone(text) ? { text, digits: text.replace(/\D/g, "") } : { text }));
+    .map((text) => (isPhone(text) ? { text, digits: localDigits(text) } : { text }));
 }
 
 /**

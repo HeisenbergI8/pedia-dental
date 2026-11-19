@@ -1,3 +1,4 @@
+import { format, parseISO } from "date-fns";
 import { Role } from "../schemas/common";
 import type { StaffMember } from "../schemas/clinic";
 import type { Branch, ClinicSupportView, OpeningHours, SupportContact, SupportSettings, Tier } from "../schemas/tenancy";
@@ -145,19 +146,36 @@ export const TIER_LABEL: Record<Tier, string> = { small: "Starter", mid: "Clinic
 /** Can sign in and be chosen for new work. A deactivated login keeps its name on what it recorded (decision #23). */
 export const isActiveStaff = (staff: Pick<StaffMember, "deactivatedAt">) => !staff.deactivatedAt;
 
+/** The Owner is an admin or a dentist (as their job or a second role), never front desk only: sign-up's rule too. */
+export const canOwn = (staff: Pick<StaffMember, "role" | "alsoRoles">) => holdsRole(staff, "admin") || holdsRole(staff, "dentist");
+
 /**
  * Why ownership can't go to this login, in plain words; undefined when it can (decision #13: exactly one Owner,
- * moved only by the operator). Only an active staff login of the same account: `staff` is that account's list.
+ * moved only by the operator). Only an active admin or dentist login of the same account: `staff` is that account's list.
  */
 export function transferProblem(
-  staff: Pick<StaffMember, "id" | "fullName" | "isOwner" | "deactivatedAt">[],
+  staff: Pick<StaffMember, "id" | "fullName" | "isOwner" | "deactivatedAt" | "role" | "alsoRoles">[],
   toStaffId: string,
 ): string | undefined {
   const to = staff.find((s) => s.id === toStaffId);
   if (!to) return "Choose a staff login of this clinic";
   if (to.isOwner) return `${to.fullName} is already the Owner`;
   if (!isActiveStaff(to)) return `${to.fullName}'s login is deactivated. The Owner must reactivate it before it can own the account.`;
+  if (!canOwn(to)) return `The Owner must be an admin or a dentist. ${to.fullName} works at the front desk.`;
   return undefined;
+}
+
+/** Branch names match ignoring case and spaces: "Imus  Branch" is "imus branch". */
+const branchNameKey = (name: string) => name.normalize("NFKC").toLowerCase().replace(/\s+/g, "");
+
+/**
+ * Why this name can't be used, in plain words; undefined when it can. Two open branches never share a name (ignoring
+ * case and spaces), so staff can tell them apart. `selfId` is the branch being renamed; archived branches don't count.
+ */
+export function branchNameProblem(name: string, branches: Pick<Branch, "id" | "name" | "archived">[], selfId?: string): string | undefined {
+  const key = branchNameKey(name);
+  const same = branches.find((b) => !b.archived && b.id !== selfId && branchNameKey(b.name) === key);
+  return same ? `There is already an open branch called ${same.name}. Choose another name.` : undefined;
 }
 
 /** What counts toward the limits: open branches and active logins, the Owner included (decisions #10, #37). */
@@ -167,11 +185,20 @@ export function accountUsage(data: { branches: Pick<Branch, "archived">[]; staff
 
 const LIMIT_NOUN = { branches: ["branch", "branches"], staffLogins: ["staff login", "staff logins"] } as const;
 
-/** The refusal at a limit (decision #8), word for word the same in the form and the API. */
-export function limitMessage(tier: Tier, limit: "branches" | "staffLogins"): string {
+/**
+ * The refusal at a limit (decision #8), word for word the same in the form and the API. `downgradeOn`: `tier` is the
+ * smaller plan a waiting downgrade moves to on that date (B12 E13, limitTier), whose limit already counts; say so, so the
+ * words agree with a Plan page that still names the current plan.
+ */
+export function limitMessage(tier: Tier, limit: "branches" | "staffLogins", downgradeOn?: string): string {
   const max = TIER_LIMITS[tier][limit];
   const [one, many] = LIMIT_NOUN[limit];
-  return `Your ${TIER_LABEL[tier]} plan includes ${max ?? "unlimited"} ${max === 1 ? one : many}. Contact Primolar to upgrade.`;
+  const includes = `${max ?? "unlimited"} ${max === 1 ? one : many}`;
+  if (downgradeOn) {
+    const plan = TIER_LABEL[tier];
+    return `Your plan moves to ${plan} on ${format(parseISO(downgradeOn), "d MMMM yyyy")}, and ${plan} includes ${includes}. Contact Primolar to keep your current plan.`;
+  }
+  return `Your ${TIER_LABEL[tier]} plan includes ${includes}. Contact Primolar to upgrade.`;
 }
 
 /** "12 Aguinaldo Highway, Imus · (046) 417 0001": under the clinic's name on receipts and letterheads (decision #19). */

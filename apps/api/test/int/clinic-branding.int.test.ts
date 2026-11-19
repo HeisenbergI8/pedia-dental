@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { INestApplication } from "@nestjs/common";
 import { seedPlatform } from "@pedia/seed";
-import { ClinicAccount, ClinicContext, duplicateNameMessage } from "@pedia/shared";
+import { ClinicAccount, ClinicContext, DUPLICATE_EMAIL_MESSAGE, duplicateNameMessage } from "@pedia/shared";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Hasher } from "../../src/auth/hashing";
@@ -143,5 +143,14 @@ describe("branding (owner-settings.test.ts, decisions #28–#31)", () => {
     expect((await put("N".repeat(81))).status).toBe(400);
     expect(ClinicAccount.parse((await put("ngiti kids dental")).body).name).toBe("ngiti kids dental"); // its own name, any case
     expect((await put(profile.name)).status).toBe(200);
+  });
+
+  it("refuses another clinic's or a waiting sign-up's contact email, as sign-up does (bot report #40)", async () => {
+    const cookie = await as(NGITI_OWNER);
+    const profile = { name: "Ngiti Kids Dental", contactEmail: "hello@ngiti.demo", tin: "234-567-890-0001" };
+    const put = (contactEmail: string) => http().put("/api/clinic").set("Cookie", cookie).send({ ...profile, contactEmail });
+    const clash = await put("HELLO@ipin.demo");
+    expect([clash.status, clash.text]).toEqual([409, DUPLICATE_EMAIL_MESSAGE]);
+    expect(ClinicAccount.parse((await put("HELLO@ngiti.demo")).body).contactEmail).toBe("hello@ngiti.demo"); // its own, any case
   });
 });

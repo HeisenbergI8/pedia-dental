@@ -1,5 +1,4 @@
 import { http, HttpResponse, delay } from "msw";
-import { format } from "date-fns";
 import {
   ApplyCreditInput,
   CreateInvoiceInput,
@@ -25,8 +24,12 @@ import { env } from "@/lib/env";
 import { activeBranch, reportBranches, sessionOf, usableBranchesOf } from "@/mocks/access";
 import { currentClinicId, db, persist } from "@/mocks/db";
 import { idempotencyKey, once } from "@/mocks/idempotency";
+import { manilaDay } from "./manila-time";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
+const notFound = () => new HttpResponse("Patient not found", { status: 404 });
+/** apps/api billing.rules BILL_MAX: the most one bill can total, ₱10,000,000 (bot report #23). */
+const BILL_MAX = 1_000_000_000;
 /** New money is received by someone who works here now; old records keep a deactivated name (decision #23). */
 const isActiveStaffId = (id: string) => db.staff.some((s) => s.id === id && isActiveStaff(s));
 const byReceived = (a: Payment, b: Payment) => a.receivedAt.localeCompare(b.receivedAt);
@@ -49,6 +52,7 @@ const fingerprint = (request: Request, route: string, id: string, body: unknown)
 export const billingHandlers = [
   http.get(url("/patients/:id/invoices"), async ({ params, request }) => {
     await delay(100);
+    if (!db.patients.some((p) => p.id === params.id)) return notFound(); // bot report #30: never an empty list
     const rows = db.invoices.filter((i) => i.patientId === params.id).sort((a, b) => a.issuedAt.localeCompare(b.issuedAt));
     // Staff see voided bills; a parent (billing.view only for their own children) doesn't (B8 question 3).
     return HttpResponse.json(rolesCan(sessionOf(request)!.roles, "billing.view", "all") ? rows : liveInvoices(rows));
@@ -57,7 +61,7 @@ export const billingHandlers = [
   http.post(url("/patients/:id/invoices"), async ({ params, request }) => {
     const key = idempotencyKey(request);
     if (key instanceof Response) return key;
-    if (!db.patients.some((p) => p.id === params.id)) return new HttpResponse("Patient not found", { status: 404 });
+    if (!db.patients.some((p) => p.id === params.id)) return notFound();
     const parsed = CreateInvoiceInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
     const { planItemIds, discount } = parsed.data;
@@ -78,6 +82,7 @@ export const billingHandlers = [
       }));
       const subtotal = lines.reduce((s, l) => s + l.amount, 0);
       if (discount > subtotal) return new HttpResponse(`The discount can't be more than ${formatPeso(subtotal)}`, { status: 400 });
+      if (subtotal - discount > BILL_MAX) return new HttpResponse(`A bill can total at most ${formatPeso(BILL_MAX)}. Bill these treatments on two bills.`, { status: 400 });
       // The appointment these treatments were done in, when they all share one: links "unpaid appointments".
       const fromAppointments = new Set(items.map((i) => db.visits.find((v) => v.id === i.completedVisitId)?.appointmentId));
       const appointmentId = fromAppointments.size === 1 ? [...fromAppointments][0] : undefined;
@@ -113,17 +118,18 @@ export const billingHandlers = [
 
   http.get(url("/patients/:id/payments"), async ({ params }) => {
     await delay(100);
+    if (!db.patients.some((p) => p.id === params.id)) return notFound();
     return HttpResponse.json(db.payments.filter((p) => p.patientId === params.id).sort(byReceived));
   }),
 
-  // The daily collection list: payments and refunds received on ?date=YYYY-MM-DD (local day), at the device's branch
+  // The daily collection list: payments and refunds received on ?date=YYYY-MM-DD (the Manila day), at the device's branch
   // or the ?branch= one (reportBranches, decision #20).
   http.get(url("/payments"), async ({ request }) => {
     await delay(100);
-    const date = new URL(request.url).searchParams.get("date") ?? format(new Date(), "yyyy-MM-dd");
+    const date = new URL(request.url).searchParams.get("date") ?? manilaDay();
     const branches = reportBranches(request);
     if (branches instanceof Response) return branches;
-    const rows = db.payments.filter((p) => branches.includes(p.branchId) && format(new Date(p.receivedAt), "yyyy-MM-dd") === date);
+    const rows = db.payments.filter((p) => branches.includes(p.branchId) && manilaDay(p.receivedAt) === date);
     return HttpResponse.json(rows.sort(byReceived));
   }),
 
@@ -166,7 +172,7 @@ export const billingHandlers = [
     const key = idempotencyKey(request);
     if (key instanceof Response) return key;
     const patientId = String(params.id);
-    if (!db.patients.some((p) => p.id === patientId)) return new HttpResponse("Patient not found", { status: 404 });
+    if (!db.patients.some((p) => p.id === patientId)) return notFound();
     const parsed = RecordPaymentInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
     const refused = refundRefused(request, parsed.data.amount);

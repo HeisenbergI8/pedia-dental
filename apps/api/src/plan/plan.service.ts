@@ -11,7 +11,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { clinicData } from "../prisma/tenant-scope";
 import { runInTransaction, type Tx } from "../prisma/transaction";
 import { PLAN_COLUMNS, PLAN_ORDER, toPlanItem } from "./plan.rows";
-import { PLAN_ITEM_NOT_FOUND, addRefusal, statusRefusal } from "./plan.rules";
+import { PLAN_ITEM_NOT_FOUND, addRefusal, findingRefusal, statusRefusal } from "./plan.rules";
 
 const OPEN = ["planned", "in_progress"] as const;
 
@@ -46,12 +46,20 @@ export class PlanService implements OnModuleInit {
     return rows.map(toPlanItem);
   }
 
-  /** POST /patients/:id/plan: 404 → 400 issues → 400 "Unknown procedure" → 400 "… is planned per tooth". */
+  /** POST /patients/:id/plan: 404 → 400 issues → 400 "Unknown procedure" → 400 "… is planned per tooth" → the finding's 400s and 409. */
   async add(patientId: string, body: unknown): Promise<PlanItem> {
     return runInTransaction(this.prisma, async (tx) => {
       await lockPatient(tx, patientId); // the 404, and every patient write locks first (CONVENTIONS → Traps)
       const input = new ZodValidationPipe(AddPlanItemInput).transform(body);
-      refuse(addRefusal(await this.clinic.procedure(input.procedureCode, tx), input));
+      const procedure = await this.clinic.procedure(input.procedureCode, tx);
+      refuse(addRefusal(procedure, input));
+      if (input.sourceChartEntryId) {
+        // Read under the patient's lock, so a double click can't plan one finding twice.
+        const finding = await tx.chartEntry.findUnique({ where: { id: input.sourceChartEntryId }, select: { patientId: true, tooth: true } });
+        const where = { patientId, sourceChartEntryId: input.sourceChartEntryId, procedureCode: input.procedureCode, status: { in: [...OPEN] } };
+        const open = await tx.planItem.findFirst({ where, select: { id: true } });
+        refuse(findingRefusal(finding ?? undefined, patientId, input, open ? procedure!.name : undefined));
+      }
       const row = await tx.planItem.create({
         data: {
           ...clinicData(), patientId, procedureCode: input.procedureCode, tooth: input.tooth ?? null, fee: input.fee,

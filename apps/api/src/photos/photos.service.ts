@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException, type OnModuleInit, PayloadTooLargeException } from "@nestjs/common";
-import { CONSENTED_PHOTO_TYPES, STAFF_PHOTO_KEPT, UPLOAD_RULES, UploadPhotoInput, choiceDeclined, manilaMonth, parentUploadRefusal, photoFileName, rolesCan, type ClinicalPhoto, type Patient, type PhotoType } from "@pedia/shared";
+import { CONSENTED_PHOTO_TYPES, STAFF_PHOTO_KEPT, UPLOAD_RULES, UploadPhotoInput, beforeBirthProblem, choiceDeclined, manilaMonth, parentUploadRefusal, photoFileName, rolesCan, type ClinicalPhoto, type Patient, type PhotoType } from "@pedia/shared";
 import type { Request } from "express";
 import { AuditService } from "../audit/audit.service";
 import { RecordOwners } from "../auth/record-owners";
@@ -95,8 +95,10 @@ export class PhotosService implements OnModuleInit {
         throw new BadRequestException("Upload a photo or a medical document");
       }
       if (input.visitId && (await this.visits.patientOf(input.visitId)) !== patientId) throw new BadRequestException("Visit not found");
+      const beforeBirth = beforeBirthProblem(input.takenOn, patient.birthDate); // issue 13
+      if (beforeBirth) throw new BadRequestException(beforeBirth);
       // Audit #5: a parent's uploads have their own limits per child, checked before storing (and again under the lock).
-      const overParentLimit = async (db: Pick<Tx, "clinicalPhoto">) => fromParent && parentUploadRefusal(patient.firstName, await this.parentUse(db, patientId), file.bytes);
+      const overParentLimit = async (db: Pick<Tx, "clinicalPhoto" | "auditEvent">) => fromParent && parentUploadRefusal(patient.firstName, await this.parentUse(db, patientId), file.bytes);
       const early = await overParentLimit(this.prisma);
       if (early) throw new ConflictException(early);
 
@@ -133,13 +135,16 @@ export class PhotosService implements OnModuleInit {
     }
   }
 
-  /** Audit #5: this child's parent uploads this Manila month, and the bytes of every parent upload still stored. */
-  private async parentUse(db: Pick<Tx, "clinicalPhoto">, patientId: string): Promise<{ thisMonth: number; storedBytes: number }> {
+  /**
+   * Audit #5: the files a parent sent for this child this Manila month, and the bytes of every parent upload still
+   * stored. "Sent" is counted from the trail's uploads by a parent (BotF-8), so a file staff remove doesn't give the
+   * month's slot back ("You've sent 20 files"); the bytes come back, as the storage limit is about what is kept.
+   */
+  private async parentUse(db: Pick<Tx, "clinicalPhoto" | "auditEvent">, patientId: string): Promise<{ thisMonth: number; storedBytes: number }> {
     const monthStart = new Date(`${manilaMonth(this.clock.today())}-01T00:00:00+08:00`);
-    const where = { patientId, uploadedBy: "parent" as const };
     const [thisMonth, stored] = await Promise.all([
-      db.clinicalPhoto.count({ where: { ...where, createdAt: { gte: monthStart } } }),
-      db.clinicalPhoto.aggregate({ where, _sum: { bytes: true } }),
+      db.auditEvent.count({ where: { patientId, action: "create", record: "Photo", actorRole: "parent", at: { gte: monthStart } } }),
+      db.clinicalPhoto.aggregate({ where: { patientId, uploadedBy: "parent" }, _sum: { bytes: true } }),
     ]);
     return { thisMonth, storedBytes: stored._sum.bytes ?? 0 };
   }
