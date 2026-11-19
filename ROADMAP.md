@@ -177,10 +177,10 @@ Turns the single-clinic app into a product many clinics use. Decisions settled o
   dental business. It has exactly one **Owner**, one or more **branches** (physical locations), and
   **staff** (Admin, Dentist, Front desk), each assigned to one or more branches. Parents use the portal
   and are never staff. Any staff role, the Owner included, can also hold a clinical role.
-- **Tiers (revised 2026-11-19, not built yet):** named after a child's dentition stages. The code keeps the ids
-  `small`, `mid` and `big`; only the labels (`TIER_LABEL`) change. ₱15,000 a month is the baseline (Primary).
+- **Tiers (revised 2026-11-19, not built yet):** plain names that say who each tier is for. The code keeps the ids
+  `small`, `mid` and `big`; only the labels (`TIER_LABEL`) change. ₱15,000 a month is the baseline (Starter).
 
-  | | Primary (`small`) | Mixed (`mid`) ⭐ | Permanent (`big`) |
+  | | Starter (`small`) | Clinic (`mid`) ⭐ | Pro (`big`) |
   |---|---|---|---|
   | Monthly price (VAT-inclusive) | ₱15,000 | ₱24,999 | ₱44,999 |
   | Branches | 1 | up to 3 | unlimited |
@@ -202,7 +202,7 @@ Turns the single-clinic app into a product many clinics use. Decisions settled o
     SMS plus storage at full use is about ₱300 / ₱1,650 / ₱5,700. Prices are VAT-inclusive (12%), and PayMongo, once
     added, takes about 2.5–3.5% of each payment. Check the figures against AWS's calculator and Semaphore's rates
     before launch.
-  - **Open:** the trial and annual billing that feature 17 ruled out are worth reconsidering (a 14-day Permanent trial;
+  - **Open:** the trial and annual billing that feature 17 ruled out are worth reconsidering (a 14-day Pro trial;
     annual billing with 2 months free).
 
 - **What belongs where:** the clinic account owns patients and charts, the procedure price list,
@@ -632,6 +632,8 @@ document asks again; every record shows who accepted which version and when.
   balance.
 - Responsive check at phone width; keyboard pass; empty and error states.
 - Deploy to Vercel; write a 5-minute demo script for the client.
+- Record a narrated demo video that follows the script: every feature, each role and what it can't
+  reach (RBAC), and the screens at phone, tablet and laptop sizes.
 
 **Done when:** the client can open a link and walk the demo script without your help.
 
