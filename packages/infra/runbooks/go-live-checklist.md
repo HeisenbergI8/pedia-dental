@@ -8,6 +8,8 @@ Tick every line before real clinics' data goes in. Each line names how to check 
 - [ ] You work as an IAM Identity Center administrator, not root.
 - [ ] No IAM users or access keys exist for CI: `aws iam list-users` shows none for GitHub. Deploys use OIDC.
 - [ ] The GitHub environment `production` is limited to `master`.
+- [ ] CDK's CloudFormation role is not an administrator: `aws iam list-attached-role-policies --role-name
+  cdk-hnb659fds-cfn-exec-role-<account>-ap-southeast-1` lists only `primolar-cfn-execution` (first-time setup, step 3).
 
 ## Settings (`packages/infra/cdk.json`)
 
@@ -17,6 +19,10 @@ Tick every line before real clinics' data goes in. Each line names how to check 
 - [ ] `webOrigins` and `webUrl` are the real web addresses (https). `WEB_URL` drives texted invite and reset links
   (B11).
 - [ ] `trustProxyHops` measured (first-time setup, step 10), not left at the default.
+- [ ] `databaseRequireTls` = `true` and `apiDatabaseUser` = `app` (first-time setup, step 7.4): RDS refuses connections
+  without TLS, and the services sign in as `primolar_app` (SELECT, INSERT, UPDATE, DELETE only).
+- [ ] `waf` = `true`: WAF → Web ACLs (Asia Pacific (Singapore)) → `primolar-api` lists the load balancer under
+  Associated AWS resources.
 
 ## Carried from B12
 
@@ -29,7 +35,10 @@ Tick every line before real clinics' data goes in. Each line names how to check 
 
 ## Health and alerts
 
-- [ ] `https://<apiDomain>/api/health/ready` answers 200; `http://` answers 301.
+- [ ] `https://<apiDomain>/api/health/ready` answers 200 with the `X-Primolar-Origin` header and 403 without it;
+  `http://` answers 301 (first-time setup, step 8).
+- [ ] The web works through its proxy: sign in on the web once (a 403 there means Vercel's `ORIGIN_SECRET` is missing
+  or stale).
 - [ ] The alert email subscription is confirmed (SNS → Subscriptions: not "Pending confirmation").
 - [ ] Each alarm reaches you. For each of `primolar-api-unhandled-errors`, `primolar-api-outbox-stuck` and
   `primolar-api-no-healthy-task`, run
@@ -46,10 +55,15 @@ Tick every line before real clinics' data goes in. Each line names how to check 
   Maintenance & backups).
 - [ ] A [restore drill](restore-drill.md) passed within the last 30 days, recorded in its table.
 - [ ] Bucket: Block Public Access all on, versioning on (S3 → the bucket → Permissions, Properties).
+- [ ] Logs arrive: the access-log bucket has objects under `alb/` and `s3-files/`, and CloudWatch has
+  `/aws/rds/instance/<id>/error` and `…/slowquery` (90 days each).
+- [ ] Storage encryption uses AWS-managed keys; a customer-managed key requires a new RDS instance (snapshot copy) and
+  is planned after launch. Document this in the Data Privacy Act records.
 
 ## Web and the rest of B13
 
-- [ ] Vercel production: `API_PROXY_TARGET` = `https://<apiDomain>`.
+- [ ] Vercel production: `API_PROXY_TARGET` = `https://<apiDomain>`, and `ORIGIN_SECRET` (Sensitive) = the value of
+  `primolar/origin-secret` (first-time setup, step 9).
 - [ ] Vercel production and preview: `NEXT_PUBLIC_API_MOCKING=disabled` (B13c1: no deployment runs MSW), then redeploy.
 - [ ] `apps/web/e2e/api-demo-script.spec.ts` passes against the deployed demo (`E2E_BASE_URL=https://<demo web>`), right
   after a reset (B13's "Done when").
@@ -57,11 +71,15 @@ Tick every line before real clinics' data goes in. Each line names how to check 
   the patient list and search slow down from a few hundred patients (p97.5 683–819 ms at ~560, B13c1 tester); at 5,000, Today and booking miss their targets too
   (B13c1 decisions.md L1), until the "at scale" chunk.
 - [ ] B13c2's Data Privacy Act items (export and deletion requests, retention, NPC registration) are done.
-- [ ] The operator's password is strong and stored in a password manager. Two-step sign-in comes later (B13a D3).
+- [ ] The operator's password is strong and stored in a password manager, and the operator is enrolled in two-step sign-in (`first-time-setup.md` step 11): production refuses an operator without it.
 
 ## Known limits at go-live (accepted)
 
-- No TLS between the API and RDS inside the VPC (decisions.md I5).
-- A direct caller to `<apiDomain>` can choose the address the rate limits see (I11).
+- The release task's migrations (Prisma's schema engine) use TLS to RDS without checking the server's certificate;
+  the API checks it. Both stay inside the VPC.
+- The origin secret is readable by anyone allowed `elasticloadbalancing:DescribeRules` in the account (it sits in the
+  load balancer's rule). Rotation: first-time setup, "Changing the origin secret".
+- Storage encryption (RDS, S3) uses AWS-managed keys, and no field is encrypted by the application. A customer-managed
+  key needs a new RDS instance (snapshot copy): planned after launch.
 - Single-AZ database: an AZ outage means downtime until AWS recovers it (CHUNKS: Multi-AZ when downtime starts to
   cost).

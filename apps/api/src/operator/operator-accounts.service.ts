@@ -67,6 +67,8 @@ export class OperatorAccountsService {
         const refused = await this.subscriptions.reactivateRefusal(tx, clinicId);
         if (refused) throw new ConflictException(refused);
         await this.subscriptions.forgetPause(tx, clinicId);
+      } else {
+        await this.subscriptions.pauseByHand(tx, clinicId); // #27: no payment or settle lifts it
       }
       await tx.clinicAccount.update({ where: { id: clinicId }, data: { status }, select: { id: true } });
     });

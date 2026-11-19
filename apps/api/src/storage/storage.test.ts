@@ -27,11 +27,14 @@ const ledger: Row[] = [];
 const clinicOf = () => requestContext.current()?.clinicId;
 /** B12: each clinic's plan, for the storage limit (decision 1). */
 const tiers: Record<string, "small" | "mid" | "big"> = {};
+const downgrades: Record<string, "small" | "mid" | "big"> = {};
 const fakePrisma: Record<string, unknown> = {
   // The transaction is the client itself (one request at a time here); the account lock is a no-op.
   $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(fakePrisma),
   $queryRaw: async () => [],
   clinicAccount: { findUniqueOrThrow: async () => ({ tier: tiers[clinicOf()!] ?? "big" }) },
+  // Audit #25: a waiting downgrade, read from the Subscription row by clinic.
+  subscription: { findUnique: async ({ where }: { where: { clinicId: string } }) => ({ downgradeTier: downgrades[where.clinicId] ?? null }) },
   storedFile: {
     create: async ({ data }: { data: Row }) => void ledger.push(data),
     deleteMany: async ({ where }: { where: { key: string } }) => {
@@ -147,6 +150,16 @@ describe("StorageService on the local disk", () => {
     expect(put).toHaveBeenCalledTimes(1);
     put.mockRestore();
     await as("clinic_full", () => storage.delete(key));
+  });
+
+  it("counts the smaller plan's storage while a downgrade waits (audit #25: limitTier, as assertRoomFor)", async () => {
+    tiers.clinic_down = "big";
+    downgrades.clinic_down = "small";
+    ledger.push({ clinicId: "clinic_down", key: "clinics/clinic_down/photos/seed.png", area: "photos", bytes: TIER_LIMITS.small.storageBytes - 1 });
+    await expect(as("clinic_down", () => storage.put("photos", "png", Buffer.from([1, 2])))).rejects.toThrow(storageFullMessage("small"));
+    delete downgrades.clinic_down; // the downgrade withdrawn: the big plan's room again
+    const key = await as("clinic_down", () => storage.put("photos", "png", Buffer.from([1, 2])));
+    await as("clinic_down", () => storage.delete(key));
   });
 
   it("removes the ledger row when the driver fails to store the file", async () => {

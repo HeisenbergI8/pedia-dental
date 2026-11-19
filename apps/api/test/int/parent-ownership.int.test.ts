@@ -44,6 +44,21 @@ beforeAll(async () => {
       select: { id: true },
     }),
   );
+  // #38: a clinic photo of their own child (staff-uploaded), and a voided bill for that child, as rows.
+  await inClinic("clinic_demo", async () => {
+    await prisma.clinicalPhoto.create({
+      data: { id: "photo_staff_own_child", clinicId: "clinic_demo", patientId: mine, type: "xray", takenOn: new Date("2026-01-06"), caption: "Bitewing", contentType: "image/jpeg", uploadedBy: "staff", fileKey: "clinics/clinic_demo/photos/none.jpg", bytes: 1, createdAt: new Date() },
+      select: { id: true },
+    });
+    await prisma.invoice.create({
+      data: { id: "invoice_voided_own_child", clinicId: "clinic_demo", branchId: "branch_imus", patientId: mine, discount: 0, issuedAt: new Date("2026-01-06T02:00:00Z"), voidedAt: new Date("2026-01-06T03:00:00Z"), voidedBy: "staff_delacruz", voidReason: "Wrong child" },
+      select: { id: true },
+    });
+    await prisma.invoiceLine.create({
+      data: { clinicId: "clinic_demo", invoiceId: "invoice_voided_own_child", position: 0, procedureCode: "fluoride", description: "Fluoride varnish", amount: 80_000 },
+      select: { id: true },
+    });
+  });
   const res = await request(app.getHttpServer()).post("/api/auth/login").send({ email: "parent@gmail.com", password: DEMO_PASSWORD });
   cookie = ([] as string[]).concat(res.headers["set-cookie"] ?? []).find((c) => c.startsWith("pd_session="))!.split(";")[0]!;
 }, 60_000);
@@ -97,5 +112,29 @@ describe("a parent's ownership on every route they can pass (B11 E12)", () => {
     for (const path of [`/messages?patientId=${other}`, "/messages", "/appointments", `/patients/${mine}/chart`, `/patients/${mine}/notes`, "/reports/finance"]) {
       expect([path, (await call("GET", path)).status]).toEqual([path, 403]);
     }
+  });
+
+  // #38: the four reads the sweep above can't see, because they filter rather than refuse.
+  it("lists only a parent's own children in the patient summaries", async () => {
+    const page = await call("GET", "/patient-summaries?pageSize=100");
+    expect(page.status).toBe(200);
+    expect((page.body.rows as { id: string }[]).map((r) => r.id).sort()).toEqual([...ours].sort());
+  });
+
+  it("hides the clinic's photos of their own child from a parent, and opens none of their files", async () => {
+    const photos = await call("GET", `/patients/${mine}/photos`);
+    expect(photos.status).toBe(200);
+    const listed = photos.body as { id: string; uploadedBy?: string }[];
+    expect(listed.map((p) => p.id)).not.toContain("photo_staff_own_child");
+    expect(listed.every((p) => p.uploadedBy === "parent")).toBe(true);
+    expect((await call("GET", "/photos/photo_staff_own_child/file")).status).toBe(404);
+  });
+
+  it("shows a parent only the live bills of their own child, never a voided one", async () => {
+    const bills = await call("GET", `/patients/${mine}/invoices`);
+    expect(bills.status).toBe(200);
+    const listed = bills.body as { id: string; voided?: unknown }[];
+    expect(listed.map((i) => i.id)).not.toContain("invoice_voided_own_child");
+    expect(listed.every((i) => !i.voided)).toBe(true);
   });
 });

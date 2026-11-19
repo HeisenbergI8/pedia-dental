@@ -27,16 +27,19 @@ HOST=$(aws rds describe-db-instances --db-instance-identifier "$DRILL" --query "
 ## 2. Check it from inside the VPC
 
 A one-off run of the release task definition, with its command replaced and `DB_HOST` pointed at the copy. The
-restored instance keeps the master password it had at that time, which is the same secret.
+release task signs in as the master user; the restored instance keeps the master password it had at that time, which
+is the same secret. The copy also holds the API's own user (`primolar_app`, from `primolar/database-app`) and, through
+the same parameter group, requires TLS: the check connects with TLS against the RDS CA bundle in the image.
 
 ```
 cat > drill-check.cjs <<'EOF'
-// Counts that prove the copy holds real data. Uses the mariadb driver already in the image.
-const { readdirSync } = require("node:fs");
+// Counts that prove the copy holds real data. Uses the mariadb driver already in the image, over TLS.
+const { readdirSync, readFileSync } = require("node:fs");
 const dir = readdirSync("/app/node_modules/.pnpm").find((name) => name.startsWith("mariadb@"));
 const mariadb = require(`/app/node_modules/.pnpm/${dir}/node_modules/mariadb`);
 (async () => {
-  const db = await mariadb.createConnection({ host: process.env.DB_HOST, port: Number(process.env.DB_PORT), user: process.env.DB_USER, password: process.env.DB_PASSWORD, database: process.env.DB_NAME });
+  const ssl = { ca: readFileSync("/app/rds-global-bundle.pem", "utf8") };
+  const db = await mariadb.createConnection({ host: process.env.DB_HOST, port: Number(process.env.DB_PORT), user: process.env.DB_USER, password: process.env.DB_PASSWORD, database: process.env.DB_NAME, ssl });
   const [row] = await db.query("SELECT (SELECT COUNT(*) FROM ClinicAccount) AS clinics, (SELECT COUNT(*) FROM Patient) AS patients, (SELECT MAX(at) FROM AuditEvent) AS lastAudit, (SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL) AS migrations");
   console.log("DRILL", process.env.DB_HOST, JSON.stringify(row, (_key, value) => (typeof value === "bigint" ? Number(value) : value)));
   await db.end();
@@ -78,6 +81,10 @@ Add a row below.
 2. In `packages/infra/cdk.json`, set `databaseHostOverride` to the restored instance's endpoint. Merge, then run
    **deploy** with `image_tag` = the tag running now (`ImageTagInUse`). The services and the release task now use
    the restored copy. The damaged original stays untouched for investigation.
+   - The services sign in as `primolar_app`, which the copy holds with the password it had at the restore time. If
+     `primolar/database-app` changed since, they get `Access denied`. Run the release task once against the copy:
+     Actions → deploy with `image_tag` empty (a rollback tag skips the release task). Its first step
+     (`CREATE USER IF NOT EXISTS … ; ALTER USER …`) sets the password from the secret again.
 3. Files: the bucket keeps deleted or overwritten files as old versions for 35 days. Bring back what the restored
    rows point to with `aws s3api list-object-versions` and `copy-object`. This is a manual step.
 4. Later, as its own reviewed change: keep the override (the restored instance isn't managed by CDK, so set its

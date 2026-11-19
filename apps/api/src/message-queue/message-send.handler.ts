@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from "@nestjs/common";
-import { FAILURE, LINK_MARK, MESSAGE_RETRY_DELAYS_MS, isAccountText, textAllowance, manilaMonth, nextSendingTime, smsNumber, smsSegments, textPartsRefusal, type LoggedMessageKind } from "@pedia/shared";
+import { ACCOUNT_TEXT_KINDS, FAILURE, LINK_MARK, MESSAGE_RETRY_DELAYS_MS, isAccountText, textAllowance, manilaMonth, nextSendingTime, smsNumber, smsSegments, textPartsRefusal, type LoggedMessageKind } from "@pedia/shared";
 import { addMonths, format, parseISO } from "date-fns";
 import { lockAccount } from "../clinic/account-lock";
 import { Clock } from "../common/clock";
@@ -17,9 +17,16 @@ import { SMS_PROVIDER, SmsInDoubt, SmsRejected, type SmsProvider } from "./sms-p
 const monthStart = (month: string) => new Date(`${month}-01T00:00:00+08:00`);
 const nextMonth = (month: string) => format(addMonths(parseISO(`${month}-01`), 1), "yyyy-MM");
 
-/** Billed parts this clinic handed to the provider in `month` (decision 18): the claims' `segments`, by `dispatchedAt`. */
+/**
+ * Billed parts this clinic handed to the provider in `month` (decision 18): the claims' `segments`, by `dispatchedAt`.
+ * Template texts only (audit #3): account texts (invites, resets) are never refused, so they never count toward the cap
+ * either, or a stranger asking for resets could use up the clinic's month. They stay in the message log.
+ */
 export async function partsIn(tx: Tx, month: string): Promise<number> {
-  const { _sum } = await tx.message.aggregate({ where: { dispatchedAt: { gte: monthStart(month), lt: monthStart(nextMonth(month)) } }, _sum: { segments: true } });
+  const { _sum } = await tx.message.aggregate({
+    where: { dispatchedAt: { gte: monthStart(month), lt: monthStart(nextMonth(month)) }, kind: { notIn: [...ACCOUNT_TEXT_KINDS] } },
+    _sum: { segments: true },
+  });
   return _sum.segments ?? 0;
 }
 
@@ -61,6 +68,14 @@ export class MessageSendHandler implements OutboxHandler, OnModuleInit {
       const [m] = await tx.$queryRaw<{ status: string; dispatchedAt: Date | null; to: string; body: string; kind: string; linkId: string | null; patientId: string }[]>`
         SELECT status, dispatchedAt, \`to\`, body, kind, linkId, patientId FROM Message WHERE id = ${messageId} AND clinicId = ${clinicId} FOR UPDATE`;
       if (!m || m.status !== "queued") return { skip: true }; // withdrawn, sent or failed already: a redelivery
+      // Audit #24: a paused (suspended) clinic's template texts fail at once and are never sent later. Account texts still
+      // go: a parent may need a reset while the clinic is paused.
+      const { tier, status } = await tx.clinicAccount.findUniqueOrThrow({ where: { id: clinicId }, select: { tier: true, status: true } });
+      if (status !== "active" && !isAccountText(m.kind)) {
+        await tx.message.update({ where: { id: messageId }, data: { status: "failed", failureReason: FAILURE.clinicPaused }, select: { id: true } });
+        await this.settled(tx, m);
+        return { permanent: FAILURE.clinicPaused };
+      }
       // Decision 4: a retry that lands at night waits, without spending a try. An invite or reset goes at any hour (B11 decision 12).
       if (open > now && !isAccountText(m.kind)) return { defer: open };
       if (m.dispatchedAt) {
@@ -86,7 +101,6 @@ export class MessageSendHandler implements OutboxHandler, OnModuleInit {
       // B12 decisions 2, 3, 19: past the month's parts a template text fails and is never sent later; account texts always go.
       // Feature 16 (revised): the month's parts are the plan's plus that month's confirmed top-ups (textAllowance). A
       // confirm takes this same account lock, so a claim sees a top-up whole or not at all.
-      const { tier } = await tx.clinicAccount.findUniqueOrThrow({ where: { id: clinicId }, select: { tier: true } });
       const month = manilaMonth(this.clock.today());
       const bought = (await tx.textTopUp.aggregate({ where: { clinicId, month }, _sum: { parts: true } }))._sum.parts ?? 0;
       const refused = textPartsRefusal(m.kind as LoggedMessageKind, await partsIn(tx, month), parts, textAllowance(tier, bought));

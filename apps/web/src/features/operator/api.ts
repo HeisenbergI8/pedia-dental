@@ -25,6 +25,7 @@ import {
 import { imageFormData } from "@/features/payments/form-data";
 import { signupFormData } from "@/features/signup/form-data";
 import { api } from "@/lib/api-client";
+import { idempotent } from "@/lib/idempotency";
 import { env } from "@/lib/env";
 import { useOperatorSessionStore } from "@/stores/operator-session-store";
 
@@ -103,9 +104,14 @@ export const useSetBranding = (accountId: string) =>
 /** Billing #31: the clinic's subscription, state and payment history (S14). */
 export const useAccountSubscription = (id: string) =>
   useQuery({ queryKey: operatorKeys.subscription(id), queryFn: () => api(`/operator/accounts/${id}/subscription`, SubscriptionView) });
-/** Billing #29, S5: one month, marked by hand. Not `useRecordPayment`, which is the sign-up's upfront payment. */
+/**
+ * Billing #29, S5: one month, marked by hand. Not `useRecordPayment`, which is the sign-up's upfront payment. #18: it
+ * moves money, so it sends the form attempt's Idempotency-Key (`useIdempotencyKey`), as patient payments do.
+ */
 export const useRecordSubscriptionPayment = (id: string) =>
-  useAccountAction((input: RecordUpfrontPaymentInput) => api(`/operator/accounts/${id}/subscription/payments`, SubscriptionView, post(input)));
+  useAccountAction(({ key, ...input }: RecordUpfrontPaymentInput & { key: string }) =>
+    api(`/operator/accounts/${id}/subscription/payments`, SubscriptionView, { ...post(input), headers: idempotent(key) }),
+  );
 /** Billing #30, S7. */
 export const useCancelSubscription = (id: string) =>
   useAccountAction(() => api(`/operator/accounts/${id}/subscription/cancel`, SubscriptionView, post()));

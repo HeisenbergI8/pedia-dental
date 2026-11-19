@@ -83,10 +83,10 @@ describe("which routes the API serves", () => {
     // B10: photos, the documents log and the local driver's file links.
     const b10 = [
       ["GET", "/patients/p1/photos"], ["POST", "/patients/p1/photos"], ["GET", "/photos/ph1/file"], ["GET", "/documents"],
-      ["GET", "/patients/p1/documents"], ["POST", "/patients/p1/documents"], ["GET", "/files/abc.def"],
+      ["GET", "/patients/p1/documents"], ["POST", "/patients/p1/documents"], ["GET", "/files/abc.def"], ["DELETE", "/photos/ph1"], // audit #5
     ] as const;
     for (const [method, path] of b10) expect(api(method, path), `${method} ${path}`).toBe(true);
-    expect([api("POST", "/files/x"), api("DELETE", "/photos/ph1")]).toEqual([false, false]); // exact method
+    expect([api("POST", "/files/x"), api("PUT", "/photos/ph1")]).toEqual([false, false]); // exact method
     // B11: the portal's staff routes, the signed-out link routes and the demo's texts.
     const b11 = [
       ["GET", "/patients/p1/portal-access"], ["POST", "/patients/p1/guardians/g1/portal-invite"], ["POST", "/patients/p1/guardians/g1/portal-off"],

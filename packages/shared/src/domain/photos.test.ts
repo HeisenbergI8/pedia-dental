@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { FILE_LINK_SECONDS, groupPhotos, photoFileName, uploadProblem } from "./photos";
+import { FILE_LINK_SECONDS, PARENT_UPLOAD_LIMITS, groupPhotos, parentUploadRefusal, photoFileName, uploadProblem } from "./photos";
+
+describe("parent upload limits (audit #5)", () => {
+  it("refuses the 21st file of a month for a child, then anything past 200 MB in all", () => {
+    expect(parentUploadRefusal("Bea", { thisMonth: PARENT_UPLOAD_LIMITS.perMonth - 1, storedBytes: 0 }, 10)).toBeUndefined();
+    expect(parentUploadRefusal("Bea", { thisMonth: PARENT_UPLOAD_LIMITS.perMonth, storedBytes: 0 }, 10)).toMatch(/You've sent 20 files for Bea this month/);
+    expect(parentUploadRefusal("Bea", { thisMonth: 0, storedBytes: PARENT_UPLOAD_LIMITS.totalBytes - 10 }, 10)).toBeUndefined(); // exactly at the limit
+    expect(parentUploadRefusal("Bea", { thisMonth: 0, storedBytes: PARENT_UPLOAD_LIMITS.totalBytes - 10 }, 11)).toBe(
+      "Bea's uploads from the portal are full (200 MB). Ask the clinic to remove ones they no longer need.",
+    );
+  });
+});
 
 const photo = (id: string, takenOn: string, type: "intraoral" | "xray" | "document", visitId?: string) => ({ id, takenOn, type, visitId });
 const visitDate = (id: string) => ({ v1: "2026-03-01", v2: "2026-09-01" })[id];

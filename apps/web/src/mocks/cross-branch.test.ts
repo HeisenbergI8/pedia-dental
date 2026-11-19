@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { format } from "date-fns";
 import { setupServer } from "msw/node";
 import { z } from "zod";
-import { FinanceSummary, Payment, TodaySummary, IDEMPOTENCY_HEADER } from "@pedia/shared";
+import { Appointment, ClinicalNote, FinanceSummary, Invoice, Payment, PlanItem, TodaySummary, Visit, IDEMPOTENCY_HEADER, pesos } from "@pedia/shared";
 import { ApiError, api } from "@/lib/api-client";
 import { handlers } from "./handlers";
 import { DASMA, IMUS } from "@pedia/seed";
@@ -62,5 +62,49 @@ describe("cross-branch reports (decision #20)", () => {
     signIn(NGITI_OWNER);
     expect(await status(finance("all"))).toBe(403);
     expect(await status(api(`/payments?date=${today}&branch=all`, z.array(Payment)))).toBe(403);
+  });
+});
+
+describe("branch-level changes by id (#10)", () => {
+  const confirm = { method: "POST", body: JSON.stringify({ status: "confirmed" }) };
+  /** A fluoride bill for patient_sibling, made by the Owner on a Dasmariñas device: the bill is Dasmariñas's. */
+  async function dasmaBill() {
+    signIn(OWNER, DASMA);
+    await api("/patients/patient_sibling/plan", PlanItem, send("POST", { procedureCode: "fluoride", fee: pesos(800) }));
+    const visit = await api("/patients/patient_sibling/visits", Visit, send("POST", { dentistId: "staff_reyes" }));
+    const note = await api("/patients/patient_sibling/notes", ClinicalNote, send("POST", { visitId: visit.id, templateId: "tpl_fluoride", values: { agent: "5% NaF varnish", teeth: [] }, behavior: [] }));
+    await api(`/notes/${note.id}/sign`, ClinicalNote, { method: "POST" });
+    await api(`/visits/${visit.id}/complete`, Visit, { method: "POST" });
+    const item = (await api("/patients/patient_sibling/plan", z.array(PlanItem))).find((i) => i.completedNoteId === note.id)!;
+    const bill = await api("/patients/patient_sibling/invoices", Invoice, send("POST", { planItemIds: [item.id] }));
+    expect(bill.branchId).toBe(DASMA);
+    return bill;
+  }
+
+  it("answers another branch's appointment as missing to staff who don't work there, and lets the Owner change it", async () => {
+    signIn(OWNER, DASMA);
+    const there = (await api("/appointments", z.array(Appointment))).find((a) => a.status === "booked")!;
+    expect(there.branchId).toBe(DASMA);
+    signIn(ADMIN, IMUS); // Carmen works at Imus only
+    const move = { dentistId: there.dentistId, chairId: there.chairId, startsAt: there.startsAt, durationMin: there.durationMin, reason: there.reason };
+    for (const res of [api(`/appointments/${there.id}`, Appointment, { method: "PUT", body: JSON.stringify(move) }), api(`/appointments/${there.id}/status`, Appointment, confirm)]) {
+      await expect(res).rejects.toMatchObject({ status: 404, message: "Appointment not found" });
+    }
+    signIn(OWNER, IMUS); // branches.all, from any device
+    expect((await api(`/appointments/${there.id}/status`, Appointment, confirm)).status).toBe("confirmed");
+  });
+
+  it("answers another branch's bill as missing to staff who don't work there, but lets them take a payment on it", async () => {
+    const bill = await dasmaBill();
+    signIn(ADMIN, IMUS);
+    await expect(api(`/invoices/${bill.id}/void`, Invoice, send("POST", { reason: "Wrong child" }))).rejects.toMatchObject({ status: 404, message: "Invoice not found" });
+    // Paying stays open across branches: a payment goes to its bill's branch wherever it's paid.
+    expect((await api(`/invoices/${bill.id}/payments`, Payment, send("POST", { amount: pesos(100), method: "cash", receivedBy: "staff_cruz" }))).branchId).toBe(DASMA);
+  });
+
+  it("lets the Owner void another branch's bill from any device", async () => {
+    const bill = await dasmaBill();
+    signIn(OWNER, IMUS);
+    expect((await api(`/invoices/${bill.id}/void`, Invoice, send("POST", { reason: "Wrong child" }))).voided?.reason).toBe("Wrong child");
   });
 });

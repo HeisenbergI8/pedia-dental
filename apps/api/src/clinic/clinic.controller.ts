@@ -1,26 +1,19 @@
+import { readFile } from "node:fs/promises";
 import {
-  type ArgumentsHost, Body, Catch, Controller, Delete, type ExceptionFilter, ForbiddenException, Get, HttpCode, NotFoundException,
-  Param, PayloadTooLargeException, Post, Put, Req, Res, StreamableFile, UploadedFile, UseFilters, UseInterceptors,
+  Body, Controller, Delete, ForbiddenException, Get, HttpCode, NotFoundException, Param, PayloadTooLargeException, Post, Put, Req, Res,
+  StreamableFile,
 } from "@nestjs/common";
-import { FileInterceptor } from "@nestjs/platform-express";
 import { LOGO_RULES, SavePrivacyNoticeInput, UpdateBrandingInput, UpdateClinicProfileInput } from "@pedia/shared";
 import type { Request, Response } from "express";
 import { identityOf } from "../auth/access.guard";
 import { requireContext } from "../common/request-context";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { PrivacyNoticeService } from "../legal/privacy-notice.service";
+import { readUpload, tooLargeToRead } from "../storage/multipart";
 import { BranchesService } from "./branches.service";
 import { ClinicService } from "./clinic.service";
 import { StaffService } from "./staff.service";
-import { LOGO_HEADERS, LOGO_TOO_LARGE, type LogoUpload } from "./logo";
-
-/** Multer stops reading at LOGO_RULES.maxBytes and Nest answers "File too large"; this gives the shared rule's words. */
-@Catch(PayloadTooLargeException)
-class LogoTooLarge implements ExceptionFilter {
-  catch(_error: PayloadTooLargeException, host: ArgumentsHost) {
-    host.switchToHttp().getResponse<Response>().status(413).type("text/plain").send(LOGO_TOO_LARGE);
-  }
-}
+import { LOGO_HEADERS, LOGO_TOO_LARGE } from "./logo";
 
 /**
  * The clinic account and its setup (features/clinic/mocks.ts). Reads are clinic.view, writes clinic.manage
@@ -98,12 +91,19 @@ export class ClinicController {
     return new StreamableFile(file.body, { type: file.contentType });
   }
 
-  // Memory storage, at most 1 MB read (LOGO_RULES): a logo is small. B10's photos go straight to storage instead.
+  // Streamed to a temp file like every other upload (readUpload, D #12), refused unread past twice the limit (E13), then
+  // read whole: a logo is at most 1 MB, cleanLogo sanitises it in memory, and it is served as bytes (CONVENTIONS → Traps).
   @Put("clinic/logo")
-  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: LOGO_RULES.maxBytes, files: 1 } }))
-  @UseFilters(LogoTooLarge)
-  uploadLogo(@UploadedFile() file: LogoUpload | undefined) {
-    return this.clinic.uploadLogo(file);
+  async uploadLogo(@Req() req: Request) {
+    if (tooLargeToRead(req.headers, LOGO_RULES.maxBytes)) throw new PayloadTooLargeException(LOGO_TOO_LARGE);
+    const upload = await readUpload(req, { maxBytes: LOGO_RULES.maxBytes });
+    try {
+      const { file } = upload;
+      if (file?.tooLarge) throw new PayloadTooLargeException(LOGO_TOO_LARGE);
+      return await this.clinic.uploadLogo(file && { buffer: await readFile(file.path), mimetype: file.claimedType, size: file.bytes });
+    } finally {
+      await upload.dispose();
+    }
   }
 
   @Delete("clinic/logo")

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import type { Readable } from "node:stream";
 import { ConflictException, Injectable } from "@nestjs/common";
-import { FILE_LINK_SECONDS, storageRefusal } from "@pedia/shared";
+import { FILE_LINK_SECONDS, limitTier, storageRefusal } from "@pedia/shared";
 import { Clock } from "../common/clock";
 import { requireContext } from "../common/request-context";
 import { PrismaService } from "../prisma/prisma.service";
@@ -86,7 +86,10 @@ export class StorageService {
     await runInTransaction(this.prisma, async (tx) => {
       const clinicId = await lockAccount(tx);
       const { tier } = await tx.clinicAccount.findUniqueOrThrow({ where: { id: clinicId }, select: { tier: true } });
-      const refused = storageRefusal(tier, await this.usedBytes(tx), bytes);
+      // Audit #25: while a downgrade waits, the smaller plan's storage counts (limitTier, as assertRoomFor). Read from the
+      // Subscription row itself (as SubscriptionRecordsService.waitingDowngrade does): importing that module would close a cycle.
+      const sub = await tx.subscription.findUnique({ where: { clinicId }, select: { downgradeTier: true } });
+      const refused = storageRefusal(limitTier(tier, sub?.downgradeTier ? { tier: sub.downgradeTier } : null), await this.usedBytes(tx), bytes);
       if (refused) throw new ConflictException(refused);
       await tx.storedFile.create({ data: { ...clinicData(), key, area, bytes, createdAt: this.clock.now() }, select: { id: true } });
     });

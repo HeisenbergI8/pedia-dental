@@ -21,11 +21,19 @@ import {
   type AppointmentRequest,
 } from "@pedia/shared";
 import { env } from "@/lib/env";
-import { activeBranch, sessionOf } from "@/mocks/access";
+import { activeBranch, sessionOf, usableBranchesOf } from "@/mocks/access";
 import { currentAccount, currentClinicId, db, persist } from "@/mocks/db";
 import { cancelQueued, queueBookingMessages, queueMessage } from "@/mocks/outbox";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
+/**
+ * #10: may the caller change this branch's appointment? The Owner (`branches.all`) anywhere, anyone else at a branch
+ * they work at (a parent's are every open one). Out of reach answers as if it weren't there (the API's `reachesBranch`).
+ */
+const reaches = (request: Request, branchId: string) => {
+  const session = sessionOf(request)!;
+  return rolesCan(session.roles, "branches.all") || usableBranchesOf(session).some((b) => b.id === branchId);
+};
 const byStart = (a: Appointment, b: Appointment) => a.startsAt.localeCompare(b.startsAt);
 
 /**
@@ -98,7 +106,7 @@ export const appointmentHandlers = [
   }),
 
   http.put(url("/appointments/:id"), async ({ params, request }) => {
-    const appointment = db.appointments.find((a) => a.id === params.id);
+    const appointment = db.appointments.find((a) => a.id === params.id && reaches(request, a.branchId)); // #10
     if (!appointment) return new HttpResponse("Appointment not found", { status: 404 });
     const parsed = RescheduleAppointmentInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
@@ -116,7 +124,7 @@ export const appointmentHandlers = [
   }),
 
   http.post(url("/appointments/:id/status"), async ({ params, request }) => {
-    const appointment = db.appointments.find((a) => a.id === params.id);
+    const appointment = db.appointments.find((a) => a.id === params.id && reaches(request, a.branchId)); // #10
     if (!appointment) return new HttpResponse("Appointment not found", { status: 404 });
     const parsed = ChangeAppointmentStatusInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });

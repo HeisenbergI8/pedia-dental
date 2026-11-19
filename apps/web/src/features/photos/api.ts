@@ -25,6 +25,15 @@ export function usePhotos(patientId: string) {
   });
 }
 
+/** Audit #5: staff (clinical.write) remove a file a parent sent from the portal. The clinic's own photos can't be. */
+export function useRemovePhoto(patientId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (photoId: string) => api(`/photos/${photoId}`, z.object({}), { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: photoKeys.forPatient(patientId) }),
+  });
+}
+
 export function useUploadPhoto(patientId: string) {
   const qc = useQueryClient();
   return useMutation({

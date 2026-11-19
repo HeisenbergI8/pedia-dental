@@ -1,0 +1,151 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ServicesTheStacksUse",
+      "Effect": "Allow",
+      "Action": [
+        "ecs:*",
+        "elasticloadbalancing:*",
+        "rds:*",
+        "ecr:*",
+        "logs:*",
+        "cloudwatch:*",
+        "sns:*",
+        "budgets:*",
+        "acm:*",
+        "wafv2:*",
+        "ec2:Describe*",
+        "ec2:*Vpc*",
+        "ec2:*Subnet*",
+        "ec2:*RouteTable*",
+        "ec2:*Route",
+        "ec2:*InternetGateway*",
+        "ec2:*SecurityGroup*",
+        "ec2:CreateTags",
+        "ec2:DeleteTags",
+        "secretsmanager:GetRandomPassword"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "PrimolarBuckets",
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::primolarfoundation-*",
+        "arn:aws:s3:::primolarservice-*"
+      ]
+    },
+    {
+      "Sid": "CdkAssetsForLambdaCode",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:GetObjectVersion"
+      ],
+      "Resource": "arn:aws:s3:::cdk-hnb659fds-assets-*/*"
+    },
+    {
+      "Sid": "PrimolarSecrets",
+      "Effect": "Allow",
+      "Action": "secretsmanager:*",
+      "Resource": "arn:aws:secretsmanager:*:*:secret:primolar/*"
+    },
+    {
+      "Sid": "CdkBootstrapVersion",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetParameter",
+        "ssm:GetParameters"
+      ],
+      "Resource": "arn:aws:ssm:*:*:parameter/cdk-bootstrap/*"
+    },
+    {
+      "Sid": "CdkCustomResourceFunctions",
+      "Effect": "Allow",
+      "Action": "lambda:*",
+      "Resource": "arn:aws:lambda:*:*:function:Primolar*"
+    },
+    {
+      "Sid": "PrimolarRoles",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetRole",
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:UpdateRole",
+        "iam:UpdateRoleDescription",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:PassRole",
+        "iam:GetRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:DetachRolePolicy"
+      ],
+      "Resource": [
+        "arn:aws:iam::*:role/primolar-*",
+        "arn:aws:iam::*:role/Primolar*"
+      ]
+    },
+    {
+      "Sid": "OnlyLambdaBasicExecutionAttaches",
+      "Effect": "Allow",
+      "Action": "iam:AttachRolePolicy",
+      "Resource": [
+        "arn:aws:iam::*:role/primolar-*",
+        "arn:aws:iam::*:role/Primolar*"
+      ],
+      "Condition": {
+        "ArnEquals": {
+          "iam:PolicyARN": "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+        }
+      }
+    },
+    {
+      "Sid": "GithubOidcProvider",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateOpenIDConnectProvider",
+        "iam:DeleteOpenIDConnectProvider",
+        "iam:GetOpenIDConnectProvider",
+        "iam:UpdateOpenIDConnectProviderThumbprint",
+        "iam:AddClientIDToOpenIDConnectProvider",
+        "iam:RemoveClientIDFromOpenIDConnectProvider",
+        "iam:TagOpenIDConnectProvider",
+        "iam:UntagOpenIDConnectProvider"
+      ],
+      "Resource": "arn:aws:iam::*:oidc-provider/token.actions.githubusercontent.com"
+    },
+    {
+      "Sid": "ServiceLinkedRoles",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "arn:aws:iam::*:role/aws-service-role/*",
+      "Condition": {
+        "StringEquals": {
+          "iam:AWSServiceName": [
+            "ecs.amazonaws.com",
+            "elasticloadbalancing.amazonaws.com",
+            "rds.amazonaws.com",
+            "wafv2.amazonaws.com"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "NeverShareDatabaseSnapshots",
+      "Effect": "Deny",
+      "Action": [
+        "rds:ModifyDBSnapshotAttribute",
+        "rds:ModifyDBClusterSnapshotAttribute",
+        "rds:CopyDBSnapshot"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

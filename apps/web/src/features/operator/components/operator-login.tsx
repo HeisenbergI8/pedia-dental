@@ -17,7 +17,7 @@ export function OperatorLogin() {
   const router = useRouter();
   const signIn = useOperatorSignIn();
   const demo = useDemoAccounts();
-  const form = useForm<OperatorLoginInput>({ resolver: zodResolver(OperatorLoginInput), defaultValues: { email: "", password: "" } });
+  const form = useForm<OperatorLoginInput>({ resolver: zodResolver(OperatorLoginInput), defaultValues: { email: "", password: "", code: "" } });
   const submit = form.handleSubmit((input) => signIn.mutate(input, { onSuccess: () => router.replace("/operator") }));
 
   return (
@@ -37,6 +37,10 @@ export function OperatorLogin() {
               <FormField name="password" label="Password">
                 <Input type="password" autoComplete="current-password" {...form.register("password")} />
               </FormField>
+              {/* Security review #8: two-step sign-in. Required once the operator has enrolled (always, in production). */}
+              <FormField name="code" label="Code from your authenticator app" hint="6 digits, changes every 30 seconds">
+                <Input inputMode="numeric" autoComplete="one-time-code" maxLength={7} className="font-mono tracking-widest" {...form.register("code")} />
+              </FormField>
               {signIn.error && <p role="alert" className="text-sm text-danger">{signIn.error.message}</p>}
               <Button type="submit" className="w-full" disabled={signIn.isPending}>
                 {signIn.isPending ? "Signing in" : "Sign in"}
@@ -46,7 +50,7 @@ export function OperatorLogin() {
         </div>
         {demoHelp(env.apiMockingMode, demo) === "show" && (
           <p className="text-center text-sm text-ink-muted">
-            Demo sign-in: <span className="font-mono">operator@primolar.demo</span> · <span className="font-mono">pass123</span>
+            Demo sign-in: <span className="font-mono">operator@primolar.demo</span> · <span className="font-mono">pass123</span> · any 6-digit code
           </p>
         )}
       </div>

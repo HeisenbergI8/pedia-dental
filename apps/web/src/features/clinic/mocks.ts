@@ -36,6 +36,8 @@ import {
   imageProblem,
   letterheadProblem,
   type LetterheadSettings,
+  duplicateNameMessage,
+  sameClinicName,
 } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { branchOf, sessionOf, usableBranchesOf } from "@/mocks/access";
@@ -161,6 +163,9 @@ export const clinicHandlers = [
   http.put(url("/clinic"), async ({ request }) => {
     const parsed = UpdateClinicProfileInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
+    // Audit #26: another clinic's name, or a waiting sign-up's, is refused in sign-up's words (sameClinicName).
+    const others = [...platform.accounts.filter((a) => a.id !== currentClinicId()), ...platform.signups.filter((s) => s.status === "waiting").map((s) => s.account)];
+    if (others.some((a) => sameClinicName(a.name, parsed.data.name))) return refuse(409, duplicateNameMessage(parsed.data.name));
     const account = Object.assign(currentAccount(), parsed.data);
     persist();
     return HttpResponse.json(account);
@@ -199,7 +204,7 @@ export const clinicHandlers = [
     const problem = logoProblem(file);
     if (problem) return refuse(file.size > LOGO_RULES.maxBytes ? 413 : 400, problem);
     const account = currentAccount();
-    const full = storageRefused(db, account.tier, file.size); // B12 decision 1: refused before storing
+    const full = storageRefused(db, account, file.size); // B12 decision 1: refused before storing
     if (full) return refuse(409, full);
     const old = account.logoRef;
     const key = `logo_${currentClinicId()}_${crypto.randomUUID()}`;
@@ -241,7 +246,7 @@ export const clinicHandlers = [
     if (!(file instanceof File)) return refuse(400, "Attach the letterhead image");
     const problem = imageProblem(LETTERHEAD_IMAGE_RULES, file);
     if (problem) return refuse(file.size > LETTERHEAD_IMAGE_RULES.maxBytes && LETTERHEAD_IMAGE_RULES.types.includes(file.type) ? 413 : 400, problem);
-    const full = storageRefused(db, account.tier, file.size);
+    const full = storageRefused(db, account, file.size);
     if (full) return refuse(409, full);
     const old = db.letterhead?.imageRef;
     const key = `letterhead_${currentClinicId()}_${crypto.randomUUID()}`;

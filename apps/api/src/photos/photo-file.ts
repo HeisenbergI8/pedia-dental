@@ -1,6 +1,6 @@
 import { PDF, UPLOAD_RULES, uploadProblem, type PhotoType } from "@pedia/shared";
 import type { SpooledFile } from "../storage/multipart";
-import { IMAGE_EXTENSIONS, sniff } from "../storage/sniff";
+import { IMAGE_EXTENSIONS, pixelProblem, sniff } from "../storage/sniff";
 import type { FileExtension } from "../storage/storage";
 
 /**
@@ -15,7 +15,10 @@ export function photoFileProblem(type: PhotoType, file: SpooledFile): { ext: Fil
   if (problem) return { problem, status: file.tooLarge ? 413 : 400 };
   const ext = sniff(file.head);
   const fits = file.claimedType === PDF ? ext === "pdf" : !!ext && IMAGE_EXTENSIONS.includes(ext);
-  if (fits) return { ext: ext! };
+  if (fits) {
+    const pixels = pixelProblem(file.pixels); // D #30: an image over 8000 px a side
+    return pixels ? { problem: pixels, status: 400 } : { ext: ext! };
+  }
   // The wrong-type words for this photo type, from the one copy of them (a type no rule accepts).
   return { problem: uploadProblem(type, { type: "application/octet-stream", size: 0 })!, status: 400 };
 }

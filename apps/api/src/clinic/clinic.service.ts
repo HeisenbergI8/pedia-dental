@@ -1,6 +1,6 @@
-import { BadRequestException, Injectable, PayloadTooLargeException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, PayloadTooLargeException } from "@nestjs/common";
 import {
-  Branch, Chair, ClinicContext, Procedure, StaffRole, holdsRole, isActiveStaff, manilaMonth,
+  Branch, Chair, ClinicContext, Procedure, StaffRole, duplicateNameMessage, holdsRole, isActiveStaff, manilaMonth, sameClinicName,
   type ClinicAccount, type ClinicUsage, type Role, type StaffMember, type Tier, type UpdateBrandingInput, type UpdateClinicProfileInput,
 } from "@pedia/shared";
 import { z } from "zod";
@@ -126,7 +126,17 @@ export class ClinicService {
 
   /** PUT /clinic: name, contact email and TIN (decision #18). Tier and status are the operator's (B12). */
   async updateProfile(input: UpdateClinicProfileInput): Promise<ClinicAccount> {
-    return toClinicAccount(await this.prisma.clinicAccount.update({ where: { id: ownClinicId() }, data: input }));
+    return runInTransaction(this.prisma, async (tx) => {
+      // Audit #26: a new name another clinic (or a waiting sign-up) already has is refused in sign-up's words. Read under
+      // Primolar's platform lock (lockPlatform's row, taken first as B12 E6 orders it), so a sign-up or another rename
+      // can't take the same name at once. The two reads are read-only, one column each (Signup stays SignupsService's).
+      await tx.$queryRaw`SELECT id FROM PlatformSettings WHERE id = ${"primolar"} FOR UPDATE`;
+      const id = ownClinicId();
+      const others = await tx.clinicAccount.findMany({ where: { id: { not: id } }, select: { name: true } });
+      const waiting = await tx.signup.findMany({ where: { status: "waiting" }, select: { name: true } });
+      if ([...others, ...waiting].some((a) => sameClinicName(a.name, input.name))) throw new ConflictException(duplicateNameMessage(input.name));
+      return toClinicAccount(await tx.clinicAccount.update({ where: { id }, data: input }));
+    });
   }
 
   /** PUT /clinic/branding: a colour below AA is refused with the nearest that passes; `headingFont: null` unsets it. */

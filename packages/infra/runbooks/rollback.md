@@ -27,7 +27,7 @@ resolved.
    OUT() { aws cloudformation describe-stacks --stack-name PrimolarService --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text; }
    aws ecs run-task --cluster primolar --task-definition primolar-api-release --launch-type FARGATE \
      --network-configuration "awsvpcConfiguration={subnets=[$(OUT TaskSubnetIds)],securityGroups=[$(OUT TaskSecurityGroupId)],assignPublicIp=ENABLED}" \
-     --overrides '{"containerOverrides":[{"name":"release","command":["sh","-c","export DATABASE_URL=\"mysql://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME\" && exec node_modules/.bin/prisma migrate status"]}]}'
+     --overrides '{"containerOverrides":[{"name":"release","command":["sh","-c","export DATABASE_URL=\"mysql://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME?sslcert=/app/rds-global-bundle.pem&sslaccept=accept_invalid_certs\" && exec node_modules/.bin/prisma migrate status"]}]}'
    ```
 3. Fix forward: undo the half-applied change by hand if needed, then
    `prisma migrate resolve --rolled-back <migration>` (the same override, with that command). Then deploy a corrected

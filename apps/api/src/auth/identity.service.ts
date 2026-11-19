@@ -184,10 +184,13 @@ export class IdentityService {
    * left out, as `allAccounts` does in the mock, so they read as a wrong password.
    */
   async loginsBy(login: string): Promise<LoginCandidate[]> {
-    const creds = await this.prisma.credential.findMany({
-      where: login.includes("@") ? { email: login } : { phone: login },
-      select: { clinicId: true, accountId: true, staffId: true, guardianId: true, name: true, passwordHash: true },
-    });
+    const byEmail = login.includes("@");
+    // Exact match only: the column's collation ignores accents, so "mária@" would otherwise find "maria@"'s login while
+    // the per-account lock counts it as another account (security review #7, verification bypass A).
+    const creds = (await this.prisma.credential.findMany({
+      where: byEmail ? { email: login } : { phone: login },
+      select: { clinicId: true, accountId: true, staffId: true, guardianId: true, name: true, passwordHash: true, email: true, phone: true },
+    })).filter((c) => (byEmail ? c.email : c.phone) === login);
     if (creds.length === 0) return [];
     const accounts = await this.prisma.clinicAccount.findMany({
       where: { id: { in: [...new Set(creds.map((c) => c.clinicId))] } },
@@ -302,7 +305,26 @@ export class IdentityService {
 
   /** Sign-in's lookup. The hash never leaves this service and AuthService. */
   async operatorByEmail(email: string) {
-    return (await this.prisma.operatorUser.findUnique({ where: { email }, select: { id: true, name: true, email: true, passwordHash: true } })) ?? undefined;
+    return (await this.prisma.operatorUser.findUnique({ where: { email }, select: { id: true, name: true, email: true, passwordHash: true, totpSecret: true } })) ?? undefined;
+  }
+
+  /**
+   * Security review #8: takes one TOTP step for an operator's sign-in, once. False when this step, or a later one, was
+   * already used: a code read over a shoulder or replayed is refused within its window. One conditional update, so two
+   * parallel sign-ins with the same code can't both pass.
+   */
+  async useTotpStep(operatorId: string, step: number): Promise<boolean> {
+    const { count } = await this.prisma.operatorUser.updateMany({
+      where: { id: operatorId, OR: [{ totpLastStep: null }, { totpLastStep: { lt: step } }] },
+      data: { totpLastStep: step },
+    });
+    return count === 1;
+  }
+
+  /** Security review #7: what this login signs in with (email, mobile), which a new password may not be. */
+  async signInValues(clinicId: string, accountId: string): Promise<(string | null)[]> {
+    const cred = await this.prisma.credential.findUnique({ where: { clinicId_accountId: { clinicId, accountId } }, select: { email: true, phone: true } });
+    return cred ? [cred.email, cred.phone] : [];
   }
 
   /** A new staff login's one-time secrets (decision #21) and their argon2id hashes. Call it before the transaction. */

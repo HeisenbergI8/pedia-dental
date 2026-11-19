@@ -5,7 +5,7 @@ import { imageProblem, type ImageRules } from "@pedia/shared";
 import type { z } from "zod";
 import { ZodIssuesException } from "../common/zod-validation.pipe";
 import { readUploads, tooLargeToRead } from "./multipart";
-import { sniff } from "./sniff";
+import { pixelProblem, sniff } from "./sniff";
 import { CONTENT_TYPES, type FileExtension } from "./storage";
 import type { CheckedFile } from "./storage.service";
 
@@ -48,6 +48,8 @@ export async function readImageForm<T extends z.ZodType>(
     const image = ext && IMAGE_EXTS.includes(ext) ? ext : undefined;
     const problem = imageProblem(rules, present && { type: image ? CONTENT_TYPES[image] : "", size: present.bytes });
     if (problem) throw present?.tooLarge && image ? new PayloadTooLargeException(problem) : new BadRequestException(problem);
+    const pixels = pixelProblem(present!.pixels); // D #30
+    if (pixels) throw new BadRequestException(pixels);
     return { data: parsed.data, file: { path: present!.path, bytes: present!.bytes, ext: image! }, dispose: upload.dispose };
   } catch (error) {
     await upload.dispose();

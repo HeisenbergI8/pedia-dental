@@ -13,6 +13,9 @@ import {
   LOGO_RULES,
   SIGNUPS_PER_HOUR,
   filesDueForDeletion,
+  publicClashMessage,
+  unpaidSignupExpired,
+  UNPAID_SIGNUP_REASON,
   type AgreementRecord,
   type BrandingInput,
   type Branch,
@@ -77,6 +80,17 @@ export function duplicateOf(account: Pick<SignupInput["account"], "name" | "cont
   const email = account.contactEmail.trim().toLowerCase();
   if (taken.some((a) => a.contactEmail.toLowerCase() === email)) return DUPLICATE_EMAIL_MESSAGE;
   return undefined;
+}
+
+/**
+ * #29: the public form's answer to a clash. It names no clinic or email (`SIGNUP_REFUSED_MESSAGE`), except to a
+ * resubmission of a waiting sign-up with this very name and email. The console keeps `duplicateOf`'s real reason.
+ */
+export function publicDuplicateOf(account: Pick<SignupInput["account"], "name" | "contactEmail">): string | undefined {
+  if (!duplicateOf(account)) return undefined;
+  const email = account.contactEmail.trim().toLowerCase();
+  const own = platform.signups.some((s) => s.status === "waiting" && sameClinicName(s.account.name, account.name) && s.account.contactEmail.trim().toLowerCase() === email);
+  return publicClashMessage(own);
 }
 
 /**
@@ -245,13 +259,24 @@ export const resetSignupHits = () => {
 };
 
 /**
+ * #17: the API's nightly `signups.expire-unpaid`. A waiting sign-up still unpaid 14 days after it was submitted is
+ * rejected ("Not paid within 14 days"), freeing its name and email; one with a receipt waiting is left alone.
+ */
+function expireUnpaid(day: string): boolean {
+  const due = platform.signups.filter((s) => unpaidSignupExpired(s, day) && latestReceipt({ kind: "signup", signupId: s.id })?.status !== "pending");
+  for (const s of due) Object.assign(s, { status: "rejected", rejection: { reason: UNPAID_SIGNUP_REASON, at: new Date().toISOString() } });
+  return due.length > 0;
+}
+
+/**
  * B12 decision 15: once a day, a sign-up rejected at least 30 days ago loses its logo, reference images and receipt
- * images; its record and words stay.
+ * images; its record and words stay. #17's expiry runs first, as the API's 03:05 job runs before its 03:15 purge.
  */
 let purgedOn = "";
 export function purgeRejectedFiles(day: string): void {
   if (purgedOn === day) return;
   purgedOn = day;
+  if (expireUnpaid(day)) persist();
   const keys: string[] = [];
   for (const s of platform.signups.filter((x) => filesDueForDeletion(x, day))) {
     keys.push(...[s.logoRef, ...s.referenceRefs].filter((k): k is string => !!k), ...forgetReceiptFiles(s.id));

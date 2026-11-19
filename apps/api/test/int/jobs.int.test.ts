@@ -41,8 +41,9 @@ async function seedExpiring() {
   await prisma.operatorSession.createMany({ data: [op("oplive", at(-1)), op("opidle", at(-45))] });
   await prisma.rateLimitCounter.createMany({
     data: [
-      { bucket: "reset:ended", windowStart: at(-60), hits: 3 }, // the longest window (B11's reset hour) has just ended
-      { bucket: "reset:open", windowStart: at(-59), hits: 3 },
+      // The longest window is the sign-in lock's 24-hour memory (security review #7, was B11's reset hour).
+      { bucket: "reset:ended", windowStart: at(-24 * 60), hits: 3 },
+      { bucket: "reset:open", windowStart: at(-24 * 60 + 1), hits: 3 },
     ],
   });
 }

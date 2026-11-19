@@ -1,10 +1,13 @@
 import { http, HttpResponse, delay } from "msw";
-import { CONSENTED_PHOTO_TYPES, UPLOAD_RULES, UploadPhotoInput, choiceDeclined, photoFileName, rolesCan, uploadProblem, type ClinicalPhoto, type PhotoType } from "@pedia/shared";
+import {
+  CONSENTED_PHOTO_TYPES, STAFF_PHOTO_KEPT, UPLOAD_RULES, UploadPhotoInput, choiceDeclined, parentUploadRefusal, photoFileName, rolesCan, uploadProblem,
+  type ClinicalPhoto, type PhotoType,
+} from "@pedia/shared";
 import { env } from "@/lib/env";
 import { inScope, sessionOf } from "@/mocks/access";
 import { seedFileOf } from "@pedia/seed";
-import { getBlob, putBlob } from "@/mocks/blob-store";
-import { forgetStored, recordStored, storageRefused } from "@/mocks/allowances";
+import { deleteBlob, getBlob, putBlob } from "@/mocks/blob-store";
+import { forgetStored, manilaMonthOf, recordStored, storageRefused } from "@/mocks/allowances";
 import { currentAccount, currentClinicId, db, persist } from "@/mocks/db";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
@@ -68,13 +71,36 @@ export const photoHandlers = [
       uploadedBy: fromParent ? "parent" : "staff",
       createdAt: new Date().toISOString(),
     };
-    const full = storageRefused(db, currentAccount().tier, file.size); // B12 decision 1
+    // Audit #5: a parent's uploads have their own limits per child (this Manila month, and every parent upload stored).
+    if (fromParent) {
+      const mine = db.photos.filter((p) => p.patientId === params.id && p.uploadedBy === "parent");
+      const month = manilaMonthOf(new Date().toISOString());
+      const use = {
+        thisMonth: mine.filter((p) => manilaMonthOf(p.createdAt) === month).length,
+        storedBytes: mine.reduce((n, p) => n + (db.storedFiles.find((f) => f.key === p.id)?.bytes ?? 0), 0),
+      };
+      const over = parentUploadRefusal(patient.firstName, use, file.size);
+      if (over) return new HttpResponse(over, { status: 409 });
+    }
+    const full = storageRefused(db, currentAccount(), file.size); // B12 decision 1
     if (full) return new HttpResponse(full, { status: 409 });
     await putBlob(photo.id, file);
     recordStored(db, photo.id, "photos", file.size);
     db.photos.push(photo);
     persist();
     return HttpResponse.json(photo, { status: 201 });
+  }),
+
+  // Audit #5: staff (clinical.write, the gate) remove a file a parent sent; the clinic's own photos stay (decision 5).
+  http.delete(url("/photos/:id"), async ({ params }) => {
+    const photo = db.photos.find((p) => p.id === params.id);
+    if (!photo) return new HttpResponse("Photo not found", { status: 404 });
+    if (photo.uploadedBy !== "parent") return new HttpResponse(STAFF_PHOTO_KEPT, { status: 409 });
+    db.photos = db.photos.filter((p) => p.id !== photo.id);
+    forgetStored(db, photo.id);
+    await deleteBlob(photo.id);
+    persist();
+    return HttpResponse.json({});
   }),
 
   http.get(url("/photos/:id/file"), async ({ params, request }) => {

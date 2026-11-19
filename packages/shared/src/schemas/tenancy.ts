@@ -34,9 +34,13 @@ export const HEADING_FONT_LABEL: Record<HeadingFont, string> = {
   fredoka: "Fredoka",
 };
 
+/** The longest clinic name (audit #4): it is the first words of every portal invite and reset text. */
+export const CLINIC_NAME_MAX = 80;
+
 /** One paying dental business (the tenant), with its branding (decisions #18, #28–#31). */
 export const ClinicAccount = z.object({
   id: Id,
+  // Audit #4: the name is in every account text (invites, resets), so it is capped like a text's other parts.
   name: z.string().trim().min(1, "Enter the clinic's name"),
   logoRef: z.string().optional(), // a blob-store key from Owner settings, or `demo/<file>` for a seeded logo in public/
   contactEmail: z.string().trim().toLowerCase().email("Enter the clinic's email address, like hello@clinic.ph"),
@@ -77,7 +81,9 @@ export const ClinicContext = z.object({
 export type ClinicContext = z.infer<typeof ClinicContext>;
 
 /** PUT /clinic: what the Owner edits about the account (decision #18). Tier and status are the operator's. */
-export const UpdateClinicProfileInput = ClinicAccount.pick({ name: true, contactEmail: true, tin: true });
+/** Audit #4: a name typed now is capped (it starts every text); a stored name is read as it is, so old rows never fail. */
+export const ClinicNameInput = z.string().trim().min(1, "Enter the clinic's name").max(CLINIC_NAME_MAX, `Keep the clinic's name under ${CLINIC_NAME_MAX} characters`);
+export const UpdateClinicProfileInput = ClinicAccount.pick({ name: true, contactEmail: true, tin: true }).extend({ name: ClinicNameInput });
 export type UpdateClinicProfileInput = z.infer<typeof UpdateClinicProfileInput>;
 
 /** PUT /clinic/branding. `headingFont: null` goes back to the app's own. The logo is a file, so it has its own route. */

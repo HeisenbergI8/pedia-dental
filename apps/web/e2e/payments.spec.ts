@@ -123,7 +123,7 @@ test("Bulilit's Owner sees storage and this month's texts on the plan", async ({
   await page.getByRole("tab", { name: "Plan" }).click();
   const panel = page.getByRole("tabpanel", { name: "Plan" });
   await expect(panel.getByText("Storage", { exact: true })).toBeVisible(SLOW);
-  await expect(panel.getByText(/ of 10 GB$/)).toBeVisible();
+  await expect(panel.getByText(/ of 100 GB$/)).toBeVisible(); // the Clinic plan's storage (feature 16, revised)
   await expect(panel.getByText(/^Texts in \w+$/)).toBeVisible();
   await expect(panel.getByText(/ of 1000$/)).toBeVisible();
 });

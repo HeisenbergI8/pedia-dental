@@ -22,7 +22,7 @@ import {
   type Payment,
 } from "@pedia/shared";
 import { env } from "@/lib/env";
-import { activeBranch, reportBranches, sessionOf } from "@/mocks/access";
+import { activeBranch, reportBranches, sessionOf, usableBranchesOf } from "@/mocks/access";
 import { currentClinicId, db, persist } from "@/mocks/db";
 import { idempotencyKey, once } from "@/mocks/idempotency";
 
@@ -94,7 +94,11 @@ export const billingHandlers = [
   // Decision 2: a bill made by mistake, voided with a reason while nothing was ever paid or applied on it. It stays on
   // record; its treatments are billable again; it counts in no balance or total. No key: a repeat is a 409 (E9).
   http.post(url("/invoices/:id/void"), async ({ params, request }) => {
-    const invoice = db.invoices.find((i) => i.id === params.id);
+    // #10: another branch's bill answers as if it weren't there, unless the caller works everywhere (`branches.all`).
+    // Paying and applying credit stay open across branches: a payment goes to its bill's branch wherever it's paid.
+    const session = sessionOf(request)!;
+    const reaches = (branchId: string) => rolesCan(session.roles, "branches.all") || usableBranchesOf(session).some((b) => b.id === branchId);
+    const invoice = db.invoices.find((i) => i.id === params.id && reaches(i.branchId));
     if (!invoice) return new HttpResponse("Invoice not found", { status: 404 });
     const parsed = VoidInvoiceInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });

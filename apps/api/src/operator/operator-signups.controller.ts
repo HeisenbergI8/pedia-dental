@@ -33,14 +33,14 @@ export class OperatorSignupsController {
   }
 
   @Post(":id/payment")
-  @OperatorAudited({ action: "create", record: "Sign-up payment", detail: "Payment recorded" })
+  @OperatorAudited({ action: "create", record: "Sign-up payment", detail: "Payment recorded", values: ({ answer }) => ({ method: (answer as Signup).payment!.method, amount: (answer as Signup).payment!.amount }) })
   @HttpCode(200)
   payment(@Param("id") id: string, @Body(new ZodValidationPipe(RecordUpfrontPaymentInput)) input: RecordUpfrontPaymentInput): Promise<Signup> {
     return this.signups.recordPayment(id, input);
   }
 
   @Post(":id/reject")
-  @OperatorAudited({ action: "update", record: "Sign-up", detail: "Sign-up rejected" })
+  @OperatorAudited({ action: "update", record: "Sign-up", detail: "Sign-up rejected", values: ({ req }) => ({ reason: (req.body as RejectSignupInput).reason }) })
   @HttpCode(200)
   reject(@Param("id") id: string, @Body(new ZodValidationPipe(RejectSignupInput)) { reason }: RejectSignupInput): Promise<Signup> {
     return this.signups.reject(id, reason);

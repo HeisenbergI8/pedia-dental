@@ -49,12 +49,85 @@ describe("PrimolarService", () => {
     expect(DRAIN.deregistrationDelay.toMilliseconds()).toBeGreaterThanOrEqual(graceMs);
   });
 
-  it("builds DATABASE_URL in the container; the password only ever comes from Secrets Manager (I4)", () => {
+  it("builds DATABASE_URL in the container, with verified TLS; the password only ever comes from Secrets Manager (I4, #15)", () => {
     const api = containerOf(template, "primolar-api");
-    expect(api.Command).toEqual(["sh", "-c", 'export DATABASE_URL="mysql://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME?allowPublicKeyRetrieval=true" && exec node --enable-source-maps dist/main.mjs']);
-    expect(api.Secrets!.map((s) => s.Name).sort()).toEqual(["DB_PASSWORD", "DB_USER"]);
+    expect(api.Command).toEqual(["sh", "-c", 'export DATABASE_URL="mysql://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME?sslcert=/app/rds-global-bundle.pem&sslaccept=strict" && exec node --enable-source-maps dist/main.mjs']);
+    expect(api.Secrets!.map((s) => s.Name).sort()).toEqual(["DB_PASSWORD", "DB_USER", "ORIGIN_SECRET"]);
     expect(Object.keys(envOf(api))).not.toEqual(expect.arrayContaining(["DATABASE_URL"]));
-    expect(JSON.stringify(api.Environment)).not.toMatch(/PASSWORD|S3_ACCESS_KEY_ID|S3_SECRET_ACCESS_KEY|SEMAPHORE_API_KEY/);
+    expect(JSON.stringify(api.Environment)).not.toMatch(/PASSWORD|S3_ACCESS_KEY_ID|S3_SECRET_ACCESS_KEY|SEMAPHORE_API_KEY|ORIGIN_SECRET|allowPublicKeyRetrieval/);
+    expect(JSON.stringify(taskDefinitions(template))).not.toContain("allowPublicKeyRetrieval");
+  });
+
+  it("carries the RDS CA bundle where the image puts it (#15)", () => {
+    const dockerfile = readFileSync(new URL("../../../apps/api/Dockerfile", import.meta.url), "utf8");
+    expect(dockerfile).toContain("https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /app/rds-global-bundle.pem");
+  });
+
+  it("signs the services in as the DML-only app user, and the release task as the master user (#34)", () => {
+    const secretRef = (container: Container, name: string) => JSON.stringify((container.Secrets as { Name: string; ValueFrom: unknown }[]).find((s) => s.Name === name)!.ValueFrom);
+    for (const family of ["primolar-api", "primolar-api-web"]) expect(secretRef(containerOf(template, family), "DB_USER")).toContain("AppDatabaseSecret");
+    const release = containerOf(template, "primolar-api-release");
+    expect(secretRef(release, "DB_USER")).toContain("DatabaseSecretAttachment");
+    expect(secretRef(release, "APP_DB_PASSWORD")).toContain("AppDatabaseSecret");
+    // Until the release task has created the app user once (first-time setup), the services keep the master user.
+    expect(secretRef(containerOf(serviceOf({ apiDatabaseUser: "master" }), "primolar-api"), "DB_USER")).toContain("DatabaseSecretAttachment");
+  });
+
+  it("creates the app user before migrating, idempotently, with DML grants only (#34)", () => {
+    const script = containerOf(template, "primolar-api-release").Command[2]!;
+    expect(script).toContain("$DB_NAME?sslcert=/app/rds-global-bundle.pem&sslaccept=accept_invalid_certs");
+    const setup = script.indexOf("prisma db execute --stdin");
+    expect(setup).toBeGreaterThan(-1);
+    expect(setup).toBeLessThan(script.indexOf("prisma migrate deploy"));
+    expect(script).toContain("CREATE USER IF NOT EXISTS '$APP_DB_USER'@'%' IDENTIFIED BY '$APP_DB_PASSWORD'");
+    expect(script).toContain("ALTER USER '$APP_DB_USER'@'%' IDENTIFIED BY '$APP_DB_PASSWORD'");
+    expect(script).toContain("GRANT SELECT, INSERT, UPDATE, DELETE ON $DB_NAME.* TO '$APP_DB_USER'@'%';");
+    // The nightly demo reset truncates (B13c1 E5): TRUNCATE needs DROP, and only that demo gets it.
+    const demo = containerOf(serviceOf({ appEnv: "demo", demoLogins: true, demoDailyReset: true }), "primolar-api-release").Command[2]!;
+    expect(demo).toContain("GRANT SELECT, INSERT, UPDATE, DELETE, DROP ON");
+    expect(script).not.toContain("DROP");
+  });
+
+  it("locks the load balancer to the web's proxy: 403 unless X-Primolar-Origin carries the secret (#2)", () => {
+    template.hasResourceProperties("AWS::ElasticLoadBalancingV2::Listener", {
+      Port: 443,
+      DefaultActions: [{ Type: "fixed-response", FixedResponseConfig: { StatusCode: "403", ContentType: "text/plain", MessageBody: "Forbidden" } }],
+    });
+    template.resourceCountIs("AWS::ElasticLoadBalancingV2::ListenerRule", 1);
+    template.hasResourceProperties("AWS::ElasticLoadBalancingV2::ListenerRule", {
+      Actions: [Match.objectLike({ Type: "forward", TargetGroupArn: { Ref: Match.stringLikeRegexp("^AlbHttpsApiGroup") } })],
+      Conditions: [{ Field: "http-header", HttpHeaderConfig: { HttpHeaderName: "X-Primolar-Origin", Values: ["{{resolve:secretsmanager:primolar/origin-secret:SecretString:::}}"] } }],
+    });
+    // Both serving tasks get the secret from Secrets Manager; the release task serves nothing and doesn't.
+    for (const family of ["primolar-api", "primolar-api-web"]) expect(containerOf(template, family).Secrets!.map((s) => s.Name)).toContain("ORIGIN_SECRET");
+    expect(containerOf(template, "primolar-api-release").Secrets!.map((s) => s.Name)).not.toContain("ORIGIN_SECRET");
+  });
+
+  it("writes the load balancer's access logs to the foundation's log bucket (#36)", () => {
+    template.hasResourceProperties("AWS::ElasticLoadBalancingV2::LoadBalancer", {
+      LoadBalancerAttributes: Match.arrayWith([{ Key: "access_logs.s3.enabled", Value: "true" }, Match.objectLike({ Key: "access_logs.s3.prefix", Value: "alb" })]),
+    });
+  });
+
+  it("puts AWS WAF in front: managed common rules and a per-address limit on /api/auth/*, unless switched off (#36)", () => {
+    template.hasResourceProperties("AWS::WAFv2::WebACL", {
+      Scope: "REGIONAL",
+      DefaultAction: { Allow: {} },
+      Rules: [
+        Match.objectLike({ Statement: { ManagedRuleGroupStatement: Match.objectLike({ VendorName: "AWS", Name: "AWSManagedRulesCommonRuleSet" }) } }),
+        Match.objectLike({
+          Action: { Block: {} },
+          Statement: { RateBasedStatement: Match.objectLike({
+            AggregateKeyType: "FORWARDED_IP",
+            ScopeDownStatement: { ByteMatchStatement: Match.objectLike({ SearchString: "/api/auth/", PositionalConstraint: "STARTS_WITH" }) },
+          }) },
+        }),
+      ],
+    });
+    template.hasResourceProperties("AWS::WAFv2::WebACLAssociation", { ResourceArn: { Ref: Match.stringLikeRegexp("^Alb") } });
+    const off = serviceOf({ waf: false });
+    off.resourceCountIs("AWS::WAFv2::WebACL", 0);
+    off.resourceCountIs("AWS::WAFv2::WebACLAssociation", 0);
   });
 
   it("runs migrations as a one-off task from its own image tag, serving nothing (B13a E4, I7)", () => {
@@ -144,6 +217,8 @@ describe("PrimolarService", () => {
     for (const family of ["primolar-api", "primolar-api-web"]) {
       const container = containerOf(template, family);
       const env = Object.fromEntries(Object.entries(envOf(container)).map(([name, value]) => [name, typeof value === "string" ? value : "resolved-at-deploy"]));
+      // Secrets arrive at start-up; a 64-character stand-in for each (the origin secret's generated length).
+      for (const { Name } of container.Secrets ?? []) env[Name] ??= "s".repeat(64);
       const url = /DATABASE_URL="([^"]+)"/.exec(container.Command[2]!)![1]!.replace("$DB_USER", "primolar").replace("$DB_PASSWORD", "x").replace("$DB_HOST", "db.internal").replace("$DB_PORT", "3306").replace("$DB_NAME", "primolar");
       const parsed = loadEnv({ ...env, DATABASE_URL: url });
       expect([parsed.APP_ENV, parsed.COOKIE_SECURE, parsed.BACKGROUND_WORK]).toEqual(["production", true, family === "primolar-api"]);

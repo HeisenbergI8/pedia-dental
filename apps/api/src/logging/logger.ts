@@ -21,6 +21,14 @@ export const REDACT_PATHS = [
   'res.headers["set-cookie"]',
   // A download's file name is the child's (`mendoza-bea-photo.jpg`, B4).
   'res.headers["content-disposition"]',
+  // A file read's 302 goes to a working 5-minute link (B10): whoever reads the logs could open it.
+  "res.headers.location",
+  // The page the request came from: `/patients?q=<child's name>` (the query is never logged, B4; nor is it here).
+  "req.headers.referer",
+  // The origin lock's secret rides on every proxied request (#2), and Vercel may add its own token headers.
+  'req.headers["x-primolar-origin"]',
+  'req.headers["x-vercel-oidc-token"]',
+  'req.headers["x-vercel-proxy-signature"]',
   ...PERSONAL_FIELDS,
   ...PERSONAL_FIELDS.map((field) => `*.${field}`),
 ];

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { INestApplication } from "@nestjs/common";
 import { DEMO_CLINIC_ID, childrenOf, seedPlatform } from "@pedia/seed";
-import { ClinicalPhoto, choiceDeclined } from "@pedia/shared";
+import { ClinicalPhoto, PARENT_UPLOAD_LIMITS, STAFF_PHOTO_KEPT, choiceDeclined, parentUploadRefusal } from "@pedia/shared";
 import request from "supertest";
 import { z } from "zod";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -16,6 +16,7 @@ import { seedDatabase } from "../../src/seed/seed-database";
 import { LINK_GONE } from "../../src/storage/local-files.controller";
 import { FileStorage } from "../../src/storage/storage";
 import { StorageService } from "../../src/storage/storage.service";
+import { jpegOf } from "../support/images";
 import { inClinic, resetDatabase } from "./support/database";
 import { openFile } from "./support/files";
 import { createIntApp } from "./support/int-app";
@@ -122,6 +123,7 @@ describe("photos (apps/web handlers.test.ts → photos)", () => {
     expect(await said(upload(dentist, another.id, {}, big))).toEqual([413, "Files must be under 10 MB"]);
     expect(await said(upload(dentist, another.id, "oops", big))).toEqual([400, "`meta` must be JSON"]); // meta is checked first
     expect(await said(upload(dentist, another.id, {}, SVG))).toEqual([400, "Attach an image file"]);
+    expect(await said(upload(dentist, another.id, {}, jpegOf(8001, 600)))).toEqual([400, "This image is 8001 × 600 pixels. Make it at most 8000 pixels on each side, then upload it again."]); // D #30
     const refusal = await said(upload(dentist, declinedChild.id, {}, JPEG));
     expect(refusal).toEqual([409, `${declinedChild.firstName}'s family declined clinical photos. Staff can change this under Privacy on the child's Overview; parents on the portal's Home page.`]);
     expect((await upload(dentist, declinedChild.id, { type: "xray" }, JPEG)).status).toBe(201); // only photos need consent
@@ -258,11 +260,53 @@ describe("B10's guarantees", () => {
     expect(await used(DEMO_CLINIC_ID)).toBe(before);
   });
 
-  it("has no way to change or delete a photo (decision 5)", async () => {
+  it("has no way to change a photo, or to delete one the clinic took (decision 5, audit #5)", async () => {
     const dentist = await as(DENTIST);
     const photo = ClinicalPhoto.parse((await upload(dentist, another.id, {}, JPEG)).body);
-    expect((await http().delete(`/api/photos/${photo.id}`).set("Cookie", dentist)).status).toBe(404);
+    expect(await said(http().delete(`/api/photos/${photo.id}`).set("Cookie", dentist))).toEqual([409, STAFF_PHOTO_KEPT]);
     await expect(inClinic(DEMO_CLINIC_ID, () => prisma.clinicalPhoto.update({ where: { id: photo.id }, data: { caption: "x" } }))).rejects.toThrow(/append-only/);
+    await expect(inClinic(DEMO_CLINIC_ID, () => prisma.clinicalPhoto.deleteMany({ where: { id: photo.id } }))).rejects.toThrow(/append-only/);
+  });
+
+  it("limits a parent's uploads per child each month and in all (audit #5)", async () => {
+    const parent = await as(PARENT);
+    const theirs = async () => inClinic(DEMO_CLINIC_ID, () => prisma.clinicalPhoto.count({ where: { patientId: own.id, uploadedBy: "parent", createdAt: { gte: new Date(Date.now() - 20 * 86_400_000) } } }));
+    // Fill this month's allowance with rows (the limit counts rows, not files), then one more is refused.
+    const template = await inClinic(DEMO_CLINIC_ID, () => prisma.clinicalPhoto.findFirstOrThrow({ where: { patientId: own.id, uploadedBy: "parent" } }));
+    const fill = PARENT_UPLOAD_LIMITS.perMonth; // a full month's worth dated now (older seeded uploads may be last month's)
+    const { id: _id, ...row } = template;
+    await inClinic(DEMO_CLINIC_ID, async () => await prisma.clinicalPhoto.createMany({ data: Array.from({ length: fill }, () => ({ ...row, createdAt: new Date(), bytes: 1 })) }));
+    expect(await theirs()).toBeGreaterThanOrEqual(PARENT_UPLOAD_LIMITS.perMonth);
+    const before = await used(DEMO_CLINIC_ID);
+    const res = await upload(parent, own.id, { type: "extraoral" }, JPEG);
+    expect([res.status, res.text]).toEqual([409, parentUploadRefusal(own.firstName, { thisMonth: PARENT_UPLOAD_LIMITS.perMonth, storedBytes: 0 }, 0)]);
+    expect(await used(DEMO_CLINIC_ID)).toBe(before); // refused before storing
+    // Last year's uploads count toward the total only.
+    await prisma.$executeRaw`UPDATE ClinicalPhoto SET createdAt = '2025-01-15 02:00:00', bytes = 1 WHERE clinicId = ${DEMO_CLINIC_ID} AND patientId = ${own.id} AND uploadedBy = 'parent'`;
+    await prisma.$executeRaw`UPDATE ClinicalPhoto SET bytes = ${PARENT_UPLOAD_LIMITS.totalBytes} WHERE clinicId = ${DEMO_CLINIC_ID} AND id = ${template.id}`;
+    const full = await upload(parent, own.id, { type: "extraoral" }, JPEG);
+    expect([full.status, full.text]).toEqual([409, expect.stringContaining("uploads from the portal are full")]);
+    await prisma.$executeRaw`UPDATE ClinicalPhoto SET bytes = 1 WHERE clinicId = ${DEMO_CLINIC_ID} AND id = ${template.id}`;
+    expect((await upload(parent, own.id, { type: "extraoral" }, JPEG)).status).toBe(201);
+  });
+
+  it("lets staff remove a parent's upload, never the clinic's own photo (audit #5)", async () => {
+    const [dentist, desk, parent] = [await as(DENTIST), await as(FRONT_DESK), await as(PARENT)];
+    const theirs = ClinicalPhoto.parse((await upload(parent, own.id, { type: "extraoral" }, PNG, "image/png")).body);
+    const clinics = ClinicalPhoto.parse((await upload(dentist, own.id, {}, JPEG)).body);
+    for (const cookie of [desk, parent]) expect((await http().delete(`/api/photos/${theirs.id}`).set("Cookie", cookie)).status).toBe(403);
+    expect(await said(http().delete(`/api/photos/${clinics.id}`).set("Cookie", dentist))).toEqual([409, STAFF_PHOTO_KEPT]);
+    const before = await used(DEMO_CLINIC_ID);
+    const key = (await inClinic(DEMO_CLINIC_ID, () => prisma.clinicalPhoto.findFirstOrThrow({ where: { id: theirs.id } }))).fileKey;
+    const res = await http().delete(`/api/photos/${theirs.id}`).set("Cookie", dentist);
+    expect([res.status, res.body]).toEqual([200, {}]);
+    const list = z.array(ClinicalPhoto).parse((await http().get(`/api/patients/${own.id}/photos`).set("Cookie", dentist)).body);
+    expect(list.map((p) => p.id)).not.toContain(theirs.id);
+    while ((await app.get(OutboxWorker).drain()) > 0); // the file and its ledger row go after the commit
+    expect(await inClinic(DEMO_CLINIC_ID, () => app.get(StorageService).get(key))).toBeUndefined();
+    expect(await used(DEMO_CLINIC_ID)).toBe(before - PNG.length);
+    expect(await inClinic(DEMO_CLINIC_ID, () => prisma.auditEvent.count({ where: { patientId: own.id, record: "Photo (removed a parent's upload)" } }))).toBe(1);
+    expect((await http().delete(`/api/photos/${theirs.id}`).set("Cookie", dentist)).status).toBe(404);
   });
 
   // Last: it re-seeds with the app's storage driver, so the seed's photo files exist (the other cases seed rows only).

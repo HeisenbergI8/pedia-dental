@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loadEnv } from "./env";
+import { loadScriptEnv, loadEnv } from "./env";
 
 describe("loadEnv", () => {
   it("applies defaults", () => {
@@ -66,7 +66,7 @@ describe("loadEnv", () => {
   it("refuses dev defaults in a hosted deployment (B13a)", () => {
     const base = { DATABASE_URL: "mysql://u:p@h/db" };
     expect(() => loadEnv({ ...base, APP_ENV: "production" })).toThrow(/CORS_ORIGIN[\s\S]*WEB_URL[\s\S]*S3_BUCKET/);
-    const hosted = { ...base, CORS_ORIGIN: "https://app.primolar.ph", WEB_URL: "https://app.primolar.ph", S3_BUCKET: "primolar-files" };
+    const hosted = { ...base, CORS_ORIGIN: "https://app.primolar.ph", WEB_URL: "https://app.primolar.ph", S3_BUCKET: "primolar-files", ORIGIN_SECRET: "o".repeat(32) };
     expect(loadEnv({ ...hosted, APP_ENV: "production" }).APP_ENV).toBe("production");
     expect(() => loadEnv({ ...hosted, APP_ENV: "production", DEMO_LOGINS: "true" })).toThrow(/DEMO_LOGINS/);
     expect(loadEnv({ ...hosted, APP_ENV: "demo", DEMO_LOGINS: "true" }).DEMO_LOGINS).toBe(true);
@@ -74,11 +74,41 @@ describe("loadEnv", () => {
   });
 
   it("allows the nightly demo reset only on a demo deployment with demo logins (B13c1)", () => {
-    const hosted = { DATABASE_URL: "mysql://u:p@h/db", CORS_ORIGIN: "https://demo.primolar.ph", WEB_URL: "https://demo.primolar.ph", S3_BUCKET: "primolar-demo" };
+    const hosted = { DATABASE_URL: "mysql://u:p@h/db", CORS_ORIGIN: "https://demo.primolar.ph", WEB_URL: "https://demo.primolar.ph", S3_BUCKET: "primolar-demo", ORIGIN_SECRET: "o".repeat(32) };
     expect(loadEnv({ ...hosted, APP_ENV: "demo", DEMO_LOGINS: "true", DEMO_DAILY_RESET: "true" }).DEMO_DAILY_RESET).toBe(true);
     expect(() => loadEnv({ ...hosted, APP_ENV: "demo", DEMO_DAILY_RESET: "true" })).toThrow(/DEMO_DAILY_RESET/);
     expect(() => loadEnv({ ...hosted, APP_ENV: "production", DEMO_DAILY_RESET: "true" })).toThrow(/DEMO_DAILY_RESET/);
     expect(() => loadEnv({ DATABASE_URL: "mysql://u:p@h/db", DEMO_LOGINS: "true", DEMO_DAILY_RESET: "true" })).toThrow(/DEMO_DAILY_RESET/);
+  });
+
+  it("fails closed: NODE_ENV=production refuses APP_ENV unset or local", () => {
+    const hosted = { DATABASE_URL: "mysql://u:p@h/db", CORS_ORIGIN: "https://app.primolar.ph", WEB_URL: "https://app.primolar.ph", S3_BUCKET: "primolar-files", ORIGIN_SECRET: "o".repeat(64) };
+    expect(() => loadEnv({ ...hosted, NODE_ENV: "production" })).toThrow(/APP_ENV must be demo or production/);
+    expect(() => loadEnv({ ...hosted, NODE_ENV: "production", APP_ENV: "local" })).toThrow(/APP_ENV must be demo or production/);
+    expect(loadEnv({ ...hosted, NODE_ENV: "production", APP_ENV: "production" }).APP_ENV).toBe("production");
+    expect(loadEnv({ ...hosted, NODE_ENV: "production", APP_ENV: "demo" }).APP_ENV).toBe("demo");
+    // Other variables' problems are still named alongside it.
+    expect(() => loadEnv({ DATABASE_URL: "postgres://x", NODE_ENV: "production" })).toThrow(/DATABASE_URL[\s\S]*APP_ENV/);
+    // Local development and tests keep the local default.
+    expect(loadEnv({ DATABASE_URL: "mysql://u:p@h/db", NODE_ENV: "development" }).APP_ENV).toBe("local");
+    expect(loadEnv({ DATABASE_URL: "mysql://u:p@h/db", NODE_ENV: "test" }).APP_ENV).toBe("local");
+  });
+
+  it("requires an https:// SEMAPHORE_URL outside APP_ENV=local", () => {
+    const hosted = { DATABASE_URL: "mysql://u:p@h/db", CORS_ORIGIN: "https://app.primolar.ph", WEB_URL: "https://app.primolar.ph", S3_BUCKET: "primolar-files", ORIGIN_SECRET: "o".repeat(64) };
+    expect(() => loadEnv({ ...hosted, APP_ENV: "production", SEMAPHORE_URL: "http://api.semaphore.co/api/v4/messages" })).toThrow(/SEMAPHORE_URL must be an https/);
+    expect(() => loadEnv({ ...hosted, APP_ENV: "demo", SEMAPHORE_URL: "http://api.semaphore.co/api/v4/messages" })).toThrow(/SEMAPHORE_URL/);
+    expect(loadEnv({ ...hosted, APP_ENV: "production" }).SEMAPHORE_URL).toBe("https://api.semaphore.co/api/v4/messages");
+    // A local fake (e.g. a mock server) may stay on http.
+    expect(loadEnv({ DATABASE_URL: "mysql://u:p@h/db", SEMAPHORE_URL: "http://127.0.0.1:9999/messages" }).SEMAPHORE_URL).toBe("http://127.0.0.1:9999/messages");
+  });
+
+  it("requires an origin secret of 32+ characters outside APP_ENV=local (#2)", () => {
+    const hosted = { DATABASE_URL: "mysql://u:p@h/db", CORS_ORIGIN: "https://app.primolar.ph", WEB_URL: "https://app.primolar.ph", S3_BUCKET: "primolar-files" };
+    expect(() => loadEnv({ ...hosted, APP_ENV: "production" })).toThrow(/ORIGIN_SECRET is required outside APP_ENV=local/);
+    expect(() => loadEnv({ ...hosted, APP_ENV: "demo", ORIGIN_SECRET: "o".repeat(31) })).toThrow(/ORIGIN_SECRET must be at least 32 characters/);
+    expect(loadEnv({ ...hosted, APP_ENV: "production", ORIGIN_SECRET: "o".repeat(64) }).ORIGIN_SECRET).toHaveLength(64);
+    expect(loadEnv({ DATABASE_URL: "mysql://u:p@h/db" }).ORIGIN_SECRET).toBeUndefined(); // local: no lock
   });
 
   it("takes 0–3 proxy hops", () => {
@@ -92,5 +122,14 @@ describe("loadEnv", () => {
     expect(loadEnv(base).OPERATOR_AUDIT_KEEP_DAYS).toBeUndefined();
     expect(loadEnv({ ...base, OPERATOR_AUDIT_KEEP_DAYS: "1826" }).OPERATOR_AUDIT_KEEP_DAYS).toBe(1826);
     expect(() => loadEnv({ ...base, OPERATOR_AUDIT_KEEP_DAYS: "30" })).toThrow(/at least 365/);
+  });
+
+  it("lets a one-off script run without the web-facing settings, never as local (security review #8 follow-up)", () => {
+    const task = { DATABASE_URL: "mysql://u:p@h/db", APP_ENV: "production", NODE_ENV: "production" };
+    expect(() => loadEnv(task)).toThrow(/ORIGIN_SECRET/);
+    expect(() => loadScriptEnv(task)).toThrow(/S3_BUCKET/); // a script that stores files still needs the bucket
+    const env = loadScriptEnv(task, { storage: false });
+    expect([env.APP_ENV, env.BACKGROUND_WORK]).toEqual(["production", false]);
+    expect(() => loadScriptEnv({ DATABASE_URL: "mysql://u:p@h/db", NODE_ENV: "production" }, { storage: false })).toThrow(/APP_ENV/);
   });
 });

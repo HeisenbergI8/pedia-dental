@@ -21,12 +21,12 @@ export class AppointmentsController {
   book(@Body(new ZodValidationPipe(BookAppointmentInput)) body: BookAppointmentInput) { return this.appointments.book(body); }
 
   @Put("appointments/:id")
-  move(@Param("id") id: string, @Body() body: unknown) { return this.appointments.move(id, body); }
+  move(@Req() req: Request, @Param("id") id: string, @Body() body: unknown) { return this.appointments.move(id, body, identityOf(req)!); }
 
   @Post("appointments/:id/status")
   @HttpCode(200) // an action, not a creation (CONVENTIONS → Traps)
   setStatus(@Req() req: Request, @Param("id") id: string, @Body() body: unknown) {
-    return this.appointments.setStatus(id, body, identityOf(req)!.user.roles);
+    return this.appointments.setStatus(id, body, identityOf(req)!);
   }
 
   @Get("appointment-requests")

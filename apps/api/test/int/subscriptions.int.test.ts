@@ -1,6 +1,6 @@
 import type { INestApplication } from "@nestjs/common";
 import { DEMO_CLINIC_ID, SEED_PRICES, seedPlatform, staffEmail } from "@pedia/seed";
-import { BILLING_ONLY_MESSAGE, RECEIPT_PENDING, Session, SubscriptionView, amountDue, type PriceList } from "@pedia/shared";
+import { BILLING_ONLY_MESSAGE, IDEMPOTENCY_KEY_MISSING, RECEIPT_PENDING, Session, SubscriptionView, amountDue, type PriceList } from "@pedia/shared";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Hasher } from "../../src/auth/hashing";
@@ -47,7 +47,7 @@ beforeEach(async () => {
 const http = () => request(app.getHttpServer());
 const account = (id: string) => prisma.clinicAccount.findUniqueOrThrow({ where: { id }, select: { status: true, tier: true } });
 const pauseOf = async (id: string) => (await prisma.subscription.findUniqueOrThrow({ where: { clinicId: id } })).pause;
-const payByHand = async (id: string) => http().post(`/api/operator/accounts/${id}/subscription/payments`).set("Cookie", await asOperator(app)).send({ method: "gcash", paidOn: clock.today() });
+const payByHand = async (id: string) => http().post(`/api/operator/accounts/${id}/subscription/payments`).set("Cookie", await asOperator(app)).set("Idempotency-Key", crypto.randomUUID()).send({ method: "gcash", paidOn: clock.today() });
 const raiseSmall = (by: number): PriceList => ({ ...SEED_PRICES, plans: { ...SEED_PRICES.plans, small: { ...SEED_PRICES.plans.small, monthlyFee: SEED_PRICES.plans.small.monthlyFee + by } } });
 
 describe("the nightly settle and the check at sign-in (decision 4)", () => {
@@ -112,6 +112,50 @@ describe("the nightly settle and the check at sign-in (decision 4)", () => {
     expect(await account(DEMO_CLINIC_ID)).toMatchObject({ status: "suspended" });
     const owner = await signIn(app, "owner@gmail.com", DEMO_CLINIC_ID);
     expect(owner.res.status).toBe(403);
+  });
+
+  it("keeps a clinic paused for non-payment and then by hand paused after its payment and the settle, until Reactivate (#27)", async () => {
+    daysOn(5); // Ipin: 8 days past due
+    await records.settleAll();
+    expect([(await account(IPIN)).status, await pauseOf(IPIN)]).toEqual(["suspended", "overdue"]);
+    const op = await asOperator(app);
+    expect((await http().post(`/api/operator/accounts/${IPIN}/suspend`).set("Cookie", op)).status).toBe(200);
+    expect(await pauseOf(IPIN)).toBe("manual");
+    const paid = await payByHand(IPIN);
+    expect(paid.status).toBe(201);
+    expect(SubscriptionView.parse(paid.body)).toMatchObject({ state: "paid", pausedFor: "manual" }); // not lifted
+    await records.settleAll();
+    expect([(await account(IPIN)).status, await pauseOf(IPIN)]).toEqual(["suspended", "manual"]);
+    expect((await signIn(app, IPIN_OWNER, IPIN)).res.status).toBe(403); // no billing-only session for a pause by hand
+    expect((await http().post(`/api/operator/accounts/${IPIN}/reactivate`).set("Cookie", op)).status).toBe(200);
+    expect([(await account(IPIN)).status, await pauseOf(IPIN)]).toEqual(["active", null]);
+  });
+
+  it("records a payment by hand once per key, and refuses the same reference on the same paid date (#18)", async () => {
+    const op = await asOperator(app);
+    const path = `/api/operator/accounts/${NGITI}/subscription/payments`;
+    const body = { method: "gcash", reference: "GC 4455 6677", paidOn: clock.today() };
+    const post = (key: string | null, b: object = body) => {
+      const req = http().post(path).set("Cookie", op);
+      return (key === null ? req : req.set("Idempotency-Key", key)).send(b);
+    };
+    const missing = await post(null);
+    expect([missing.status, missing.text]).toEqual([400, IDEMPOTENCY_KEY_MISSING]);
+    const key = crypto.randomUUID();
+    const first = await post(key);
+    expect(first.status).toBe(201);
+    const again = await post(key); // a retry whose answer was lost: replayed, not recorded
+    expect([again.status, again.headers["idempotent-replayed"], again.body]).toEqual([201, "true", first.body]);
+    expect(await prisma.subscriptionPayment.count({ where: { clinicId: NGITI, reference: body.reference } })).toBe(1);
+    const twice = await post(crypto.randomUUID());
+    expect([twice.status, twice.text]).toEqual([409, "This payment is already recorded"]);
+    expect((await post(crypto.randomUUID(), { ...body, reference: "GC 4455 6678" })).status).toBe(201);
+    // #28: one operator row per payment recorded (none for the replay or the refusal), with its method and amount.
+    const rows = await prisma.operatorAuditEvent.findMany({ where: { record: "Subscription payment", targetId: NGITI }, orderBy: { at: "asc" }, select: { values: true } });
+    expect(rows.map((r) => r.values)).toEqual([
+      { method: "gcash", amount: SubscriptionView.parse(first.body).payments[0]!.amount },
+      { method: "gcash", amount: expect.any(Number) },
+    ]);
   });
 
   it("shows only the Owner the overdue state, with the date to pay by, for seven days", async () => {

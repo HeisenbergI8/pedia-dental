@@ -30,6 +30,13 @@ describe("parent messages", () => {
     expect(MessageTemplate.safeParse({ ...template, body: "Hi {child_first_name}" }).success).toBe(true);
   });
 
+  it("treats inherited object names like {constructor} as unknown placeholders, never as values", () => {
+    expect(unknownPlaceholders("Hi {constructor} {toString} {__proto__}")).toEqual(["constructor", "toString", "__proto__"]);
+    expect(renderMessage("Hi {constructor}", messageVars(bea, { clinicName: "Bulilit Smiles" }))).toBe("Hi {constructor}");
+    const template = { clinicId: "c", kind: "recall", name: "Recall", body: "Hi {constructor}", updatedAt: new Date().toISOString() };
+    expect(MessageTemplate.safeParse(template).success).toBe(false);
+  });
+
   it("sends the reminder at 9 AM the day before, or now when booked later than that", () => {
     expect(reminderSendAt(startsAt, new Date(2030, 0, 1))).toBe(new Date(2030, 0, 7, 9, 0).toISOString());
     const late = new Date(2030, 0, 7, 15, 0);

@@ -18,6 +18,9 @@ export type OperatorSession = z.infer<typeof OperatorSession>;
 export const OperatorLoginInput = z.object({
   email: z.string().trim().toLowerCase().email("Enter your email address, like name@example.com"),
   password: z.string().min(1, "Enter your password"),
+  // Security review #8: the 6-digit code from the operator's authenticator app (TOTP). Empty or absent for an operator
+  // who hasn't enrolled, which only demo and local deployments allow. Apps show it as "123 456", so one space is fine.
+  code: z.string().trim().regex(/^(\d{3} ?\d{3})?$/, "Enter the 6-digit code from your authenticator app").optional(),
 });
 export type OperatorLoginInput = z.infer<typeof OperatorLoginInput>;
 

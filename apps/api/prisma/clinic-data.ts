@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "../src/app.module";
-import { loadEnv } from "../src/config/env";
+import { loadScriptEnv } from "../src/config/env";
 import { ClinicDataRefusal, ClinicDataService } from "../src/privacy/clinic-data";
 import { PrismaService } from "../src/prisma/prisma.service";
 
@@ -22,7 +22,7 @@ if (!complete || !clinicId || !values.operator) {
   console.error(USAGE);
   process.exit(2);
 }
-const env = loadEnv();
+const env = loadScriptEnv();
 // A remote database without S3_BUCKET means local-disk storage: every file would land in `missing` (the release task
 // has no S3 settings of its own; the runbook passes them).
 if (command === "export" && !env.S3_BUCKET && !/@(localhost|127\.0\.0\.1)[:/]/.test(env.DATABASE_URL)) {

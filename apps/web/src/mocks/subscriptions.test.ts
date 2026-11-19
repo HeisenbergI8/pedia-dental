@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupServer } from "msw/node";
 import { z } from "zod";
 import { AccountOverview, ClinicContext, CreateAccountResult, Session, SubscriptionView } from "@pedia/shared";
+import { staffEmail } from "@pedia/seed";
 import { ApiError, api } from "@/lib/api-client";
 import { setToday } from "./clock";
 import { accountById, platform } from "./db";
@@ -19,7 +20,7 @@ const send = (method: string, body?: unknown) => ({ method, ...(body === undefin
 const status = (p: Promise<unknown>) => p.then(() => 200, (e: ApiError) => e.status);
 const subscription = (id: string) => api(`/operator/accounts/${id}/subscription`, SubscriptionView);
 const pay = (id: string, paidOn: string) =>
-  api(`/operator/accounts/${id}/subscription/payments`, SubscriptionView, send("POST", { method: "gcash", paidOn }));
+  api(`/operator/accounts/${id}/subscription/payments`, SubscriptionView, { ...send("POST", { method: "gcash", paidOn }), headers: { "Idempotency-Key": crypto.randomUUID() } }); // #18
 const setTier = (id: string, tier: string) => api(`/operator/accounts/${id}/tier`, AccountOverview, send("PUT", { tier }));
 const ipin = () => platform.subscriptions.find((s) => s.clinicId === "clinic_ipin")!;
 
@@ -173,6 +174,42 @@ describe("plan changes and pauses around a running month (review fixes)", () => 
     expect(accountById("clinic_ngiti")!.status).toBe("active");
     await api("/operator/accounts/clinic_ngiti/subscription/cancel", SubscriptionView, send("POST"));
     expect(await status(setTier("clinic_ngiti", "mid"))).toBe(409);
+  });
+
+  it("keeps a clinic paused for non-payment and then by hand paused after its payment and the settle, until Reactivate (#27)", async () => {
+    reset("small");
+    setToday("2026-10-23"); // grace ended on 2026-10-22
+    asOperator();
+    expect(await subscription("clinic_ngiti")).toMatchObject({ state: "lapsed", pausedFor: "overdue" });
+    await api("/operator/accounts/clinic_ngiti/suspend", AccountOverview, send("POST"));
+    expect((await subscription("clinic_ngiti")).pausedFor).toBe("manual");
+    expect(await pay("clinic_ngiti", "2026-10-23")).toMatchObject({ state: "paid", pausedFor: "manual" }); // not lifted
+    setToday("2026-10-24"); // the next settle lifts nothing either
+    expect((await subscription("clinic_ngiti")).pausedFor).toBe("manual");
+    expect(accountById("clinic_ngiti")!.status).toBe("suspended");
+    cookies();
+    const owner = platform.tenants.clinic_ngiti!.staff.find((s) => s.isOwner)!;
+    expect(await status(api("/auth/login", Session, send("POST", { email: staffEmail(owner), password: DEMO_PASSWORD })))).toBe(403); // no billing-only session
+    asOperator();
+    await api("/operator/accounts/clinic_ngiti/reactivate", AccountOverview, send("POST"));
+    expect([accountById("clinic_ngiti")!.status, (await subscription("clinic_ngiti")).pausedFor]).toEqual(["active", null]);
+  });
+
+  it("records a payment by hand once per key, and refuses the same reference on the same paid date (#18)", async () => {
+    reset("small");
+    setToday("2026-10-18");
+    asOperator();
+    const path = "/operator/accounts/clinic_ngiti/subscription/payments";
+    const body = { method: "gcash", reference: "GC 4455 6677", paidOn: "2026-10-18" };
+    const keyed = (key?: string, b: object = body) => ({ ...send("POST", b), ...(key && { headers: { "Idempotency-Key": key } }) });
+    expect(await status(api(path, SubscriptionView, keyed()))).toBe(400); // no key
+    const key = crypto.randomUUID();
+    const first = await api(path, SubscriptionView, keyed(key));
+    const again = await api(path, SubscriptionView, keyed(key)); // a retry whose answer was lost: replayed, not recorded
+    expect(again.payments).toHaveLength(first.payments.length);
+    expect((await subscription("clinic_ngiti")).payments).toHaveLength(first.payments.length);
+    await expect(api(path, SubscriptionView, keyed(crypto.randomUUID()))).rejects.toMatchObject({ status: 409, message: "This payment is already recorded" });
+    expect((await api(path, SubscriptionView, keyed(crypto.randomUUID(), { ...body, reference: "GC 4455 6678" }))).payments).toHaveLength(first.payments.length + 1);
   });
 });
 

@@ -50,6 +50,26 @@ export function photoFileName(patient: { lastName: string; firstName: string }, 
 /** Upload rules as data. PDFs only where a paper document is expected (a clearance, a lab result, a referral). */
 export const UPLOAD_RULES = { maxBytes: 10 * 1024 * 1024, pdfTypes: ["document", "referral"] as PhotoType[] };
 
+/**
+ * Audit #5: what parents may upload from the portal for one child, so they can't fill the clinic's storage. Per Manila
+ * calendar month (`perMonth`) and in total (`totalBytes`, parent uploads still stored). Staff uploads aren't counted.
+ */
+export const PARENT_UPLOAD_LIMITS = { perMonth: 20, totalBytes: 200 * 1024 * 1024 } as const;
+
+/** The refusal a parent sees past those limits (409), in plain words; undefined when the upload may go. */
+export function parentUploadRefusal(childFirstName: string, use: { thisMonth: number; storedBytes: number }, addingBytes: number): string | undefined {
+  if (use.thisMonth >= PARENT_UPLOAD_LIMITS.perMonth) {
+    return `You've sent ${PARENT_UPLOAD_LIMITS.perMonth} files for ${childFirstName} this month. You can send more next month, or bring them to the clinic.`;
+  }
+  if (use.storedBytes + addingBytes > PARENT_UPLOAD_LIMITS.totalBytes) {
+    return `${childFirstName}'s uploads from the portal are full (${PARENT_UPLOAD_LIMITS.totalBytes / (1024 * 1024)} MB). Ask the clinic to remove ones they no longer need.`;
+  }
+  return undefined;
+}
+
+/** Audit #5: staff may remove only what a parent sent; this is the 409 for a photo the clinic took. */
+export const STAFF_PHOTO_KEPT = "Only files a parent sent from the portal can be removed. The clinic's own photos are part of the child's record.";
+
 /** Why this file can't be uploaded as `type`, in plain words. Undefined when it can. Server and form use the same rule. */
 export function uploadProblem(type: PhotoType, file: { type: string; size: number }): string | undefined {
   const pdfOk = UPLOAD_RULES.pdfTypes.includes(type);

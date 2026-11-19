@@ -64,9 +64,35 @@ export const SIGNUP_LIMIT_MESSAGE = "Too many sign-ups from this connection. Try
 /** B12 decision 15: a rejected sign-up's files are deleted this many days after the rejection; the record stays. */
 export const REJECTED_FILES_DAYS = 30;
 
+/** A timestamp's Manila calendar day (UTC+8, no DST). */
+const manilaDay = (iso: string) => new Date(Date.parse(iso) + 8 * 3_600_000).toISOString().slice(0, 10);
+
 /** Is this sign-up's files' time up on `today` (a Manila date)? */
 export function filesDueForDeletion(s: Pick<Signup, "status" | "rejection" | "filesDeletedAt">, today: string): boolean {
   if (s.status !== "rejected" || !s.rejection || s.filesDeletedAt) return false;
-  const rejectedOn = new Date(Date.parse(s.rejection.at) + 8 * 3_600_000).toISOString().slice(0, 10); // Manila: UTC+8, no DST
-  return differenceInCalendarDays(parseISO(today), parseISO(rejectedOn)) >= REJECTED_FILES_DAYS;
+  return differenceInCalendarDays(parseISO(today), parseISO(manilaDay(s.rejection.at))) >= REJECTED_FILES_DAYS;
 }
+
+/**
+ * #17: a waiting sign-up with no setup fee recorded is rejected this many days after it was submitted (the nightly job;
+ * the mock's once-a-day run), so unpaid sign-ups don't pile up or hold names. Its files then go 30 days later, as any
+ * rejected sign-up's. One waiting for the operator to check a receipt is left alone until the receipt is answered.
+ */
+export const UNPAID_SIGNUP_DAYS = 14;
+export const UNPAID_SIGNUP_REASON = `Not paid within ${UNPAID_SIGNUP_DAYS} days`;
+
+/** Is this sign-up unpaid past its time on `today` (a Manila date)? The caller checks for a receipt waiting. */
+export function unpaidSignupExpired(s: Pick<Signup, "status" | "payment" | "submittedAt">, today: string): boolean {
+  if (s.status !== "waiting" || s.payment) return false;
+  return differenceInCalendarDays(parseISO(today), parseISO(manilaDay(s.submittedAt))) >= UNPAID_SIGNUP_DAYS;
+}
+
+/**
+ * #29: what the public form says about any clash it can't safely name, so the form never tells a stranger which clinic
+ * or email is on Primolar. The operator's console keeps the real reason (`duplicateNameMessage`, `DUPLICATE_EMAIL_MESSAGE`).
+ * The email's own words stay only for a resubmission of the same waiting sign-up (its name and email both match).
+ */
+export const SIGNUP_REFUSED_MESSAGE = "We couldn't take this sign-up. If your clinic already uses Primolar, contact us.";
+
+/** #29: the public form's 409 for a clash. `ownSignup`: the same name and email as a waiting sign-up (a resubmission). */
+export const publicClashMessage = (ownSignup: boolean) => (ownSignup ? DUPLICATE_EMAIL_MESSAGE : SIGNUP_REFUSED_MESSAGE);

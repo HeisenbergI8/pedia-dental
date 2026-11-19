@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { FAILURE, choiceDeclined, composeMessage, nextSendingTime, preVisitMessageFor, reminderSendAt, smsNumber, type Appointment, type Guardian, type Message, type MessageEvent, type MessageStatus, type Patient } from "@pedia/shared";
+import { ACCOUNT_TEXT_KINDS, FAILURE, choiceDeclined, composeMessage, nextSendingTime, preVisitMessageFor, reminderSendAt, smsNumber, type Appointment, type Guardian, type Message, type MessageEvent, type MessageStatus, type Patient } from "@pedia/shared";
 import { ownClinicId } from "../clinic/account-lock";
 import { Clock } from "../common/clock";
 import { Prisma } from "../generated/prisma/client.ts";
@@ -73,13 +73,14 @@ export class MessageQueueService {
    */
   async queueAccountText(
     tx: Tx,
-    t: { kind: "portal_invite" | "password_reset"; patientId: string; guardian: Pick<Guardian, "fullName" | "phone">; linkId: string; body: string },
+    // Audit #21: `sign_in_changed` carries no link.
+    t: { kind: "portal_invite" | "password_reset" | "sign_in_changed"; patientId: string; guardian: Pick<Guardian, "fullName" | "phone">; linkId?: string; body: string },
   ): Promise<Message> {
     const now = this.clock.now();
     const row = await tx.message.create({
       data: {
         clinicId: ownClinicId(), patientId: t.patientId, kind: t.kind, channel: "sms", to: t.guardian.phone, recipientName: t.guardian.fullName,
-        body: t.body, status: "queued", sendAt: now, createdAt: now, linkId: t.linkId,
+        body: t.body, status: "queued", sendAt: now, createdAt: now, linkId: t.linkId ?? null,
       },
       select: MESSAGE_COLUMNS,
     });
@@ -147,7 +148,7 @@ export class MessageQueueService {
       SELECT patientId, status, sendAt FROM (
         SELECT patientId, status, sendAt, ROW_NUMBER() OVER (PARTITION BY patientId ORDER BY sendAt DESC, status = 'sent' DESC, id DESC) AS rn
         FROM Message
-        WHERE clinicId = ${ownClinicId()} AND status IN ('sent', 'failed') AND kind NOT IN ('portal_invite', 'password_reset')
+        WHERE clinicId = ${ownClinicId()} AND status IN ('sent', 'failed') AND kind NOT IN (${Prisma.join([...ACCOUNT_TEXT_KINDS])})
           AND patientId IN (${Prisma.join([...patientIds])})
       ) last WHERE rn = 1`;
     return rows.map((r) => ({ ...r, sendAt: r.sendAt.toISOString() }));

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { INestApplication } from "@nestjs/common";
 import { seedPlatform } from "@pedia/seed";
-import { ClinicAccount, ClinicContext } from "@pedia/shared";
+import { ClinicAccount, ClinicContext, duplicateNameMessage } from "@pedia/shared";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Hasher } from "../../src/auth/hashing";
@@ -12,6 +12,7 @@ import { OutboxWorker } from "../../src/outbox/outbox.worker";
 import { PrismaService } from "../../src/prisma/prisma.service";
 import { seedDatabase } from "../../src/seed/seed-database";
 import { StorageService } from "../../src/storage/storage.service";
+import { pngOf } from "../support/images";
 import { inClinic, resetDatabase } from "./support/database";
 import { createIntApp } from "./support/int-app";
 
@@ -87,6 +88,25 @@ describe("branding (owner-settings.test.ts, decisions #28–#31)", () => {
     expect([none.status, none.text]).toEqual([400, "Attach the logo file"]);
   });
 
+  it("refuses a body over twice the limit before reading it, and a logo over 8000 px a side (D #12, #30)", async () => {
+    const cookie = await as(NGITI_OWNER);
+    const unread = await http().put("/api/clinic/logo").set("Cookie", cookie).set("Content-Type", "multipart/form-data; boundary=x").set("Content-Length", String(3 * 1024 * 1024)).send("");
+    expect([unread.status, unread.text]).toEqual([413, "Logos must be 1 MB or smaller"]);
+    const wide = await upload(cookie, "image/png", "wide.png", pngOf(9000, 10));
+    expect([wide.status, wide.text]).toEqual([400, "This image is 9000 × 10 pixels. Make it at most 8000 pixels on each side, then upload it again."]);
+    const fits = await upload(cookie, "image/png", "fits.png", pngOf(8000, 10));
+    expect(fits.status).toBe(200);
+  });
+
+  it("stores an SVG with no <style>, <image> or outside link (D #31)", async () => {
+    const cookie = await as(NGITI_OWNER);
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><style>@import url(https://evil.example/a.css)</style><image href="https://evil.example/t.png"/><rect width="1" height="1" fill="url(https://evil.example/p#x)"/></svg>';
+    expect((await upload(cookie, "image/svg+xml", "x.svg", svg)).status).toBe(200);
+    const stored = (await http().get("/api/clinic/logo").set("Cookie", cookie).buffer(true)).body as Buffer;
+    expect(stored.toString()).not.toMatch(/style|image|evil\.example/);
+    expect(stored.toString()).toContain("<rect");
+  });
+
   it("deletes the replaced logo's file through the outbox, after the swap commits", async () => {
     const cookie = await as(NGITI_OWNER);
     const before = ClinicAccount.parse((await upload(cookie, "image/svg+xml", "a.svg", '<svg xmlns="http://www.w3.org/2000/svg"/>')).body).logoRef!;
@@ -111,5 +131,17 @@ describe("branding (owner-settings.test.ts, decisions #28–#31)", () => {
     expect((await http().put("/api/clinic").set("Cookie", cookie).send(profile)).status).toBe(400);
     const saved = await http().put("/api/clinic").set("Cookie", cookie).send({ ...profile, tin: "234-567-890-0001" });
     expect(ClinicAccount.parse(saved.body).tin).toBe("234-567-890-0001");
+  });
+
+  it("refuses a rename to another clinic's or a waiting sign-up's name, and a name over 80 characters (audit #4, #26)", async () => {
+    const cookie = await as(NGITI_OWNER);
+    const profile = { name: "Ngiti Kids Dental", contactEmail: "hello@ngiti.demo", tin: "234-567-890-0001" };
+    const put = (name: string) => http().put("/api/clinic").set("Cookie", cookie).send({ ...profile, name });
+    const clash = await put("  bulilit smiles   PEDIATRIC dental ");
+    expect([clash.status, clash.text]).toEqual([409, duplicateNameMessage("  bulilit smiles   PEDIATRIC dental ")]);
+    expect((await put("Hagikgik Kids Dental")).status).toBe(409); // the seed's waiting sign-up
+    expect((await put("N".repeat(81))).status).toBe(400);
+    expect(ClinicAccount.parse((await put("ngiti kids dental")).body).name).toBe("ngiti kids dental"); // its own name, any case
+    expect((await put(profile.name)).status).toBe(200);
   });
 });

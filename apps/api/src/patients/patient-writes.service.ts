@@ -56,7 +56,8 @@ export class PatientWritesService {
     for (const g of after) {
       const old = before.guardians.find((x) => x.id === g.id);
       if (!old || smsNumber(old.phone) === smsNumber(g.phone)) continue; // the same number, written another way
-      const login = await this.portal.numberChanged(tx, { guardianId: g.id, fullName: g.fullName, phone: g.phone, email: g.email ?? null });
+      // Audit #21: the old number is told of the change (an account text), and resets wait a day.
+      const login = await this.portal.numberChanged(tx, { guardianId: g.id, fullName: g.fullName, phone: g.phone, email: g.email ?? null }, { oldPhone: old.phone, patientId: before.id });
       if (login) moved.push(login);
     }
     return moved;

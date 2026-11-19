@@ -31,7 +31,8 @@ import { OPERATORS, operatorPasswordOpens, operatorToken } from "@/mocks/operato
 import { agreementView, latestAgreement } from "@/mocks/privacy";
 import { onFileAgreement } from "@pedia/seed";
 import { addSignup, brandingRefusal, createClinic, duplicateOf, readSignupForm, replaceFile, signupOfClinic } from "@/mocks/signups";
-import { cancelSubscription, changePlan, forgetPause, reactivateRefusal, recordSubscriptionPayment, subscriptionView } from "@/mocks/subscriptions";
+import { cancelSubscription, changePlan, forgetPause, pauseByHand, paymentAlreadyRecorded, reactivateRefusal, recordSubscriptionPayment, subscriptionView } from "@/mocks/subscriptions";
+import { idempotencyKey, once } from "@/mocks/idempotency";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 const refuse = (status: 400 | 401 | 404 | 409, message: string) => new HttpResponse(message, { status });
@@ -87,6 +88,8 @@ function setStatus(id: unknown, status: AccountStatus) {
     const refused = reactivateRefusal(account.id);
     if (refused) return refuse(409, refused);
     forgetPause(account.id);
+  } else {
+    pauseByHand(account.id); // #27: no payment or settle lifts it; only Reactivate
   }
   account.status = status;
   persist();
@@ -95,7 +98,9 @@ function setStatus(id: unknown, status: AccountStatus) {
 
 /** API contract for apps/api's OperatorController: Primolar's console, outside every clinic account. */
 export const operatorHandlers = [
-  // One message for a wrong password and an unknown email, as the clinic sign-in.
+  // One message for a wrong password and an unknown email, as the clinic sign-in. Security review #8: the demo operator
+  // hasn't enrolled in two-step sign-in (as on a demo or local API), so any 6-digit code, or none, is accepted; the
+  // schema still refuses a code that isn't 6 digits.
   http.post(url("/operator/auth/login"), async ({ request }) => {
     const parsed = OperatorLoginInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
@@ -158,13 +163,21 @@ export const operatorHandlers = [
   }),
 
   // Billing #3, #29, S5: one month marked paid by hand, a late one included. The amount is the server's.
+  // #18: money, so the Idempotency-Key comes first (400 without) and a retry replays; the same reference on the same
+  // paid date is refused (409), as the API.
   http.post(url("/operator/accounts/:id/subscription/payments"), async ({ params, request }) => {
+    const key = idempotencyKey(request);
+    if (key instanceof Response) return key;
     const found = findAccount(params.id);
     if (!found) return notFound();
     const parsed = RecordUpfrontPaymentInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
-    const refused = recordSubscriptionPayment(found.account.id, parsed.data);
-    return refused ? refuse(409, refused) : HttpResponse.json(subscriptionView(found.account.id), { status: 201 });
+    const clinicId = found.account.id;
+    return once(key, { route: "subscription payment", clinicId, body: parsed.data }, () => {
+      if (paymentAlreadyRecorded(clinicId, parsed.data)) return refuse(409, "This payment is already recorded");
+      const refused = recordSubscriptionPayment(clinicId, parsed.data);
+      return refused ? refuse(409, refused) : HttpResponse.json(subscriptionView(clinicId), { status: 201 });
+    });
   }),
 
   // Billing #30, S7: the Owner has no Cancel button; Primolar cancels on request. Pauses when the paid month ends.
@@ -255,7 +268,7 @@ export const operatorHandlers = [
     if (!form.logo && !delivered) return refuse(400, "Add the finished logo");
     if (form.logo) {
       const tenant = platform.tenants[account.id]!;
-      const full = storageRefused(tenant, account.tier, form.logo.size); // B12 decision 1: the clinic's own storage
+      const full = storageRefused(tenant, account, form.logo.size); // B12 decision 1: the clinic's own storage
       if (full) return refuse(409, full);
       forgetStored(tenant, account.logoRef);
       account.logoRef = await replaceFile(account.logoRef, `logo_${account.id}`, form.logo);

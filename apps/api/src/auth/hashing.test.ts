@@ -20,7 +20,7 @@ describe("Hasher", () => {
   });
 });
 
-describe("pinAttempt (PIN_POLICY: 5 wrong in 15 min lock for 5 min)", () => {
+describe("pinAttempt (PIN_POLICY: 5 wrong in 15 min lock for 5 min, then longer)", () => {
   const now = at("2026-10-16T02:00:00Z");
   const wrongs = (n: number) => Array.from({ length: n }, (_, i) => new Date(now.getTime() - (n - i) * 60_000).toISOString());
 
@@ -35,9 +35,17 @@ describe("pinAttempt (PIN_POLICY: 5 wrong in 15 min lock for 5 min)", () => {
     expect(pinAttempt(fifth.outcome === "wrong" ? fifth.failedAt : [], true, at("2026-10-16T02:01:00Z")).outcome).toBe("locked");
   });
 
-  it("clears the tries on the right PIN, and drops tries older than the window", () => {
+  it("clears the tries on the right PIN, and drops tries the lock no longer remembers (a day)", () => {
     expect(pinAttempt(wrongs(3), true, now)).toEqual({ outcome: "ok", failedAt: [] });
-    const old = ["2026-10-16T01:00:00.000Z"];
-    expect(pinAttempt(old, false, now)).toMatchObject({ failedAt: [now.toISOString()] });
+    const hourAgo = "2026-10-16T01:00:00.000Z";
+    expect(pinAttempt([hourAgo], false, now)).toMatchObject({ failedAt: [hourAgo, now.toISOString()] });
+    expect(pinAttempt(["2026-10-15T01:00:00.000Z"], false, now)).toMatchObject({ failedAt: [now.toISOString()] });
+  });
+
+  it("locks for twice as long on the next wrong try after a lock ends (security review #9)", () => {
+    const fifth = pinAttempt(wrongs(4), false, now);
+    const later = at("2026-10-16T02:06:00Z"); // the 5-minute lock has ended
+    const sixth = pinAttempt(fifth.outcome === "wrong" ? fifth.failedAt : [], false, later);
+    expect(sixth).toMatchObject({ outcome: "wrong", locked: { until: "2026-10-16T02:16:00.000Z" } });
   });
 });

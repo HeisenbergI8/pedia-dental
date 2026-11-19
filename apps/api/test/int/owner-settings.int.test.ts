@@ -14,6 +14,7 @@ import { Hasher } from "../../src/auth/hashing";
 import { SessionService } from "../../src/auth/session.service";
 import { PrismaService } from "../../src/prisma/prisma.service";
 import { seedDatabase } from "../../src/seed/seed-database";
+import { pngOf } from "../support/images";
 import { inClinic, resetDatabase } from "./support/database";
 import { createIntApp } from "./support/int-app";
 
@@ -284,6 +285,8 @@ describe("custom letterhead (D11, decisions 22, 24)", () => {
     const before = (await ok(call("get", "/clinic/usage", owner), ClinicUsage)).storage.inUse;
     const svg = await putImage(owner, Buffer.from("<svg xmlns='http://www.w3.org/2000/svg'/>"), "image/svg+xml");
     expect([svg.status, svg.text]).toEqual([400, "Choose a PNG or JPG image"]); // the shared imageProblem's words
+    const wide = await putImage(owner, pngOf(8001, 600)); // D #30
+    expect([wide.status, wide.text]).toEqual([400, "This image is 8001 × 600 pixels. Make it at most 8000 pixels on each side, then upload it again."]);
     const saved = await ok(putImage(owner), LetterheadSettings);
     expect([saved.mode, !!saved.imageUpdatedAt, saved.tagline]).toEqual(["image", true, text.tagline]); // the text is kept
     expect((await ok(call("get", "/clinic/usage", owner), ClinicUsage)).storage.inUse).toBe(before + PNG.length);

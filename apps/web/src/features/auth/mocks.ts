@@ -1,5 +1,8 @@
 import { http, HttpResponse, delay } from "msw";
-import { AcknowledgeInput, ChangePasswordInput, LoginInput, LogoutInput, SwitchUserInput, pinLockout, rolesCan, worksAt, type AuditAction, type Session, type SessionUser } from "@pedia/shared";
+import {
+  AcknowledgeInput, ChangePasswordInput, LOGIN_PASSWORD_MESSAGE, LoginInput, LogoutInput, SESSION_WRONG_PINS, SwitchUserInput, passwordIsLogin, pinLockout, rolesCan, worksAt,
+  type AuditAction, type Session, type SessionUser,
+} from "@pedia/shared";
 import { env } from "@/lib/env";
 import { branchOf, recordAudit, sessionOf } from "@/mocks/access";
 import { accountById, credentialOf, db, persist, platform, selectTenant } from "@/mocks/db";
@@ -34,6 +37,13 @@ const lockedMessage = (until: string) => {
   const minutes = Math.max(1, Math.ceil((Date.parse(until) - Date.now()) / 60_000));
   return `Too many wrong PINs. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}, or sign out and sign in with your password.`;
 };
+
+/**
+ * Security review #9: PIN tries per session, across everyone it tries (the API's RATE_LIMITS.pins). The mock's tokens
+ * can't be revoked, so reaching the limit forgets the count as if the session ended (the API deletes it).
+ */
+const pinTries = new Map<string, number>();
+const WRONG_PINS_MESSAGE = "Too many wrong PINs on this device. Sign in again with your password.";
 
 /** API contract for apps/api's AuthController. `/auth/demo-accounts` is prototype-only. */
 export const authHandlers = [
@@ -111,6 +121,7 @@ export const authHandlers = [
     if (!staffOwn && !parentOwn?.password) return new HttpResponse(`Demo logins keep the demo password (${DEMO_PASSWORD})`, { status: 403 });
     const parsed = ChangePasswordInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
+    if (passwordIsLogin(parsed.data.next, [session.email])) return new HttpResponse(LOGIN_PASSWORD_MESSAGE, { status: 400 }); // security review #7
     if (!passwordOpens(db, session, parsed.data.current)) {
       recordAudit(session, "denied", "Password");
       return new HttpResponse("That isn't your current password", { status: 400 });
@@ -184,21 +195,35 @@ export const authHandlers = [
       return new HttpResponse(`${target.name} doesn't work at ${device.name}. They can sign in with their password.`, { status: 400 });
     }
 
+    // Security review #9: every PIN try counts against this session; the last one allowed, if it fails, signs it out.
+    const sessionKey = tokenFor(current.clinicId, current);
+    const tries = (pinTries.get(sessionKey) ?? 0) + 1;
+    pinTries.set(sessionKey, tries);
+    const signOut = () => {
+      pinTries.delete(sessionKey);
+      recordAudit(current, "sign_out", "Session (too many wrong PINs)");
+      return new HttpResponse(WRONG_PINS_MESSAGE, { status: 401 });
+    };
+    const lastTry = tries >= SESSION_WRONG_PINS;
+
     const lock = pinLockout(pin.failedAt, new Date());
     if (lock.locked) {
       recordAudit(target, "denied", PIN_SWITCH);
+      if (lastTry) return signOut();
       return new HttpResponse(lockedMessage(lock.until), { status: 429 });
     }
     if (parsed.data.pin !== pin.pin) {
       pin.failedAt.push(new Date().toISOString());
       persist();
       recordAudit(target, "sign_in_failed", PIN_SWITCH);
+      if (lastTry) return signOut();
       const after = pinLockout(pin.failedAt, new Date());
       if (after.locked) return new HttpResponse(lockedMessage(after.until), { status: 429 });
-      const tries = `${after.attemptsLeft} ${after.attemptsLeft === 1 ? "try" : "tries"} left`;
-      return new HttpResponse(`That PIN isn't right for ${target.name}. ${tries}.`, { status: 401 });
+      const left = `${after.attemptsLeft} ${after.attemptsLeft === 1 ? "try" : "tries"} left`;
+      return new HttpResponse(`That PIN isn't right for ${target.name}. ${left}.`, { status: 401 });
     }
 
+    pinTries.delete(sessionKey);
     pin.failedAt = [];
     persist();
     recordAudit(current, "sign_out", "Session (switched user)");

@@ -26,7 +26,51 @@ describe("PrimolarFoundation", () => {
         BackupRetentionPeriod: 30, DeleteAutomatedBackups: false, DeletionProtection: true,
       }),
     });
-    template.hasResourceProperties("AWS::RDS::DBParameterGroup", { Family: "mysql8.4", Parameters: { require_secure_transport: "0" } });
+  });
+
+  it("requires TLS, unless the move to the TLS image is under way, and logs slow queries (#15, #36)", () => {
+    template.hasResourceProperties("AWS::RDS::DBParameterGroup", {
+      Family: "mysql8.4",
+      Parameters: { require_secure_transport: "1", slow_query_log: "1", long_query_time: "2", log_output: "FILE" },
+    });
+    foundationOf({ databaseRequireTls: false }).hasResourceProperties("AWS::RDS::DBParameterGroup", { Parameters: Match.objectLike({ require_secure_transport: "0" }) });
+    template.hasResourceProperties("AWS::RDS::DBInstance", { EnableCloudwatchLogsExports: ["error", "slowquery"] });
+    template.resourcePropertiesCountIs("Custom::LogRetention", { RetentionInDays: 90 }, 2);
+  });
+
+  it("lets the API tasks out on HTTPS and to MySQL only: no all-traffic egress (#36)", () => {
+    const groups = Object.entries(template.findResources("AWS::EC2::SecurityGroup"));
+    const app = groups.find(([id]) => id.startsWith("AppSg"))![1];
+    expect(app.Properties.SecurityGroupEgress).toEqual([expect.objectContaining({ CidrIp: "0.0.0.0/0", IpProtocol: "tcp", FromPort: 443, ToPort: 443 })]);
+    template.hasResourceProperties("AWS::EC2::SecurityGroupEgress", {
+      IpProtocol: "tcp", FromPort: 3306, ToPort: 3306,
+      GroupId: { "Fn::GetAtt": [Match.stringLikeRegexp("^AppSg"), "GroupId"] },
+      DestinationSecurityGroupId: { "Fn::GetAtt": [Match.stringLikeRegexp("^DatabaseSg"), "GroupId"] },
+    });
+    const inline = groups.flatMap(([, g]) => (g.Properties.SecurityGroupEgress ?? []) as Record<string, unknown>[]);
+    const standalone = Object.values(template.findResources("AWS::EC2::SecurityGroupEgress")).map((r) => r.Properties as Record<string, unknown>);
+    expect([...inline, ...standalone].filter((rule) => rule.IpProtocol === "-1")).toEqual([]);
+  });
+
+  it("keeps a private access-log bucket for the load balancer and the files bucket, 90 days (#36)", () => {
+    const buckets = Object.entries(template.findResources("AWS::S3::Bucket"));
+    const [logsId, logs] = buckets.find(([id]) => id.startsWith("AccessLogs"))!;
+    expect(logs.Properties).toMatchObject({
+      PublicAccessBlockConfiguration: { BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true },
+      LifecycleConfiguration: { Rules: [expect.objectContaining({ ExpirationInDays: 90 })] },
+    });
+    expect(buckets.find(([id]) => id.startsWith("Files"))![1].Properties.LoggingConfiguration).toEqual({ DestinationBucketName: { Ref: logsId }, LogFilePrefix: "s3-files/" });
+  });
+
+  it("generates the origin secret and the app user's secret, never in code (#2, #34)", () => {
+    const secrets = Object.values(template.findResources("AWS::SecretsManager::Secret")).map((r) => r.Properties);
+    const named = (name: string) => secrets.find((s) => s.Name === name)!;
+    expect(named("primolar/origin-secret").GenerateSecretString).toEqual({ PasswordLength: 64, ExcludePunctuation: true, IncludeSpace: false });
+    const app = named("primolar/database-app").GenerateSecretString;
+    expect(JSON.parse(app.SecretStringTemplate)).toEqual({ username: "primolar_app" });
+    expect(app.GenerateStringKey).toBe("password");
+    expect(app.ExcludeCharacters).toBe(named("primolar/database").GenerateSecretString.ExcludeCharacters);
+    expect(JSON.stringify(secrets)).not.toMatch(/"SecretString":/);
   });
 
   it("admits MySQL only from the API tasks' security group", () => {
@@ -41,10 +85,9 @@ describe("PrimolarFoundation", () => {
   });
 
   it("generates a password that is safe in a URL and inside sh double quotes (I4)", () => {
-    const [secret] = Object.values(template.findResources("AWS::SecretsManager::Secret"));
+    const secret = Object.values(template.findResources("AWS::SecretsManager::Secret")).find((r) => r.Properties.Name === "primolar/database");
     const excluded = secret!.Properties.GenerateSecretString.ExcludeCharacters as string;
-    for (const ch of [" ", "/", "@", ":", "$", "\"", "\\", "`", "%", "?", "#"]) expect(excluded).toContain(ch);
-    expect(secret!.Properties.Name).toBe("primolar/database");
+    for (const ch of [" ", "/", "@", ":", "$", "\"", "\\", "`", "%", "?", "#", "'"]) expect(excluded).toContain(ch);
   });
 
   it("keeps files private, encrypted, versioned and TLS-only, without CORS; current files never expire (I6)", () => {

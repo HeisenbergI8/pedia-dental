@@ -64,6 +64,7 @@ export function TextTopUpCard() {
         )}
         {(t.paymentQr || latest) && (
           <ReceiptUpload
+            label="Send your text top-up receipt"
             latest={latest}
             pending={buy.isPending}
             error={buy.error?.message}

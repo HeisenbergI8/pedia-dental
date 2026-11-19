@@ -31,6 +31,10 @@ describe("the production bundle on MySQL", { timeout: 90_000 }, () => {
       const run = spawnSync(process.execPath, [join(dir, "clinic-data.mjs")], { cwd: API_DIR, encoding: "utf8" });
       expect(run.status, run.stderr).toBe(2);
       expect(run.stderr.startsWith("Usage: clinic-data")).toBe(true);
+      // Security review #8: the operator's two-step enrolment ships the same way.
+      const totp = spawnSync(process.execPath, [join(dir, "operator-totp.mjs")], { cwd: API_DIR, encoding: "utf8" });
+      expect(totp.status, totp.stderr).toBe(2);
+      expect(totp.stderr.startsWith("Usage: operator-totp")).toBe(true);
     } finally {
       removeBundle(dir);
     }

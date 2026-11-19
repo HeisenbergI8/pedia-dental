@@ -103,6 +103,11 @@ describe("settleStep (S2, B12 E5)", () => {
     expect(settleStep(sub, { tier: "mid", status: "suspended" }, "2026-10-18")).toEqual({});
     expect(settleStep({ ...sub, pause: "overdue" }, { tier: "mid", status: "suspended" }, "2026-10-18")).toEqual({ status: "active", pause: null });
   });
+  it("never lifts a pause recorded as the operator's, paid up or not (#27)", () => {
+    const suspended = { tier: "mid" as const, status: "suspended" as const };
+    expect(settleStep({ ...sub, pause: "manual" }, suspended, "2026-10-18")).toEqual({});
+    expect(settleStep({ anchor: "2026-01-10", paidMonths: 9, pause: "manual" }, suspended, "2026-10-18")).toEqual({});
+  });
 });
 
 describe("downgrades (B12 decision 12, E13)", () => {

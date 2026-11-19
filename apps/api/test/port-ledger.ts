@@ -109,7 +109,8 @@ export const PORT_LEDGER: Readonly<Record<string, Readonly<Record<string, Ported
     "keeps a seeded parent on the demo password, and lets a parent with their own change it": { api: "test/int/portal.int.test.ts › keeps a seeded parent on the demo password, and lets a parent with their own change it" }, // was a gap: written for B13c1; the change outside a demo deployment: portal-sign-in.int "lets a parent change their own password (decision 7), which signs the old sessions out"
   },
   // primolar: signups, operator-signups, operator, subscriptions (B13c1 Step 2.1). Twins (no entry needed):
-  //   signups.test.ts › "refuses a name or contact email already on Primolar or waiting, ignoring case and spaces (billing #10)"
+  //   signups.test.ts › "refuses a name or contact email already on Primolar or waiting without saying which, unless it is the same waiting sign-up (billing #10, #29)"
+  //   signups.test.ts › "rejects a sign-up still unpaid 14 days after it was sent, freeing its name, and leaves one whose receipt waits (#17)"
   //   operator-signups.test.ts › "serves a sign-up's files to the operator only, and only its own"
   "signups.test.ts": {
     "serves the price list without a sign-in": { api: "test/int/platform-settings.int.test.ts › is public for the form and the operator's to read" },

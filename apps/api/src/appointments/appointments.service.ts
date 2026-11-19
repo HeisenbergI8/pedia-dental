@@ -1,9 +1,10 @@
 import { ConflictException, Injectable, NotFoundException, type OnModuleInit } from "@nestjs/common";
-import { ChangeAppointmentStatusInput, RescheduleAppointmentInput, RESTRICTED_BOOKING_MESSAGE, rolesCan, type Appointment, type BookAppointmentInput, type Role } from "@pedia/shared";
+import { ChangeAppointmentStatusInput, RescheduleAppointmentInput, RESTRICTED_BOOKING_MESSAGE, rolesCan, type Appointment, type BookAppointmentInput } from "@pedia/shared";
 import { AuditService } from "../audit/audit.service";
 import { RecordOwners } from "../auth/record-owners";
 import { lockAccount } from "../clinic/account-lock";
 import { ClinicService } from "../clinic/clinic.service";
+import { reachesBranch, type BranchCaller } from "../common/branch-reach";
 import { Clock } from "../common/clock";
 import { refuse } from "../common/refusal";
 import { requireContext } from "../common/request-context";
@@ -90,15 +91,15 @@ export class AppointmentsService implements OnModuleInit {
     });
   }
 
-  /** PUT /appointments/:id: lock → 404 → 400 body → 409 status → slot refusals → write. */
-  async move(id: string, body: unknown): Promise<Appointment> {
+  /** PUT /appointments/:id: lock → 404 (also another branch's, #10) → 400 body → 409 status → slot refusals → write. */
+  async move(id: string, body: unknown, who: BranchCaller): Promise<Appointment> {
     const patientId = await this.records.patientOf(id); // outside the transaction (B6 decision 3)
     if (!patientId) throw new NotFoundException(APPOINTMENT_NOT_FOUND);
     return runInTransaction(this.prisma, async (tx) => {
       await lockAccount(tx); // E1
       await lockPatient(tx, patientId); // B9: account → patient → appointment, so a reminders "no" can't interleave
       const current = await this.records.lockOne(tx, id);
-      if (!current) throw new NotFoundException(APPOINTMENT_NOT_FOUND);
+      if (!current || !reachesBranch(who, current.branchId)) throw new NotFoundException(APPOINTMENT_NOT_FOUND);
       const input = new ZodValidationPipe(RescheduleAppointmentInput).transform(body);
       refuse(moveRefusal(current.status));
       const moved = { ...current, ...input };
@@ -112,15 +113,19 @@ export class AppointmentsService implements OnModuleInit {
     });
   }
 
-  /** POST /appointments/:id/status: 404 → 400 body → 403 confirm-only → 409 transition. Patient lock, not the clinic's (E1). */
-  async setStatus(id: string, body: unknown, roles: readonly Role[]): Promise<Appointment> {
+  /**
+   * POST /appointments/:id/status: 404 (also another branch's, #10) → 400 body → 403 confirm-only → 409 transition.
+   * Patient lock, not the clinic's (E1).
+   */
+  async setStatus(id: string, body: unknown, who: BranchCaller): Promise<Appointment> {
     const patientId = await this.records.patientOf(id); // outside the transaction (B6 decision 3)
     if (!patientId) throw new NotFoundException(APPOINTMENT_NOT_FOUND);
     return runInTransaction(this.prisma, async (tx) => {
       await lockPatient(tx, patientId); // first statement; E2: patient → appointment
       const current = (await this.records.one(tx, id))!;
+      if (!reachesBranch(who, current.branchId)) throw new NotFoundException(APPOINTMENT_NOT_FOUND);
       const input = new ZodValidationPipe(ChangeAppointmentStatusInput).transform(body);
-      refuse(statusRefusal(current.status, input, rolesCan(roles, "appointments.manage")));
+      refuse(statusRefusal(current.status, input, rolesCan(who.user.roles, "appointments.manage")));
       const row = await this.records.update(tx, id, { status: input.status, ...(input.status === "cancelled" && { cancelReason: input.cancelReason }) });
       // Decision 7: a cancelled or missed visit withdraws what it queued; a no-show also queues the missed text (mocks.ts:129–132).
       if (row.status === "cancelled" || row.status === "no_show") await this.messages.withdrawAppointment(tx, id);

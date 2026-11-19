@@ -19,6 +19,7 @@ export const KIND_LABEL: Record<LoggedMessageKind, string> = {
   birthday: "Birthday greeting",
   portal_invite: "Portal invitation",
   password_reset: "Password reset link",
+  sign_in_changed: "Sign-in number changed",
 };
 
 export const MESSAGE_STATUS_LABEL: Record<MessageStatus, string> = { queued: "Queued", sent: "Sent", failed: "Failed", cancelled: "Withdrawn" };

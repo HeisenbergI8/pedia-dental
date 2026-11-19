@@ -51,8 +51,9 @@ describe("POST /auth/login on MySQL", () => {
 
   it("signs in with the demo password only, any case of email, and logs each failure in its own clinic", async () => {
     expect((await login({ email: "DENTIST@GMAIL.COM", password: "wrong", clinicId: "clinic_demo" })).status).toBe(401);
-    expect(await trail("clinic_demo", "staff_reyes")).toContainEqual({ action: "sign_in_failed", record: "Session" });
-    expect(await trail("clinic_ngiti", "ngiti_staff_reyes")).toContainEqual({ action: "sign_in_failed", record: "Session" });
+    // Security review #20: failure entries aren't awaited by the answer, so they may land a moment after it.
+    await expect.poll(() => trail("clinic_demo", "staff_reyes")).toContainEqual({ action: "sign_in_failed", record: "Session" });
+    await expect.poll(() => trail("clinic_ngiti", "ngiti_staff_reyes")).toContainEqual({ action: "sign_in_failed", record: "Session" });
     const ok = await login({ email: "DENTIST@GMAIL.COM", clinicId: "clinic_demo" });
     expect((await me(cookieOf(ok))).body).toMatchObject({ role: "dentist", staffId: "staff_reyes" });
     expect(await trail("clinic_demo", "staff_reyes")).toContainEqual({ action: "sign_in", record: "Session" });

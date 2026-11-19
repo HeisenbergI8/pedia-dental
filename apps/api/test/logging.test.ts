@@ -30,6 +30,11 @@ class ProbeController {
     return { ok: true };
   }
 
+  @Get("file")
+  file(@Res() res: Response) {
+    res.redirect(302, "https://files.s3.ap-southeast-1.amazonaws.com/clinics/c/photos/p.jpg?X-Amz-Signature=sig123");
+  }
+
   @Get("prisma-error")
   prismaError() {
     throw new Prisma.PrismaClientValidationError('Invalid value for argument `firstName`: "Ana Santos"', {
@@ -52,6 +57,14 @@ describe("logs over HTTP", () => {
     const mine = linesFor(res.headers["x-request-id"]!).join("\n");
     expect(mine).toContain("/api/probe/download");
     expect(mine).not.toMatch(/santos|ana-photo/i);
+  });
+
+  it("never logs a file read's working link, nor the page (and its search) the request came from (D #11)", async () => {
+    const res = await request(app.getHttpServer()).get("/api/probe/file").set("Referer", "http://localhost:3000/patients?q=rosa%20mendoza");
+    expect(res.status).toBe(302);
+    const mine = linesFor(res.headers["x-request-id"]!).join("\n");
+    expect(mine).toContain("/api/probe/file");
+    expect(mine).not.toMatch(/sig123|amazonaws|rosa|mendoza/i);
   });
 
   it("logs a request's path, never its query (B4: searches and duplicate checks carry names)", async () => {

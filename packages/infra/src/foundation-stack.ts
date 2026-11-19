@@ -1,10 +1,14 @@
 import {
   CfnOutput, Duration, RemovalPolicy, Stack, type StackProps,
   aws_budgets as budgets, aws_certificatemanager as acm, aws_ec2 as ec2, aws_ecr as ecr, aws_iam as iam,
-  aws_rds as rds, aws_s3 as s3, aws_sns as sns, aws_sns_subscriptions as subscriptions,
+  aws_logs as logs, aws_rds as rds, aws_s3 as s3, aws_secretsmanager as secretsmanager, aws_sns as sns,
+  aws_sns_subscriptions as subscriptions,
 } from "aws-cdk-lib";
 import type { Construct } from "constructs";
 import { AVAILABILITY_ZONES, NAMES, type Settings } from "./config";
+
+/** I4: the passwords go into a URL inside sh double quotes (and the app user's into SQL quotes), so never these. */
+export const DATABASE_PASSWORD_EXCLUDED = " %+~`#$&*()|[]{}:;<>?!'/@\"\\";
 
 export interface FoundationProps extends StackProps {
   settings: Settings;
@@ -19,6 +23,9 @@ export class FoundationStack extends Stack {
   readonly appSecurityGroup: ec2.SecurityGroup;
   readonly databaseSecurityGroup: ec2.SecurityGroup;
   readonly bucket: s3.Bucket;
+  readonly logsBucket: s3.Bucket;
+  readonly originSecret: secretsmanager.Secret;
+  readonly appDatabaseSecret: secretsmanager.Secret;
   readonly repository: ecr.Repository;
   readonly database: rds.DatabaseInstance;
   readonly certificate: acm.ICertificate;
@@ -45,14 +52,29 @@ export class FoundationStack extends Stack {
     this.appSecurityGroup = new ec2.SecurityGroup(this, "AppSg", {
       vpc: this.vpc,
       description: "Primolar API tasks: in from the load balancer only (rule added by PrimolarService)",
-      allowAllOutbound: true, // ECR, Logs, Secrets Manager, Semaphore: through the internet gateway (I2)
+      // #36: ECR, Logs, Secrets Manager, S3 and Semaphore are all HTTPS (through the internet gateway, I2, or S3's
+      // gateway endpoint); MySQL goes to the database's group. Nothing else leaves. DNS (the VPC resolver) isn't filtered.
+      allowAllOutbound: false,
     });
+    this.appSecurityGroup.addEgressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443), "HTTPS: AWS APIs and Semaphore");
     this.databaseSecurityGroup = new ec2.SecurityGroup(this, "DatabaseSg", {
       vpc: this.vpc,
       description: "Primolar RDS: MySQL from the API tasks only",
       allowAllOutbound: false,
     });
     this.databaseSecurityGroup.addIngressRule(this.appSecurityGroup, ec2.Port.tcp(3306), "MySQL from the API tasks");
+    this.appSecurityGroup.addEgressRule(this.databaseSecurityGroup, ec2.Port.tcp(3306), "MySQL to the database");
+
+    // #36: the load balancer's access logs (PrimolarService adds its prefix) and the files bucket's server access logs.
+    // Private, TLS-only, 90 days (as the API's log group).
+    this.logsBucket = new s3.Bucket(this, "AccessLogs", {
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED, // the only encryption ALB access logs accept
+      enforceSSL: true,
+      objectOwnership: s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
+      lifecycleRules: [{ id: "expire-90-days", expiration: Duration.days(90), abortIncompleteMultipartUploadAfter: Duration.days(7) }],
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
 
     // I6: private, encrypted, versioned. Current files never expire; old versions go after 35 days (> the 30-day restore window).
     this.bucket = new s3.Bucket(this, "Files", {
@@ -65,6 +87,8 @@ export class FoundationStack extends Stack {
         { id: "old-versions-35-days", noncurrentVersionExpiration: Duration.days(35), abortIncompleteMultipartUploadAfter: Duration.days(7) },
       ],
       removalPolicy: RemovalPolicy.RETAIN,
+      serverAccessLogsBucket: this.logsBucket,
+      serverAccessLogsPrefix: "s3-files/",
     });
 
     // I7: one tag per commit SHA, never overwritten; the 30 newest are kept as rollback targets.
@@ -79,11 +103,17 @@ export class FoundationStack extends Stack {
     // I3: MySQL 8.4, single-AZ, 30 days of backups and point-in-time restore. CloudFormation refuses a bare "8.4" (Q4), so
     // the newest 8.4 minor this aws-cdk-lib knows; autoMinorVersionUpgrade below moves it forward in maintenance windows.
     const engine = rds.DatabaseInstanceEngine.mysql({ version: rds.MysqlEngineVersion.VER_8_4_10 });
-    // I5: no TLS to RDS until the image carries the RDS CA bundle. Explicit, so a changed engine default can't break start-up.
+    // #15: TLS required (the image carries the RDS CA bundle; databaseRequireTls=false only during the move to it).
+    // Slow queries (over 2 s) go to a log file, exported below.
     const parameterGroup = new rds.ParameterGroup(this, "DatabaseParameters", {
       engine,
       description: "Primolar MySQL 8.4",
-      parameters: { require_secure_transport: "0" },
+      parameters: {
+        require_secure_transport: settings.databaseRequireTls ? "1" : "0",
+        slow_query_log: "1",
+        long_query_time: "2",
+        log_output: "FILE",
+      },
     });
     const subnetGroup = new rds.SubnetGroup(this, "DatabaseSubnets", {
       vpc: this.vpc,
@@ -103,7 +133,7 @@ export class FoundationStack extends Stack {
       // I4: the password goes into a URL inside sh double quotes, so it must never hold these.
       credentials: rds.Credentials.fromGeneratedSecret(NAMES.databaseUser, {
         secretName: NAMES.databaseSecret,
-        excludeCharacters: " %+~`#$&*()|[]{}:;<>?!'/@\"\\",
+        excludeCharacters: DATABASE_PASSWORD_EXCLUDED,
       }),
       storageType: rds.StorageType.GP3,
       allocatedStorage: 20,
@@ -117,6 +147,31 @@ export class FoundationStack extends Stack {
       removalPolicy: RemovalPolicy.SNAPSHOT,
       autoMinorVersionUpgrade: true,
       enablePerformanceInsights: false,
+      // #36: MySQL's error and slow-query logs in CloudWatch (/aws/rds/instance/<id>/…), kept as long as the API's.
+      cloudwatchLogsExports: ["error", "slowquery"],
+      cloudwatchLogsRetention: logs.RetentionDays.THREE_MONTHS,
+    });
+
+    // #34: the services' own user, SELECT, INSERT, UPDATE and DELETE on the schema. The release task, signed in as the
+    // master user, creates it and keeps its password in step with this secret (service-stack.ts).
+    this.appDatabaseSecret = new secretsmanager.Secret(this, "AppDatabaseSecret", {
+      secretName: NAMES.appDatabaseSecret,
+      description: "Primolar API's MySQL user (DML only)",
+      generateSecretString: {
+        secretStringTemplate: JSON.stringify({ username: NAMES.appDatabaseUser }),
+        generateStringKey: "password",
+        passwordLength: 32,
+        excludeCharacters: DATABASE_PASSWORD_EXCLUDED,
+      },
+    });
+
+    // #2: the origin lock. The web's /api proxy sends it (Vercel env ORIGIN_SECRET, copied there by hand); the load
+    // balancer forwards only requests that carry it, and the API checks it again. Letters and digits only: an ALB
+    // header condition reads * and ? as wildcards.
+    this.originSecret = new secretsmanager.Secret(this, "OriginSecret", {
+      secretName: NAMES.originSecret,
+      description: "Primolar: header X-Primolar-Origin from the web's /api proxy (Vercel ORIGIN_SECRET)",
+      generateSecretString: { passwordLength: 64, excludePunctuation: true, includeSpace: false },
     });
 
     // I10: the domain is the user's. DNS validation without a Route 53 zone: the CNAME is added by hand during the

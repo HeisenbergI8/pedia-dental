@@ -14,6 +14,7 @@ import {
   Patient,
   Session,
   StaffMember,
+  duplicateNameMessage,
   featureMessage,
   type AddStaffInput,
   type BranchInput,
@@ -260,6 +261,19 @@ describe("branding (decisions #28–#31)", () => {
     const profile = { name: "Ngiti Kids Dental", contactEmail: "hello@ngiti.demo", tin: "234567890" };
     await expect(api("/clinic", ClinicAccount, send("PUT", profile))).rejects.toMatchObject({ status: 400 });
     expect((await api("/clinic", ClinicAccount, send("PUT", { ...profile, tin: "234-567-890-0001" }))).tin).toBe("234-567-890-0001");
+  });
+
+  it("refuses a rename to another clinic's or a waiting sign-up's name, and a name over 80 characters (audit #4, #26)", async () => {
+    signIn(NGITI_OWNER);
+    const profile = { name: "Ngiti Kids Dental", contactEmail: "hello@ngiti.demo", tin: "234-567-890-0001" };
+    await expect(api("/clinic", ClinicAccount, send("PUT", { ...profile, name: "  bulilit smiles   PEDIATRIC dental " }))).rejects.toMatchObject({
+      status: 409,
+      message: duplicateNameMessage("  bulilit smiles   PEDIATRIC dental "),
+    });
+    await expect(api("/clinic", ClinicAccount, send("PUT", { ...profile, name: "Hagikgik Kids Dental" }))).rejects.toMatchObject({ status: 409 });
+    await expect(api("/clinic", ClinicAccount, send("PUT", { ...profile, name: "N".repeat(81) }))).rejects.toMatchObject({ status: 400 });
+    expect((await api("/clinic", ClinicAccount, send("PUT", { ...profile, name: "ngiti kids dental" }))).name).toBe("ngiti kids dental"); // its own name, any case
+    await api("/clinic", ClinicAccount, send("PUT", profile));
   });
 });
 

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { LINK_MARK, PORTAL_LINK_LIFETIME_MS, accountText, isAccountText, linkPath, loginIdOf, maskedNumber } from "./portal";
+import {
+  ACCOUNT_TEXT_LIMITS, LINK_MARK, PORTAL_LINK_LIFETIME_MS, accountText, inviteLimitReached, isAccountText, linkPath, loginIdOf, maskedNumber, numberChangedText, resetHeld,
+} from "./portal";
 import { smsSegments } from "./sending";
 
 describe("loginIdOf (decision 4)", () => {
@@ -33,5 +35,30 @@ describe("account texts (E4)", () => {
   });
   it("tells account texts from parent messages", () => {
     expect([isAccountText("portal_invite"), isAccountText("password_reset"), isAccountText("recall")]).toEqual([true, true, false]);
+  });
+});
+
+describe("account text limits (audit #3, #4, #21)", () => {
+  it("treats the sign-in-changed text as an account text, with no link in it", () => {
+    expect(isAccountText("sign_in_changed")).toBe(true);
+    expect(numberChangedText("Bulilit")).toBe("Your Primolar sign-in number for Bulilit was changed. If this wasn't you, call the clinic.");
+    expect(numberChangedText("Bulilit")).not.toContain(LINK_MARK);
+  });
+
+  it("refuses the fourth invite to a parent, then the clinic's 201st, in that order", () => {
+    expect(inviteLimitReached(2, 199)).toBeUndefined();
+    expect(inviteLimitReached(3, 0)).toBe("guardian");
+    expect(inviteLimitReached(0, ACCOUNT_TEXT_LIMITS.invitesPerClinic)).toBe("clinic");
+    expect(inviteLimitReached(3, ACCOUNT_TEXT_LIMITS.invitesPerClinic)).toBe("guardian");
+  });
+
+  it("holds a reset for a day after a number change, and past the clinic's daily ceiling", () => {
+    const now = new Date("2026-11-19T10:00:00Z");
+    const ago = (ms: number) => new Date(now.getTime() - ms);
+    expect(resetHeld(0, undefined, now)).toBeUndefined();
+    expect(resetHeld(0, ago(ACCOUNT_TEXT_LIMITS.resetHoldAfterNumberChangeMs - 1), now)).toBe("number_changed");
+    expect(resetHeld(0, ago(ACCOUNT_TEXT_LIMITS.resetHoldAfterNumberChangeMs), now)).toBeUndefined();
+    expect(resetHeld(ACCOUNT_TEXT_LIMITS.resetsPerClinic - 1, undefined, now)).toBeUndefined();
+    expect(resetHeld(ACCOUNT_TEXT_LIMITS.resetsPerClinic, undefined, now)).toBe("clinic_ceiling");
   });
 });

@@ -8,7 +8,9 @@ AWS CDK v2 in TypeScript. Two stacks in `ap-southeast-1`:
 | `PrimolarService` | ECS cluster `primolar`, services `api` (background work) and `api-web`, the release task, the HTTPS load balancer, logs, alarms | the `deploy` workflow (Actions → deploy) |
 
 Settings live in `cdk.json` → `context` (no secrets). Their rules are in `src/config.ts`; the decisions behind them
-are in `.claude/plans/feature-chunk-b13b-aws-infra-plan/decisions.md`.
+are in `.claude/plans/feature-chunk-b13b-aws-infra-plan/decisions.md`. CloudFormation deploys both stacks with the
+scoped policy in `policies/cfn-execution.json`, not as administrator (first-time setup, step 3; its test names any
+resource type it misses).
 
 ## Commands (from the repository root)
 
@@ -41,9 +43,11 @@ budget alert (US$100) emails at 80% of actual and 100% of forecast.
 | RDS gp3 storage, 20 GB (backups up to the database's size are free) | ~$0.138 per GB | ~3 |
 | Public IPv4 addresses: the load balancer's 2 and the task's 1 | $0.005 per hour each | ~11 |
 | CloudWatch: ~10 custom metrics (B13a E6), 3 alarms, 1–2 GB of logs | | ~5 |
-| Secrets Manager: 1–2 secrets | $0.40 each | ~1 |
+| Secrets Manager: 3–4 secrets (database, app user, origin, Semaphore) | $0.40 each | ~2 |
+| AWS WAF (`waf`, on by default): one web ACL, two rules, requests | $5 + $1 per rule + $0.60 per million requests | ~8 |
+| Access logs (ALB, files bucket) and RDS log exports, 90 days | S3 and CloudWatch Logs at pilot volume | ~1 |
 | S3, ECR (up to 30 images), data out | small at pilot volume | ~3 |
-| **Total** | | **~88** |
+| **Total** | | **~98** (~89 with `waf=false`): close to the US$100 budget; raise `monthlyBudgetUsd` if its alerts become noise |
 
 Each extra `api-web` task adds about US$26 (task and IPv4). A restore drill adds under US$1 (a second micro instance
 for an hour or two).

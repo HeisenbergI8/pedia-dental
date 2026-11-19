@@ -124,6 +124,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "GET", path: "/patients/:id/photos" },
   { method: "POST", path: "/patients/:id/photos" },
   { method: "GET", path: "/photos/:id/file" },
+  { method: "DELETE", path: "/photos/:id" }, // audit #5
   { method: "GET", path: "/documents" },
   { method: "GET", path: "/patients/:id/documents" },
   { method: "POST", path: "/patients/:id/documents" },

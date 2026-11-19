@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupServer } from "msw/node";
 import { z } from "zod";
 import { AccountOverview, ClinicUsage, FAILURE, GB, PortalAccess, storageFullMessage } from "@pedia/shared";
-import { manilaMonthOf } from "./allowances";
+import { manilaMonthOf, textPartsUsed } from "./allowances";
 import { ApiError, api } from "@/lib/api-client";
 import { accountById, platform, selectTenant } from "./db";
 import { usageOf } from "./allowances";
@@ -109,5 +109,36 @@ describe("texts (decisions 2, 3, 18, 19)", () => {
     if (account) account.state = "off"; // seeded parents are active: invite them again
     await api(`/patients/${kid.id}/guardians/${g.id}/portal-invite`, PortalAccess, { method: "POST" });
     expect(ngiti().messages.at(-1)).toMatchObject({ kind: "portal_invite", status: "queued" });
+  });
+
+  it("counts template texts only toward the month, never invites or resets (audit #3)", async () => {
+    asStaff(BULILIT_ADMIN);
+    const tenant = platform.tenants.clinic_demo!;
+    const month = manilaMonthOf(new Date().toISOString());
+    const before = textPartsUsed(tenant, month);
+    const now = new Date().toISOString();
+    tenant.messages.push({ ...tenant.messages[0]!, id: "reset_flood", kind: "password_reset", status: "sent", sendAt: now, body: "x".repeat(153 * 50) });
+    expect(textPartsUsed(tenant, month)).toBe(before); // still in the log, not in the count
+    tenant.messages = tenant.messages.filter((m) => m.id !== "reset_flood");
+  });
+});
+
+describe("storage while a downgrade waits (audit #25)", () => {
+  it("counts the smaller plan's storage until the downgrade's date", async () => {
+    asStaff(BULILIT_ADMIN);
+    const tenant = platform.tenants.clinic_demo!;
+    const sub = platform.subscriptions.find((s) => s.clinicId === "clinic_demo")!;
+    const kept = sub.downgrade;
+    tenant.storedFiles.push({ key: "filler_down", area: "photos", bytes: 25 * GB - tenant.storedFiles.reduce((n, f) => n + f.bytes, 0) });
+    try {
+      sub.downgrade = { tier: "small", on: "2099-01-01" };
+      const kid = tenant.patients[0]!.id;
+      expect(await message(api(`/patients/${kid}/photo`, z.unknown(), photo()))).toBe(storageFullMessage("small"));
+      sub.downgrade = kept;
+      expect(await message(api(`/patients/${kid}/photo`, z.unknown(), photo()))).toBe("");
+    } finally {
+      sub.downgrade = kept;
+      tenant.storedFiles = tenant.storedFiles.filter((f) => f.key !== "filler_down");
+    }
   });
 });

@@ -4,7 +4,7 @@ import { env } from "@/lib/env";
 import { platform } from "@/mocks/db";
 import { onlineAgreement } from "@pedia/seed";
 import { addSignupReceipt, imageResponse, readImageForm } from "@/mocks/receipts";
-import { addSignup, brandingRefusal, duplicateOf, readSignupForm, signupHitAllowed, statusView } from "@/mocks/signups";
+import { addSignup, brandingRefusal, publicDuplicateOf, readSignupForm, signupHitAllowed, statusView } from "@/mocks/signups";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 const byReference = (reference: unknown) => {
@@ -28,7 +28,7 @@ export const signupHandlers = [
     if (form instanceof Response) return form;
     const refused = brandingRefusal(form.data.branding, !!form.logo);
     if (refused) return refused;
-    const clash = duplicateOf(form.data.account);
+    const clash = publicDuplicateOf(form.data.account); // #29: names no clinic or email
     if (clash) return new HttpResponse(clash, { status: 409 });
     const signup = await addSignup(form.data, form, "form", onlineAgreement(form.data.owner.fullName)); // P4
     return HttpResponse.json(statusView(signup), { status: 201 });

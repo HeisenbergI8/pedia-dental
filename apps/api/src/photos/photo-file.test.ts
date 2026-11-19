@@ -30,6 +30,12 @@ describe("photoFileProblem (B10 E4)", () => {
     expect(photoFileProblem("intraoral", file(PNG, "image/jpeg"))).toEqual({ ext: "png" });
     expect(photoFileProblem("intraoral", file(Buffer.from("<svg xmlns='x'/>"), "image/jpeg"))).toEqual({ problem: "Attach an image file", status: 400 });
   });
+
+  it("refuses an image over 8000 px a side in plain words, and takes one at the limit (D #30)", () => {
+    const sized = (width: number, height: number): SpooledFile => ({ ...file(JPEG, "image/jpeg"), pixels: { width, height } });
+    expect(photoFileProblem("intraoral", sized(8000, 6000))).toEqual({ ext: "jpg" });
+    expect(photoFileProblem("intraoral", sized(8001, 6000))).toEqual({ problem: expect.stringMatching(/8001 × 6000 pixels.*at most 8000/), status: 400 });
+  });
 });
 
 describe("toPhoto", () => {

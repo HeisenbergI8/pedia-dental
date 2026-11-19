@@ -4,7 +4,9 @@
 # Release:  docker run … primolar-api node_modules/.bin/prisma migrate deploy    (before every service update, E4)
 ARG NODE_VERSION=22
 
-FROM node:${NODE_VERSION}-bookworm-slim AS base
+# Pinned by digest (the multi-arch index of node:22-bookworm-slim, 2026-11-19): a moved tag can't change the image
+# unseen. With NODE_VERSION, update it: `docker buildx imagetools inspect node:<version>-bookworm-slim`, its Digest.
+FROM node:${NODE_VERSION}-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee AS base
 # Prisma's schema engine (the release step) links against OpenSSL, which the slim image lacks.
 RUN apt-get update -y && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH
@@ -35,13 +37,17 @@ RUN pnpm --filter api deploy --prod --ignore-scripts /out \
  && node scripts/postinstall.js
 
 FROM base AS runtime
-ENV NODE_ENV=production PORT=4100
+# APP_ENV=production: a container started without its settings fails closed (env.ts's hosted checks). CDK sets APP_ENV
+# on every task (demo or production), which overrides this.
+ENV NODE_ENV=production APP_ENV=production PORT=4100
 WORKDIR /app
 COPY --from=build --chown=node:node /out/node_modules ./node_modules
 COPY --from=build --chown=node:node /out/package.json ./package.json
 COPY --from=build --chown=node:node /repo/apps/api/dist ./dist
 COPY --from=build --chown=node:node /repo/apps/api/prisma ./prisma
 COPY --from=build --chown=node:node /repo/apps/api/prisma.config.ts ./prisma.config.ts
+# TLS to RDS (#15): AWS's RDS CA bundle, fetched at build time. DATABASE_URL's sslcert points here (packages/infra service-stack.ts).
+ADD --chown=node:node --chmod=644 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /app/rds-global-bundle.pem
 USER node
 EXPOSE 4100
 # For `docker run` locally; ECS ignores this and uses the task definition's check on the same path (B13b).

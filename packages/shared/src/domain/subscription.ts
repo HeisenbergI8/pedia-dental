@@ -136,7 +136,8 @@ export function settleStep(sub: Sub, account: { tier: Tier; status: AccountStatu
   const { state } = subscriptionStatus(s, day);
   const ownPause = state === "lapsed" || state === "ended";
   if (ownPause && account.status === "active") Object.assign(patch, { status: "suspended", pause: state === "lapsed" ? "overdue" : "cancelled" });
-  else if (s.pause && !ownPause && account.status === "suspended") Object.assign(patch, { status: "active", pause: null });
+  // #27: a pause made by hand is never the subscription's to lift; only the operator's Reactivate clears it.
+  else if (s.pause && s.pause !== "manual" && !ownPause && account.status === "suspended") Object.assign(patch, { status: "active", pause: null });
   return patch;
 }
 

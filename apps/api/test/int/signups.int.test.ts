@@ -5,7 +5,7 @@ import type { INestApplication } from "@nestjs/common";
 import { SEED_PRICES, seedPlatform } from "@pedia/seed";
 import {
   ClinicContext, CreateAccountResult, DEFAULT_OPENING_HOURS, DUPLICATE_EMAIL_MESSAGE, LEGAL_DOCUMENTS, PriceList, Session, Signup, SignupStatusView,
-  amountDue, duplicateNameMessage, pesos, signupStatusLabel, type GetStartedInput,
+  SIGNUP_REFUSED_MESSAGE, amountDue, duplicateNameMessage, pesos, signupStatusLabel, type GetStartedInput,
 } from "@pedia/shared";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -90,14 +90,22 @@ describe("the public Get started form on MySQL (billing #4–#11)", () => {
     expect([four.status, four.text]).toEqual([400, "Choose up to 3 reference images"]);
   });
 
-  it("refuses a name or contact email already on Primolar or waiting, ignoring case and spaces (billing #10)", async () => {
+  it("refuses a name or contact email already on Primolar or waiting without saying which, unless it is the same waiting sign-up (billing #10, #29)", async () => {
     const taken = form({ choice: "default" }, "small", "  bulilit   SMILES Pediatric Dental ");
-    expect([(await submit(taken)).status, (await submit(taken)).text]).toEqual([409, duplicateNameMessage(taken.account.name)]);
-    expect((await submit(form({ choice: "default" }, "small", "Hagikgik Kids Dental"))).status).toBe(409); // the seeded waiting sign-up
+    const takenRes = await submit(taken); // once: each send counts toward the 5-an-hour limit
+    expect([takenRes.status, takenRes.text]).toEqual([409, SIGNUP_REFUSED_MESSAGE]);
+    const waiting = await submit(form({ choice: "default" }, "small", "Hagikgik Kids Dental")); // the seeded waiting sign-up
+    expect([waiting.status, waiting.text]).toEqual([409, SIGNUP_REFUSED_MESSAGE]);
     const email = { ...form({ choice: "default" }), account: { ...form({ choice: "default" }).account, contactEmail: "HELLO@BULILIT.DEMO" } };
     const clinicEmail = (await prisma.clinicAccount.findUniqueOrThrow({ where: { id: "clinic_demo" } })).contactEmail;
     email.account.contactEmail = clinicEmail.toUpperCase();
-    expect([(await submit(email)).status, (await submit(email)).text]).toEqual([409, DUPLICATE_EMAIL_MESSAGE]);
+    const emailRes = await submit(email); // once: each send counts toward the 5-an-hour limit
+    expect([emailRes.status, emailRes.text]).toEqual([409, SIGNUP_REFUSED_MESSAGE]);
+    // Sent twice: the same name and email as a waiting sign-up tells the sender only what they typed.
+    const again = form({ choice: "default" });
+    expect((await submit(again)).status).toBe(201);
+    const twice = await submit({ ...again, account: { ...again.account, name: ` ${again.account.name.toUpperCase()} `, contactEmail: again.account.contactEmail.toUpperCase() } });
+    expect([twice.status, twice.text]).toEqual([409, DUPLICATE_EMAIL_MESSAGE]);
   });
 
   it("shows a sign-up by its reference in any case, and nothing private (A1); a console sign-up has no page", async () => {

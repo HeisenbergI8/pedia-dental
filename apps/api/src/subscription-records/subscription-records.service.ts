@@ -8,12 +8,12 @@ import {
 import type { Request } from "express";
 import { randomUUID } from "node:crypto";
 import { Clock } from "../common/clock";
-import { currentContext, requestContext } from "../common/request-context";
+import { currentContext, requestContext, requireContext } from "../common/request-context";
 import { lockAccountById } from "../clinic/account-lock";
 import { countUsage } from "../clinic/limits";
 import { TextTopUpsService } from "../text-topups/text-topups.service";
 import { nextInvoiceNo } from "./invoice-counter";
-import { isDuplicateKey } from "../idempotency/idempotency.service";
+import { IdempotencyService, isDuplicateKey, type Answer } from "../idempotency/idempotency.service";
 import { PlatformSettingsService } from "../platform-settings/platform-settings.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { runInTransaction, type Tx } from "../prisma/transaction";
@@ -28,6 +28,8 @@ type Account = { tier: Tier; status: AccountStatus };
 
 export const CANCELLED_NO_PAYMENTS = "This subscription is cancelled, so Primolar records no more payments for it.";
 export const MONTH_ALREADY_PAID = "This month is already paid.";
+/** #18: the same reference on the same paid date, already recorded for this clinic. */
+export const PAYMENT_ALREADY_RECORDED = "This payment is already recorded";
 const CANCELLED_NO_RECEIPTS = "This subscription is cancelled, so Primolar takes no more payments for it.";
 const RECEIPT_MONTH_PAID = "This month is already paid. Reject the receipt if it was sent twice.";
 const AMOUNT_CHANGED = "The amount due has changed since this receipt was sent. Reject it and ask for a new one.";
@@ -54,6 +56,7 @@ export class SubscriptionRecordsService {
     private readonly files: PlatformFilesService,
     private readonly audit: AuditService,
     private readonly topUps: TextTopUpsService,
+    private readonly keys: IdempotencyService,
   ) {}
 
   /** E6's account lock by id (the operator and the jobs name the clinic; a clinic request has it in context). */
@@ -205,14 +208,26 @@ export class SubscriptionRecordsService {
     }, receiptId);
   }
 
-  /** POST /operator/accounts/:id/subscription/payments: one month marked by hand (201 view). */
-  async recordByHand(clinicId: string, input: RecordUpfrontPaymentInput): Promise<SubscriptionView> {
-    await runInTransaction(this.prisma, async (tx) => {
-      const account = await this.lockAccount(tx, clinicId);
-      await this.lock(tx, clinicId);
-      await this.recordPayment(tx, clinicId, account, input);
-    });
-    return this.view(clinicId);
+  /**
+   * POST /operator/accounts/:id/subscription/payments: one month marked by hand (201 view). #18: once per
+   * Idempotency-Key, claimed first in the clinic's own key space (the key, then account, subscription, counter), and
+   * refused when this clinic already has a payment with the same reference on the same paid date.
+   */
+  async recordByHand(clinicId: string, input: RecordUpfrontPaymentInput, key: string): Promise<Answer<SubscriptionView>> {
+    const actor = requireContext().operatorId ?? "operator";
+    const request = { route: "POST /operator/accounts/:id/subscription/payments", params: { id: clinicId }, actor, body: input };
+    return requestContext.within({ clinicId }, () =>
+      this.keys.once(key, request, async (tx) => {
+        const account = await this.lockAccount(tx, clinicId);
+        await this.lock(tx, clinicId);
+        const paidOn = new Date(`${input.paidOn}T00:00:00.000Z`);
+        if (input.reference && (await tx.subscriptionPayment.findFirst({ where: { clinicId, paidOn, reference: input.reference }, select: { id: true } }))) {
+          throw new ConflictException(PAYMENT_ALREADY_RECORDED);
+        }
+        await this.recordPayment(tx, clinicId, account, input);
+        return { status: 201, body: await this.view(clinicId, tx) };
+      }),
+    );
   }
 
   /**
@@ -273,9 +288,18 @@ export class SubscriptionRecordsService {
     return undefined;
   }
 
-  /** A manual reactivation also clears a subscription pause. */
+  /** A manual reactivation also clears a subscription pause, and only it clears `manual` (#27). */
   async forgetPause(tx: Tx, clinicId: string): Promise<void> {
     await tx.subscription.updateMany({ where: { clinicId }, data: { pause: null } });
+  }
+
+  /**
+   * #27: the operator's Suspend records the pause as theirs, over any the subscription made, so neither a payment nor
+   * the settle reactivates the clinic (both lift only the subscription's own pause) and its Owner gets no billing-only
+   * session. Under the account and subscription locks.
+   */
+  async pauseByHand(tx: Tx, clinicId: string): Promise<void> {
+    await tx.subscription.updateMany({ where: { clinicId }, data: { pause: "manual" } });
   }
 
   /** E13: the plan a waiting downgrade goes to, for the limit checks (after lockAccount: account → subscription). */

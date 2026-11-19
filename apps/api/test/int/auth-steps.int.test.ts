@@ -57,10 +57,29 @@ describe("POST /auth/switch on MySQL", () => {
       const res = await switchTo(desk, "staff_santos", "0000");
       expect([res.status, res.text]).toEqual([401, expect.stringContaining(`${left} left`)]);
     }
-    expect((await switchTo(desk, "staff_santos", "0000")).status).toBe(429);
-    expect((await switchTo(desk, "staff_santos")).status).toBe(429);
+    // Security review #9: the fifth wrong PIN on one session signs that session out (cookie cleared), and the person stays locked.
+    const fifth = await switchTo(desk, "staff_santos", "0000");
+    expect([fifth.status, fifth.text]).toEqual([401, "Too many wrong PINs on this device. Sign in again with your password."]);
+    expect(([] as string[]).concat(fifth.headers["set-cookie"] ?? [])[0]).toMatch(/^pd_session=;/);
+    expect((await me(desk)).status).toBe(401);
+    expect(await trail("staff_cruz", "Session (too many wrong PINs)")).toEqual(["sign_out"]);
+    const again = await signIn("frontdesk@gmail.com"); // signed in again with the password
+    expect((await switchTo(again, "staff_santos")).status).toBe(429);
     expect(await trail("staff_santos", "Session (PIN switch)")).toEqual([...Array(5).fill("sign_in_failed"), "denied"]);
-    expect(Session.parse((await switchTo(desk, "staff_delacruz")).body).user.role).toBe("admin"); // per person, not per device
+    expect(Session.parse((await switchTo(again, "staff_delacruz")).body).user.role).toBe("admin"); // per person, not per device
+  });
+
+  it("signs a session out after five wrong PINs across different people (security review #9)", async () => {
+    const desk = await signIn("frontdesk@gmail.com");
+    for (const id of ["staff_reyes", "staff_delacruz", "staff_villanueva", "staff_reyes"]) {
+      const res = await switchTo(desk, id, "0000");
+      expect([res.status, res.text]).toEqual([401, expect.stringContaining("isn't right")]);
+    }
+    const fifth = await switchTo(desk, "staff_delacruz", "0000");
+    expect([fifth.status, fifth.text]).toEqual([401, expect.stringContaining("Sign in again")]);
+    const fresh = await signIn("frontdesk@gmail.com"); // a fresh session counts from zero
+    expect(Session.parse((await switchTo(fresh, "staff_delacruz")).body).user.role).toBe("admin");
+    await prisma.credential.updateMany({ where: { clinicId: "clinic_demo", accountId: { in: ["staff_reyes", "staff_villanueva"] } }, data: { pinFailedAt: [] } });
   });
 
   it("never switches to a parent, never from a parent, and never without a session", async () => {
@@ -115,5 +134,22 @@ describe("POST /auth/password and /auth/acknowledgement on MySQL", () => {
     expect(await trail("staff_new", "Confidentiality (acknowledged)")).toEqual(["create"]);
     expect((await http().get("/api/patients").set("Cookie", own)).status).toBe(200); // to work
     expect((await http().get("/api/auth/acknowledgement").set("Cookie", own)).status).toBe(409);
+  });
+
+  it("refuses a common password or the login itself, and locks the current-password check after five wrong ones (security review #7)", async () => {
+    await inClinic("clinic_demo", () =>
+      prisma.staff.create({ data: { id: "staff_new2", clinicId: "clinic_demo", fullName: "Lito Ramos", role: "front_desk", alsoRoles: [], branchIds: ["branch_imus"], email: "lito@bulilit.demo" } }));
+    await prisma.credential.create({
+      data: { clinicId: "clinic_demo", accountId: "staff_new2", email: "lito@bulilit.demo", staffId: "staff_new2", name: "Lito Ramos", passwordHash: await hasher.hash(EXAMPLE_TEMPORARY), mustChange: true, pinFailedAt: [] },
+    });
+    const temp = cookieOf(await http().post("/api/auth/login").send({ email: "lito@bulilit.demo", password: EXAMPLE_TEMPORARY }));
+    const change = (current: string, next: string) => http().post("/api/auth/password").set("Cookie", temp).send({ current, next });
+    const common = await change(EXAMPLE_TEMPORARY, "Password123");
+    expect([common.status, common.body[0]?.message]).toEqual([400, "That password is too common and easy to guess. Choose another."]);
+    const own = await change(EXAMPLE_TEMPORARY, "LITO@bulilit.demo");
+    expect([own.status, own.text]).toEqual([400, "Don't use your email or mobile number as your password. Choose another."]);
+    for (let i = 0; i < 5; i++) expect((await change(`not-it-${i}`, EXAMPLE_CHOSEN)).status).toBe(400);
+    const locked = await change(EXAMPLE_TEMPORARY, EXAMPLE_CHOSEN);
+    expect([locked.status, locked.text]).toEqual([429, "Too many wrong passwords. Try again in 1 minute."]);
   });
 });

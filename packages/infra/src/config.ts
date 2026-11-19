@@ -17,6 +17,12 @@ export const NAMES = {
   databaseName: "primolar",
   databaseUser: "primolar",
   databaseSecret: "primolar/database",
+  // #34: the services' own MySQL user (DML only), created by the release task with the master user.
+  appDatabaseUser: "primolar_app",
+  appDatabaseSecret: "primolar/database-app",
+  // #2: the web's /api proxy sends it in ORIGIN_HEADER; the ALB and the API refuse a request without it.
+  originSecret: "primolar/origin-secret",
+  cfnExecutionPolicy: "primolar-cfn-execution",
   budget: "primolar-monthly",
 } as const;
 
@@ -26,11 +32,18 @@ export const AVAILABILITY_ZONES = ["ap-southeast-1a", "ap-southeast-1b"];
 /** The API's port (apps/api/Dockerfile `EXPOSE 4100`, env.ts PORT default). */
 export const API_PORT = 4100;
 
+/** #2: the header the web's /api proxy (apps/web/src/middleware.ts) adds; apps/api/src/origin-check.ts reads it. */
+export const ORIGIN_HEADER = "X-Primolar-Origin";
+/** #15: the RDS CA bundle the image carries (apps/api/Dockerfile). */
+export const RDS_CA_BUNDLE = "/app/rds-global-bundle.pem";
+
 /** Set in code rather than cdk.json, so a test's `new App({ context: FEATURE_FLAGS })` matches `cdk deploy`. */
 export const FEATURE_FLAGS = {
   "@aws-cdk/aws-ec2:restrictDefaultSecurityGroup": true,
   "@aws-cdk/aws-iam:minimizePolicies": true,
   "@aws-cdk/core:checkSecretUsage": true,
+  // #36: S3 server access logs are delivered through a bucket policy, so the log bucket keeps ACLs off.
+  "@aws-cdk/aws-s3:serverAccessLogsUseBucketPolicy": true,
 } as const;
 
 const notSet = (key: string) => `${key} is not set: fill it in packages/infra/cdk.json (first-time setup runbook) or pass -c ${key}=…`;
@@ -67,6 +80,16 @@ const SettingsShape = z.object({
   semaphoreSecretArn: optional(z.string().startsWith("arn:aws:secretsmanager:")),
   smsSenderName: optional(z.string().min(1).max(11)),
   databaseHostOverride: optional(z.string().min(1)),
+  // #15: RDS refuses connections without TLS. false only while an existing deployment moves to the TLS image
+  // (first-time setup, "Database TLS and the app user"); the API connects with TLS either way.
+  databaseRequireTls: flag().default(true),
+  // #34: which MySQL user the services sign in as. `master` only until the release task has created the app user once.
+  apiDatabaseUser: z.enum(["app", "master"]).default("app"),
+  // #36: AWS WAF on the load balancer (managed common rules, a per-address limit on /api/auth/*).
+  waf: flag().default(true),
+  // Verification of #36: the common rule set counts (logs, never blocks) until a week of real traffic shows no false
+  // positives on uploads, notes or searches; then set wafBlock=true.
+  wafBlock: flag().default(false),
 });
 
 export const Settings = SettingsShape.superRefine((settings, ctx) => {

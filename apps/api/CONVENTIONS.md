@@ -380,9 +380,9 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **`migrate dev` won't run non-interactively when it warns** (a new unique index on existing rows). Write the SQL with
   `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` into a new
   `prisma/migrations/<timestamp>_<name>/migration.sql`, then `db:deploy` and `db:generate` (B3 did).
-- **The logo passes through the API's memory** (multer, at most 1 MB) and is served as bytes, not a link: the PDF
-  letterhead draws it into a canvas, which a cross-origin redirect would taint. Don't raise `LOGO_RULES.maxBytes`
-  without moving it to `readUpload`.
+- **The logo is streamed to a temp file (`readUpload`, D #12), then read whole** (at most 1 MB) for `cleanLogo`, and is
+  served as bytes, not a link: the PDF letterhead draws it into a canvas, which a cross-origin redirect would taint.
+  No multer `FileInterceptor` on any route: its unbounded fields and parts are how an upload crashes the API.
 - **`"branch"` scope narrows reads to the device's branch.** A branch-level table that is read account-wide (`Chair`)
   is `"clinic"` in `MODEL_SCOPE`, with `branchId` as a plain column.
 - **A unit test that builds `StorageModule`** must override `OutboxModule` (it registers `storage.delete` there), as
@@ -414,6 +414,9 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **Upload routes read the raw request** (`readUpload`, busboy): no global multipart, raw or text body parser, or the
   stream is gone before the service reads it. The temp disk needs (instances × concurrent uploads × 10 MB) under
   `os.tmpdir()/primolar-uploads`; every upload's temp file is removed in `finally`.
+- **No uploaded image over 8000 px a side** (D #30): `readUploads` reads each image's size from its header
+  (`sniff.ts`, `SpooledFile.pixels`) and each check refuses with `pixelProblem`. Unreadable sizes pass (the type check
+  already ran).
 - **The bytes decide a file's type** (`sniff`): JPEG, PNG or WebP for an image, `%PDF-` for a PDF; the stored and served
   type is the sniffed one. A photo's consent is read again under the patient's lock after the file is stored, and a
   "no" that landed in between queues the file's deletion (B10 E6).
@@ -422,8 +425,10 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **The S3 bucket stays private** (Block Public Access, SSE-S3, no CORS: the browser only follows links), with
   versioning on and no expiry of current files (nothing is deleted on purpose; old versions go after 35 days), and
   the API's IAM role limited to `s3:PutObject`/`GetObject`/`DeleteObject` on `clinics/*` and `platform/*`, plus
-  `s3:ListBucket` so a missing key answers `NoSuchKey`, not 403 (B13b, `packages/infra/src/service-stack.ts`). A presigned link names the download file (the child's name)
-  in `response-content-disposition`; it goes only to the signed-in browser, never to our logs. Presigned
+  `s3:ListBucket` so a missing key answers `NoSuchKey`, not 403 (B13b, `packages/infra/src/service-stack.ts`). A presigned link never names the child (D #11):
+  `S3FileStorage.link` puts `<kind>-<short hash>.<ext>` in `response-content-disposition` and ignores the caller's
+  `fileName`, which only the local driver (`/files/:token`, streamed by the API) shows; a stored SVG is always an
+  attachment (D #31). The 302's `Location` and the request's `Referer` are redacted from the logs. Presigned
   URLs need the host clock NTP-synced. Credentials: both `S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY` or neither (the
   SDK's default chain, an IAM role in production).
 - **A database seeded before B10 has no photos, documents or ledger rows:** use a fresh one. `db:seed` writes the

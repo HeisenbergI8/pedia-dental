@@ -69,6 +69,9 @@ export const PatientProfile = z.object({
 });
 export type PatientProfile = z.infer<typeof PatientProfile>;
 
+/** The longest first or last name of a child (audit #4). */
+export const PATIENT_NAME_MAX = 60;
+
 export const Patient = ClinicScoped.extend({
   id: Id,
   patientNo: PatientNo,
@@ -144,6 +147,10 @@ const PatientInputBase = Patient.omit({
   patientNo: true, // server-assigned
   photoUpdatedAt: true, // set by the photo endpoints
   restrictedAt: true, // set only by closing an erasure request (B13c2b)
+}).extend({
+  // Audit #4: names typed now go into invite texts, so they are capped; stored names are read as they are.
+  firstName: z.string().trim().min(1, "Enter the child's first name").max(PATIENT_NAME_MAX, `Keep the first name under ${PATIENT_NAME_MAX} characters`),
+  lastName: z.string().trim().min(1, "Enter the child's last name").max(PATIENT_NAME_MAX, `Keep the last name under ${PATIENT_NAME_MAX} characters`),
 });
 
 /** Used for create, and for edit by a caller holding patients.contact (PUT replaces the whole record except consents). */

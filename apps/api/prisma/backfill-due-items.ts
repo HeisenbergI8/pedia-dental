@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "../src/app.module";
 import { requestContext } from "../src/common/request-context";
-import { loadEnv } from "../src/config/env";
+import { loadScriptEnv } from "../src/config/env";
 import { NotesService } from "../src/notes/notes.service";
 import { PrismaService } from "../src/prisma/prisma.service";
 import { runInTransaction } from "../src/prisma/transaction";
@@ -15,7 +15,7 @@ import { DueItemsService } from "../src/recalls/due-items.service";
  * signed on the API before B7. Idempotent: run it again and it creates nothing.
  */
 if (existsSync(".env")) process.loadEnvFile(".env"); // real env vars win over the file
-const app = await NestFactory.createApplicationContext(AppModule.forRoot(loadEnv()), { logger: false });
+const app = await NestFactory.createApplicationContext(AppModule.forRoot(loadScriptEnv(process.env, { storage: false })), { logger: false });
 try {
   const prisma = app.get(PrismaService);
   const notes = app.get(NotesService);

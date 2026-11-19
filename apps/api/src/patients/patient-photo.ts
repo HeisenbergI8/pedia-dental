@@ -1,5 +1,5 @@
 import type { SpooledFile } from "../storage/multipart";
-import { IMAGE_EXTENSIONS, sniff } from "../storage/sniff";
+import { IMAGE_EXTENSIONS, pixelProblem, sniff } from "../storage/sniff";
 import type { FileExtension } from "../storage/storage";
 
 /** The mock's limit and words (mocks.ts:71, :337, :338). */
@@ -16,7 +16,9 @@ export function cleanPhoto(file: SpooledFile | undefined): { ext: FileExtension 
   if (!file || !file.claimedType.startsWith("image/")) return { problem: NOT_AN_IMAGE, status: 400 };
   if (file.tooLarge) return { problem: PHOTO_TOO_LARGE, status: 413 };
   const ext = sniff(file.head);
-  return ext && IMAGE_EXTENSIONS.includes(ext) ? { ext } : { problem: NOT_AN_IMAGE, status: 400 };
+  if (!ext || !IMAGE_EXTENSIONS.includes(ext)) return { problem: NOT_AN_IMAGE, status: 400 };
+  const tooBig = pixelProblem(file.pixels); // security review #30
+  return tooBig ? { problem: tooBig, status: 400 } : { ext };
 }
 
 /** A readable name if someone saves it, never the record id (mocks.ts:349). Always `.jpg`, as the mock. */

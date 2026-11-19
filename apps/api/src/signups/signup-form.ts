@@ -7,7 +7,7 @@ import type { z } from "zod";
 import { cleanLogo } from "../clinic/logo";
 import { ZodIssuesException } from "../common/zod-validation.pipe";
 import { partsTooLargeToRead, readUploads, type PartRules } from "../storage/multipart";
-import { sniff } from "../storage/sniff";
+import { pixelProblem, sniff } from "../storage/sniff";
 import { CONTENT_TYPES, type FileExtension } from "../storage/storage";
 import type { CheckedImage } from "../storage/image-form";
 
@@ -65,6 +65,8 @@ export async function readSignupForm<T extends z.ZodType>(req: Readable & { head
       spooled.map((f, i) => ({ type: kinds[i] && REFERENCE_EXTS.includes(kinds[i]) ? CONTENT_TYPES[kinds[i]] : "", size: f.tooLarge ? REFERENCE_IMAGE_RULES.maxBytes + 1 : f.bytes })),
     );
     if (problem) throw new BadRequestException(problem);
+    const tooBig = spooled.map((f) => pixelProblem(f.pixels)).find(Boolean); // security review #30
+    if (tooBig) throw new BadRequestException(tooBig);
     const references = spooled.map((f, i) => ({ path: f.path, bytes: f.bytes, ext: kinds[i]! }));
     return { data: parsed.data, logo, references, dispose: upload.dispose };
   } catch (error) {

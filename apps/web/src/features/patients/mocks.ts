@@ -228,7 +228,7 @@ export const patientHandlers = [
     // Decision 15: a number changed for real (not just written another way) stops links texted to the old one.
     for (const g of input.guardians) {
       const old = current.guardians.find((x) => x.id === g.id);
-      if (old && smsNumber(old.phone) !== smsNumber(g.phone)) portalNumberMoved(g.id);
+      if (old && smsNumber(old.phone) !== smsNumber(g.phone)) portalNumberMoved(g.id, current.id);
     }
     const patient: Patient = { ...current, ...tidy(input) };
     db.patients[index] = patient;
@@ -302,7 +302,7 @@ export const patientHandlers = [
       const primary = patient.guardians.find((g) => g.isPrimary) ?? patient.guardians[0];
       const clash = portalNumberClash({ id: primary.id, phone });
       if (clash) return new HttpResponse(clash, { status: 409 });
-      if (smsNumber(primary.phone) !== smsNumber(phone)) portalNumberMoved(primary.id); // decision 15, as PUT
+      if (smsNumber(primary.phone) !== smsNumber(phone)) portalNumberMoved(primary.id, patient.id); // decision 15, as PUT
       // One guardian, one phone: siblings share the guardian id, so they all get the new number.
       for (const g of db.patients.flatMap((p) => p.guardians)) if (g.id === primary.id) g.phone = phone;
     }
@@ -353,7 +353,7 @@ export const patientHandlers = [
     const file = (await request.formData()).get("file");
     if (!(file instanceof Blob) || !file.type.startsWith("image/")) return new HttpResponse("Attach an image file", { status: 400 });
     if (file.size > MAX_PHOTO_BYTES) return new HttpResponse("Images must be under 10 MB", { status: 413 });
-    const full = storageRefused(db, currentAccount().tier, file.size); // B12 decision 1
+    const full = storageRefused(db, currentAccount(), file.size); // B12 decision 1
     if (full) return new HttpResponse(full, { status: 409 });
     await putBlob(photoKey(patient.id), file);
     recordStored(db, photoKey(patient.id), "patients", file.size); // replaces the old photo's row (one key per child)

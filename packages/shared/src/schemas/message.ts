@@ -21,7 +21,8 @@ export type MessageKind = z.infer<typeof MessageKind>;
  * What the log holds: the parent messages above (each a template) and the account texts (B11 E4), whose words are fixed
  * (`accountText`) and never a template.
  */
-export const LoggedMessageKind = z.enum([...MessageKind.options, "portal_invite", "password_reset"]);
+// Audit #21: `sign_in_changed` tells the old number that a parent's sign-in number was changed.
+export const LoggedMessageKind = z.enum([...MessageKind.options, "portal_invite", "password_reset", "sign_in_changed"]);
 export type LoggedMessageKind = z.infer<typeof LoggedMessageKind>;
 
 /** 480 characters is three SMS segments: the most a reminder should cost. */

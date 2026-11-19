@@ -17,7 +17,8 @@ export type Placeholder = keyof typeof PLACEHOLDERS;
 export type MessageVars = Partial<Record<Placeholder, string>>;
 
 const TOKEN = /\{(\w+)\}/g;
-const isPlaceholder = (key: string): key is Placeholder => key in PLACEHOLDERS;
+/** Own keys only: `in` would pass inherited names such as {constructor} or {toString}. */
+const isPlaceholder = (key: string): key is Placeholder => Object.hasOwn(PLACEHOLDERS, key);
 
 /** Placeholders in `body` that don't exist, e.g. a misspelled {child_nmae}. */
 export function unknownPlaceholders(body: string): string[] {

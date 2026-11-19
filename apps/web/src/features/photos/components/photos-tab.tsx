@@ -16,6 +16,7 @@ import { useStaff } from "@/features/clinic/api";
 import { useVisits } from "@/features/visits/api";
 import { photoFileUrl, usePhotos } from "../api";
 import { FileCard } from "./file-card";
+import { RemoveUpload } from "./remove-upload";
 import { TYPE_LABEL, UploadPhotoDialog } from "./upload-photo-dialog";
 import { Loading } from "@/components/brand";
 import { ErrorState } from "@/components/error-state";
@@ -177,6 +178,14 @@ export function PhotosTab({ patientId }: { patientId: string }) {
                           <span className="text-ink-muted">{format(parseISO(p.takenOn), "MMM d")}</span>
                         </p>
                         {p.caption && <p className="text-sm text-ink-muted">{p.caption}</p>}
+                        {p.uploadedBy === "parent" && (
+                          <p className="flex flex-wrap items-center gap-x-1 text-sm text-ink-muted">
+                            From the portal
+                            <Can permission="clinical.write">
+                              <RemoveUpload patientId={patientId} photoId={p.id} label={TYPE_LABEL[p.type]} />
+                            </Can>
+                          </p>
+                        )}
                       </li>
                     ))}
                 </ul>

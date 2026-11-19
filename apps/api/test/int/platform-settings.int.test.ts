@@ -14,6 +14,7 @@ import { PrismaService } from "../../src/prisma/prisma.service";
 import { seedDatabase } from "../../src/seed/seed-database";
 import { FileStorage } from "../../src/storage/storage";
 import { resetDatabase } from "./support/database";
+import { webpVp8xOf } from "../support/images";
 import { binary } from "./support/files";
 import { createIntApp } from "./support/int-app";
 import { asOperator } from "./support/operator";
@@ -122,6 +123,8 @@ describe("Primolar's payment QR on MySQL (B12 decisions 5, 23)", () => {
     expect([gif.status, gif.text]).toEqual([400, "Choose a PNG, JPG or WebP image"]);
     const big = await putQr("x", Buffer.concat([PNG, Buffer.alloc(2 * 1024 * 1024)]));
     expect([big.status, big.text]).toEqual([413, "The image must be 2 MB or smaller"]);
+    const wide = await putQr("x", webpVp8xOf(600, 9000), "image/webp"); // D #30
+    expect([wide.status, wide.text]).toEqual([400, "This image is 600 × 9000 pixels. Make it at most 8000 pixels on each side, then upload it again."]);
     expect((await prisma.platformSettings.findUniqueOrThrow({ where: { id: "primolar" } })).paymentQrKey).toBe(before.paymentQrKey);
   });
 });

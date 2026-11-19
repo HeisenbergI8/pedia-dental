@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ClinicScoped, Id, IsoDateTime, Role } from "./common";
 import { AcknowledgementKind } from "./legal";
+import { isCommonPassword } from "../domain/common-passwords";
 import { loginIdOf } from "../domain/portal";
 
 /**
@@ -91,8 +92,31 @@ export const LoginId = z
     return z.NEVER;
   });
 
-/** B11 decision 8: every password a person chooses follows the staff rule (B2). */
-export const NewPassword = z.string().min(8, "Use at least 8 characters");
+export const COMMON_PASSWORD_MESSAGE = "That password is too common and easy to guess. Choose another.";
+export const LOGIN_PASSWORD_MESSAGE = "Don't use your email or mobile number as your password. Choose another.";
+
+/**
+ * B11 decision 8: every password a person chooses follows the staff rule (B2). Security review #7: and isn't one of the
+ * most common passwords. Not being the person's own email or mobile is `passwordIsLogin`, checked where the login is known.
+ */
+export const NewPassword = z
+  .string()
+  .min(8, "Use at least 8 characters")
+  .refine((p) => !isCommonPassword(p), COMMON_PASSWORD_MESSAGE);
+
+/**
+ * Security review #7: a password that is the person's own sign-in (their email or mobile, in any case or form). The
+ * API checks it on every new password; a form checks it when it knows who is signed in.
+ */
+export function passwordIsLogin(password: string, logins: readonly (string | null | undefined)[]): boolean {
+  const typed = password.trim().toLowerCase();
+  const asLogin = loginIdOf(password)?.value;
+  return logins.some((login) => {
+    if (!login) return false;
+    const id = loginIdOf(login)?.value ?? login.trim().toLowerCase();
+    return typed === login.trim().toLowerCase() || typed === id || (asLogin !== undefined && asLogin === id);
+  });
+}
 
 export const LoginInput = z.object({
   // Still called `email` on the wire (B2's contract, B11 E3): it carries an email or a mobile number.

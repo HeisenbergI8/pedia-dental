@@ -26,11 +26,14 @@ export function ReceiptUpload({
   onSubmit,
   pending,
   error,
+  label = "Send your receipt",
 }: {
   latest: ReceiptView | null | undefined;
   onSubmit: (input: ReceiptUploadInput, file: File) => void;
   pending: boolean;
   error?: string;
+  /** The form's name, so two on one page (the month's and a text top-up's) can be told apart. */
+  label?: string;
 }) {
   const form = useForm<Form>({ resolver: zodResolver(Form), defaultValues: { reference: "", file: undefined } });
 
@@ -57,7 +60,7 @@ export function ReceiptUpload({
         </p>
       )}
       <FormProvider {...form}>
-        <form noValidate onSubmit={submit} aria-label="Send your receipt" className="grid max-w-md gap-4">
+        <form noValidate onSubmit={submit} aria-label={label} className="grid max-w-md gap-4">
           <FormField name="file" label="Receipt screenshot" hint="PNG, JPG or WebP, up to 5 MB">
             {(control) => (
               <Controller

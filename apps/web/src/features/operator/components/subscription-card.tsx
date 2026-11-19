@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PaymentHistory } from "@/features/clinic/components/payment-history";
 import { ReceiptList } from "@/features/payments/components/receipt-list";
+import { useIdempotencyKey } from "@/lib/idempotency";
 import { receiptImageUrl, useAccountSubscription, useCancelSubscription, useRecordSubscriptionPayment } from "../api";
 import { PaymentFields } from "./payment-fields";
 
@@ -65,7 +66,7 @@ export function SubscriptionCard({ row }: { row: AccountOverview }) {
         {s.pausedFor && (
           <>
             <dt className="text-ink-muted">Paused for</dt>
-            <dd>{s.pausedFor === "overdue" ? "Non-payment. Recording the payment reactivates it." : "Cancellation"}</dd>
+            <dd>{PAUSED_FOR[s.pausedFor]}</dd>
           </>
         )}
         {s.cancelledAt && (
@@ -104,20 +105,36 @@ export function SubscriptionCard({ row }: { row: AccountOverview }) {
 type DialogProps = { name: string; s: SubscriptionView; onClose: () => void; returnFocus: () => void };
 const keepFocus = (returnFocus: () => void) => (e: Event) => (e.preventDefault(), returnFocus());
 
+/** Why the clinic is paused, in the console's words. Only the operator's Reactivate lifts a pause made by hand (#27). */
+const PAUSED_FOR: Record<NonNullable<SubscriptionView["pausedFor"]>, string> = {
+  overdue: "Non-payment. Recording the payment reactivates it.",
+  cancelled: "Cancellation",
+  manual: "Paused by Primolar. Only Reactivate reopens it.",
+};
+
 function MonthPaymentDialog({ name, s, onClose, returnFocus }: DialogProps) {
   const record = useRecordSubscriptionPayment(s.clinicId);
+  const idem = useIdempotencyKey(); // #18: one per attempt; kept for a retry whose outcome is unknown (B8 E2)
   const form = useForm<RecordUpfrontPaymentInput>({
     resolver: zodResolver(RecordUpfrontPaymentInput),
     defaultValues: { method: "bank_transfer", reference: "", paidOn: s.today }, // the server's day, so it follows the demo clock
   });
   const submit = form.handleSubmit((input) =>
     record.mutate(
-      { ...input, reference: input.reference || undefined },
+      { ...input, reference: input.reference || undefined, key: idem.current },
       {
         onSuccess: (after) => {
-          toast.success(after.pausedFor ? "Payment recorded. The clinic is still behind, so it stays paused." : `Payment recorded for ${name}`);
+          idem.settle();
+          toast.success(
+            after.pausedFor === "manual"
+              ? "Payment recorded. The clinic stays paused until you reactivate it."
+              : after.pausedFor
+                ? "Payment recorded. The clinic is still behind, so it stays paused."
+                : `Payment recorded for ${name}`,
+          );
           onClose();
         },
+        onError: (err) => idem.settle(err),
       },
     ),
   );

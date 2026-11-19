@@ -47,6 +47,9 @@ import {
   isMoneyIn,
   pesos,
   permissionScopeFor,
+  PARENT_UPLOAD_LIMITS,
+  parentUploadRefusal,
+  STAFF_PHOTO_KEPT,
   planProgress,
   reminderSendAt,
   surfacesFor,
@@ -1340,12 +1343,25 @@ describe("staff switch", () => {
     for (const left of ["4 tries", "3 tries", "2 tries", "1 try"]) {
       await expect(wrong()).rejects.toMatchObject({ status: 401, message: expect.stringContaining(`${left} left`) });
     }
-    await expect(wrong()).rejects.toMatchObject({ status: 429 });
+    // Security review #9: the fifth wrong PIN on one session signs that session out, and the person stays locked.
+    await expect(wrong()).rejects.toMatchObject({ status: 401, message: "Too many wrong PINs on this device. Sign in again with your password." });
+    expect(db.auditEvents.at(-1)).toMatchObject({ actorId: "staff_cruz", action: "sign_out", record: "Session (too many wrong PINs)" });
+    signIn(DESK); // signed in again with the password
     await expect(switchTo("staff_santos", pinOf("staff_santos"))).rejects.toMatchObject({ status: 429 });
     const pinEvents = db.auditEvents.filter((e) => e.actorId === "staff_santos" && e.record === "Session (PIN switch)");
     expect(pinEvents.map((e) => e.action)).toEqual([...Array(5).fill("sign_in_failed"), "denied"]);
     // Someone else's PIN still works: the lock is per person, not per device.
     expect((await switchTo("staff_delacruz", pinOf("staff_delacruz"))).user.role).toBe("admin");
+  });
+
+  it("signs a session out after five wrong PINs across different people (security review #9)", async () => {
+    signIn(DESK);
+    const others = ["staff_reyes", "staff_delacruz", "staff_villanueva", "staff_reyes"];
+    for (const id of others) await expect(switchTo(id, "0000")).rejects.toMatchObject({ status: 401, message: expect.stringContaining("isn't right") });
+    await expect(switchTo("staff_delacruz", "0000")).rejects.toMatchObject({ status: 401, message: expect.stringContaining("Sign in again") });
+    signIn(DESK); // a fresh session counts from zero
+    expect((await switchTo("staff_delacruz", pinOf("staff_delacruz"))).user.role).toBe("admin");
+    for (const id of ["staff_reyes", "staff_delacruz", "staff_villanueva"]) db.staffPins.find((p) => p.staffId === id)!.failedAt = [];
   });
 
   it("never switches to a parent, never from a parent, and never without a session", async () => {
@@ -1594,6 +1610,48 @@ describe("parent portal", () => {
     body.set("meta", JSON.stringify({ type: "document", takenOn: "2026-10-02", caption: "Lab result" }));
     const pdf = await api("/patients/patient_sibling/photos", ClinicalPhoto, { method: "POST", body });
     expect(pdf).toMatchObject({ contentType: "application/pdf", uploadedBy: "parent" });
+    signIn(ADMIN);
+  });
+
+  it("limits a parent's uploads per child each month and in all (audit #5)", async () => {
+    const send = () => {
+      const body = new FormData();
+      body.set("file", new Blob(["fake-jpeg"], { type: "image/jpeg" }));
+      body.set("meta", JSON.stringify({ type: "extraoral", takenOn: "2026-10-02", caption: "" }));
+      return api("/patients/patient_sibling/photos", ClinicalPhoto, { method: "POST", body });
+    };
+    await signInAsFamily();
+    const firstName = db.patients.find((p) => p.id === "patient_sibling")!.firstName;
+    const sentThisMonth = () => db.photos.filter((p) => p.patientId === "patient_sibling" && p.uploadedBy === "parent").length;
+    const filler = (i: number, createdAt: string) => ({ ...db.photos.find((p) => p.patientId === "patient_sibling" && p.uploadedBy === "parent")!, id: `filler_${i}`, createdAt });
+    const now = new Date().toISOString();
+    const fillers = Array.from({ length: PARENT_UPLOAD_LIMITS.perMonth - sentThisMonth() }, (_, i) => filler(i, now));
+    db.photos.push(...fillers);
+    await expect(send()).rejects.toMatchObject({ status: 409, message: parentUploadRefusal(firstName, { thisMonth: PARENT_UPLOAD_LIMITS.perMonth, storedBytes: 0 }, 0) });
+    db.photos = db.photos.filter((p) => !p.id.startsWith("filler_"));
+    // Last year's upload still counts toward the total.
+    db.photos.push(filler(99, "2025-01-15T02:00:00.000Z"));
+    db.storedFiles.push({ key: "filler_99", area: "photos", bytes: PARENT_UPLOAD_LIMITS.totalBytes });
+    await expect(send()).rejects.toMatchObject({ status: 409, message: expect.stringContaining("uploads from the portal are full") });
+    db.photos = db.photos.filter((p) => p.id !== "filler_99");
+    db.storedFiles = db.storedFiles.filter((f) => f.key !== "filler_99");
+    expect((await send()).uploadedBy).toBe("parent");
+    signIn(ADMIN);
+  });
+
+  it("lets staff remove a parent's upload, never the clinic's own photo (audit #5)", async () => {
+    const theirs = db.photos.find((p) => p.patientId === "patient_sibling" && p.uploadedBy === "parent")!;
+    const clinics = db.photos.find((p) => p.uploadedBy === "staff")!;
+    for (const token of ["demo.clinic_demo.staff_cruz", `demo.clinic_demo.guardian.${db.patients.find((p) => p.id === "patient_sibling")!.guardians[0]!.id}`]) {
+      signIn(token); // front desk and the parent: no clinical.write
+      await expect(api(`/photos/${theirs.id}`, z.object({}), { method: "DELETE" })).rejects.toMatchObject({ status: 403 });
+    }
+    signIn("demo.clinic_demo.staff_reyes"); // a dentist
+    await expect(api(`/photos/${clinics.id}`, z.object({}), { method: "DELETE" })).rejects.toMatchObject({ status: 409, message: STAFF_PHOTO_KEPT });
+    expect(await api(`/photos/${theirs.id}`, z.object({}), { method: "DELETE" })).toEqual({});
+    expect((await api("/patients/patient_sibling/photos", z.array(ClinicalPhoto))).map((p) => p.id)).not.toContain(theirs.id);
+    expect(db.storedFiles.some((f) => f.key === theirs.id)).toBe(false);
+    await expect(api(`/photos/${theirs.id}`, z.object({}), { method: "DELETE" })).rejects.toMatchObject({ status: 404 });
     signIn(ADMIN);
   });
 

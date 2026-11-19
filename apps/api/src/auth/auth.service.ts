@@ -1,8 +1,12 @@
-import { BadRequestException, ConflictException, ForbiddenException, HttpException, HttpStatus, Inject, Injectable, UnauthorizedException } from "@nestjs/common";
-import { AcknowledgeInput, ChangePasswordInput, SwitchUserInput, rolesCan, worksAt, type AcknowledgementPrompt, type AuditAction, type Branch, type DemoAccounts, type LoginInput, type LoginResult, type OperatorLoginInput, type OperatorSession, type Session } from "@pedia/shared";
-import { DEMO_CLINIC_ID, DEMO_PASSWORD } from "@pedia/seed";
+import { BadRequestException, ConflictException, ForbiddenException, HttpException, HttpStatus, Inject, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
+import {
+  AcknowledgeInput, ChangePasswordInput, LOGIN_PASSWORD_MESSAGE, SwitchUserInput, passwordIsLogin, rolesCan, worksAt,
+  type AcknowledgementPrompt, type AuditAction, type Branch, type DemoAccounts, type LoginInput, type LoginResult, type OperatorLoginInput, type OperatorSession, type Session,
+} from "@pedia/shared";
+import { DEMO_CLINIC_ID, DEMO_PASSWORD, IPIN_ID, NGITI_ID } from "@pedia/seed";
 import { AuditService } from "../audit/audit.service";
 import { Clock } from "../common/clock";
+import { errorFingerprint } from "../common/process-errors";
 import { requestContext } from "../common/request-context";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { ENV, type Env } from "../config/env";
@@ -11,7 +15,10 @@ import { runInTransaction } from "../prisma/transaction";
 import type { ZodType } from "zod";
 import { Hasher } from "./hashing";
 import { type Actor, type ClinicIdentity, IdentityService, type LoginCandidate, toSessionUser } from "./identity.service";
+import { RATE_LIMITS, RateLimitService, hashedBucketOf } from "./rate-limit";
 import { SessionService } from "./session.service";
+import { SIGN_IN_FLOOR_MS, failNoSoonerThan } from "./sign-in-timing";
+import { matchTotp } from "./totp";
 import { SubscriptionRecordsService } from "../subscription-records/subscription-records.service";
 import { OperatorAuditService } from "../operator-audit/operator-audit.service";
 
@@ -29,6 +36,26 @@ const lockedMessage = (until: string, now: Date) => {
 /** The same pipe the decorators use, applied after a handler's own session checks. */
 const parse = <T extends ZodType>(schema: T, body: unknown) => new ZodValidationPipe(schema).transform(body);
 
+/** Security review #9: how the trail reads a session signed out for guessing PINs (the person leaving is named). */
+export const WRONG_PINS_SIGN_OUT = "Session (too many wrong PINs)";
+export const WRONG_PINS_MESSAGE = "Too many wrong PINs on this device. Sign in again with your password.";
+/** Security review #8. */
+export const CODE_NEEDED_MESSAGE = "Enter the 6-digit code from your authenticator app";
+export const CODE_WRONG_MESSAGE = "That code isn't right, or it was already used. Wait for the next code and try again.";
+export const TOTP_REQUIRED_MESSAGE = "Two-step sign-in is required. Run the enrolment script.";
+
+/** Security review #7: the same words for every login, real or not, so a lock says nothing about whether one exists. */
+const lockedOutMessage = (retryAfterSeconds: number) => {
+  const minutes = Math.max(1, Math.ceil(retryAfterSeconds / 60));
+  return `Too many wrong passwords. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`;
+};
+
+/** Security review #7: one counter per login typed, per sign-in form, stored only as a hash (hashedBucketOf). */
+export const passwordBucket = (form: "clinic" | "operator" | "account", login: string) => hashedBucketOf("signin", `${form}:${login}`);
+
+/** Security review #9: the session was signed out; the controller clears its cookie too. */
+export class SessionEndedException extends UnauthorizedException {}
+
 /**
  * Sign-in, sign-out and the session steps: port of authHandlers (apps/web/src/features/auth/mocks.ts). Owns no table:
  * it orchestrates IdentityService, SessionService and AuditService.
@@ -37,6 +64,9 @@ const parse = <T extends ZodType>(schema: T, body: unknown) => new ZodValidation
 export class AuthService {
   /** A real argon2id hash, checked when an email has no login, so a miss costs what a hit does. */
   private decoy?: Promise<string>;
+  private readonly log = new Logger(AuthService.name);
+  /** Security review #20 (sign-in-timing.ts). A field only so a unit test can drop the wait. */
+  signInFloorMs = SIGN_IN_FLOOR_MS;
 
   constructor(
     private readonly identity: IdentityService,
@@ -48,11 +78,28 @@ export class AuthService {
     @Inject(ENV) private readonly env: Env,
     private readonly subscriptions: SubscriptionRecordsService,
     private readonly operatorAudit: OperatorAuditService,
+    private readonly limits: RateLimitService,
   ) {}
 
   /** An entry in the account it names, signed in or not (the mock's `logEach`: selectTenant, then recordAudit). */
   private auditAs(clinicId: string, actor: Actor, action: AuditAction, record: string): Promise<void> {
     return requestContext.within({ clinicId, user: actor }, () => this.audit.record(action, record));
+  }
+
+  /**
+   * Security review #20: a failed sign-in's entry, not awaited (as the operator's), so the answer doesn't wait on an
+   * insert that only a real login gets. A failed insert is logged by its fingerprint, never failing the request.
+   */
+  private auditLater(clinicId: string, actor: Actor, action: AuditAction, record: string): void {
+    this.auditAs(clinicId, actor, action, record).catch((error: unknown) => {
+      this.log.error({ fingerprint: errorFingerprint(error) }, `Audit row not written (${record})`);
+    });
+  }
+
+  /** Security review #7: refuses a locked login (429), else counts this try until `passwordRight` clears it. */
+  private async tryPassword(bucket: string): Promise<void> {
+    const attempt = await this.limits.tryPassword(bucket);
+    if (!attempt.allowed) throw new HttpException(lockedOutMessage(attempt.retryAfter), HttpStatus.TOO_MANY_REQUESTS);
   }
 
   /** A new session for a login that passed its checks, and the Session the web parses. */
@@ -63,17 +110,27 @@ export class AuthService {
     return { token, session: { token: COOKIE_TOKEN, user: toSessionUser(who) } };
   }
 
-  /** POST /auth/login, in the mock's order: the password, then suspension, then which clinic (decision #27). */
-  async login({ email, password, clinicId }: LoginInput): Promise<{ result: LoginResult; token?: string }> {
-    const matches = await this.identity.loginsBy(email); // `email` holds a mobile or an email (LoginId, B11 decision 4)
+  /**
+   * POST /auth/login, in the mock's order: the password, then suspension, then which clinic (decision #27). Security
+   * review #7: a login locked by wrong passwords is refused first; #20: a failure takes SIGN_IN_FLOOR_MS at least.
+   */
+  login(input: LoginInput): Promise<{ result: LoginResult; token?: string }> {
+    return failNoSoonerThan(this.signInFloorMs, () => this.checkedLogin(input));
+  }
+
+  private async checkedLogin({ email, password, clinicId }: LoginInput): Promise<{ result: LoginResult; token?: string }> {
+    const bucket = passwordBucket("clinic", email); // `email` holds a mobile or an email (LoginId, B11 decision 4)
+    await this.tryPassword(bucket);
+    const matches = await this.identity.loginsBy(email);
     if (matches.length === 0) await this.hasher.matches(await (this.decoy ??= this.hasher.hash("no such login")), password);
     const opened: LoginCandidate[] = [];
     for (const m of matches) if (await this.hasher.matches(m.passwordHash, password)) opened.push(m);
     if (opened.length === 0) {
-      // Each failure is logged in the account it names; an unknown email has no one to log against.
-      for (const m of matches) await this.auditAs(m.clinicId, m.actor, "sign_in_failed", "Session");
+      // Each failure is logged in the account it names; an unknown email has no one to log against. Not awaited (#20).
+      for (const m of matches) this.auditLater(m.clinicId, m.actor, "sign_in_failed", "Session");
       throw new UnauthorizedException("That mobile number or email and password don't match an account");
     }
+    await this.limits.passwordRight(bucket);
     // B12 decision 4: the subscription check at sign-in, before the active check, so a lapsed clinic is paused now
     // rather than at the nightly job. Only after a correct password. Then each match's account is read again.
     for (const clinicId of new Set(opened.map((m) => m.clinicId))) await this.subscriptions.settle(clinicId);
@@ -103,7 +160,9 @@ export class AuthService {
 
   /** GET /auth/demo-accounts: signed in, this account's people (the Switch user hints); signed out, the demo clinic's. */
   async demoAccounts(who: ClinicIdentity | undefined): Promise<DemoAccounts> {
-    const rows = await this.identity.demoAccounts(who?.clinicId ?? DEMO_CLINIC_ID);
+    // Security review #23: only the seeded demo clinics' people and PINs, never a clinic created on a demo deployment.
+    const clinicId = who?.clinicId ?? DEMO_CLINIC_ID;
+    const rows = [DEMO_CLINIC_ID, NGITI_ID, IPIN_ID].includes(clinicId) ? await this.identity.demoAccounts(clinicId) : [];
     return {
       password: DEMO_PASSWORD,
       accounts: rows.map(({ accountId, pin, ...a }) => ({ id: accountId, ...a, ...(pin ? { pin } : {}) })),
@@ -130,15 +189,23 @@ export class AuthService {
     if (!device || !worksAt(target.staff, device)) {
       throw new BadRequestException(`${target.actor.name} doesn't work at ${device?.name ?? "this branch"}. They can sign in with their password.`);
     }
+    // Security review #9: every PIN try counts against this session, whoever it is for, before the PIN is checked (so
+    // parallel guesses can't slip past). A try past the limit isn't checked; the last allowed one, if it fails, signs
+    // the session out. A right PIN ends this session anyway (the switch rotates it).
+    const { hits } = await this.limits.hitRolling(hashedBucketOf("pins", `session:${token}`), RATE_LIMITS.pins);
+    if (hits > RATE_LIMITS.pins.hits) return this.signOutForWrongPins(token);
+    const lastTry = hits >= RATE_LIMITS.pins.hits;
     const attempt = await this.identity.checkPin(current.clinicId, accountId, pin);
     const now = this.clock.now();
     if (!attempt) throw new BadRequestException("Choose a staff member from the list");
     if (attempt.outcome === "locked") {
       await this.auditAs(current.clinicId, target.actor, "denied", PIN_SWITCH);
+      if (lastTry) return this.signOutForWrongPins(token);
       throw new HttpException(lockedMessage(attempt.until, now), HttpStatus.TOO_MANY_REQUESTS);
     }
     if (attempt.outcome === "wrong") {
       await this.auditAs(current.clinicId, target.actor, "sign_in_failed", PIN_SWITCH);
+      if (lastTry) return this.signOutForWrongPins(token);
       if (attempt.locked) throw new HttpException(lockedMessage(attempt.locked.until, now), HttpStatus.TOO_MANY_REQUESTS);
       const left = `${attempt.attemptsLeft} ${attempt.attemptsLeft === 1 ? "try" : "tries"} left`;
       throw new UnauthorizedException(`That PIN isn't right for ${target.actor.name}. ${left}.`);
@@ -147,6 +214,13 @@ export class AuthService {
     await this.auditAs(current.clinicId, target.actor, "sign_in", PIN_SWITCH);
     await this.sessions.closeClinic(token);
     return this.open(current.clinicId, accountId);
+  }
+
+  /** Security review #9: the session that guessed too many PINs is signed out, logged as the person it belonged to. */
+  private async signOutForWrongPins(token: string): Promise<never> {
+    await this.audit.record("sign_out", WRONG_PINS_SIGN_OUT); // the guard put the session's person in the context
+    await this.sessions.closeClinic(token);
+    throw new SessionEndedException(WRONG_PINS_MESSAGE);
   }
 
   /**
@@ -158,12 +232,20 @@ export class AuthService {
     const { current, next } = parse(ChangePasswordInput, body);
     // Decision 4: on a demo deployment the shown password stays the shown password.
     if (this.env.DEMO_LOGINS && current === DEMO_PASSWORD) throw new ForbiddenException(`Demo logins keep the demo password (${DEMO_PASSWORD})`);
+    // Security review #7: not the login itself (NewPassword already refused the most common ones).
+    if (passwordIsLogin(next, [who.email, ...(await this.identity.signInValues(who.clinicId, who.user.id))])) {
+      throw new BadRequestException(LOGIN_PASSWORD_MESSAGE);
+    }
+    // Security review #7: the current-password check has the sign-in's per-login lock, on this login's own counter.
+    const bucket = passwordBucket("account", `${who.clinicId}:${who.user.id}`);
+    await this.tryPassword(bucket);
     const changed = await runInTransaction(this.prisma, async (tx) => {
       const ok = await this.identity.changePassword(who.clinicId, who.user.id, current, next, tx);
       await this.audit.record(ok ? "update" : "denied", "Password", undefined, tx);
       return ok;
     });
     if (!changed) throw new BadRequestException("That isn't your current password");
+    await this.limits.passwordRight(bucket);
     await this.sessions.closeAllFor(who.clinicId, who.user.id); // every device signed in with the old password
     return this.open(who.clinicId, who.user.id);
   }
@@ -191,8 +273,18 @@ export class AuthService {
     return this.refreshed(who);
   }
 
-  /** POST /operator/auth/login: one message for a wrong password and an unknown email, as the clinic sign-in. */
-  async operatorLogin({ email, password }: OperatorLoginInput): Promise<{ token: string; session: OperatorSession }> {
+  /**
+   * POST /operator/auth/login: one message for a wrong password and an unknown email, as the clinic sign-in. Security
+   * review #8: then the authenticator code, when the operator has enrolled (prisma/operator-totp.ts); in production an
+   * operator who hasn't is refused. #7 and #20 as the clinic sign-in: a per-login lock, and a floor on a failure's time.
+   */
+  operatorLogin(input: OperatorLoginInput): Promise<{ token: string; session: OperatorSession }> {
+    return failNoSoonerThan(this.signInFloorMs, () => this.checkedOperatorLogin(input));
+  }
+
+  private async checkedOperatorLogin({ email, password, code }: OperatorLoginInput): Promise<{ token: string; session: OperatorSession }> {
+    const bucket = passwordBucket("operator", email);
+    await this.tryPassword(bucket);
     const op = await this.identity.operatorByEmail(email);
     const ok = await this.hasher.matches(op?.passwordHash ?? (await (this.decoy ??= this.hasher.hash("no such login"))), password);
     if (!op || !ok) {
@@ -201,6 +293,21 @@ export class AuthService {
       if (op) void this.operatorAudit.tryRecordFor(op, "sign_in_failed", "Console", "Wrong password");
       throw new UnauthorizedException("That email and password don't match a Primolar operator");
     }
+    // Past here the password was right. A missing or wrong code keeps this try counted (tryPassword), so guessing codes
+    // locks the login as guessing passwords does.
+    if (op.totpSecret) {
+      const typed = code?.replace(/\s/g, "") ?? "";
+      if (!typed) throw new UnauthorizedException(CODE_NEEDED_MESSAGE);
+      const step = matchTotp(op.totpSecret, typed, this.clock.now());
+      if (step === undefined || !(await this.identity.useTotpStep(op.id, step))) {
+        void this.operatorAudit.tryRecordFor(op, "sign_in_failed", "Console", "Wrong two-step code");
+        throw new UnauthorizedException(CODE_WRONG_MESSAGE);
+      }
+    } else if (this.env.APP_ENV === "production") {
+      void this.operatorAudit.tryRecordFor(op, "denied", "Console", "Two-step sign-in not set up");
+      throw new ForbiddenException(TOTP_REQUIRED_MESSAGE);
+    }
+    await this.limits.passwordRight(bucket);
     const token = await this.sessions.openOperator(op.id);
     await this.operatorAudit.tryRecordFor(op, "sign_in", "Console", "Signed in");
     return { token, session: { token: OPERATOR_COOKIE_TOKEN, operator: { id: op.id, name: op.name, email: op.email } } };

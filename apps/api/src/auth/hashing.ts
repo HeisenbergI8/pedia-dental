@@ -36,8 +36,8 @@ export function pinAttempt(failedAt: readonly string[], correct: boolean, now: D
   const before = pinLockout(failedAt, now, policy);
   if (before.locked) return { outcome: "locked", until: before.until };
   if (correct) return { outcome: "ok", failedAt: [] };
-  // Only tries inside the window are kept, so the stored list never grows without bound.
-  const since = now.getTime() - policy.windowMinutes * 60_000;
+  // Only tries the lock still remembers are kept, so the stored list never grows without bound.
+  const since = now.getTime() - policy.memoryMinutes * 60_000;
   const kept = [...failedAt.filter((at) => Date.parse(at) > since), now.toISOString()];
   const after = pinLockout(kept, now, policy);
   return after.locked

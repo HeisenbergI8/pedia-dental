@@ -3,7 +3,11 @@ import type { PriceList } from "../schemas/signup";
 import { pesos } from "./money";
 import {
   DUPLICATE_EMAIL_MESSAGE,
+  SIGNUP_REFUSED_MESSAGE,
+  UNPAID_SIGNUP_REASON,
   amountDue,
+  publicClashMessage,
+  unpaidSignupExpired,
   duplicateField,
   duplicateNameMessage,
   referenceImagesProblem,
@@ -72,5 +76,22 @@ describe("reference images (billing #9, A7)", () => {
     expect(referenceImagesProblem([png(), png(), png(), png()])).toMatch(/up to 3/);
     expect(referenceImagesProblem([{ type: "image/gif", size: 10 }])).toMatch(/PNG or JPG/);
     expect(referenceImagesProblem([png(6 * 1024 * 1024)])).toMatch(/5 MB/);
+  });
+});
+
+describe("unpaid sign-ups and the public form's words (#17, #29)", () => {
+  // Sent at 23:30 on 1 Nov Manila (15:30 UTC): Manila's day counts, not UTC's.
+  const sent = { status: "waiting" as const, submittedAt: "2026-11-01T15:30:00.000Z" };
+  it("expires a waiting, unpaid sign-up 14 Manila days after it was sent, and nothing paid or decided", () => {
+    expect(unpaidSignupExpired(sent, "2026-11-14")).toBe(false);
+    expect(unpaidSignupExpired(sent, "2026-11-15")).toBe(true);
+    expect(unpaidSignupExpired({ ...sent, payment: { method: "gcash", paidOn: "2026-11-02", amount: 1, recordedAt: "2026-11-02T00:00:00.000Z" } }, "2026-12-01")).toBe(false);
+    expect(unpaidSignupExpired({ ...sent, status: "rejected" }, "2026-12-01")).toBe(false);
+    expect(UNPAID_SIGNUP_REASON).toBe("Not paid within 14 days");
+  });
+  it("names no clinic or email to the public form, but for a resubmission of the same sign-up", () => {
+    expect(publicClashMessage(false)).toBe(SIGNUP_REFUSED_MESSAGE);
+    expect(publicClashMessage(true)).toBe(DUPLICATE_EMAIL_MESSAGE);
+    expect(duplicateField(SIGNUP_REFUSED_MESSAGE)).toBeUndefined(); // the form shows it as the form's own error
   });
 });

@@ -78,6 +78,7 @@ export const CLINIC_RULES: readonly ClinicRule[] = [
   { method: "GET", path: "/patients/:id/photos", permission: ["clinical.view", "uploads.create"], owner: "id" },
   { method: "POST", path: "/patients/:id/photos", permission: ["clinical.write", "uploads.create"], owner: "id" },
   { method: "GET", path: "/photos/:id/file", permission: ["clinical.view", "uploads.create"], owner: "record" },
+  { method: "DELETE", path: "/photos/:id", permission: "clinical.write", owner: "record" }, // audit #5: a parent's upload only
   { method: "GET", path: "/patients/:id/plan", permission: "plan.view", owner: "id" },
   { method: "POST", path: "/patients/:id/plan", permission: "plan.write" },
   { method: "PATCH", path: "/plan-items/:id", permission: "plan.write", owner: "record" },

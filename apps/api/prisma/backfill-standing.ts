@@ -3,7 +3,7 @@ import "reflect-metadata";
 import { existsSync } from "node:fs";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "../src/app.module";
-import { loadEnv } from "../src/config/env";
+import { loadScriptEnv } from "../src/config/env";
 import { PatientStandingService } from "../src/patients/patient-standing.service";
 import { reconcileAll } from "../src/patients/standing.jobs";
 import { PrismaService } from "../src/prisma/prisma.service";
@@ -13,7 +13,7 @@ import { PrismaService } from "../src/prisma/prisma.service";
  * `standing.reconcile` does (after `db:backfill-due-items`, say). Idempotent: a second run corrects nothing.
  */
 if (existsSync(".env")) process.loadEnvFile(".env"); // real env vars win over the file
-const app = await NestFactory.createApplicationContext(AppModule.forRoot(loadEnv()), { logger: false });
+const app = await NestFactory.createApplicationContext(AppModule.forRoot(loadScriptEnv(process.env, { storage: false })), { logger: false });
 try {
   console.log(`${await reconcileAll(app.get(PrismaService), app.get(PatientStandingService))} patient row(s) corrected`);
 } finally {

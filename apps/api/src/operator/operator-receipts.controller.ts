@@ -36,7 +36,7 @@ export class OperatorReceiptsController {
 
   /** Decision 22: only for the full amount due; a subscription's records the month, a sign-up's its setup fee. */
   @Post(":id/confirm")
-  @OperatorAudited({ action: "update", record: "Payment receipt", detail: "Receipt confirmed" })
+  @OperatorAudited({ action: "update", record: "Payment receipt", detail: "Receipt confirmed", values: ({ req, answer }) => ({ method: (req.body as ConfirmReceiptInput).method, amount: (answer as ReceiptToCheck).amountDue }) })
   @HttpCode(200)
   async confirm(@Param("id") id: string, @Body(new ZodValidationPipe(ConfirmReceiptInput)) input: ConfirmReceiptInput): Promise<ReceiptToCheck> {
     const payer = await this.receipts.payer(id);
@@ -47,7 +47,7 @@ export class OperatorReceiptsController {
   }
 
   @Post(":id/reject")
-  @OperatorAudited({ action: "update", record: "Payment receipt", detail: "Receipt rejected" })
+  @OperatorAudited({ action: "update", record: "Payment receipt", detail: "Receipt rejected", values: ({ req }) => ({ reason: (req.body as RejectReceiptInput).reason }) })
   @HttpCode(200)
   async reject(@Param("id") id: string, @Body(new ZodValidationPipe(RejectReceiptInput)) { reason }: RejectReceiptInput): Promise<ReceiptToCheck> {
     const payer = await this.receipts.payer(id);

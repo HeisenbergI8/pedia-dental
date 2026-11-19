@@ -683,7 +683,8 @@ test.describe("edge cases", () => {
   });
 
   test("a very long clinic name is accepted and shown in full on its page", async ({ page }) => {
-    const long = `Klinika ng Ngiti at Kalusugan ng Ngipin ng mga Bata sa Lungsod ng Dasmariñas ${uid()} `.repeat(3).trim();
+    // Security review #4: a clinic name is at most 80 characters, so the longest allowed is the test.
+    const long = `Klinika ng Ngiti at Kalusugan ng Ngipin ng mga Bata sa Lungsod ng Dasmariñas ${uid()} `.repeat(3).slice(0, 80).trim();
     const c = aClinic({ name: long });
     await openConsole(page);
     const dialog = await openNewClinicDialog(page);

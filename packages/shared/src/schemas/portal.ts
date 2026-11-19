@@ -62,6 +62,7 @@ export const PortalAccount = ClinicScoped.extend({
   invitedBy: z.string().optional(),
   activatedAt: IsoDateTime.optional(),
   turnedOffAt: IsoDateTime.optional(),
+  numberChangedAt: IsoDateTime.optional(), // audit #21: an active parent's sign-in number last changed; resets wait a day
   email: z.string().optional(),
   password: z.string().optional(), // none: a seeded parent, on the demo password (decision 13)
   links: z.array(PortalLinkRecord),

@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException, type OnModuleInit } from "@nestjs/common";
+import { reachesBranch, type BranchCaller } from "../common/branch-reach";
 import { StartVisitInput, type Visit } from "@pedia/shared";
 import { AppointmentRecordsService } from "../appointments/appointment-records.service";
 import { APPOINTMENT_NOT_FOUND } from "../appointments/appointment.rules";
@@ -43,7 +44,7 @@ export class VisitsService implements OnModuleInit {
   }
 
   /** POST /patients/:id/visits: the mock's order, 404 → 400 → 400 "Unknown dentist" → 409, under the patient's lock. */
-  async start(patientId: string, body: unknown): Promise<Visit> {
+  async start(patientId: string, body: unknown, who: BranchCaller): Promise<Visit> {
     return runInTransaction(this.prisma, async (tx) => {
       await lockPatient(tx, patientId);
       const input = new ZodValidationPipe(StartVisitInput).transform(body);
@@ -54,7 +55,8 @@ export class VisitsService implements OnModuleInit {
       // lock, as every status change (E2), so a parallel cancel or second start sees the result.
       if (input.appointmentId) {
         const appointment = await this.appointments.one(tx, input.appointmentId);
-        if (!appointment || appointment.patientId !== patientId) throw new NotFoundException(APPOINTMENT_NOT_FOUND);
+        // Security review #10: another branch's appointment reads as missing to staff who don't work there.
+        if (!appointment || appointment.patientId !== patientId || !reachesBranch(who, appointment.branchId)) throw new NotFoundException(APPOINTMENT_NOT_FOUND);
         if (!(await this.appointments.advance(tx, appointment.id, "arrived", "in_chair"))) {
           throw new ConflictException("Check the patient in before starting the visit");
         }

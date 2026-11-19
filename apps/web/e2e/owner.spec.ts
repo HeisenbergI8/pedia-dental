@@ -217,7 +217,7 @@ test.describe("happy paths", () => {
     const suggested = await colour.inputValue();
     expect(suggested).toMatch(/^#[0-9a-f]{6}$/);
     expect(suggested).not.toBe("#e07a48");
-    await expect(page.getByLabel("Preview")).toBeVisible();
+    await expect(page.getByLabel("Preview", { exact: true })).toBeVisible(); // not the letterhead card's sample document
     await expect(save).toBeEnabled();
     await save.click();
     await expect(toast(page, "Your clinic's look is saved")).toBeVisible();
@@ -800,7 +800,8 @@ test.describe("edge cases", () => {
   test("a very long clinic name is saved and shown in full", async ({ page }) => {
     await signInAsOwner(page);
     await openSettings(page, "Clinic");
-    const long = "Bulilit Smiles Pediatric Dental and Orthodontic Centre for Kids of Imus, Dasmariñas, Bacoor and the Whole of Cavite Province";
+    // Security review #4: at most 80 characters.
+    const long = "Bulilit Smiles Pediatric Dental and Orthodontic Centre for Kids of Imus, Dasmariñas, Bacoor and the Whole of Cavite Province".slice(0, 80).trim();
     await page.getByLabel("Clinic name").fill(long);
     await page.getByRole("button", { name: "Save details" }).click();
     await expect(toast(page, "Clinic details saved")).toBeVisible();

@@ -40,4 +40,5 @@ export const FAILURE = {
   gaveUp: "Couldn't be sent after 4 tries",
   notConfirmed: "Not confirmed by the SMS provider",
   textLimit: "Monthly text limit reached", // B12 decision 19: logged, never sent later
+  clinicPaused: "Clinic paused", // audit #24: a paused clinic's template texts fail, never sent later; account texts still go
 } as const;

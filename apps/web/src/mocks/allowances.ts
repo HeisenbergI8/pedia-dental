@@ -1,5 +1,6 @@
-import { TIER_LIMITS, accountUsage, smsSegments, storageRefusal, textAllowance, type ClinicAccount, type ClinicUsage, type Tier } from "@pedia/shared";
+import { TIER_LIMITS, accountUsage, isAccountText, limitTier, smsSegments, storageRefusal, textAllowance, type ClinicAccount, type ClinicUsage } from "@pedia/shared";
 import type { Db, StoredFileRecord } from "@pedia/seed";
+import { subscriptionOf } from "./subscriptions";
 import { topUpPartsIn } from "./text-topups";
 
 /*
@@ -19,18 +20,25 @@ export function forgetStored(tenant: Db, key: string | undefined): void {
   if (key) tenant.storedFiles = tenant.storedFiles.filter((f) => f.key !== key);
 }
 
-/** The refusal when this upload would pass the plan's storage (decision 1), else undefined. */
-export const storageRefused = (tenant: Db, tier: Tier, adding: number) => storageRefusal(tier, storedBytes(tenant), adding);
+/**
+ * The refusal when this upload would pass the plan's storage (decision 1), else undefined. Audit #25: while a downgrade
+ * waits, the smaller plan's storage counts (`limitTier`, as branches and logins do), so the clinic can't fill past it.
+ */
+export const storageRefused = (tenant: Db, account: Pick<ClinicAccount, "id" | "tier">, adding: number) =>
+  storageRefusal(limitTier(account.tier, subscriptionOf(account.id)?.downgrade), storedBytes(tenant), adding);
 
 /** A timestamp's Manila month ("2026-10"): Manila is UTC+8 all year. */
 export const manilaMonthOf = (iso: string) => new Date(Date.parse(iso) + 8 * 3_600_000).toISOString().slice(0, 7);
 
 /**
  * Billed parts of the texts in `month` (decision 18). The mock never sends, so it counts what it queued or marked
- * sent; the API counts what it handed to the provider (B12 E9).
+ * sent; the API counts what it handed to the provider (B12 E9). Template texts only (audit #3): account texts are never
+ * refused, so they never count toward the cap; they stay in the log.
  */
 export const textPartsUsed = (tenant: Db, month: string) =>
-  tenant.messages.filter((m) => (m.status === "queued" || m.status === "sent") && manilaMonthOf(m.sendAt) === month).reduce((n, m) => n + smsSegments(m.body), 0);
+  tenant.messages
+    .filter((m) => (m.status === "queued" || m.status === "sent") && !isAccountText(m.kind) && manilaMonthOf(m.sendAt) === month)
+    .reduce((n, m) => n + smsSegments(m.body), 0);
 
 /** GET /clinic/usage and the console's overview (decision 17). */
 export function usageOf(tenant: Db, account: Pick<ClinicAccount, "id" | "tier">, month: string): ClinicUsage {

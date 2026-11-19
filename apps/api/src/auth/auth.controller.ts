@@ -5,7 +5,7 @@ import { z } from "zod";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { ENV, type Env } from "../config/env";
 import { identityOf } from "./access.guard";
-import { AuthService } from "./auth.service";
+import { AuthService, SessionEndedException } from "./auth.service";
 import { BRANCH_COOKIE, SESSION_COOKIE, readCookie, sessionCookieOptions } from "./cookies";
 import { IdentityService, toSessionUser } from "./identity.service";
 
@@ -60,9 +60,15 @@ export class AuthController {
   async switch(@Req() req: Request, @Body() body: unknown, @Res({ passthrough: true }) res: Response) {
     const who = identityOf(req);
     const device = who && this.identity.branchFor(who, readCookie(req.headers.cookie, BRANCH_COOKIE));
-    const { token, session } = await this.auth.switchUser(who, readCookie(req.headers.cookie, SESSION_COOKIE), device, body);
-    res.cookie(SESSION_COOKIE, token, sessionCookieOptions(this.env));
-    return session;
+    try {
+      const { token, session } = await this.auth.switchUser(who, readCookie(req.headers.cookie, SESSION_COOKIE), device, body);
+      res.cookie(SESSION_COOKIE, token, sessionCookieOptions(this.env));
+      return session;
+    } catch (error) {
+      // Security review #9: signed out for too many wrong PINs, so the dead cookie goes too.
+      if (error instanceof SessionEndedException) res.clearCookie(SESSION_COOKIE, sessionCookieOptions(this.env));
+      throw error;
+    }
   }
 
   @Post("password")

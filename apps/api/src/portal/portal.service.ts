@@ -1,8 +1,8 @@
 import { randomBytes } from "node:crypto";
-import { ConflictException, GoneException, HttpException, HttpStatus, Inject, Injectable, NotFoundException, type OnModuleInit } from "@nestjs/common";
-import { DEMO_CLINIC_ID } from "@pedia/seed";
+import { BadRequestException, ConflictException, GoneException, HttpException, HttpStatus, Inject, Injectable, Logger, NotFoundException, type OnModuleInit } from "@nestjs/common";
+import { DEMO_CLINIC_ID, IPIN_ID, NGITI_ID } from "@pedia/seed";
 import {
-  PORTAL_LINK_LIFETIME_MS, accountText, linkPath, maskedNumber, smsNumber,
+  ACCOUNT_TEXT_LIMITS, LOGIN_PASSWORD_MESSAGE, PORTAL_LINK_LIFETIME_MS, accountText, passwordIsLogin, inviteLimitMessage, inviteLimitReached, linkPath, maskedNumber, numberChangedText, resetHeld, rolesCan, smsNumber,
   type DemoTexts, type PasswordLink, type PasswordLinkInput, type PasswordResetInput, type PortalAccess, type PortalLinkPurpose, type Session, type SetPasswordInput,
 } from "@pedia/shared";
 import { AuditService } from "../audit/audit.service";
@@ -23,6 +23,10 @@ import type { Viewer } from "../patients/patient.views";
 import { PrismaService } from "../prisma/prisma.service";
 import { clinicData } from "../prisma/tenant-scope";
 import { runInTransaction, type Tx } from "../prisma/transaction";
+import { RESET_ANSWER_MS, atLeast } from "./at-least";
+
+/** Audit #23: the seeded demo clinics, the only ones whose texted links a demo deployment lists. */
+const DEMO_CLINIC_IDS: readonly string[] = [DEMO_CLINIC_ID, NGITI_ID, IPIN_ID];
 
 const GONE = "This link has expired or was already used.";
 /** B13c2a: an expired link is kept this long for support questions, then pruned (decisions.md E9: not a legal threshold). */
@@ -42,6 +46,8 @@ type LinkRow = { id: string; clinicId: string; guardianId: string; purpose: Port
  */
 @Injectable()
 export class PortalService implements OnModuleInit {
+  private readonly log = new Logger(PortalService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly family: FamilyService,
@@ -145,6 +151,12 @@ export class PortalService implements OnModuleInit {
     if (live.length) await tx.portalLink.updateMany({ where: { id: { in: live.map((l) => l.id) } }, data: { cancelledAt: now } });
   }
 
+  /** Links of this purpose made for this clinic (one guardian's, if given) in the last day (ACCOUNT_TEXT_LIMITS.windowMs). */
+  private async linksSince(tx: Tx, purpose: PortalLinkPurpose, guardianId?: string): Promise<number> {
+    const since = new Date(this.clock.now().getTime() - ACCOUNT_TEXT_LIMITS.windowMs);
+    return tx.portalLink.count({ where: { clinicId: ownClinicId(), purpose, ...(guardianId && { guardianId }), createdAt: { gt: since } } });
+  }
+
   /** A new link, and its text in the log with [link] (E4); sent now, at any hour (decisions 3, 12, 20). */
   private async sendLink(tx: Tx, purpose: PortalLinkPurpose, g: FamilyGuardian, patientId: string, childName?: string): Promise<void> {
     const clinicId = ownClinicId();
@@ -172,6 +184,10 @@ export class PortalService implements OnModuleInit {
       if (a?.state === "active") throw new ConflictException(`${g.fullName} already uses the portal`);
       const blocked = await this.blocked(tx, g);
       if (blocked) throw new ConflictException(blocked);
+      // Audit #4: invites are account texts (never refused for the plan, never counted), so they have their own limits:
+      // per guardian and per clinic in the last day, counted under the clinic's lock.
+      const over = inviteLimitReached(await this.linksSince(tx, "invite", guardianId), await this.linksSince(tx, "invite"));
+      if (over) throw new HttpException(inviteLimitMessage(over, g.fullName), HttpStatus.TOO_MANY_REQUESTS);
       await this.cancelLinks(tx, guardianId);
       const now = this.clock.now();
       const invited = { state: "invited" as const, invitedAt: now, invitedBy: viewer.name, turnedOffAt: null };
@@ -210,19 +226,49 @@ export class PortalService implements OnModuleInit {
    * follows the new number, and links already texted to the old one stop working. 409 when another parent signs in
    * with it or was invited on it (decision 14) and this guardian has portal access. Returns the login whose sessions
    * the caller ends after its commit.
+   *
+   * Audit #21: when an active parent's sign-in moves, the old number gets an account text saying so (no link), and
+   * reset texts for that login are held for a day (`numberChangedAt`), so a number changed at the desk by someone else
+   * can't be followed at once by a reset to the new phone.
    */
-  async numberChanged(tx: Tx, g: FamilyGuardian): Promise<string | undefined> {
+  async numberChanged(tx: Tx, g: FamilyGuardian, change: { oldPhone: string; patientId: string }): Promise<string | undefined> {
     const clinicId = ownClinicId();
     const a = await tx.portalAccount.findUnique({ where: { clinicId_guardianId: { clinicId, guardianId: g.guardianId } }, select: { state: true } });
-    if (!a || a.state === "off") return undefined;
+    if (!a) return undefined;
     const n = smsNumber(g.phone);
+    if (a.state === "off") {
+      // Turned off first, then the number changed, then re-invited (verification bypass B): the old number still hears.
+      await tx.portalAccount.update({ where: { clinicId_guardianId: { clinicId, guardianId: g.guardianId } }, data: { numberChangedAt: this.clock.now() }, select: { guardianId: true } });
+      await this.warnOldNumber(tx, g, change);
+      return undefined;
+    }
     const holder = n ? await this.numberHolder(tx, n, g.guardianId) : undefined;
     if (holder) throw new ConflictException(clashText(g, holder));
     // A link already texted went to the old number (a lost phone, a typo): it stops working. Staff resend an invite.
     await this.cancelLinks(tx, g.guardianId);
     if (a.state !== "active") return undefined; // an invite reads the number when it is accepted
     const moved = await this.identity.followPhone(tx, clinicId, g.guardianId, n ?? null, clashText(g, { fullName: "another parent" }));
+    await tx.portalAccount.update({ where: { clinicId_guardianId: { clinicId, guardianId: g.guardianId } }, data: { numberChangedAt: this.clock.now() }, select: { guardianId: true } });
+    await this.warnOldNumber(tx, g, change);
     return moved ? parentId(g.guardianId) : undefined;
+  }
+
+  /**
+   * The "your sign-in number changed" text to the old number. At most one per guardian a day and 20 per clinic a day
+   * (verification of #4: repeated number edits must not become free texts to any number).
+   */
+  private async warnOldNumber(tx: Tx, g: FamilyGuardian, change: { oldPhone: string; patientId: string }): Promise<void> {
+    if (!smsNumber(change.oldPhone)) return;
+    const since = new Date(this.clock.now().getTime() - 24 * 60 * 60_000);
+    const recent = await tx.message.findMany({ where: { kind: "sign_in_changed", createdAt: { gte: since } }, select: { to: true, recipientName: true, patientId: true } });
+    if (recent.length >= 20 || recent.some((m) => m.patientId === change.patientId && m.recipientName === g.fullName)) return;
+    const { name: clinicName } = await tx.clinicAccount.findUniqueOrThrow({ where: { id: ownClinicId() }, select: { name: true } });
+    await this.queue.queueAccountText(tx, {
+      kind: "sign_in_changed",
+      patientId: change.patientId,
+      guardian: { fullName: g.fullName, phone: change.oldPhone },
+      body: numberChangedText(clinicName),
+    });
   }
 
   // ── Signed out (/auth/*) ───────────────────────────────────────────────────────────────────────────────────────
@@ -271,6 +317,8 @@ export class PortalService implements OnModuleInit {
         const hit = await this.usable(token, tx);
         if (!hit) throw new GoneException(GONE);
         const { link, g } = hit;
+        // Security review #7: never the parent's own mobile or email as the password.
+        if (passwordIsLogin(password, [g.phone, g.email])) throw new BadRequestException(LOGIN_PASSWORD_MESSAGE);
         const now = this.clock.now();
         const accountId = parentId(g.guardianId);
         if (link.purpose === "invite") {
@@ -299,31 +347,48 @@ export class PortalService implements OnModuleInit {
   /**
    * POST /auth/password-reset (decisions 6, 19): 202 whether or not an account exists. Counted first, per number or
    * email, so a 429 says nothing either. Parents only: staff ask their Owner.
+   *
+   * Audit #3, #21: a clinic's reset texts have a daily ceiling (ACCOUNT_TEXT_LIMITS.resetsPerClinic), and a login whose
+   * number just changed gets none for a day; past either, still 202, nothing sent, and a log line (ids only).
+   * Audit #20: the answer takes at least RESET_ANSWER_MS whichever path ran (atLeast).
    */
   async requestReset({ login }: PasswordResetInput): Promise<Record<string, never>> {
-    const { allowed } = await this.limits.hitRolling(hashedBucketOf("reset", login), RATE_LIMITS.reset);
-    if (!allowed) throw new HttpException("Too many reset texts for this number. Try again later.", HttpStatus.TOO_MANY_REQUESTS);
-    for (const m of await this.identity.loginsBy(login)) {
-      if (m.isStaff) continue;
-      const guardianId = m.accountId.slice("guardian.".length);
-      await requestContext.within({ clinicId: m.clinicId, user: m.actor }, () =>
-        runInTransaction(this.prisma, async (tx) => {
-          const clinicId = await lockAccount(tx);
-          const a = await tx.portalAccount.findUnique({ where: { clinicId_guardianId: { clinicId, guardianId } }, select: { state: true } });
-          const [g] = await this.family.guardians(tx, [guardianId]);
-          if (a?.state !== "active" || !g || !smsNumber(g.phone)) return;
-          await this.cancelLinks(tx, guardianId, "reset"); // only the newest reset text works
-          await this.sendLink(tx, "reset", g, g.firstChildId);
-          await this.audit.record("create", "Password reset (requested)", undefined, tx);
-        }),
-      );
-    }
-    return {};
+    return atLeast(RESET_ANSWER_MS, async () => {
+      const { allowed } = await this.limits.hitRolling(hashedBucketOf("reset", login), RATE_LIMITS.reset);
+      if (!allowed) throw new HttpException("Too many reset texts for this number. Try again later.", HttpStatus.TOO_MANY_REQUESTS);
+      for (const m of await this.identity.loginsBy(login)) {
+        if (m.isStaff) continue;
+        const guardianId = m.accountId.slice("guardian.".length);
+        await requestContext.within({ clinicId: m.clinicId, user: m.actor }, () =>
+          runInTransaction(this.prisma, async (tx) => {
+            const clinicId = await lockAccount(tx);
+            const a = await tx.portalAccount.findUnique({ where: { clinicId_guardianId: { clinicId, guardianId } }, select: { state: true, numberChangedAt: true } });
+            const [g] = await this.family.guardians(tx, [guardianId]);
+            if (a?.state !== "active" || !g || !smsNumber(g.phone)) return;
+            const held = resetHeld(await this.linksSince(tx, "reset"), a.numberChangedAt ?? undefined, this.clock.now());
+            if (held) {
+              this.log.warn(`Password reset not sent (${held === "clinic_ceiling" ? "the clinic's daily reset ceiling" : "sign-in number changed in the last day"}): clinic ${clinicId}, guardian ${guardianId}`);
+              return;
+            }
+            await this.cancelLinks(tx, guardianId, "reset"); // only the newest reset text works
+            await this.sendLink(tx, "reset", g, g.firstChildId);
+            await this.audit.record("create", "Password reset (requested)", undefined, tx);
+          }),
+        );
+      }
+      return {};
+    });
   }
 
-  /** GET /auth/demo-texts: demo deployments only (E6), else a 404. Signed in: this clinic's; signed out: the demo clinic's. */
+  /**
+   * GET /auth/demo-texts: demo deployments only (E6), else a 404. Audit #23: only to signed-in staff with portal.manage,
+   * and only for a seeded demo clinic; anyone else gets the same 404, so the links can't be read signed out.
+   */
   async demoTexts(who: ClinicIdentity | undefined): Promise<DemoTexts> {
-    if (!this.env.DEMO_LOGINS) throw new NotFoundException("Not found");
+    // Signed out: the seeded demo clinic's texts only (its families are invented), so the sign-in page's demo help works.
+    // Signed in: staff with portal.manage at a seeded demo clinic. A clinic created on a demo deployment never shows.
+    const signedIn = !!who && rolesCan(who.user.roles, "portal.manage") && DEMO_CLINIC_IDS.includes(who.clinicId);
+    if (!this.env.DEMO_LOGINS || (who && !signedIn)) throw new NotFoundException("Not found");
     const clinicId = who?.clinicId ?? DEMO_CLINIC_ID;
     const rows = await this.prisma.portalLink.findMany({
       where: { clinicId, demoToken: { not: null }, usedAt: null, cancelledAt: null, expiresAt: { gt: this.clock.now() } },

@@ -1,6 +1,8 @@
 import type { INestApplication } from "@nestjs/common";
 import { DEMO_PASSWORD, seedPlatform } from "@pedia/seed";
-import { DemoTexts, Message, PasswordLink, Patient, PatientPage, PortalAccess, Session, type RegisterPatientInput } from "@pedia/shared";
+import {
+  ACCOUNT_TEXT_LIMITS, DemoTexts, Message, PasswordLink, Patient, PatientPage, PortalAccess, Session, inviteLimitMessage, numberChangedText, type RegisterPatientInput,
+} from "@pedia/shared";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hasher } from "../../src/auth/hashing";
@@ -108,7 +110,7 @@ describe("portal invitations on MySQL (B11)", () => {
     const stored = await prisma.portalLink.findFirstOrThrow({ where: { guardianId: "g_m_Bo" } });
     expect(stored.tokenHash).toHaveLength(64);
     expect(stored.demoToken).toBe(lastToken()); // DEMO_LOGINS only (E6)
-    expect(DemoTexts.parse((await http().get("/api/auth/demo-texts")).body).texts[0]).toMatchObject({ name: "Rosa Bo", purpose: "invite" });
+    expect(DemoTexts.parse((await http().get("/api/auth/demo-texts").set("Cookie", desk)).body).texts[0]).toMatchObject({ name: "Rosa Bo", purpose: "invite" }); // audit #23: staff only
   });
 
   it("checks the link, sets the password, signs in with the notice step, and works once (CHUNKS B11 done-when)", async () => {
@@ -297,6 +299,103 @@ describe("forgot password on MySQL (decisions 6, 19)", () => {
     expect((await reset("09995550001")).status).toBe(202);
     const buckets = (await prisma.rateLimitCounter.findMany({ select: { bucket: true } })).map((r) => r.bucket);
     expect(buckets.some((b) => b.includes("9995550001"))).toBe(false);
+  });
+});
+
+describe("account text limits (audit #3, #4, #21, #23)", () => {
+  const reset = (value: string) => http().post("/api/auth/password-reset").send({ login: value });
+  /** `n` links of `purpose` made now for the demo clinic, so a daily cap is reached without texting them. */
+  const fill = (purpose: "invite" | "reset", n: number) =>
+    prisma.portalLink.createMany({
+      data: Array.from({ length: n }, () => ({ clinicId: "clinic_demo", guardianId: "g_filler", purpose, createdAt: clock.now(), expiresAt: clock.now() })),
+    });
+  const unfill = () => prisma.portalLink.deleteMany({ where: { guardianId: "g_filler" } });
+  /** A family whose mother has accepted her invite: an active portal login on `phone`. */
+  const activeFamily = async (name: string, phone: string) => {
+    const kid = await family(name, phone);
+    await invite(kid.id, `g_m_${name}`);
+    await drain();
+    expect((await accept(lastToken(`63${phone.slice(1)}`), pw(30))).status).toBe(200); // this family's text, not a straggler's
+    return kid;
+  };
+
+  beforeAll(async () => {
+    desk = await signIn("frontdesk@gmail.com");
+  });
+
+  it("refuses a fourth invite to one parent in a day with a plain 429 for staff", async () => {
+    const kid = await family("Ky", "09170000021");
+    for (let i = 0; i < 3; i++) expect((await invite(kid.id, "g_m_Ky")).status).toBe(200);
+    const res = await invite(kid.id, "g_m_Ky");
+    expect([res.status, res.text]).toEqual([429, inviteLimitMessage("guardian", "Rosa Ky")]);
+    clock.set(new Date(NIGHT.getTime() + ACCOUNT_TEXT_LIMITS.windowMs + 1000)); // a day on, the oldest has left the window
+    desk = await signIn("frontdesk@gmail.com");
+    expect((await invite(kid.id, "g_m_Ky")).status).toBe(200);
+    clock.set(NIGHT);
+    desk = await signIn("frontdesk@gmail.com");
+  });
+
+  it("refuses an invite past the clinic's daily cap", async () => {
+    const kid = await family("Ly", "09170000022");
+    await fill("invite", ACCOUNT_TEXT_LIMITS.invitesPerClinic);
+    try {
+      const res = await invite(kid.id, "g_m_Ly");
+      expect([res.status, res.text]).toEqual([429, inviteLimitMessage("clinic")]);
+    } finally {
+      await unfill();
+    }
+    expect((await invite(kid.id, "g_m_Ly")).status).toBe(200);
+  });
+
+  it("answers 202 and texts nothing past the clinic's daily reset ceiling", async () => {
+    await activeFamily("My", "09170000023");
+    await fill("reset", ACCOUNT_TEXT_LIMITS.resetsPerClinic);
+    try {
+      calls.length = 0;
+      expect((await reset("09170000023")).status).toBe(202);
+      await drain();
+      expect(calls.filter((c) => c.number === "639170000023")).toHaveLength(0);
+    } finally {
+      await unfill();
+    }
+    calls.length = 0;
+    expect((await reset("09170000023")).status).toBe(202);
+    await drain();
+    expect(calls.filter((c) => c.number === "639170000023")).toHaveLength(1); // other tests' late texts may drain too
+  });
+
+  it("texts the old number when a parent's sign-in number changes, and holds resets for a day", async () => {
+    const kid = await activeFamily("Ny", "09170000024");
+    calls.length = 0;
+    const quick = await http().patch(`/api/patients/${kid.id}`).set("Cookie", desk).send({ phone: "09170000034", nickname: "", tags: [], alerts: [] });
+    expect(quick.status).toBe(200);
+    await drain();
+    expect(calls.map((c) => [c.number, c.body])).toEqual([["639170000024", numberChangedText("Bulilit Smiles Pediatric Dental")]]);
+    const logged = Message.array().parse((await http().get(`/api/messages?patientId=${kid.id}`).set("Cookie", desk)).body);
+    expect(logged.find((m) => m.kind === "sign_in_changed")).toMatchObject({ to: "09170000024", status: "sent" });
+    calls.length = 0;
+    expect((await reset("09170000034")).status).toBe(202);
+    await drain();
+    expect(calls.filter((c) => c.number === "639170000034")).toHaveLength(0); // held: someone else may have changed it
+    try {
+      clock.set(new Date(NIGHT.getTime() + ACCOUNT_TEXT_LIMITS.resetHoldAfterNumberChangeMs + 1000));
+      expect((await reset("09170000034")).status).toBe(202);
+      await drain();
+      expect(calls.filter((c) => c.number === "639170000034")).toHaveLength(1); // a day later it goes (others' due texts may too)
+    } finally {
+      clock.set(NIGHT);
+      desk = await signIn("frontdesk@gmail.com");
+    }
+  });
+
+  it("lists the demo clinic's texts signed out and to staff with portal.manage, never to other staff or parents", async () => {
+    expect((await http().get("/api/auth/demo-texts")).status).toBe(200); // the sign-in page's demo help (seeded clinic)
+    // Signed in first: a supertest request built before an await shares its server with the sign-in's.
+    const [dentist, parent] = [await signIn("dentist@gmail.com"), await signIn("parent@gmail.com")];
+    expect((await http().get("/api/auth/demo-texts").set("Cookie", dentist)).status).toBe(404);
+    expect((await http().get("/api/auth/demo-texts").set("Cookie", parent)).status).toBe(404);
+    const res = await http().get("/api/auth/demo-texts").set("Cookie", desk);
+    expect(DemoTexts.parse(res.body).texts.length).toBeGreaterThan(0);
   });
 });
 

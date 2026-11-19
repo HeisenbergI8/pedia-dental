@@ -15,6 +15,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:drift": "prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --exit-code",
     "db:seed": "prisma db seed",
+    "db:operator-totp": "node --import @swc-node/register/esm-register prisma/operator-totp.ts",
     "db:demo-reset": "node --import @swc-node/register/esm-register prisma/demo-reset.ts",
     "db:backfill-due-items": "node --import @swc-node/register/esm-register prisma/backfill-due-items.ts",
     "db:backfill-standing": "node --import @swc-node/register/esm-register prisma/backfill-standing.ts",
@@ -30,7 +31,7 @@
     "load:run": "node --import @swc-node/register/esm-register test/load/run.ts"
   },
   "devDependencies": {
-    "@nestjs/testing": "^12",
+    "@nestjs/testing": "^12.5.1",
     "@types/autocannon": "^7.12.7",
     "@types/busboy": "^1.5.5",
     "@types/express": "^5",
@@ -46,9 +47,9 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3",
     "@aws-sdk/s3-request-presigner": "^3",
-    "@nestjs/common": "^12",
-    "@nestjs/core": "^12",
-    "@nestjs/platform-express": "^12",
+    "@nestjs/common": "^12.5.1",
+    "@nestjs/core": "^12.5.1",
+    "@nestjs/platform-express": "^12.5.1",
     "@nestjs/schedule": "^12.0.2",
     "@node-rs/argon2": "^2.0.2",
     "@pedia/seed": "workspace:^",
@@ -59,7 +60,7 @@
     "@swc/core": "^1.16.18",
     "busboy": "^1.6.0",
     "date-fns": "^4.4.0",
-    "dompurify": "3.4.16",
+    "dompurify": "3.4.18",
     "helmet": "^8",
     "jsdom": "29.1.1",
     "nestjs-pino": "^5.3.1",
@@ -68,6 +69,6 @@
     "prisma": "^7.10.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   }
 }

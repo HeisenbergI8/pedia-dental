@@ -21,7 +21,7 @@ export class SupportController {
   }
 
   @Put("operator/support")
-  @OperatorAudited({ action: "update", record: "Support details", detail: "Support details saved" })
+  @OperatorAudited({ action: "update", record: "Support details", detail: "Support details saved", values: ({ answer }) => ({ email: (answer as SupportSettings).email, chatUrl: (answer as SupportSettings).chatUrl }) })
   saveSupport(@Body(new ZodValidationPipe(SupportSettings)) input: SupportSettings): Promise<SupportSettings> {
     return this.settings.saveSupport(input);
   }

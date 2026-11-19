@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { LOGO_TOO_LARGE, cleanLogo } from "./logo";
+import { jpegOf, pngOf } from "../../test/support/images";
+import { LOGO_TOO_LARGE, cleanLogo, sanitizeSvg } from "./logo";
 
 const file = (mimetype: string, body: string | Buffer) => {
   const buffer = typeof body === "string" ? Buffer.from(body, "utf8") : body;
@@ -50,9 +51,39 @@ describe("cleanLogo (decision #28, B3 Decision 5)", () => {
     expect(cleanLogo(file("image/png", '<svg xmlns="http://www.w3.org/2000/svg"/>'))).toMatchObject({ status: 400 });
   });
 
+  it("drops <style>, <image> and every link or url() that leaves the SVG, keeping #fragment ones (D #31)", () => {
+    const out = svgOut(
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">' +
+        '<style>@import url(https://evil.example/a.css); rect { fill: url(https://evil.example/p.svg#x) }</style>' +
+        '<defs><linearGradient id="g"><stop offset="0" stop-color="#b0245e"/></linearGradient><linearGradient id="h" xlink:href="#g"/><linearGradient id="i" href="https://evil.example/g.svg#g"/></defs>' +
+        '<image href="https://evil.example/track.png" width="1" height="1"/><image xlink:href="data:image/png;base64,AAAA"/>' +
+        '<a href="#top"><circle r="1"/></a><a xlink:href="other.svg#dot"><circle r="2"/></a>' +
+        '<a href="https://evil.example/"><rect width="4" height="4" fill="url(#g)"/></a>' +
+        '<rect width="2" height="2" fill="url(https://evil.example/f.svg#p)" style="fill: url(\'//evil.example/x\')"/>' +
+        '<filter id="f"><feImage href="https://evil.example/i.png"/></filter></svg>',
+    );
+    for (const bad of ["<style", "@import", "<image", "feImage", "evil.example", "data:image", "other.svg"]) expect(out).not.toContain(bad);
+    expect(out).toContain('href="#top"');
+    expect(out).toContain('xlink:href="#g"');
+    expect(out).toContain('fill="url(#g)"');
+    expect(out).toContain("<linearGradient");
+  });
+
+  it("refuses a PNG or JPEG over 8000 px a side, and takes one at the limit (D #30)", () => {
+    expect(cleanLogo(file("image/png", pngOf(8000, 400)))).toMatchObject({ ext: "png" });
+    expect(cleanLogo(file("image/png", pngOf(8001, 400)))).toEqual({ status: 400, problem: expect.stringMatching(/8001 × 400 pixels.*at most 8000/) });
+    expect(cleanLogo(file("image/jpeg", jpegOf(300, 30_000)))).toEqual({ status: 400, problem: expect.stringMatching(/300 × 30000 pixels/) });
+  });
+
   it("refuses a GIF (400) and a file over 1 MB (413), in the shared rule's words", () => {
     expect(cleanLogo(file("image/gif", "GIF89a"))).toEqual({ status: 400, problem: "Choose a PNG, JPG or SVG file" });
     expect(cleanLogo(file("image/png", Buffer.alloc(1024 * 1024 + 1)))).toEqual({ status: 413, problem: LOGO_TOO_LARGE });
     expect(LOGO_TOO_LARGE).toBe("Logos must be 1 MB or smaller");
+  });
+
+  it("drops inline style and escaped or image-set URLs (verification of #31)", () => {
+    const out = sanitizeSvg('<svg xmlns="http://www.w3.org/2000/svg"><rect style="fill:red" mask="u\\72l(https://evil/p.svg#p)" fill="image-set(&quot;https://evil/i.png&quot; 1x)" width="1" height="1"/></svg>')!;
+    expect(out).not.toMatch(/style=|evil|image-set/);
+    expect(out).toContain("<rect");
   });
 });

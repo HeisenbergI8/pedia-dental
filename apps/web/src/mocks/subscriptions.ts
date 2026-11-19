@@ -165,10 +165,23 @@ export function reactivateRefusal(clinicId: string): string | undefined {
   return undefined;
 }
 
-/** A manual reactivation, once reactivateRefusal allows it, also clears a subscription pause. */
+/** A manual reactivation, once reactivateRefusal allows it, also clears a subscription pause (and only it, `manual`). */
 export function forgetPause(clinicId: string): void {
   const sub = subscriptionOf(clinicId);
   if (sub) delete sub.pause;
+}
+
+/** #18: a payment by hand with the same reference on the same paid date as one already recorded for this clinic. */
+export const paymentAlreadyRecorded = (clinicId: string, input: RecordUpfrontPaymentInput): boolean =>
+  !!input.reference && !!subscriptionOf(clinicId)?.payments.some((p) => p.reference === input.reference && p.paidOn === input.paidOn);
+
+/**
+ * #27: the operator's Suspend records the pause as theirs, over any the subscription made, so neither a payment nor
+ * the settle reactivates the clinic, and its Owner gets no billing-only session.
+ */
+export function pauseByHand(clinicId: string): void {
+  const sub = subscriptionOf(clinicId);
+  if (sub) sub.pause = "manual";
 }
 
 /** S14: what the Owner and the console both see. Newest payment first. */

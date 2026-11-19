@@ -328,8 +328,8 @@ test("7 · a new clinic signs up (refused without the box, PRM- with it, a dupli
   await openForm(`  ${c.name.toLowerCase().replace(/ /g, "   ")} `, `again.${RUN.toLowerCase()}@masaya.ph`, `again.${RUN.toLowerCase()}@masaya.ph`);
   await terms.check();
   await viaApi(page, /^\/api\/signups$/, "POST", 409, () => send.click());
-  await expect(field("Clinic name")).toHaveAttribute("aria-invalid", "true");
-  await expect(field("Clinic name")).toHaveAccessibleDescription(/already on Primolar or waiting to join/);
+  // #29: the public form says no more than that it couldn't take the sign-up.
+  await expect(page.getByRole("alert").filter({ hasText: "We couldn't take this sign-up. If your clinic already uses Primolar, contact us." })).toBeVisible();
   await expect(page).toHaveURL(/\/get-started$/);
 
   await openConsole(page);

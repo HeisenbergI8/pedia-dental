@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, HttpException, HttpStatus, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import {
   CreateAccountInput, DUPLICATE_EMAIL_MESSAGE, GetStartedInput, LEGAL_DOCUMENTS, RECEIPT_RULES, ReceiptUploadInput, SignupInput, SignupStatusView,
-  amountDue, duplicateNameMessage, filesDueForDeletion, sameClinicName, SIGNUP_LIMIT_MESSAGE,
+  UNPAID_SIGNUP_DAYS, UNPAID_SIGNUP_REASON, amountDue, clinicNameKey, duplicateNameMessage, filesDueForDeletion, publicClashMessage, unpaidSignupExpired, SIGNUP_LIMIT_MESSAGE,
   type AgreementRecord, type ConfirmReceiptInput, type RecordUpfrontPaymentInput, type Signup,
 } from "@pedia/shared";
 import type { Request } from "express";
@@ -74,15 +74,23 @@ export class SignupsService {
 
   /**
    * Billing #10, A11: the name or contact email is already a clinic's, or a waiting sign-up's. `exceptId`: the sign-up
-   * being fixed or approved. Read under the platform lock, so two requests can't both find a name free.
+   * being fixed or approved. Read under the platform lock, so two requests can't both find a name free. `message` is
+   * the real reason (the console's); `ownSignup` says the clash is a waiting sign-up with this very name and email (#29).
+   * #17: waiting sign-ups are found through their `nameKey` and `contactEmailKey` indexes, never read whole; clinics are
+   * Primolar's paying accounts (no spam reaches that list), read as two columns.
    */
-  private async duplicateOf(tx: Tx, account: { name: string; contactEmail: string }, exceptId?: string): Promise<string | undefined> {
+  private async duplicateOf(tx: Tx, account: { name: string; contactEmail: string }, exceptId?: string): Promise<{ message: string; ownSignup: boolean } | undefined> {
+    const nameKey = clinicNameKey(account.name);
+    const emailKey = account.contactEmail.trim().toLowerCase();
     const clinics = await tx.clinicAccount.findMany({ select: { name: true, contactEmail: true } });
-    const waiting = await tx.signup.findMany({ where: { status: "waiting", ...(exceptId && { id: { not: exceptId } }) }, select: { name: true, contactEmail: true } });
-    const taken = [...clinics, ...waiting];
-    if (taken.some((a) => sameClinicName(a.name, account.name))) return duplicateNameMessage(account.name);
-    const email = account.contactEmail.trim().toLowerCase();
-    if (taken.some((a) => a.contactEmail.toLowerCase() === email)) return DUPLICATE_EMAIL_MESSAGE;
+    const waiting = await tx.signup.findMany({
+      where: { status: "waiting", OR: [{ nameKey }, { contactEmailKey: emailKey }], ...(exceptId && { id: { not: exceptId } }) },
+      select: { nameKey: true, contactEmailKey: true },
+    });
+    const taken = [...clinics.map((c) => ({ nameKey: clinicNameKey(c.name), contactEmailKey: c.contactEmail.trim().toLowerCase() })), ...waiting];
+    const ownSignup = waiting.some((s) => s.nameKey === nameKey && s.contactEmailKey.trim() === emailKey);
+    if (taken.some((a) => a.nameKey === nameKey)) return { message: duplicateNameMessage(account.name), ownSignup };
+    if (taken.some((a) => a.contactEmailKey.trim() === emailKey)) return { message: DUPLICATE_EMAIL_MESSAGE, ownSignup };
     return undefined;
   }
 
@@ -134,7 +142,7 @@ export class SignupsService {
         runInTransaction(this.prisma, async (tx) => {
           await this.settings.lockPlatform(tx);
           const clash = await this.duplicateOf(tx, input.account);
-          if (clash) throw new ConflictException(clash);
+          if (clash) throw new ConflictException(publicClashMessage(clash.ownSignup)); // #29: the public form names no clinic or email
           return this.insert(tx, input, "form", this.agreement(input.owner.fullName), stored); // P4: accepted online
         }),
       );
@@ -199,7 +207,7 @@ export class SignupsService {
           const refused = brandingRefusal(input.branding, !!form.logo || !!s.logoRef);
           if (refused) throw new BadRequestException(refused);
           const clash = await this.duplicateOf(tx, input.account, s.id);
-          if (clash) throw new ConflictException(clash);
+          if (clash) throw new ConflictException(clash.message);
           const requote = input.account.tier !== s.account.tier || input.branding.choice !== s.branding.choice;
           if (requote && s.payment) throw new ConflictException(PAID_PLAN_LOCKED);
           const replaced = [stored.logoKey && s.logoRef, ...(stored.referenceKeys.length ? s.referenceRefs : [])].filter((k): k is string => !!k);
@@ -250,7 +258,7 @@ export class SignupsService {
       SignupsService.waiting(s);
       if (!s.payment) throw new ConflictException("Record the setup fee before approving");
       const clash = await this.duplicateOf(tx, s.account, s.id);
-      if (clash) throw new ConflictException(clash);
+      if (clash) throw new ConflictException(clash.message);
       return s;
     });
   }
@@ -269,7 +277,7 @@ export class SignupsService {
       return await this.files.keepIf([stored.logoKey, ...stored.referenceKeys], () =>
         this.make(async (tx) => {
           const clash = await this.duplicateOf(tx, input.account); // also stops a double-click making two copies
-          if (clash) throw new ConflictException(clash);
+          if (clash) throw new ConflictException(clash.message);
           const s = await this.insert(tx, input, "console", this.agreement(input.owner.fullName, signedOn), stored);
           const paid: Signup = { ...s, payment: { ...payment, amount: s.quote.total, recordedAt: this.clock.now().toISOString() } };
           await tx.signup.update({ where: { id: s.id }, data: toSignupRow(paid), select: { id: true } });
@@ -372,6 +380,41 @@ export class SignupsService {
   /** Billing #17–#20: Primolar delivered (or corrected) the finished look. In the operator's branding transaction. */
   async markDesignDelivered(tx: Tx, clinicId: string): Promise<void> {
     await tx.signup.update({ where: { clinicId }, data: { designStatus: "delivered", designDeliveredAt: this.clock.now() }, select: { id: true } });
+  }
+
+  /**
+   * #17 (the nightly job): a waiting sign-up still unpaid 14 days after it was submitted is rejected, "Not paid within 14
+   * days", which frees its name and email; `purgeRejectedFiles` takes its files 30 days after that. One waiting for the
+   * operator to check a receipt is left until the receipt is answered. One transaction per sign-up, re-checked under its
+   * lock; read through the (status, submittedAt) index, oldest first, a batch at a time.
+   */
+  async expireUnpaid(): Promise<number> {
+    const today = this.clock.today();
+    // A superset (a day early, for the Manila day); unpaidSignupExpired decides each one.
+    const before = new Date(this.clock.now().getTime() - (UNPAID_SIGNUP_DAYS - 1) * 86_400_000);
+    let expired = 0;
+    let after: string | undefined;
+    for (;;) {
+      const batch = await this.prisma.signup.findMany({
+        where: { status: "waiting", paymentRecordedAt: null, submittedAt: { lte: before } },
+        orderBy: [{ submittedAt: "asc" }, { id: "asc" }],
+        take: PURGE_BATCH,
+        ...(after && { cursor: { id: after }, skip: 1 }),
+      });
+      for (const s of batch.map(toSignup).filter((x) => unpaidSignupExpired(x, today))) {
+        const done = await runInTransaction(this.prisma, async (tx) => {
+          const locked = await this.lockSignup(tx, s.id); // addReceipt and the operator's steps take this lock first too
+          if (!unpaidSignupExpired(locked, today)) return false;
+          if ((await this.receipts.latestFor({ kind: "signup", signupId: s.id }))?.status === "pending") return false;
+          const next: Signup = { ...locked, status: "rejected", rejection: { reason: UNPAID_SIGNUP_REASON, at: this.clock.now().toISOString() } };
+          await tx.signup.update({ where: { id: s.id }, data: toSignupRow(next), select: { id: true } });
+          return true;
+        });
+        if (done) expired++;
+      }
+      if (batch.length < PURGE_BATCH) return expired;
+      after = batch[batch.length - 1]!.id;
+    }
   }
 
   /**

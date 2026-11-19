@@ -4,7 +4,7 @@ import { LINK_GONE } from "../src/storage/local-files.controller";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApp } from "./support/test-app";
 
-type Method = "get" | "post" | "put" | "patch";
+type Method = "get" | "post" | "put" | "patch" | "delete";
 
 /**
  * B5's routes. Each must reach a controller and the real guard: 401 without a session. A route with no controller would
@@ -65,6 +65,7 @@ const B10_ROUTES: [Method, string][] = [
   ["get", "/patients/p1/photos"],
   ["post", "/patients/p1/photos"],
   ["get", "/photos/ph1/file"],
+  ["delete", "/photos/ph1"], // audit #5
   ["get", "/documents"],
   ["get", "/patients/p1/documents"],
   ["post", "/patients/p1/documents"],

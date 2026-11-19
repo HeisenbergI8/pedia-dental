@@ -1,0 +1,18 @@
+version: 2
+updates:
+  # One entry at the root covers every workspace package (pnpm-workspace.yaml) through pnpm-lock.yaml.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+  # Keeps the SHA-pinned actions in .github/workflows current (it updates the SHA and the version comment).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  # Keeps the digest-pinned API base image current (apps/api/Dockerfile).
+  - package-ecosystem: docker
+    directory: /apps/api
+    schedule:
+      interval: weekly

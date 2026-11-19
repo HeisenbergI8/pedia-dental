@@ -29,6 +29,18 @@ describe("log redaction", () => {
     expect(lines.join("")).not.toMatch(/secret1|secret2/);
   });
 
+  it("hides a file read's link and the page a request came from, and keeps the headers the runbooks query", () => {
+    const { logger, lines } = capture();
+    logger.info({
+      req: { headers: { referer: "https://app.example/patients?q=ana%20santos", "user-agent": "Mozilla/5.0", "x-forwarded-for": "203.0.113.9" } },
+      res: { headers: { location: "https://files.s3.amazonaws.com/clinics/c/photos/p.jpg?X-Amz-Signature=sig123" } },
+    });
+    const line = lines.join("");
+    expect(line).not.toMatch(/santos|sig123|amazonaws/i);
+    expect(line).toContain("Mozilla/5.0");
+    expect(line).toContain("203.0.113.9");
+  });
+
   it("adds the request id inside a request, and nothing outside one", () => {
     const { logger, lines } = capture();
     requestContext.run({ requestId: "req-12345678", operator: false }, () => logger.info("inside"));

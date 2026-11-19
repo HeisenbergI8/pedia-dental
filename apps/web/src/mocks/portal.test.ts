@@ -1,7 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupServer } from "msw/node";
 import { z } from "zod";
-import { DemoTexts, LoginResult, Message, PasswordLink, Patient, PortalAccess, Session, IDEMPOTENCY_HEADER, type RegisterPatientInput } from "@pedia/shared";
+import {
+  ACCOUNT_TEXT_LIMITS, DemoTexts, LoginResult, Message, PasswordLink, Patient, PortalAccess, Session, IDEMPOTENCY_HEADER,
+  inviteLimitMessage, numberChangedText, type RegisterPatientInput,
+} from "@pedia/shared";
 import { DEMO_PASSWORD } from "@pedia/seed";
 import { api } from "@/lib/api-client";
 import { db } from "./db";
@@ -162,7 +165,9 @@ describe("forgot password (decisions 6, 19)", () => {
     expect(db.messages.length).toBe(before); // nothing to send, and nothing said
     await reset("0917 000 0011"); // Rosa Ha, active since the invite case
     expect(db.messages.at(-1)).toMatchObject({ kind: "password_reset", to: "09170000011", status: "queued" });
+    signIn(FRONT_DESK); // audit #23: only staff with portal.manage read the demo's texts
     const token = await tokenOf("Rosa Ha");
+    signIn(null);
     expect((await api("/auth/password-link", PasswordLink, post({ token }))).purpose).toBe("reset");
     await accept(token, pw(4));
     expect("user" in (await login("09170000011", pw(4)))).toBe(true);
@@ -180,5 +185,63 @@ describe("a parent's own password (decision 7)", () => {
     signIn("demo.clinic_demo.guardian.g_m_Ha");
     await api("/auth/password", Session, post({ current: pw(4), next: pw(6) }));
     expect("user" in (await login("09170000011", pw(6)))).toBe(true);
+  });
+});
+
+describe("account text limits (audit #3, #4, #21, #23)", () => {
+  /** `n` links of `purpose` made just now on a stand-in account, so a daily cap is reached without sending them. */
+  const fill = (purpose: "invite" | "reset", n: number) => {
+    const at = new Date().toISOString();
+    const links = Array.from({ length: n }, (_, i) => ({ token: `filler-${purpose}-${i}`, purpose, createdAt: at, expiresAt: at }));
+    db.portalAccounts.push({ clinicId: "clinic_demo", guardianId: `g_filler_${purpose}`, state: "off", links });
+    return () => void (db.portalAccounts = db.portalAccounts.filter((a) => a.guardianId !== `g_filler_${purpose}`));
+  };
+
+  it("refuses a fourth invite to one parent in a day with a plain 429 for staff", async () => {
+    signIn(FRONT_DESK);
+    const kid = await family("Ky", "09170000021");
+    for (let i = 0; i < 3; i++) await invite(kid.id, "g_m_Ky");
+    await expect(invite(kid.id, "g_m_Ky")).rejects.toMatchObject({ status: 429, message: inviteLimitMessage("guardian", "Rosa Ky") });
+  });
+
+  it("refuses an invite past the clinic's daily cap", async () => {
+    signIn(FRONT_DESK);
+    const kid = await family("Ly", "09170000022");
+    const clear = fill("invite", ACCOUNT_TEXT_LIMITS.invitesPerClinic);
+    await expect(invite(kid.id, "g_m_Ly")).rejects.toMatchObject({ status: 429, message: inviteLimitMessage("clinic") });
+    clear();
+    expect((await invite(kid.id, "g_m_Ly")).state).toBe("invited");
+  });
+
+  it("answers 202 and texts nothing past the clinic's daily reset ceiling", async () => {
+    signIn(null);
+    const clear = fill("reset", ACCOUNT_TEXT_LIMITS.resetsPerClinic);
+    const before = db.messages.length;
+    await reset("0917 000 0011"); // Rosa Ha, active
+    expect(db.messages.length).toBe(before);
+    clear();
+  });
+
+  it("texts the old number when a parent's sign-in number changes, and holds resets for a day", async () => {
+    signIn(FRONT_DESK);
+    const kid = db.patients.find((p) => p.guardians.some((g) => g.id === "g_m_Ha"))!;
+    await api(`/patients/${kid.id}`, Patient, { ...post({ phone: "09170000031", nickname: "", tags: [], alerts: [] }), method: "PATCH" });
+    expect(db.messages.at(-1)).toMatchObject({ kind: "sign_in_changed", to: "09170000011", status: "queued", body: numberChangedText("Bulilit Smiles Pediatric Dental") });
+    signIn(null);
+    const before = db.messages.length;
+    await reset("09170000031");
+    expect(db.messages.length).toBe(before); // 202, nothing sent
+    db.portalAccounts.find((a) => a.guardianId === "g_m_Ha")!.numberChangedAt = new Date(Date.now() - ACCOUNT_TEXT_LIMITS.resetHoldAfterNumberChangeMs - 1000).toISOString();
+    await reset("0917 000 0031");
+    expect(db.messages.at(-1)).toMatchObject({ kind: "password_reset", to: "09170000031" });
+  });
+
+  it("lists the demo clinic's texts signed out and to staff with portal.manage, never to other staff or parents", async () => {
+    signIn(null);
+    expect(await api("/auth/demo-texts", DemoTexts)).toHaveProperty("texts"); // the sign-in page's demo help
+    signIn("demo.clinic_demo.staff_reyes"); // a dentist
+    await expect(api("/auth/demo-texts", DemoTexts)).rejects.toMatchObject({ status: 404 });
+    signIn(FRONT_DESK);
+    expect((await api("/auth/demo-texts", DemoTexts)).texts.length).toBeGreaterThan(0);
   });
 });

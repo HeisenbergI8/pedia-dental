@@ -1,4 +1,4 @@
-import { Controller, Get, NotFoundException, Param, Post, Query, Req, Res } from "@nestjs/common";
+import { Controller, Delete, Get, HttpCode, NotFoundException, Param, Post, Query, Req, Res } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { identityOf } from "../auth/access.guard";
 import { viewerOf } from "../patients/patient.views";
@@ -21,6 +21,13 @@ export class PhotosController {
   @Post("patients/:id/photos")
   upload(@Req() req: Request, @Param("id") id: string) {
     return this.photos.upload(viewer(req), id, req);
+  }
+
+  // Audit #5: staff remove a file a parent sent (clinical.write). 200 {}: the web's api() reads a JSON body.
+  @Delete("photos/:id")
+  @HttpCode(200)
+  remove(@Param("id") id: string) {
+    return this.photos.remove(id);
   }
 
   // A 302 to a private link valid 5 minutes (decision 3); `?download=1` saves it (C1). no-store: every open is checked.

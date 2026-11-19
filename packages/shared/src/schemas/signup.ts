@@ -4,7 +4,7 @@ import { AddStaffInput } from "./clinic";
 import { Centavos, Id, IsoDateTime, isoDate } from "./common";
 import { AgreementRecord } from "./legal";
 import { PaymentQrView, ReceiptView } from "./payments";
-import { BranchInput, ClinicAccount, HeadingFont, HexColor, Tier } from "./tenancy";
+import { BranchInput, ClinicAccount, ClinicNameInput, HeadingFont, HexColor, Tier } from "./tenancy";
 
 /** Billing #6: how the clinic will look on day one. */
 export const BrandingChoice = z.enum(["own", "default", "designed"]);
@@ -39,7 +39,7 @@ export type BrandingInput = z.infer<typeof BrandingInput>;
  * branches and staff are the Owner's, after sign-in. The Owner is an Admin or a Dentist, never Front desk (#58).
  */
 export const SignupInput = z.object({
-  account: ClinicAccount.pick({ name: true, contactEmail: true, tin: true, tier: true }),
+  account: ClinicAccount.pick({ name: true, contactEmail: true, tin: true, tier: true }).extend({ name: ClinicNameInput }),
   branch: BranchInput,
   owner: AddStaffInput.pick({ fullName: true, email: true }).extend({ role: z.enum(["admin", "dentist"]) }),
   branding: BrandingInput,

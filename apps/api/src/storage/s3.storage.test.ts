@@ -1,6 +1,6 @@
 import { S3Client } from "@aws-sdk/client-s3";
 import { describe, expect, it } from "vitest";
-import { S3FileStorage } from "./s3.storage";
+import { S3FileStorage, linkFileName } from "./s3.storage";
 
 /** A fake client that records each command's input: put, get and delete never reach a network. */
 function fake(answer: (name: string) => unknown = () => ({})) {
@@ -37,15 +37,32 @@ describe("S3FileStorage (B10 E11)", () => {
     expect(ok.sent[0]).toMatchObject({ name: "DeleteObjectCommand", input: { Bucket: "files", Key: KEY } });
   });
 
-  it("presigns a 5-minute GET with the file's type and name, inline or as an attachment", async () => {
+  it("presigns a 5-minute GET with the file's type, inline or as an attachment, never naming the child (D #11)", async () => {
     const storage = new S3FileStorage(real(), "files", { encrypt: true });
-    const url = new URL(await storage.link(KEY, { contentType: "image/png", fileName: "bea.png", download: false, expiresInSeconds: 300 }));
+    const url = new URL(await storage.link(KEY, { contentType: "image/png", fileName: "mendoza-bea-photo.png", download: false, expiresInSeconds: 300 }));
     expect([url.host, url.pathname]).toEqual(["files.s3.ap-southeast-1.amazonaws.com", `/${KEY}`]);
     expect(url.searchParams.get("X-Amz-Expires")).toBe("300");
-    expect(url.searchParams.get("response-content-disposition")).toBe('inline; filename="bea.png"');
+    expect(url.searchParams.get("response-content-disposition")).toBe(`inline; filename="${linkFileName(KEY)}"`);
     expect(url.searchParams.get("response-content-type")).toBe("image/png");
-    const saved = new URL(await storage.link(KEY, { contentType: "image/png", fileName: "bea.png", download: true, expiresInSeconds: 300 }));
-    expect(saved.searchParams.get("response-content-disposition")).toBe('attachment; filename="bea.png"');
+    expect(url.href).not.toMatch(/mendoza|bea/i);
+    const saved = new URL(await storage.link(KEY, { contentType: "image/png", fileName: "mendoza-bea-photo.png", download: true, expiresInSeconds: 300 }));
+    expect(saved.searchParams.get("response-content-disposition")).toBe(`attachment; filename="${linkFileName(KEY)}"`);
+  });
+
+  it("names a link's file by its kind and a short hash of the key, for every area", () => {
+    expect(linkFileName(KEY)).toMatch(/^photo-[0-9a-f]{8}\.png$/);
+    expect(linkFileName("clinics/clinic_a/patients/p1.jpg")).toMatch(/^photo-[0-9a-f]{8}\.jpg$/);
+    expect(linkFileName("clinics/clinic_a/branding/b1.png")).toMatch(/^branding-[0-9a-f]{8}\.png$/);
+    expect(linkFileName("platform/signups/s1.svg")).toMatch(/^signup-file-[0-9a-f]{8}\.svg$/);
+    expect(linkFileName("platform/receipts/r1.pdf")).toMatch(/^payment-receipt-[0-9a-f]{8}\.pdf$/);
+    expect(linkFileName("platform/payment-qr/q1.webp")).toMatch(/^payment-qr-[0-9a-f]{8}\.webp$/);
+    expect(linkFileName("clinics/clinic_a/photos/f2.png")).not.toBe(linkFileName(KEY));
+  });
+
+  it("serves a stored SVG as an attachment, never inline (D #31)", async () => {
+    const storage = new S3FileStorage(real(), "files", { encrypt: true });
+    const url = new URL(await storage.link("platform/signups/s1.svg", { contentType: "image/svg+xml", fileName: "signup-file.svg", download: false, expiresInSeconds: 300 }));
+    expect(url.searchParams.get("response-content-disposition")).toMatch(/^attachment; filename="signup-file-[0-9a-f]{8}\.svg"$/);
   });
 
   it("presigns path-style for MinIO", async () => {

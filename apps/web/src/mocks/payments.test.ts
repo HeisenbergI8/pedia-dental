@@ -91,7 +91,7 @@ describe("Payments to check (decisions 8, 22)", () => {
   it("refuses a receipt whose month was then paid by hand, and lets the Owner send a new one after a rejection", async () => {
     asOperator();
     const [ngiti] = await toCheck();
-    await api("/operator/accounts/clinic_ngiti/subscription/payments", SubscriptionView, send("POST", { method: "cash", paidOn: "2026-10-18" }));
+    await api("/operator/accounts/clinic_ngiti/subscription/payments", SubscriptionView, { ...send("POST", { method: "cash", paidOn: "2026-10-18" }), headers: { "Idempotency-Key": crypto.randomUUID() } });
     expect(await message(confirm(ngiti!.id))).toBe("This month is already paid. Reject the receipt if it was sent twice.");
     expect((await api(`/operator/receipts/${ngiti!.id}/reject`, ReceiptToCheck, send("POST", { reason: "Paid in cash at the office" }))).status).toBe("rejected");
     asStaff(NGITI_OWNER);

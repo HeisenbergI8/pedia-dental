@@ -62,6 +62,29 @@ describe("the operator's audit trail", () => {
     expect((await rows()).map((r) => [r.action, r.detail])).toEqual([["sign_in", "Signed in"], ["sign_in_failed", "Wrong password"], ["sign_out", "Signed out"]]);
   });
 
+  it("records what changed: the plan, a sign-up's payment and rejection, the old and new fees, the support details (#28)", async () => {
+    const valuesOf = async (record: string) =>
+      (await prisma.operatorAuditEvent.findMany({ where: { record }, orderBy: { at: "asc" }, select: { values: true } })).map((r) => r.values);
+    expect((await http().put("/api/operator/accounts/clinic_ngiti/tier").set("Cookie", op).send({ tier: "mid" })).status).toBe(200);
+    expect(await valuesOf("Subscription")).toEqual([{ tier: "mid" }]);
+
+    const paid = await http().post("/api/operator/signups/signup_hagikgik/payment").set("Cookie", op).send({ method: "gcash", paidOn: "2026-10-18", reference: "GC-1" });
+    expect(paid.status).toBe(200);
+    expect(await valuesOf("Sign-up payment")).toEqual([{ method: "gcash", amount: paid.body.payment.amount }]);
+    expect((await http().post("/api/operator/signups/signup_hagikgik/reject").set("Cookie", op).send({ reason: "Asked to stop" })).status).toBe(200);
+    expect(await valuesOf("Sign-up")).toEqual([{ reason: "Asked to stop" }]);
+
+    const prices = (await http().get("/api/operator/prices").set("Cookie", op)).body;
+    const raised = { ...prices, plans: { ...prices.plans, small: { ...prices.plans.small, monthlyFee: prices.plans.small.monthlyFee + 100 } } };
+    expect((await http().put("/api/operator/prices").set("Cookie", op).send(raised)).status).toBe(200);
+    const fees = (list: typeof prices) => Object.fromEntries(Object.entries(list.plans as Record<string, { monthlyFee: number }>).map(([t, p]) => [t, p.monthlyFee]));
+    expect(await valuesOf("Price list")).toEqual([{ monthlyFeeBefore: fees(prices), monthlyFeeAfter: fees(raised) }]);
+
+    const support = { email: "help@primolar.demo", chatUrl: "https://chat.primolar.demo/help" };
+    expect((await http().put("/api/operator/support").set("Cookie", op).send(support)).status).toBe(200);
+    expect(await valuesOf("Support details")).toEqual([support]);
+  });
+
   it("is append-only", async () => {
     await http().post("/api/operator/accounts/clinic_ngiti/suspend").set("Cookie", op);
     const [row] = await prisma.operatorAuditEvent.findMany({ select: { id: true } });

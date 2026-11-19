@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { Readable } from "node:stream";
 import { describe, expect, it } from "vitest";
+import { jpegOf, pngOf } from "../../test/support/images";
 import { partsTooLargeToRead, readUpload, readUploads, tooLargeToRead } from "./multipart";
 import { sniff } from "./sniff";
 
@@ -110,6 +111,17 @@ describe("readUploads (B12 Step 5.2)", () => {
     const { size } = await import("node:fs/promises").then((fs) => fs.stat(upload.files.logo![0]!.path));
     expect(size).toBeLessThanOrEqual(1_001);
     await upload.dispose();
+  });
+
+  it("reads each whole image's pixel size from its header, and none for a cut-off one or a non-image (D #30)", async () => {
+    const req = await request([["logo", blob(pngOf(9000, 20), "image/png")], ["reference", blob(jpegOf(640, 480))], ["reference", blob(Buffer.from("%PDF-1.4 hi"), "application/pdf")]]);
+    const upload = await readUploads(req, { parts });
+    expect(upload.files.logo![0]!.pixels).toEqual({ width: 9000, height: 20 });
+    expect(upload.files.reference!.map((f) => f.pixels)).toEqual([{ width: 640, height: 480 }, undefined]);
+    await upload.dispose();
+    const cut = await readUploads(await request([["logo", blob(Buffer.concat([pngOf(9000, 20), Buffer.alloc(2_000)]), "image/png")]]), { parts });
+    expect([cut.files.logo![0]!.tooLarge, cut.files.logo![0]!.pixels]).toEqual([true, undefined]);
+    await cut.dispose();
   });
 
   it("refuses a body over twice what every part could hold together", () => {

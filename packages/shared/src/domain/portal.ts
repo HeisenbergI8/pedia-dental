@@ -35,5 +35,46 @@ export function accountText(purpose: PortalLinkPurpose, v: { clinicName: string;
     : `${v.clinicName}: Reset your parent portal password within 30 minutes. Didn't ask? Ignore this text. ${link}`;
 }
 
-export const ACCOUNT_TEXT_KINDS = ["portal_invite", "password_reset"] as const;
+/** Audit #21: to the old number when a parent's sign-in number changes. No link, so nothing to take over. */
+export const numberChangedText = (clinicName: string) =>
+  `Your Primolar sign-in number for ${clinicName} was changed. If this wasn't you, call the clinic.`;
+
+/** Fixed-word texts about a parent's portal account: sent at any hour, never refused, never counted toward the cap. */
+export const ACCOUNT_TEXT_KINDS = ["portal_invite", "password_reset", "sign_in_changed"] as const;
 export const isAccountText = (kind: string | undefined) => (ACCOUNT_TEXT_KINDS as readonly string[]).includes(kind ?? "");
+
+const DAY_MS = 24 * 60 * 60_000;
+/**
+ * Audit #3, #4, #21: what keeps account texts (never refused, never counted) from being a free bulk-SMS service. Rolling
+ * 24 hours. Data, not `if` statements.
+ * - `invitesPerGuardian`, `invitesPerClinic`: staff sends; past them the invite is refused (429, `inviteLimitMessage`).
+ * - `resetsPerClinic`: reset texts a clinic's parents may be sent; past it a request still answers 202 and sends nothing.
+ * - `resetHoldAfterNumberChangeMs`: no reset text for a login whose number changed this recently (202, nothing sent).
+ */
+export const ACCOUNT_TEXT_LIMITS = {
+  windowMs: DAY_MS,
+  invitesPerGuardian: 3,
+  invitesPerClinic: 200,
+  resetsPerClinic: 30,
+  resetHoldAfterNumberChangeMs: DAY_MS,
+} as const;
+
+/** The 429 staff see past an invite limit, in plain words. */
+export const inviteLimitMessage = (scope: "guardian" | "clinic", guardianName?: string) =>
+  scope === "guardian"
+    ? `${guardianName ?? "This parent"} has been sent ${ACCOUNT_TEXT_LIMITS.invitesPerGuardian} portal invites in the last day. Try again tomorrow.`
+    : `Your clinic has sent ${ACCOUNT_TEXT_LIMITS.invitesPerClinic} portal invites in the last day. Try again tomorrow.`;
+
+/** Which invite limit one more invite would pass, given the last day's counts; undefined when it may go. */
+export function inviteLimitReached(sentToGuardian: number, sentByClinic: number): "guardian" | "clinic" | undefined {
+  if (sentToGuardian >= ACCOUNT_TEXT_LIMITS.invitesPerGuardian) return "guardian";
+  if (sentByClinic >= ACCOUNT_TEXT_LIMITS.invitesPerClinic) return "clinic";
+  return undefined;
+}
+
+/** Why a reset text is held back (still 202, nothing sent), or undefined when it may go. */
+export function resetHeld(resetsByClinic: number, numberChangedAt: Date | undefined, now: Date): "clinic_ceiling" | "number_changed" | undefined {
+  if (numberChangedAt && now.getTime() - numberChangedAt.getTime() < ACCOUNT_TEXT_LIMITS.resetHoldAfterNumberChangeMs) return "number_changed";
+  if (resetsByClinic >= ACCOUNT_TEXT_LIMITS.resetsPerClinic) return "clinic_ceiling";
+  return undefined;
+}

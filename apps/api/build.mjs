@@ -64,3 +64,5 @@ const options = {
 await build({ ...options, entryPoints: ["src/main.ts"], outfile: `${outdir}/main.mjs` });
 // B13c2b-2: the operator's clinic data scripts ship in the image (dist/clinic-data.mjs), run as a one-off release task.
 await build({ ...options, entryPoints: ["prisma/clinic-data.ts"], outfile: `${outdir}/clinic-data.mjs` });
+// Security review #8: the operator's two-step enrolment (dist/operator-totp.mjs), run the same way.
+await build({ ...options, entryPoints: ["prisma/operator-totp.ts"], outfile: `${outdir}/operator-totp.mjs` });

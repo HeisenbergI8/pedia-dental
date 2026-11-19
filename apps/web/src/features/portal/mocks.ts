@@ -1,10 +1,10 @@
 import { http, HttpResponse } from "msw";
 import {
-  DemoTexts, PORTAL_LINK_LIFETIME_MS, PasswordLinkInput, PasswordResetInput, RESET_TEXTS_PER_HOUR, SetPasswordInput,
-  accountText, isAccountText, linkPath, maskedNumber, smsNumber,
+  ACCOUNT_TEXT_LIMITS, DemoTexts, PORTAL_LINK_LIFETIME_MS, PasswordLinkInput, PasswordResetInput, RESET_TEXTS_PER_HOUR, SetPasswordInput,
+  accountText, inviteLimitMessage, inviteLimitReached, isAccountText, linkPath, maskedNumber, numberChangedText, resetHeld, rolesCan, smsNumber,
   type Guardian, type PortalAccess, type PortalAccount, type PortalLinkRecord, type Session,
 } from "@pedia/shared";
-import { DEMO_CLINIC_ID } from "@pedia/seed";
+import { DEMO_CLINIC_ID, IPIN_ID, NGITI_ID } from "@pedia/seed";
 import { env } from "@/lib/env";
 import { userOf } from "@/features/auth/mocks";
 import { recordAudit, sessionOf } from "@/mocks/access";
@@ -12,6 +12,8 @@ import { currentAccount, currentClinicId, db, persist, platform, selectTenant } 
 import { accountsByLogin, allAccounts, emailTaken, portalAccountOf, tokenFor } from "@/mocks/demo-accounts";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
+/** Audit #23: the seeded demo clinics, the only ones whose texted links are listed. */
+const DEMO_CLINIC_IDS: readonly string[] = [DEMO_CLINIC_ID, NGITI_ID, IPIN_ID];
 const stamp = () => new Date().toISOString();
 
 /** 24 random bytes, base64url: the 32 characters PasswordLinkInput takes. */
@@ -51,14 +53,34 @@ export function portalNumberClash(g: Pick<Guardian, "id" | "phone">): string | u
   return holder && clashText(g, holder);
 }
 
-/** Decision 15: a guardian's number changed. Links already texted to the old one stop working (B11 audit). */
-export function portalNumberMoved(guardianId: string): void {
+/**
+ * Decision 15: a guardian's number changed. Links already texted to the old one stop working (B11 audit). Called before
+ * the new number is written, so `g.phone` is still the old one. Audit #21: an active parent's old number is told (an
+ * account text, no link), and resets wait a day.
+ */
+export function portalNumberMoved(guardianId: string, patientId: string): void {
   const a = portalAccountOf(db, guardianId);
   const g = guardianOf(guardianId);
   if (!a || !g) return;
   withdrawTexts(g);
   for (const l of a.links) if (liveLink(l)) l.cancelledAt = stamp();
+  if (a.state !== "active") return;
+  a.numberChangedAt = stamp();
+  if (smsNumber(g.phone)) {
+    const at = stamp();
+    db.messages.push({
+      id: crypto.randomUUID(), clinicId: currentClinicId(), patientId, kind: "sign_in_changed", channel: "sms", to: g.phone, recipientName: g.fullName,
+      body: numberChangedText(currentAccount().name), status: "queued", sendAt: at, createdAt: at,
+    });
+  }
 }
+
+/** Audit #3, #4: this account's links of `purpose` (one guardian's, if given) made in the last day. */
+const linksSince = (purpose: PortalLinkRecord["purpose"], guardianId?: string) =>
+  db.portalAccounts
+    .filter((a) => !guardianId || a.guardianId === guardianId)
+    .flatMap((a) => a.links)
+    .filter((l) => l.purpose === purpose && Date.parse(l.createdAt) > Date.now() - ACCOUNT_TEXT_LIMITS.windowMs).length;
 
 function portalAccessOf(g: Guardian): PortalAccess {
   const a = portalAccountOf(db, g.id);
@@ -141,6 +163,9 @@ export const portalHandlers = [
     if (a?.state === "active") return new HttpResponse(`${g.fullName} already uses the portal`, { status: 409 });
     const blocked = blockedReason(g);
     if (blocked) return new HttpResponse(blocked, { status: 409 });
+    // Audit #4: invites per guardian and per clinic in the last day.
+    const over = inviteLimitReached(linksSince("invite", g.id), linksSince("invite"));
+    if (over) return new HttpResponse(inviteLimitMessage(over, g.fullName), { status: 429 });
     if (!a) db.portalAccounts.push((a = { clinicId: currentClinicId(), guardianId: g.id, state: "invited", links: [] }));
     Object.assign(a, { state: "invited", invitedAt: stamp(), invitedBy: sessionOf(request)!.name, turnedOffAt: undefined });
     withdrawTexts(g);
@@ -212,6 +237,8 @@ export const portalHandlers = [
       const a = portalAccountOf(db, m.account.guardianId)!;
       const g = guardianOf(a.guardianId)!;
       if (!smsNumber(g.phone)) continue;
+      // Audit #3, #21: past the clinic's daily ceiling, or a day after a number change, nothing is sent (still 202).
+      if (resetHeld(linksSince("reset"), a.numberChangedAt ? new Date(a.numberChangedAt) : undefined, new Date())) continue;
       withdrawTexts(g); // only the newest reset text matters
       newLink(a, "reset");
       logAccountText("password_reset", g, db.patients.find((p) => p.guardians.some((x) => x.id === g.id))!.id);
@@ -222,8 +249,14 @@ export const portalHandlers = [
   }),
 
   // Prototype and demo deployments only (E6): the live links the demo would have texted, newest first, at most 5.
+  // Audit #23: only to signed-in staff with portal.manage, and only for a seeded demo clinic (every MSW clinic is one).
   http.get(url("/auth/demo-texts"), ({ request }) => {
-    if (!sessionOf(request)) selectTenant(DEMO_CLINIC_ID);
+    const session = sessionOf(request);
+    // Signed out: the demo clinic's texts (invented families), so the sign-in page's demo help works. Signed in: staff
+    // with portal.manage at a seeded demo clinic only (security review #23).
+    if (session && (!rolesCan(session.roles, "portal.manage") || !DEMO_CLINIC_IDS.includes(currentClinicId()))) {
+      return new HttpResponse("Not found", { status: 404 });
+    }
     const texts = db.portalAccounts
       .flatMap((a) => a.links.filter(liveLink).map((l) => ({ a, l })))
       .sort((x, y) => y.l.createdAt.localeCompare(x.l.createdAt))

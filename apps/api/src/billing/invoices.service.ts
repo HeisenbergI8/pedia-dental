@@ -6,6 +6,7 @@ import { RecordOwners } from "../auth/record-owners";
 import type { ClinicIdentity } from "../auth/identity.service";
 import { BillingRecordsService } from "../billing-records/billing-records.service";
 import { ClinicService } from "../clinic/clinic.service";
+import { reachesBranch } from "../common/branch-reach";
 import { Clock } from "../common/clock";
 import { refuse } from "../common/refusal";
 import { requireContext } from "../common/request-context";
@@ -76,14 +77,18 @@ export class InvoicesService implements OnModuleInit {
     });
   }
 
-  /** POST /invoices/:id/void: 404 → 400 → 409 voided → 409 paid → 200. No key: a repeat is a 409 (E9). */
+  /**
+   * POST /invoices/:id/void: 404 (also another branch's bill, #10) → 400 → 409 voided → 409 paid → 200. No key: a
+   * repeat is a 409 (E9).
+   */
   async void(invoiceId: string, body: unknown, who: ClinicIdentity): Promise<Invoice> {
     const patientId = await this.records.patientOfInvoice(invoiceId); // outside the transaction (B6 decision 3)
     if (!patientId) throw new NotFoundException(INVOICE_NOT_FOUND);
-    const { reason } = new ZodValidationPipe(VoidInvoiceInput).transform(body);
     return runInTransaction(this.prisma, async (tx) => {
       await lockPatient(tx, patientId);
       const invoice = (await this.records.lockInvoice(tx, invoiceId))!;
+      if (!reachesBranch(who, invoice.branchId)) throw new NotFoundException(INVOICE_NOT_FOUND);
+      const { reason } = new ZodValidationPipe(VoidInvoiceInput).transform(body);
       refuse(voidRefusal(invoice, (await this.records.paidOn(tx, invoiceId)).rows));
       const voided = await this.records.voidInvoice(tx, invoiceId, { at: this.clock.now(), by: who.staffId!, reason });
       await this.audit.record("update", "Invoice (voided)", patientId, tx);

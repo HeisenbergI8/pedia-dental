@@ -5,11 +5,13 @@ import {
   DEFAULT_OPENING_HOURS,
   DUPLICATE_EMAIL_MESSAGE,
   PriceList,
+  SIGNUP_REFUSED_MESSAGE,
   SignupStatusView,
+  UNPAID_SIGNUP_REASON,
   amountDue,
-  duplicateNameMessage,
   type GetStartedInput,
 } from "@pedia/shared";
+import { SEED_FILES } from "@pedia/seed";
 import { signupFormData } from "@/features/signup/form-data";
 import { ApiError, api } from "@/lib/api-client";
 import { env } from "@/lib/env";
@@ -84,13 +86,17 @@ describe("the public Get started form (billing #4–#11)", () => {
     expect(await status(submit(form("four", { choice: "designed", brief: "x" }), { references: [png(), png(), png(), png()] }))).toBe(400);
   });
 
-  it("refuses a name or contact email already on Primolar or waiting, ignoring case and spaces (billing #10)", async () => {
+  it("refuses a name or contact email already on Primolar or waiting without saying which, unless it is the same waiting sign-up (billing #10, #29)", async () => {
     const clinicName = { ...form("dup1", { choice: "default" }), account: { ...form("dup1", { choice: "default" }).account, name: "  bulilit SMILES pediatric   dental" } };
-    await expect(submit(clinicName)).rejects.toMatchObject({ status: 409, message: duplicateNameMessage(clinicName.account.name) });
+    await expect(submit(clinicName)).rejects.toMatchObject({ status: 409, message: SIGNUP_REFUSED_MESSAGE });
     const waitingName = { ...form("dup2", { choice: "default" }), account: { ...form("dup2", { choice: "default" }).account, name: "Hagikgik Kids Dental" } };
-    expect(await status(submit(waitingName))).toBe(409); // the seeded sign-up, still waiting
+    await expect(submit(waitingName)).rejects.toMatchObject({ status: 409, message: SIGNUP_REFUSED_MESSAGE }); // the seeded sign-up, still waiting
     const email = { ...form("dup3", { choice: "default" }), account: { ...form("dup3", { choice: "default" }).account, contactEmail: "Hello@Ngiti.demo" } };
-    await expect(submit(email)).rejects.toMatchObject({ status: 409, message: DUPLICATE_EMAIL_MESSAGE });
+    await expect(submit(email)).rejects.toMatchObject({ status: 409, message: SIGNUP_REFUSED_MESSAGE });
+    // Sent twice: the same name and email as a waiting sign-up tells the sender only what they typed.
+    const again = form("dup4", { choice: "default" });
+    await submit(again);
+    await expect(submit({ ...again, account: { ...again.account, name: ` ${again.account.name.toUpperCase()} `, contactEmail: again.account.contactEmail.toUpperCase() } })).rejects.toMatchObject({ status: 409, message: DUPLICATE_EMAIL_MESSAGE });
   });
 
   it("shows a sign-up by its reference, in any case, and nothing private (A1)", async () => {
@@ -131,5 +137,24 @@ describe("B12: the hourly limit and rejected sign-ups' files (decisions 14, 15)"
     vi.stubGlobal("document", { cookie: "pd_operator=operator.operator_primolar" });
     await expect(api(`/operator/signups/${old.id}/files/${key}`, z.unknown())).rejects.toMatchObject({ status: 404 });
     vi.stubGlobal("document", { cookie: "" });
+  });
+
+  it("rejects a sign-up still unpaid 14 days after it was sent, freeing its name, and leaves one whose receipt waits (#17)", async () => {
+    const [old, recent, checking] = await Promise.all(["Unpaid", "Recent", "Checking"].map((n) => submit(form(n, { choice: "default" }))));
+    const signup = (s: SignupStatusView) => platform.signups.find((x) => x.reference === s.reference)!;
+    const sentAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+    Object.assign(signup(old), { submittedAt: sentAgo(15) });
+    Object.assign(signup(recent), { submittedAt: sentAgo(12) });
+    const receipt = new FormData();
+    receipt.append("data", JSON.stringify({ reference: "BPI 14" }));
+    receipt.append("file", new File([SEED_FILES["image/png"].slice()], "receipt.png", { type: "image/png" }));
+    await api(`/signups/${checking.reference}/receipts`, SignupStatusView, { method: "POST", body: receipt });
+    Object.assign(signup(checking), { submittedAt: sentAgo(15) });
+    resetPurge();
+    await api("/signups/prices", z.unknown()); // any request runs the daily jobs
+    expect(await api(`/signups/${old.reference}`, SignupStatusView)).toMatchObject({ status: "rejected", rejectionReason: UNPAID_SIGNUP_REASON });
+    expect((await api(`/signups/${recent.reference}`, SignupStatusView)).status).toBe("waiting");
+    expect((await api(`/signups/${checking.reference}`, SignupStatusView)).status).toBe("waiting");
+    expect((await submit(form("Unpaid", { choice: "default" }))).status).toBe("waiting"); // the name and email are free again
   });
 });

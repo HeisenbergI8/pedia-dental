@@ -6,7 +6,10 @@ out
 cdk.out
 dist
 coverage
+.env
+.env.*
 .env*.local
+!.env.example
 *.tsbuildinfo
 .DS_Store
 

@@ -68,6 +68,9 @@ model OperatorAuditEvent {
   /// The route's :id (a clinic account, sign-up or receipt), or the created clinic's id. Null for the price list,
   /// the QR and sign-in events.
   targetId     String?
+  /// #28: what changed, small and flat (AuditValues): the target plan, a payment's method and amount, the old and new
+  /// monthly fees, the support details, a rejection's reason. Never patient data. Null for events before #28.
+  values       Json?
 
   @@index([at])
   @@index([targetId, at])
@@ -246,6 +249,8 @@ model PortalAccount {
   invitedBy   String?            @db.VarChar(191)
   activatedAt DateTime?
   turnedOffAt DateTime?
+  /// Audit #21: when an active parent's sign-in number last changed. Reset texts are held for 24 hours after it.
+  numberChangedAt DateTime?
 
   @@id([clinicId, guardianId])
 }
@@ -273,6 +278,8 @@ model PortalLink {
   cancelledAt DateTime?
 
   @@index([clinicId, guardianId, purpose])
+  /// Audit #3, #4: a clinic's invites and resets in the last day.
+  @@index([clinicId, purpose, createdAt])
   @@index([expiresAt])
 }
 
@@ -301,6 +308,11 @@ model OperatorUser {
   name         String
   email        String @unique
   passwordHash String
+  /// Security review #8: the TOTP secret, base32, set by `prisma/operator-totp.ts`. Null: not enrolled, which only demo
+  /// and local deployments let sign in.
+  totpSecret   String? @db.VarChar(64)
+  /// The last TOTP step a sign-in accepted, so a code works once (`IdentityService.useTotpStep`).
+  totpLastStep Int?
 }
 
 /// A signed-in operator, on its own cookie (pd_operator) and its own table, so it can't be mistaken for a clinic
@@ -432,6 +444,7 @@ enum LoggedMessageKind {
   birthday
   portal_invite
   password_reset
+  sign_in_changed
 }
 
 /// A parent message's wording (MessageTemplate in @pedia/shared): one per kind per clinic, edited on the Messages page.
@@ -529,7 +542,9 @@ model DemoLogin {
 /// MySQL, so every instance shares them). Platform: counted before anyone is signed in. Written only by
 /// RateLimitService, with raw SQL (INSERT … ON DUPLICATE KEY UPDATE). Old windows are swept by B1-c's scheduler.
 model RateLimitCounter {
-  /// `<group>:<client ip>`, e.g. `login:203.0.113.7` (rate-limit.ts → bucketOf).
+  /// `<group>:<client ip>`, e.g. `login:203.0.113.7` (rate-limit.ts → bucketOf). Security review #7 and #9 add
+  /// `signin:<sha256 of the login>` (one row per wrong password, `windowStart` its time) and `pins:<sha256 of the
+  /// session>` (wrong PINs per session), hashed so the table never holds an email, a mobile or a token.
   bucket      String   @db.VarChar(191)
   windowStart DateTime
   hits        Int
@@ -1238,6 +1253,8 @@ enum DesignStatus {
 enum SubscriptionPause {
   overdue
   cancelled
+  /// #27: the operator suspended the clinic by hand; only their Reactivate clears it.
+  manual
 }
 
 /// Who a receipt is from (ReceiptPayer.kind).
@@ -1387,6 +1404,8 @@ model SubscriptionPayment {
 
   @@unique([clinicId, periodStart])
   @@index([clinicId, recordedAt])
+  /// #18: "this payment is already recorded" (the same reference on the same paid date) is one indexed read.
+  @@index([clinicId, paidOn])
 }
 
 /// One line of a Primolar invoice (S15). Append-only.

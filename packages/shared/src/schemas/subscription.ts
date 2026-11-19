@@ -22,8 +22,12 @@ export const SubscriptionPayment = UpfrontPayment.extend({
 });
 export type SubscriptionPayment = z.infer<typeof SubscriptionPayment>;
 
-/** Why the subscription paused the clinic (S3). Absent for a pause the operator made by hand. */
-export const SubscriptionPause = z.enum(["overdue", "cancelled"]);
+/**
+ * Why the clinic is paused (S3): the subscription (`overdue`, `cancelled`) or the operator by hand (`manual`, #27). Only
+ * the operator's Reactivate clears `manual`; a payment and the settle lift only the subscription's own pauses.
+ * Absent for an active clinic (and for a pause made by hand before #27).
+ */
+export const SubscriptionPause = z.enum(["overdue", "cancelled", "manual"]);
 export type SubscriptionPause = z.infer<typeof SubscriptionPause>;
 
 /**

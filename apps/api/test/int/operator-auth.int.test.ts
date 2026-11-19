@@ -4,6 +4,7 @@ import { OperatorSession, OperatorUser } from "@pedia/shared";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Hasher } from "../../src/auth/hashing";
+import { base32Decode, hotp, newTotpSecret, totpStep } from "../../src/auth/totp";
 import { PrismaService } from "../../src/prisma/prisma.service";
 import { seedDatabase } from "../../src/seed/seed-database";
 import { resetDatabase } from "./support/database";
@@ -49,6 +50,37 @@ describe("operator sign-in on MySQL", () => {
     expect((await http().get("/api/operator/auth/me").set("Cookie", `pd_operator=${clinicToken}`)).status).toBe(401);
     const op = cookie(await operatorLogin(DEMO_PASSWORD), "pd_operator")!;
     expect((await http().get("/api/auth/me").set("Cookie", op.replace("pd_operator", "pd_session"))).status).toBe(401);
+  });
+
+  it("asks an enrolled operator for the authenticator code, and takes each code once (security review #8)", async () => {
+    const secret = newTotpSecret();
+    await prisma.operatorUser.update({ where: { email: OPERATOR_EMAIL }, data: { totpSecret: secret, totpLastStep: null } });
+    try {
+      const withCode = (code?: string) => http().post("/api/operator/auth/login").send({ email: OPERATOR_EMAIL, password: DEMO_PASSWORD, code });
+      const none = await withCode();
+      expect([none.status, none.text]).toEqual([401, "Enter the 6-digit code from your authenticator app"]);
+      const code = hotp(base32Decode(secret)!, totpStep(new Date()));
+      const ok = await withCode(code.replace(/^(\d{3})/, "$1 ")); // as the app shows it, "123 456"
+      expect([ok.status, cookie(ok, "pd_operator")]).toEqual([200, expect.stringMatching(/^pd_operator=/)]);
+      const replayed = await withCode(code);
+      expect([replayed.status, replayed.text]).toEqual([401, expect.stringContaining("already used")]);
+      expect((await prisma.operatorUser.findUniqueOrThrow({ where: { email: OPERATOR_EMAIL } })).totpLastStep).toBeGreaterThan(0);
+      // Two parallel sign-ins with one fresh code: only one gets in.
+      await prisma.operatorUser.update({ where: { email: OPERATOR_EMAIL }, data: { totpLastStep: null } });
+      await prisma.rateLimitCounter.deleteMany();
+      const fresh = hotp(base32Decode(secret)!, totpStep(new Date()));
+      const both = await Promise.all([withCode(fresh), withCode(fresh)]);
+      expect(both.map((r) => r.status).sort()).toEqual([200, 401]);
+    } finally {
+      await prisma.operatorUser.update({ where: { email: OPERATOR_EMAIL }, data: { totpSecret: null, totpLastStep: null } });
+    }
+  });
+
+  it("locks the operator login after five wrong passwords, as the clinic sign-in (security review #7)", async () => {
+    for (let i = 0; i < 5; i++) expect((await operatorLogin("nope")).status).toBe(401);
+    const locked = await operatorLogin(DEMO_PASSWORD);
+    expect([locked.status, locked.text]).toEqual([429, "Too many wrong passwords. Try again in 1 minute."]);
+    await prisma.rateLimitCounter.deleteMany();
   });
 
   it("ends the operator session on sign-out", async () => {

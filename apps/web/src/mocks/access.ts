@@ -207,6 +207,8 @@ const RULES: Rule[] = [
   { method: "GET", path: "/patients/:id/photos", permission: ["clinical.view", "uploads.create"], owner: byId, audit: "Photos" },
   { method: "POST", path: "/patients/:id/photos", permission: ["clinical.write", "uploads.create"], owner: byId, audit: "Photo" },
   { method: "GET", path: "/photos/:id/file", permission: ["clinical.view", "uploads.create"], owner: via(() => db.photos), audit: "Photo" },
+  // Audit #5: staff remove a file a parent sent (the handler refuses the clinic's own photos).
+  { method: "DELETE", path: "/photos/:id", permission: "clinical.write", owner: via(() => db.photos) },
   // Treatment plan
   { method: "GET", path: "/patients/:id/plan", permission: "plan.view", owner: byId, audit: "Treatment plan" },
   { method: "POST", path: "/patients/:id/plan", permission: "plan.write", audit: "Treatment plan", action: "update" },

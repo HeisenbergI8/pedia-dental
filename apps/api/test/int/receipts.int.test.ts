@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { INestApplication } from "@nestjs/common";
 import { DEMO_CLINIC_ID, SEED_PRICES, seedPlatform } from "@pedia/seed";
-import { CreateAccountResult, DEFAULT_OPENING_HOURS, RECEIPT_PENDING, ReceiptToCheck, SignupStatusView, SubscriptionView } from "@pedia/shared";
+import { CreateAccountResult, DEFAULT_OPENING_HOURS, RECEIPT_PENDING, ReceiptToCheck, SignupStatusView, SubscriptionView, UNPAID_SIGNUP_REASON } from "@pedia/shared";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Hasher } from "../../src/auth/hashing";
@@ -91,7 +91,7 @@ describe("the Owner's receipts (decisions 6, 21, 24)", () => {
     const month = (await prisma.paymentReceipt.findUniqueOrThrow({ where: { id: SEEDED } })).periodStart!;
     const [byReceipt, byHand] = await Promise.all([
       confirm(SEEDED),
-      http().post(`/api/operator/accounts/${IPIN}/subscription/payments`).set("Cookie", op).send({ method: "cash", paidOn: clock.today() }),
+      http().post(`/api/operator/accounts/${IPIN}/subscription/payments`).set("Cookie", op).set("Idempotency-Key", crypto.randomUUID()).send({ method: "cash", paidOn: clock.today() }),
     ]);
     expect(byHand.status).toBe(201);
     expect([200, 409]).toContain(byReceipt.status);
@@ -163,7 +163,7 @@ describe("the Owner's receipts (decisions 6, 21, 24)", () => {
   });
 
   it("refuses a receipt whose month was then paid by hand, and lets the Owner send a new one after a rejection", async () => {
-    const byHand = await http().post(`/api/operator/accounts/${IPIN}/subscription/payments`).set("Cookie", op).send({ method: "cash", paidOn: clock.today() });
+    const byHand = await http().post(`/api/operator/accounts/${IPIN}/subscription/payments`).set("Cookie", op).set("Idempotency-Key", crypto.randomUUID()).send({ method: "cash", paidOn: clock.today() });
     expect(byHand.status).toBe(201);
     const refused = await confirm(SEEDED);
     expect([refused.status, refused.text]).toEqual([409, "This month is already paid. Reject the receipt if it was sent twice."]);
@@ -270,5 +270,42 @@ describe("a sign-up's receipt (decision 7) and the purge (decision 15)", () => {
     op = await asOperator(app);
     const res = await http().get(`/api/operator/signups/${old.id}/files/${encodeURIComponent(key)}`).set("Cookie", op);
     expect([res.status, res.text]).toEqual([404, "That file isn't part of this sign-up"]);
+  });
+
+  it("rejects a sign-up still unpaid 14 days after it was sent, freeing its name, and leaves one whose receipt waits (#17)", async () => {
+    const data = (n: string) => ({
+      account: { name: `Ngipin ${n} Dental`, contactEmail: `hello@${n}.demo`, tin: "567-890-123", tier: "small" },
+      branch: { name: "Tagaytay", address: "1 Aguinaldo Hi-way, Tagaytay", phone: "(046) 483 0000", openingHours: DEFAULT_OPENING_HOURS },
+      owner: { fullName: `Dr. ${n} Cruz`, email: `owner@${n}.demo`, role: "admin" },
+      branding: { choice: "default" },
+      acceptTerms: true,
+    });
+    const submit = async (n: string) => {
+      const res = await http().post("/api/signups").field("data", JSON.stringify(data(n)));
+      expect(res.status).toBe(201);
+      return SignupStatusView.parse(res.body).reference;
+    };
+    const statusOf = async (reference: string) => SignupStatusView.parse((await http().get(`/api/signups/${reference}`)).body);
+    const old = await submit("unpaid");
+    const checking = await submit("checking");
+    expect((await upload(http().post(`/api/signups/${checking}/receipts`), "BPI-14")).status).toBe(201);
+    clock.set(new Date(start + 3 * 86_400_000));
+    const recent = await submit("recent");
+    const signups = app.get(SignupsService);
+    clock.set(new Date(start + 13 * 86_400_000));
+    expect(await signups.expireUnpaid()).toBe(1); // only the seeded Hagikgik, sent 3 days before the seed: 16 days now
+    clock.set(new Date(start + 15 * 86_400_000));
+    expect(await signups.expireUnpaid()).toBe(1); // "unpaid", 15 days; "recent" is 12 days old
+    expect(await signups.expireUnpaid()).toBe(0); // idempotent
+    expect(await statusOf(old)).toMatchObject({ status: "rejected", rejectionReason: UNPAID_SIGNUP_REASON });
+    expect((await statusOf(HAGIKGIK)).rejectionReason).toBe(UNPAID_SIGNUP_REASON);
+    expect([(await statusOf(recent)).status, (await statusOf(checking)).status]).toEqual(["waiting", "waiting"]);
+    await prisma.rateLimitCounter.deleteMany();
+    expect((await http().post("/api/signups").field("data", JSON.stringify(data("unpaid")))).status).toBe(201); // the name and email are free again
+    // Its files go 30 days after the rejection, as any rejected sign-up's.
+    clock.set(new Date(start + 44 * 86_400_000));
+    expect(await signups.purgeRejectedFiles()).toBe(1); // Hagikgik, rejected 31 days ago; "unpaid" 29
+    clock.set(new Date(start + 45 * 86_400_000));
+    expect(await signups.purgeRejectedFiles()).toBe(1);
   });
 });

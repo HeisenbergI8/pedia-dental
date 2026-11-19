@@ -17,6 +17,10 @@
     "githubOidcProviderArn": "",
     "semaphoreSecretArn": "",
     "smsSenderName": "",
-    "databaseHostOverride": ""
+    "databaseHostOverride": "",
+    "databaseRequireTls": false,
+    "apiDatabaseUser": "master",
+    "waf": true,
+    "wafBlock": false
   }
 }

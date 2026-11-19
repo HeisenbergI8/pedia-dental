@@ -8,7 +8,8 @@ const Env = z.object({
   DATABASE_URL: z.string().startsWith("mysql://", "DATABASE_URL must be a mysql:// URL"),
   PORT: z.coerce.number().int().positive().default(4100),
   // B13a: which kind of deployment this is. `demo` and `production` are hosted: they need https origins, secure cookies,
-  // a real WEB_URL and shared storage. Only `production` refuses DEMO_LOGINS (real clinics' data).
+  // a real WEB_URL and shared storage. Only `production` refuses DEMO_LOGINS (real clinics' data). The `local` default
+  // is refused when NODE_ENV=production (loadEnv), and the image sets APP_ENV=production, so a hosted API fails closed.
   APP_ENV: z.enum(["local", "demo", "production"]).default("local"),
   // The web app's origins, allowed by CORS (comma-separated, each scheme://host[:port], no path, never "*").
   CORS_ORIGIN: z.string().default("http://localhost:3000").transform(originsOf),
@@ -61,6 +62,14 @@ const Env = z.object({
   SEMAPHORE_URL: z.url().default("https://api.semaphore.co/api/v4/messages"),
   // B11: the web app's address, which texted invite and reset links open. Set it in production (the default is dev's).
   WEB_URL: z.url().default("http://localhost:3000"),
+  // #2: the origin lock. Every request but the health probes must carry it in X-Primolar-Origin (origin-check.ts),
+  // which only the web's /api proxy sends. Required outside APP_ENV=local (from Secrets Manager, primolar/origin-secret).
+  ORIGIN_SECRET: z.string().min(32, "ORIGIN_SECRET must be at least 32 characters").optional(),
+}).superRefine((env, ctx) => {
+  // #2: a hosted API answers only its own web's proxy.
+  if (env.APP_ENV !== "local" && !env.ORIGIN_SECRET) {
+    ctx.addIssue({ code: "custom", path: ["ORIGIN_SECRET"], message: "ORIGIN_SECRET is required outside APP_ENV=local" });
+  }
 }).superRefine((env, ctx) => {
   // B13c1 E5: a nightly wipe only where the data is the demo's by definition.
   if (env.DEMO_DAILY_RESET && (env.APP_ENV !== "demo" || !env.DEMO_LOGINS)) {
@@ -75,6 +84,8 @@ const Env = z.object({
   // A hosted API must be told its web's address: the localhost defaults would let any local page call it.
   if (env.CORS_ORIGIN.some((origin) => !origin.startsWith("https://"))) problem("CORS_ORIGIN", "CORS_ORIGIN must list only https:// origins outside APP_ENV=local");
   if (!env.WEB_URL.startsWith("https://")) problem("WEB_URL", "WEB_URL must be the web app's https:// address outside APP_ENV=local");
+  // The API key travels in the request body: never in clear text from a hosted API.
+  if (!env.SEMAPHORE_URL.startsWith("https://")) problem("SEMAPHORE_URL", "SEMAPHORE_URL must be an https:// address outside APP_ENV=local");
   if (!env.COOKIE_SECURE) problem("COOKIE_SECURE", "COOKIE_SECURE can't be false outside APP_ENV=local");
   // The local-disk driver is per instance and its links die with the process (CONVENTIONS → Traps).
   if (!env.S3_BUCKET) problem("S3_BUCKET", "S3_BUCKET is required outside APP_ENV=local");
@@ -97,10 +108,32 @@ export type Env = z.infer<typeof Env>;
 /** Parsed once at startup, so a missing or malformed variable stops the API before it listens. */
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   const parsed = Env.safeParse(source);
-  if (!parsed.success) {
-    throw new Error(`Invalid environment:\n${parsed.error.issues.map((i) => `  ${i.path.join(".")}: ${i.message}`).join("\n")}`);
+  const issues = parsed.success ? [] : parsed.error.issues.map((i) => `  ${i.path.join(".")}: ${i.message}`);
+  // Fail closed: a production build (the image sets NODE_ENV=production) started without APP_ENV would otherwise
+  // default to local and skip every hosted check above.
+  if (source.NODE_ENV === "production" && (source.APP_ENV ?? "local") === "local") {
+    issues.push("  APP_ENV: APP_ENV must be demo or production when NODE_ENV=production (local skips the hosted checks)");
   }
+  if (!parsed.success || issues.length) throw new Error(`Invalid environment:\n${issues.join("\n")}`);
   return parsed.data;
+}
+
+/**
+ * For one-off scripts run as a task (operator-totp, the backfills, clinic-data): they serve no web traffic, so the
+ * web-facing settings (the origin lock, CORS, the web's address) get inert placeholders when absent, and no jobs run.
+ * Every other rule still applies: APP_ENV stays as given, so a script can't pretend production is local.
+ * `storage: false` (database-only scripts) also stands in for S3_BUCKET.
+ */
+export function loadScriptEnv(source: NodeJS.ProcessEnv = process.env, { storage = true }: { storage?: boolean } = {}): Env {
+  const inert = "https://script.invalid";
+  return loadEnv({
+    ...source,
+    ORIGIN_SECRET: source.ORIGIN_SECRET ?? "script-task-no-http-listener-placeholder",
+    CORS_ORIGIN: source.CORS_ORIGIN ?? inert,
+    WEB_URL: source.WEB_URL ?? inert,
+    BACKGROUND_WORK: "false",
+    ...(storage ? {} : { S3_BUCKET: source.S3_BUCKET ?? "script-task-no-storage" }),
+  });
 }
 
 export const ENV = Symbol("ENV");

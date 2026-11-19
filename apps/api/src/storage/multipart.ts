@@ -8,6 +8,7 @@ import { type Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { BadRequestException } from "@nestjs/common";
 import busboy from "busboy";
+import { IMAGE_EXTENSIONS, type Pixels, imageSizeOfFile, sniff } from "./sniff";
 
 const DIR = join(tmpdir(), "primolar-uploads");
 /** `meta` is a few hundred bytes; anything past this is cut and then refused as not JSON. */
@@ -15,7 +16,8 @@ const FIELD_BYTES = 64 * 1024;
 const HEAD_BYTES = 16;
 
 /** One spooled file part, on this instance's disk (E1). `bytes` stops one past maxBytes; `tooLarge` says the part went past it. */
-export type SpooledFile = { path: string; bytes: number; claimedType: string; head: Buffer; tooLarge: boolean };
+/** `pixels`: an image's size from its header (D #30), read once the file is whole; absent for anything else or a header that doesn't say. */
+export type SpooledFile = { path: string; bytes: number; claimedType: string; head: Buffer; tooLarge: boolean; pixels?: Pixels | undefined };
 export type Upload = { fields: ReadonlyMap<string, string>; file?: SpooledFile; dispose(): Promise<void> };
 /** B12: several named file parts (a sign-up's logo and reference images): each name keeps up to `max` files. */
 export type Uploads = { fields: ReadonlyMap<string, string>; files: Record<string, SpooledFile[]>; dispose(): Promise<void> };
@@ -102,6 +104,14 @@ export async function readUploads(req: Req, { parts }: { parts: PartRules }): Pr
     await Promise.all(writes);
   } catch {
     throw await refused();
+  }
+  // Each whole image's size from its header, for the routes' pixel check (D #30). A file cut at its limit is refused anyway.
+  const images = Object.values(files).flat().filter((f) => !f.tooLarge && IMAGE_EXTENSIONS.includes(sniff(f.head)!));
+  try {
+    await Promise.all(images.map(async (f) => { f.pixels = await imageSizeOfFile(f.path); }));
+  } catch (error) {
+    await dispose();
+    throw error;
   }
   return { fields, files, dispose };
 }

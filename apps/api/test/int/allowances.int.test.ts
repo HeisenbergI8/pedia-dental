@@ -85,6 +85,32 @@ describe("storage (decision 1, E8)", () => {
   });
 });
 
+describe("storage while a downgrade waits (audit #25)", () => {
+  it("counts the smaller plan's storage until the downgrade's date", async () => {
+    const BULILIT = "clinic_demo";
+    const tenant = platform.tenants[BULILIT]!;
+    const kid = tenant.patients.find((p) => !choiceDeclined(p, "photos"))!;
+    const dentist = `pd_session=${await app.get(SessionService).openClinic(BULILIT, "staff_reyes")}`;
+    const usedHere = () => inClinic(BULILIT, async () => (await prisma.storedFile.aggregate({ _sum: { bytes: true } }))._sum.bytes ?? 0);
+    const room = TIER_LIMITS.small.storageBytes - (await usedHere()) - 1024; // 1 KB left on Starter
+    await inClinic(BULILIT, () =>
+      prisma.storedFile.createMany({
+        data: Array.from({ length: Math.ceil(room / GB) }, (_, i) => ({
+          clinicId: BULILIT, key: `clinics/${BULILIT}/photos/filler-${i}.png`, area: "photos", bytes: Math.min(GB, room - i * GB), createdAt: clock.now(),
+        })),
+      }),
+    );
+    const send = () =>
+      http().post(`/api/patients/${kid.id}/photos`).set("Cookie", dentist)
+        .field("meta", JSON.stringify({ type: "intraoral", takenOn: day, caption: "" })).attach("file", jpeg(4096), { filename: "p.jpg", contentType: "image/jpeg" });
+    await prisma.subscription.update({ where: { clinicId: BULILIT }, data: { downgradeTier: "small", downgradeOn: new Date(`${day}T00:00:00Z`) } });
+    const refused = await send();
+    expect([refused.status, refused.text]).toEqual([409, storageFullMessage("small")]);
+    await prisma.subscription.update({ where: { clinicId: BULILIT }, data: { downgradeTier: null, downgradeOn: null } });
+    expect((await send()).status).toBe(201); // the plan in force has room
+  });
+});
+
 describe("texts (decisions 2, 3, 18, 19, E9)", () => {
   /** A text already handed to the provider at `at`, with `parts` billed parts. */
   const dispatched = (parts: number, at: Date) =>
@@ -160,6 +186,37 @@ describe("texts (decisions 2, 3, 18, 19, E9)", () => {
     await app.get(OutboxWorker).drain();
     const sent = (await invites()).filter((m) => !before.has(m.id));
     expect(sent.map((m) => m.status)).toEqual(["sent"]); // account texts always go (decision 3)
+  });
+
+  it("counts template texts only toward the month, never invites or resets (audit #3)", async () => {
+    await dispatched(TIER_LIMITS.small.textParts - 1, new Date(`${month}-01T09:00:00+08:00`));
+    const before = ClinicUsage.parse((await http().get("/api/clinic/usage").set("Cookie", await owner())).body).texts.inUse;
+    const at = new Date(`${month}-01T10:00:00+08:00`);
+    await inClinic(NGITI, () =>
+      prisma.message.create({
+        data: {
+          clinicId: NGITI, patientId: child.id, kind: "password_reset", to: child.guardians[0]!.phone, recipientName: "x", body: "x",
+          status: "sent", sendAt: at, createdAt: at, dispatchedAt: at, sentAt: at, segments: 400,
+        },
+      }),
+    );
+    expect(ClinicUsage.parse((await http().get("/api/clinic/usage").set("Cookie", await owner())).body).texts.inUse).toBe(before); // in the log, not the count
+    await queued("reminder_g", "appointment_reminder");
+    await app.get(OutboxWorker).drain();
+    expect(await statusOf("reminder_g")).toBe("sent"); // the last part is still the clinic's
+  });
+
+  it("fails a paused clinic's template texts for good and still sends its account texts (audit #24)", async () => {
+    await prisma.clinicAccount.update({ where: { id: NGITI }, data: { status: "suspended" } });
+    await queued("reminder_h", "appointment_reminder");
+    await queued("invite_h", "portal_invite");
+    await app.get(OutboxWorker).drain();
+    expect(await statusOf("invite_h")).toBe("sent");
+    const failed = await inClinic(NGITI, () => prisma.message.findUniqueOrThrow({ where: { id: "reminder_h" } }));
+    expect([failed.status, failed.failureReason, failed.dispatchedAt]).toEqual(["failed", FAILURE.clinicPaused, null]);
+    await prisma.clinicAccount.update({ where: { id: NGITI }, data: { status: "active" } });
+    await app.get(OutboxWorker).drain();
+    expect(await statusOf("reminder_h")).toBe("failed"); // never sent later
   });
 
   it("shows the same storage and texts on the Plan and in the console", async () => {

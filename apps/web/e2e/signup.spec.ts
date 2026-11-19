@@ -126,6 +126,8 @@ async function expectFieldError(page: Page, label: string, message: string | Reg
   await expect(field(page, label)).toHaveAccessibleDescription(message instanceof RegExp ? message : new RegExp(escape(message)));
 }
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** #29: SIGNUP_REFUSED_MESSAGE (@pedia/shared), the public form's words for any clash it can't name. */
+const SIGNUP_REFUSED = "We couldn't take this sign-up. If your clinic already uses Primolar, contact us.";
 
 // ---------- helpers: the operator console and the new Owner ----------
 
@@ -428,11 +430,12 @@ test.describe("failed paths", () => {
     await expect(thanks, "the sign-up was sent with a phone of 'wala pa'").toHaveCount(0);
   });
 
+  // #29: the public form never says which clinic or email is on Primolar.
   test("a clinic name already on Primolar is refused, ignoring case and extra spaces", async ({ page }) => {
     await openGetStarted(page);
     await fillClinic(page, clinic({ name: "  bulilit   SMILES pediatric dental " }));
     await submitAttempt(page);
-    await expectFieldError(page, "Clinic name", /already on Primolar or waiting to join\. Contact Primolar if it's yours\./);
+    await expect(page.getByRole("alert").filter({ hasText: SIGNUP_REFUSED })).toBeVisible();
     await expect(page).toHaveURL(/\/get-started$/);
   });
 
@@ -440,14 +443,14 @@ test.describe("failed paths", () => {
     await openGetStarted(page);
     await fillClinic(page, clinic({ name: "hagikgik kids dental" }));
     await submitAttempt(page);
-    await expectFieldError(page, "Clinic name", /already on Primolar or waiting to join/);
+    await expect(page.getByRole("alert").filter({ hasText: SIGNUP_REFUSED })).toBeVisible();
   });
 
   test("a contact email that already belongs to a clinic is refused, whatever its case", async ({ page }) => {
     await openGetStarted(page);
     await fillClinic(page, clinic({ contactEmail: "HELLO@Ngiti.demo" }));
     await submitAttempt(page);
-    await expectFieldError(page, "Contact email", "That contact email already belongs to a clinic on Primolar or one waiting to join. Contact Primolar if it's yours.");
+    await expect(page.getByRole("alert").filter({ hasText: SIGNUP_REFUSED })).toBeVisible();
     await expect(page).toHaveURL(/\/get-started$/);
   });
 
@@ -581,7 +584,8 @@ test.describe("edge cases", () => {
     await expect(sendButton(page)).toBeVisible();
     await fillClinic(page, c);
     await submitAttempt(page);
-    await expectFieldError(page, "Clinic name", `A clinic called ${c.name} is already on Primolar or waiting to join. Contact Primolar if it's yours.`);
+    // #29: the same name and email as the waiting sign-up: the email's words, which tell the sender only what they typed.
+    await expectFieldError(page, "Contact email", "That contact email already belongs to a clinic on Primolar or one waiting to join. Contact Primolar if it's yours.");
   });
 
   test("reloading half-way through the form starts a clean form and sends nothing", async ({ page }) => {
@@ -632,7 +636,8 @@ test.describe("edge cases", () => {
   });
 
   test("a very long clinic name still fits the thank-you page", async ({ page }) => {
-    const c = clinic({ name: `Klinika ng Ngiping Masaya at Malusog para sa mga Batang Pilipino ${uniq()} `.repeat(4).trim() });
+    // Security review #4: at most 80 characters.
+    const c = clinic({ name: `Klinika ng Ngiping Masaya at Malusog para sa mga Batang Pilipino ${uniq()} `.repeat(4).slice(0, 80).trim() });
     await signUp(page, c);
     const heading = page.getByRole("heading", { level: 1 });
     const box = await heading.boundingBox();
