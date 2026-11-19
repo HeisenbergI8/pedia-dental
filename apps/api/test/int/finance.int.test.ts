@@ -229,9 +229,9 @@ describe("the financial dashboard matches the mock's financeSummary (done-when)"
     expect(await words(admin, "?branch=all")).toEqual([403, "Reports across branches need two open branches you work at"]);
     expect(await words(admin, `?today=${today}&branch=${DASMA}`)).toEqual([403, "Reports across branches need two open branches you work at"]);
     expect((await t.call("get", `/reports/finance?today=${today}&branch=${IMUS}`, admin)).status).toBe(200);
-    expect(await words(await t.as(NGITI_OWNER), "?branch=all")).toEqual([403, "Reports across branches come with the Mid and Big plans. Contact Primolar to upgrade."]);
+    expect(await words(await t.as(NGITI_OWNER), "?branch=all")).toEqual([403, "Reports across branches come with the Clinic and Pro plans. Contact Primolar to upgrade."]);
     const collections = await t.call("get", `/payments?date=${today}&branch=all`, await t.as(NGITI_OWNER));
-    expect([collections.status, collections.text]).toEqual([403, "Reports across branches come with the Mid and Big plans. Contact Primolar to upgrade."]);
+    expect([collections.status, collections.text]).toEqual([403, "Reports across branches come with the Clinic and Pro plans. Contact Primolar to upgrade."]);
     expect((await t.call("get", "/reports/finance", await t.as(FRONT_DESK))).status).toBe(403);
   });
 });

@@ -3,7 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Building2Icon, ChevronLeftIcon } from "lucide-react";
 import { toast } from "sonner";
-import { DESIGN_STATUS_LABEL, TIER_LABEL, Tier, downgradeProblem, formatStorage, isTierUpgrade, type AccountOverview } from "@pedia/shared";
+import { DESIGN_STATUS_LABEL, TIER_LABEL, TIER_SUPPORT, Tier, downgradeProblem, formatStorage, isTierUpgrade, type AccountOverview } from "@pedia/shared";
 import { Loading } from "@/components/brand";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
@@ -20,6 +20,7 @@ import { allowance } from "./allowance";
 import { SetBrandingDialog } from "./set-branding-dialog";
 import { StatusBadge } from "./status-badge";
 import { SubscriptionCard } from "./subscription-card";
+import { SupportContactCard } from "./support-cards";
 
 /**
  * One clinic account: its plan, whether it is paused, and who owns it (decisions #4, #13, #26). Read from the account
@@ -46,6 +47,7 @@ export function AccountDetail({ id }: { id: string }) {
             <StatusCard row={row} />
           </div>
           <SubscriptionCard row={row} />
+          <SupportContactCard clinicId={row.account.id} tier={row.account.tier} />
           <AgreementCard row={row} />
           <OwnerCard row={row} />
           {row.design && <DesignCard row={row} />}
@@ -77,7 +79,12 @@ function PlanCard({ row }: { row: AccountOverview }) {
         <dt className="text-ink-muted">Storage</dt>
         <dd className="tabular-nums">{formatStorage(storage.inUse)} of {storage.limit === null ? "unlimited" : formatStorage(storage.limit)}</dd>
         <dt className="text-ink-muted">Texts this month</dt>
-        <dd className="tabular-nums">{texts.inUse} of {texts.limit ?? "unlimited"}</dd>
+        <dd className="tabular-nums">
+          {texts.inUse} of {texts.limit ?? "unlimited"}
+          {row.usage.textTopUp > 0 && <span className="text-ink-muted"> (+{row.usage.textTopUp.toLocaleString("en-PH")} bought)</span>}
+        </dd>
+        <dt className="text-ink-muted">Support</dt>
+        <dd>{TIER_SUPPORT[row.account.tier].label}</dd>
       </dl>
       <div className="flex flex-wrap items-end gap-2 border-t border-line pt-4">
         <div className="space-y-1.5">

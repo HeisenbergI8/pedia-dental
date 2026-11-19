@@ -12,8 +12,8 @@ describe("reportBranches (mocks/access.ts:86–98)", () => {
     expect(reportBranches("imus", imus, "small", ["front_desk"], [imus], every)).toEqual(["imus"]);
   });
 
-  it("refuses another branch on the Small plan", () => {
-    expect(reportBranches("dasma", imus, "small", ["owner"], [imus, dasma], every)).toEqual({ status: 403, message: "Reports across branches come with the Mid and Big plans. Contact Primolar to upgrade." });
+  it("refuses another branch on the Starter plan", () => {
+    expect(reportBranches("dasma", imus, "small", ["owner"], [imus, dasma], every)).toEqual({ status: 403, message: "Reports across branches come with the Clinic and Pro plans. Contact Primolar to upgrade." });
   });
 
   it("refuses a caller who works at one open branch", () => {

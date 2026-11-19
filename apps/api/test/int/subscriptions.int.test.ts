@@ -167,11 +167,11 @@ describe("plan changes (billing #27, decision 12, E13)", () => {
     expect(view.downgrade?.tier).toBe("small");
     expect(await account(NGITI)).toMatchObject({ tier: "mid" });
 
-    // E13: Ngiti has 1 branch; on Mid it could add one, but the waiting Small plan holds it at 1.
+    // E13: Ngiti has 1 branch; on Clinic it could add one, but the waiting Starter plan holds it at 1.
     const owner = await signIn(app, NGITI_OWNER, NGITI);
     const cookie = owner.cookie;
     const add = await http().post("/api/branches").set("Cookie", cookie).send({ name: "Imus", address: "1 Imus", phone: "(046) 000 0000", openingHours: ngiti.branches[0]!.openingHours });
-    expect([add.status, add.text]).toEqual([409, "Your Small plan includes 1 branch. Contact Primolar to upgrade."]);
+    expect([add.status, add.text]).toEqual([409, "Your Starter plan includes 1 branch. Contact Primolar to upgrade."]);
   });
 
   it("cancels once, pausing at the paid month's end; a cancelled subscription takes no more payments", async () => {

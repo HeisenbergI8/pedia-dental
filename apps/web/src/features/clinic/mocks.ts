@@ -27,15 +27,24 @@ import {
   type ClinicContext,
   type ClinicUsage,
   type StaffMember,
+  clinicSupportView,
+  TextTopUpInput,
+  LETTERHEAD_IMAGE_RULES,
+  STANDARD_LETTERHEAD,
+  UpdateLetterheadInput,
+  featureMessage,
+  imageProblem,
+  letterheadProblem,
+  type LetterheadSettings,
 } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { branchOf, sessionOf, usableBranchesOf } from "@/mocks/access";
 import { deleteBlob, getBlob, putBlob } from "@/mocks/blob-store";
-import { currentAccount, currentClinicId, db, persist } from "@/mocks/db";
+import { currentAccount, currentClinicId, db, persist, platform } from "@/mocks/db";
 import { emailTaken, newPin, staffEmail, temporaryPassword } from "@/mocks/demo-accounts";
 import { currentNotice, noticeView } from "@/mocks/privacy";
 import { forgetStored, recordStored, storageRefused, usageOf } from "@/mocks/allowances";
-import { addClinicReceipt, findReceipt, imageResponse, readImageForm } from "@/mocks/receipts";
+import { addClinicReceipt, addTopUpReceipt, findReceipt, imageResponse, readImageForm, textTopUpsView } from "@/mocks/receipts";
 import { subscriptionOf, subscriptionView } from "@/mocks/subscriptions";
 import { today } from "@/mocks/clock";
 
@@ -48,6 +57,12 @@ const DEMO_LOGO = /^demo\//;
 const logoUrlOf = ({ logoRef }: ClinicAccount): string | null =>
   !logoRef ? null : DEMO_LOGO.test(logoRef) ? `/${logoRef}` : url(`/clinic/logo?v=${encodeURIComponent(logoRef)}`);
 
+/** The clinic's letterhead without the blob key (D11): standard until the Owner customises. */
+const letterheadView = (): LetterheadSettings => {
+  if (!db.letterhead) return STANDARD_LETTERHEAD;
+  const { imageRef: _, ...view } = db.letterhead;
+  return view;
+};
 /** Decisions #8–#10: open branches and active logins against the tier. `null` limit = unlimited. */
 const usage = (): ClinicUsage => usageOf(db, currentAccount(), manilaMonth(today()));
 
@@ -86,6 +101,13 @@ export const clinicHandlers = [
     return HttpResponse.json(usage());
   }),
 
+  // D12: what "Contact support" shows the Owner for this clinic's plan.
+  http.get(url("/clinic/support"), async () => {
+    await delay(100);
+    const account = currentAccount();
+    return HttpResponse.json(clinicSupportView(account.tier, platform.support, platform.supportContacts[account.id] ?? null));
+  }),
+
   // Billing #31, S8: the Owner's own Primolar bill. Platform data, found by this account's id.
   http.get(url("/clinic/subscription"), async () => {
     await delay(100);
@@ -102,9 +124,24 @@ export const clinicHandlers = [
     return HttpResponse.json(subscriptionView(currentClinicId()), { status: 201 });
   }),
 
+  // Feature 16 (revised): text top-ups, bought by QR like the month and confirmed by Primolar.
+  http.get(url("/clinic/text-topups"), async () => {
+    await delay(100);
+    return HttpResponse.json(textTopUpsView(currentClinicId()));
+  }),
+
+  http.post(url("/clinic/text-topups/receipts"), async ({ request }) => {
+    const form = await readImageForm(request, TextTopUpInput, RECEIPT_RULES, true);
+    if (form instanceof Response) return form;
+    const refused = await addTopUpReceipt(currentClinicId(), form.data.packs, form.data.reference, form.file!);
+    if (refused) return refuse(409, refused);
+    return HttpResponse.json(textTopUpsView(currentClinicId()), { status: 201 });
+  }),
+
   http.get(url("/clinic/subscription/receipts/:id/image"), ({ params }) => {
     const receipt = findReceipt(params.id);
-    const mine = receipt?.payer.kind === "subscription" && receipt.payer.clinicId === currentClinicId();
+    // The Owner's own subscription and text top-up receipts (feature 16, revised); never a sign-up's.
+    const mine = !!receipt && receipt.payer.kind !== "signup" && receipt.payer.clinicId === currentClinicId();
     return mine ? imageResponse(receipt.fileRef) : refuse(404, "Receipt not found");
   }),
 
@@ -173,6 +210,58 @@ export const clinicHandlers = [
     persist();
     if (old && !DEMO_LOGO.test(old)) await deleteBlob(old);
     return HttpResponse.json(account);
+  }),
+
+  // D11: a custom letterhead on Clinic and Pro. Every staff member reads it (documents); the Owner changes it.
+  http.get(url("/clinic/letterhead"), () => HttpResponse.json(letterheadView())),
+
+  http.put(url("/clinic/letterhead"), async ({ request }) => {
+    const parsed = UpdateLetterheadInput.safeParse(await request.json());
+    if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
+    const refused = letterheadProblem(currentAccount().tier, parsed.data);
+    if (refused) return refuse(409, refused);
+    const current = db.letterhead;
+    if (parsed.data.mode === "image" && !current?.imageRef) return refuse(400, "Upload the letterhead image first");
+    db.letterhead = { ...parsed.data, imageUpdatedAt: current?.imageUpdatedAt ?? null, imageRef: current?.imageRef };
+    persist();
+    return HttpResponse.json(letterheadView());
+  }),
+
+  http.get(url("/clinic/letterhead/image"), async () => {
+    const ref = db.letterhead?.imageRef;
+    const blob = ref ? await getBlob(ref) : undefined;
+    return blob ? new HttpResponse(blob, { headers: { "Content-Type": blob.type, "X-Content-Type-Options": "nosniff" } }) : refuse(404, "This clinic has no letterhead image");
+  }),
+
+  // multipart/form-data with `file`: PNG or JPG up to 2 MB (decision 24). Counts toward storage like the logo.
+  http.put(url("/clinic/letterhead/image"), async ({ request }) => {
+    const account = currentAccount();
+    if (!TIER_LIMITS[account.tier].customLetterhead) return refuse(409, featureMessage(account.tier, "customLetterhead"));
+    const file = (await request.formData()).get("file");
+    if (!(file instanceof File)) return refuse(400, "Attach the letterhead image");
+    const problem = imageProblem(LETTERHEAD_IMAGE_RULES, file);
+    if (problem) return refuse(file.size > LETTERHEAD_IMAGE_RULES.maxBytes && LETTERHEAD_IMAGE_RULES.types.includes(file.type) ? 413 : 400, problem);
+    const full = storageRefused(db, account.tier, file.size);
+    if (full) return refuse(409, full);
+    const old = db.letterhead?.imageRef;
+    const key = `letterhead_${currentClinicId()}_${crypto.randomUUID()}`;
+    await putBlob(key, file);
+    recordStored(db, key, "branding", file.size);
+    forgetStored(db, old);
+    db.letterhead = { ...(db.letterhead ?? STANDARD_LETTERHEAD), mode: "image", imageRef: key, imageUpdatedAt: new Date().toISOString() };
+    persist();
+    if (old) await deleteBlob(old);
+    return HttpResponse.json(letterheadView());
+  }),
+
+  // Allowed on any plan (decision 22): back to the standard header if the image was in use.
+  http.delete(url("/clinic/letterhead/image"), async () => {
+    const old = db.letterhead?.imageRef;
+    if (db.letterhead) db.letterhead = { ...db.letterhead, mode: db.letterhead.mode === "image" ? "standard" : db.letterhead.mode, imageRef: undefined, imageUpdatedAt: null };
+    forgetStored(db, old);
+    persist();
+    if (old) await deleteBlob(old);
+    return HttpResponse.json(letterheadView());
   }),
 
   // Back to no logo: the name in the heading font (decision #31). A seeded demo logo is just unlinked.

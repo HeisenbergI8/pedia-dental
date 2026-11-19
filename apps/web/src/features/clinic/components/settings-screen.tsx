@@ -8,6 +8,7 @@ import { useCan } from "@/features/auth/access";
 import { BranchesPanel } from "./branches-panel";
 import { BrandingForm } from "./branding-form";
 import { ClinicProfileForm } from "./clinic-profile-form";
+import { LetterheadCard } from "./letterhead-card";
 import { ClinicSettings } from "./clinic-settings";
 import { PlanPanel } from "./plan-panel";
 import { PrivacyNoticeForm } from "./privacy-notice-form";
@@ -62,6 +63,7 @@ export function SettingsScreen() {
         <TabsContent value="clinic" className="space-y-6 pt-4">
           <ClinicProfileForm />
           <BrandingForm />
+          <LetterheadCard />
           <PrivacyNoticeForm />
         </TabsContent>
         <TabsContent value="branches" className="pt-4"><BranchesPanel /></TabsContent>

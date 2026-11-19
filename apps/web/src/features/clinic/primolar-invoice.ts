@@ -1,4 +1,7 @@
-import { DEFAULT_BRAND_COLOR, TIER_LABEL, formatBillingDate, formatPeso, vatPart, type SubscriptionPayment, type SubscriptionView } from "@pedia/shared";
+import {
+  DEFAULT_BRAND_COLOR, TIER_LABEL, formatBillingDate, formatPeso, textTopUpLine, vatPart,
+  type SubscriptionPayment, type SubscriptionView, type TextTopUp,
+} from "@pedia/shared";
 import { METHOD_LABEL } from "@/features/billing/api";
 import type { DocContent } from "@/features/documents/content";
 import { downloadPdf } from "@/features/documents/download";
@@ -43,6 +46,31 @@ export function primolarInvoice(billedTo: BilledTo, p: SubscriptionPayment): Doc
     footnote: "Not an official receipt. Primolar issues BIR official receipts from launch.",
   };
 }
+
+/**
+ * Feature 16 (revised), D10: the acknowledgment for a text top-up, on Primolar's letterhead like a monthly invoice and
+ * numbered from the same PRM-INV series. Not an official receipt (B12 #9).
+ */
+export function primolarTopUpReceipt(billedTo: BilledTo, t: TextTopUp): DocContent {
+  const vat = vatPart(t.amount);
+  const paidBy = t.reference ? `${METHOD_LABEL[t.method]} · ${t.reference}` : METHOD_LABEL[t.method];
+  return {
+    title: "Acknowledgment",
+    subtitle: `${t.invoiceNo} · ${formatBillingDate(t.paidOn)}`,
+    clinicName: "Primolar",
+    fileName: `${t.invoiceNo}.pdf`,
+    letterhead: { clinicName: "Primolar", branchLine: "Pediatric dental clinic software", logoUrl: null, ring: DEFAULT_BRAND_COLOR },
+    blocks: [
+      { kind: "rows", heading: "Billed to", rows: [["Clinic", billedTo.name], ["TIN", billedTo.tin], ["Email", billedTo.contactEmail]] },
+      { kind: "rows", heading: "Payment", rows: [["Paid by", paidBy], ["Paid on", formatBillingDate(t.paidOn)]] },
+      { kind: "table", head: ["Item", "Amount"], rows: [[textTopUpLine(t), formatPeso(t.amount)]], foot: ["Total (VAT included)", formatPeso(t.amount)], numeric: [1] },
+      { kind: "rows", rows: [["VAT (12%) included", formatPeso(vat)], ["Amount before VAT", formatPeso(t.amount - vat)]] },
+    ],
+    footnote: "Not an official receipt. The texts are for the month shown and don't carry over.",
+  };
+}
+
+export const downloadPrimolarTopUpReceipt = (billedTo: BilledTo, t: TextTopUp) => downloadPdf(primolarTopUpReceipt(billedTo, t));
 
 /** Builds and saves the PDF in the browser; react-pdf loads on the first download (documents/download.ts). */
 export const downloadPrimolarInvoice = (billedTo: BilledTo, p: SubscriptionPayment) => downloadPdf(primolarInvoice(billedTo, p));

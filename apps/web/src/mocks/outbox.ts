@@ -10,11 +10,13 @@ import {
   reminderSendAt,
   smsNumber,
   smsSegments,
+  textAllowance,
   textPartsRefusal,
   type Appointment,
   type Message,
 } from "@pedia/shared";
 import { manilaMonthOf, textPartsUsed } from "./allowances";
+import { topUpPartsIn } from "./text-topups";
 import { currentAccount, currentClinicId, db } from "./db";
 import { composeMessage, type MessageEvent } from "@pedia/seed";
 
@@ -30,7 +32,9 @@ export function queueMessage(e: MessageEvent): Message | undefined {
   const unusable = composed && !smsNumber(composed.to) && FAILURE.noPhone;
   // B12 decisions 2, 3, 19: past the month's parts, a template text is logged as not sent and never sent later.
   const overLimit =
-    composed && textPartsRefusal(composed.kind, textPartsUsed(db, manilaMonthOf(sendAt)), smsSegments(composed.body), TIER_LIMITS[currentAccount().tier].textParts);
+    composed &&
+    textPartsRefusal(composed.kind, textPartsUsed(db, manilaMonthOf(sendAt)), smsSegments(composed.body),
+      textAllowance(currentAccount().tier, topUpPartsIn(currentClinicId(), manilaMonthOf(sendAt))));
   const failure = unusable || overLimit;
   const message = composed && failure ? { ...composed, status: "failed" as const, failureReason: failure } : composed;
   if (message) db.messages.push(message);

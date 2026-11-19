@@ -1,7 +1,7 @@
 import { ConflictException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import {
   RECEIPT_RULES, ReceiptUploadInput, billedTier, downgradeProblem, isTierUpgrade, keptPrice, nextBoundary,
-  primolarInvoiceNo, settleStep, subscriptionDueOn, subscriptionMonthLine, subscriptionStatus, unpaidFrom, vatPart,
+  settleStep, subscriptionDueOn, subscriptionMonthLine, subscriptionStatus, unpaidFrom, vatPart,
   type AccountStatus, type AmountDue, type ConfirmReceiptInput, type RecordUpfrontPaymentInput, type Subscription,
   type SubscriptionPayment, type SubscriptionView, type Tier, type UpfrontPayment,
 } from "@pedia/shared";
@@ -9,7 +9,10 @@ import type { Request } from "express";
 import { randomUUID } from "node:crypto";
 import { Clock } from "../common/clock";
 import { currentContext, requestContext } from "../common/request-context";
+import { lockAccountById } from "../clinic/account-lock";
 import { countUsage } from "../clinic/limits";
+import { TextTopUpsService } from "../text-topups/text-topups.service";
+import { nextInvoiceNo } from "./invoice-counter";
 import { isDuplicateKey } from "../idempotency/idempotency.service";
 import { PlatformSettingsService } from "../platform-settings/platform-settings.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -50,12 +53,12 @@ export class SubscriptionRecordsService {
     private readonly receipts: ReceiptRecordsService,
     private readonly files: PlatformFilesService,
     private readonly audit: AuditService,
+    private readonly topUps: TextTopUpsService,
   ) {}
 
   /** E6's account lock by id (the operator and the jobs name the clinic; a clinic request has it in context). */
   async lockAccount(tx: Tx, clinicId: string): Promise<Account> {
-    await tx.$queryRaw`SELECT id FROM ClinicAccount WHERE id = ${clinicId} FOR UPDATE`;
-    const account = await tx.clinicAccount.findUnique({ where: { id: clinicId }, select: { tier: true, status: true } });
+    const account = await lockAccountById(tx, clinicId);
     if (!account) throw new NotFoundException("Clinic account not found");
     return account;
   }
@@ -79,13 +82,6 @@ export class SubscriptionRecordsService {
     return sub;
   }
 
-  /** S10: one gapless sequence across the platform. Always the last lock of its transaction (E6). */
-  async nextInvoiceNo(tx: Tx): Promise<string> {
-    const [row] = await tx.$queryRaw<{ next: number | bigint }[]>`SELECT next FROM InvoiceCounter WHERE id = 'primolar' FOR UPDATE`;
-    const next = Number(row?.next ?? 1);
-    await tx.$executeRaw`INSERT INTO InvoiceCounter (id, next) VALUES ('primolar', ${next + 1}) ON DUPLICATE KEY UPDATE next = ${next + 1}`;
-    return primolarInvoiceNo(next);
-  }
 
   /**
    * Billing #24, #26, S12, S13: a new clinic's subscription anchored today, its upfront payment as its first invoice
@@ -100,7 +96,7 @@ export class SubscriptionRecordsService {
     ];
     await tx.subscription.create({ data: { clinicId: s.clinicId, anchor: new Date(`${anchor}T00:00:00.000Z`), paidMonths: 1 }, select: { clinicId: true } });
     const payment: SubscriptionPayment = {
-      ...s.payment, id: randomUUID(), invoiceNo: await this.nextInvoiceNo(tx), tier: s.tier, periodStart: anchor, periodEnd: subscriptionDueOn(anchor, 1), lines,
+      ...s.payment, id: randomUUID(), invoiceNo: await nextInvoiceNo(tx), tier: s.tier, periodStart: anchor, periodEnd: subscriptionDueOn(anchor, 1), lines,
     };
     await this.insertPayment(tx, s.clinicId, payment, null);
   }
@@ -138,6 +134,7 @@ export class SubscriptionRecordsService {
       cancelledAt: sub.cancelledAt ?? null,
       pausedFor: sub.pause ?? null,
       payments: [...sub.payments].reverse(),
+      topUps: await this.topUps.forClinic(clinicId, db),
       receipts: await this.receipts.ofClinic(clinicId, db),
       paymentQr: await this.settings.qr(db),
       today,
@@ -201,7 +198,7 @@ export class SubscriptionRecordsService {
     const lifts = sub.pause === "overdue" && subscriptionStatus({ ...sub, paidMonths }, this.clock.today()).state !== "lapsed";
     await tx.subscription.update({ where: { clinicId }, data: { paidMonths, ...(lifts && { pause: null }) }, select: { clinicId: true } });
     if (lifts) await tx.clinicAccount.update({ where: { id: clinicId }, data: { status: "active" }, select: { id: true } });
-    const invoiceNo = await this.nextInvoiceNo(tx); // the counter is the last lock (E6)
+    const invoiceNo = await nextInvoiceNo(tx); // the counter is the last lock (E6)
     await this.insertPayment(tx, clinicId, {
       ...input, id: randomUUID(), invoiceNo, tier, periodStart, periodEnd: subscriptionDueOn(sub.anchor, paidMonths),
       lines: [{ label: subscriptionMonthLine(tier, periodStart), amount }], amount, recordedAt: this.clock.now().toISOString(),

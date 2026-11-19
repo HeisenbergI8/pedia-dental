@@ -4,12 +4,12 @@ import { USERS, expectSignedIn, signIn, signInOperator } from "./support/users";
 
 /**
  * Pilot tests: plan limits and billing states, driven only through the UI.
- * Ngiti (Small plan) is at its 5-login and 1-branch limits and due in about 2 days.
- * Ipin (Small plan) is about 3 days overdue, inside its 7-day grace period.
+ * Ngiti (Starter plan) has 5 of 10 logins and is at its 1-branch limit, and is due in about 2 days.
+ * Ipin (Starter plan) is about 3 days overdue, inside its 7-day grace period.
  */
 
-const STAFF_LIMIT = "Your Small plan includes 5 staff logins. Contact Primolar to upgrade.";
-const BRANCH_LIMIT = "Your Small plan includes 1 branch. Contact Primolar to upgrade.";
+const STAFF_LIMIT = "Your Starter plan includes 10 staff logins. Contact Primolar to upgrade.";
+const BRANCH_LIMIT = "Your Starter plan includes 1 branch. Contact Primolar to upgrade.";
 const OVERDUE = /Your Primolar payment is overdue\. Pay by \d{1,2} \w+ \d{4} to keep your clinic running\./;
 const DUE_SOON = /Your Primolar payment is due in \d days?, on \d{1,2} \w+ \d{4}\./;
 
@@ -95,16 +95,14 @@ test.describe("happy paths", () => {
     await expect(banner.getByRole("link", { name: "See Settings → Plan" })).toBeVisible();
   });
 
-  test("Ngiti's Owner at 5 of 5 logins finds Add staff turned off with the upgrade message", async ({ page }) => {
+  test("Ngiti's Owner at 5 of 10 logins can still add staff and sees no upgrade message", async ({ page }) => {
     await signInAs(page, USERS.ngitiOwner);
     await openSettings(page, "Staff");
     const card = staffCard(page);
-    await expect(card.getByText("5 of 5 staff logins on your plan, yours included.")).toBeVisible();
-    const add = card.getByRole("button", { name: "Add staff" });
-    await expect(add).toBeDisabled();
-    await expect(card.getByRole("status")).toHaveText(STAFF_LIMIT);
-    // Screen readers hear why it is off.
-    await expect(add).toHaveAccessibleDescription(STAFF_LIMIT);
+    // Starter has 10 logins since feature 16, revised: Ngiti's 5 no longer reach the limit.
+    await expect(card.getByText("5 of 10 staff logins on your plan, yours included.")).toBeVisible();
+    await expect(card.getByRole("button", { name: "Add staff" })).toBeEnabled();
+    await expect(card.getByText(STAFF_LIMIT)).toBeHidden();
   });
 
   test("Ngiti's Owner at 1 of 1 branch finds Add branch turned off with the upgrade message", async ({ page }) => {
@@ -118,43 +116,43 @@ test.describe("happy paths", () => {
     await expect(card.getByRole("row", { name: /Bacoor/ })).toBeVisible();
   });
 
-  test("Ngiti's Owner reads the Small plan's usage, the next amount with VAT and every invoice", async ({ page }) => {
+  test("Ngiti's Owner reads the Starter plan's usage, the next amount with VAT and every invoice", async ({ page }) => {
     await signInAs(page, USERS.ngitiOwner);
     await openSettings(page, "Plan");
     const panel = planPanel(page);
-    await expect(panel.getByText("You're on the Small plan")).toBeVisible();
+    await expect(panel.getByText("You're on the Starter plan")).toBeVisible();
     await expect(panel.getByRole("meter", { name: "Open branches in use" })).toBeVisible();
     await expect(panel.getByRole("meter", { name: "Staff logins in use" })).toBeVisible();
-    await expect(panel.getByText("5 of 5")).toBeVisible();
+    await expect(panel.getByText("5 of 10")).toBeVisible();
     await expect(panel.getByText("1 of 1")).toBeVisible();
     await expect(panel.getByText(/Dashboard and finance views across branches\s*· not on this plan/)).toBeVisible();
     await expect(panel.getByText("Due soon", { exact: true })).toBeVisible();
-    await expect(panel.getByText(/₱2,500\.00 \(includes ₱267\.86 VAT\)/)).toBeVisible();
+    await expect(panel.getByText(/₱15,000\.00 \(includes ₱1,607\.14 VAT\)/)).toBeVisible();
     const history = panel.getByRole("table", { name: "Payments to Primolar" });
     await expect(history.getByRole("row")).toHaveCount(5); // header + 4 payments
     await expect(history.getByRole("button", { name: /Download invoice PRM-INV-/ })).toHaveCount(4);
   });
 
-  test("Ngiti's Owner deactivates a front desk login and the seat frees up for a new hire", async ({ page }) => {
+  test("Ngiti's Owner deactivates a front desk login and a new hire takes the seat", async ({ page }) => {
     await signInAs(page, USERS.ngitiOwner);
     await openSettings(page, "Staff");
     await deactivate(page, "Mae Dizon");
     const card = staffCard(page);
-    await expect(card.getByText("4 of 5 staff logins on your plan, yours included.")).toBeVisible();
+    // Starter has 10 logins since feature 16, revised, so Ngiti is not at the limit: the seat count just drops and rises.
+    await expect(card.getByText("4 of 10 staff logins on your plan, yours included.")).toBeVisible();
     await expect(card.getByRole("button", { name: "Add staff" })).toBeEnabled();
     await expect(card.getByText(STAFF_LIMIT)).toBeHidden();
     await expect(staffRow(page, "Mae Dizon").getByText(/Deactivated/)).toBeVisible();
 
-    // The freed seat goes to a new front desk hire with a Filipino name; the limit closes again.
+    // The freed seat goes to a new front desk hire with a Filipino name.
     await addStaff(page, "Ma. Niña Dela Peña", "nina.delapena@ngiti.demo");
-    await expect(card.getByText("5 of 5 staff logins on your plan, yours included.")).toBeVisible();
-    await expect(card.getByRole("button", { name: "Add staff" })).toBeDisabled();
-    await expect(card.getByRole("status")).toHaveText(STAFF_LIMIT);
+    await expect(card.getByText("5 of 10 staff logins on your plan, yours included.")).toBeVisible();
+    await expect(card.getByRole("button", { name: "Add staff" })).toBeEnabled();
     await expect(staffRow(page, "Ma. Niña Dela Peña")).toContainText("Active");
 
     // Plan tab agrees.
     await page.getByRole("tab", { name: "Plan" }).click();
-    await expect(planPanel(page).getByText("5 of 5")).toBeVisible();
+    await expect(planPanel(page).getByText("5 of 10")).toBeVisible();
   });
 
   test("a freed seat stays free after the Owner reloads the page", async ({ page }) => {
@@ -163,18 +161,19 @@ test.describe("happy paths", () => {
     await deactivate(page, "Joy Tan");
     await page.reload();
     await page.getByRole("tab", { name: "Staff" }).click();
-    await expect(staffCard(page).getByText("4 of 5 staff logins on your plan, yours included.")).toBeVisible();
+    await expect(staffCard(page).getByText("4 of 10 staff logins on your plan, yours included.")).toBeVisible();
     await expect(staffCard(page).getByRole("button", { name: "Add staff" })).toBeEnabled();
   });
 
-  test("Ngiti's Owner reactivates a login into a freed seat", async ({ page }) => {
+  test("Ngiti's Owner reactivates a deactivated login", async ({ page }) => {
     await signInAs(page, USERS.ngitiOwner);
     await openSettings(page, "Staff");
     await deactivate(page, "Joy Tan");
     await staffRow(page, "Joy Tan").getByRole("button", { name: "Reactivate" }).click();
     await expect(page.getByText("Joy Tan can sign in again")).toBeVisible();
-    await expect(staffCard(page).getByText("5 of 5 staff logins on your plan, yours included.")).toBeVisible();
-    await expect(staffCard(page).getByRole("button", { name: "Add staff" })).toBeDisabled();
+    // Starter has 10 logins since feature 16, revised: back to 5 of 10, still below the limit.
+    await expect(staffCard(page).getByText("5 of 10 staff logins on your plan, yours included.")).toBeVisible();
+    await expect(staffCard(page).getByRole("button", { name: "Add staff" })).toBeEnabled();
   });
 
   test("Ipin's Owner sees the overdue banner with the pay-by date on every page", async ({ page }) => {
@@ -193,7 +192,7 @@ test.describe("happy paths", () => {
     const panel = planPanel(page);
     await expect(panel.getByText("Overdue, in grace")).toBeVisible();
     await expect(panel.getByRole("status").filter({ hasText: OVERDUE })).toBeVisible();
-    await expect(panel.getByText(/₱2,500\.00 \(includes ₱267\.86 VAT\)/)).toBeVisible();
+    await expect(panel.getByText(/₱15,000\.00 \(includes ₱1,607\.14 VAT\)/)).toBeVisible();
     const history = panel.getByRole("table", { name: "Payments to Primolar" });
     await expect(history.getByRole("row")).toHaveCount(3);
     await expect(history.getByText("PRM-INV-00013")).toBeVisible();
@@ -212,9 +211,9 @@ test.describe("happy paths", () => {
   test("an overdue clinic in grace keeps working: Ipin's Owner can still add a staff login", async ({ page }) => {
     await signInAs(page, USERS.ipinOwner);
     await openSettings(page, "Staff");
-    await expect(staffCard(page).getByText("1 of 5 staff logins on your plan, yours included.")).toBeVisible();
+    await expect(staffCard(page).getByText("1 of 10 staff logins on your plan, yours included.")).toBeVisible();
     await addStaff(page, "Jose Rizal O'Neil", "jose.oneil@ipin.demo");
-    await expect(staffCard(page).getByText("2 of 5 staff logins on your plan, yours included.")).toBeVisible();
+    await expect(staffCard(page).getByText("2 of 10 staff logins on your plan, yours included.")).toBeVisible();
     await expect(staffRow(page, "Jose Rizal O'Neil")).toBeVisible();
   });
 
@@ -224,7 +223,7 @@ test.describe("happy paths", () => {
     await expect(page.getByText(`${IPIN.due} · pay by ${IPIN.payBy}`)).toBeVisible();
     await page.getByRole("button", { name: "Record payment" }).click();
     const dialog = page.getByRole("dialog", { name: "Record payment" });
-    await expect(dialog.getByText(`₱2,500.00 for the month from ${IPIN.due}`, { exact: false })).toBeVisible();
+    await expect(dialog.getByText(`₱15,000.00 for the month from ${IPIN.due}`, { exact: false })).toBeVisible();
     await dialog.getByLabel("Reference (optional)").fill("GC-2026-1014");
     await dialog.getByRole("button", { name: "Record payment" }).click();
     await expect(page.getByText("Payment recorded for Ipin Kids Dental")).toBeVisible();
@@ -242,61 +241,61 @@ test.describe("happy paths", () => {
     await expect(panel.getByRole("table", { name: "Payments to Primolar" }).getByRole("row")).toHaveCount(4);
   });
 
-  test("Primolar upgrades Ngiti to Mid and the Owner can add staff and branches at once", async ({ page }) => {
+  test("Primolar upgrades Ngiti to Clinic and the Owner can add staff and branches at once", async ({ page }) => {
     await operatorOpenClinic(page, "Ngiti Kids Dental");
     await page.getByRole("combobox", { name: "Plan" }).click();
-    await page.getByRole("option", { name: "Mid" }).click();
+    await page.getByRole("option", { name: "Clinic" }).click();
     await page.getByRole("button", { name: "Save plan" }).click();
-    await expect(page.getByText("Ngiti Kids Dental is on the Mid plan")).toBeVisible();
+    await expect(page.getByText("Ngiti Kids Dental is on the Clinic plan")).toBeVisible();
     await signOutOperator(page);
 
     await signInAs(page, USERS.ngitiOwner);
     await openSettings(page, "Staff");
-    await expect(staffCard(page).getByText("5 of 20 staff logins on your plan, yours included.")).toBeVisible();
+    await expect(staffCard(page).getByText("5 of 30 staff logins on your plan, yours included.")).toBeVisible();
     await expect(staffCard(page).getByRole("button", { name: "Add staff" })).toBeEnabled();
     await page.getByRole("tab", { name: "Branches" }).click();
     await expect(branchCard(page).getByText("1 of 3 open branches on your plan.")).toBeVisible();
     await expect(branchCard(page).getByRole("button", { name: "Add branch" })).toBeEnabled();
     await page.getByRole("tab", { name: "Plan" }).click();
-    await expect(planPanel(page).getByText("You're on the Mid plan")).toBeVisible();
+    await expect(planPanel(page).getByText("You're on the Clinic plan")).toBeVisible();
   });
 
   test("Primolar can't downgrade Bulilit below what it uses (B12 decision 12)", async ({ page }) => {
     await operatorOpenClinic(page, "Bulilit Smiles Pediatric Dental");
     await page.getByRole("combobox", { name: "Plan" }).click();
-    await page.getByRole("option", { name: "Small" }).click();
+    await page.getByRole("option", { name: "Starter" }).click();
     await expect(page.getByText(/the Owner must archive branches or deactivate logins before the plan can go down/)).toBeVisible();
     await expect(page.getByRole("button", { name: "Save plan" })).toBeDisabled();
   });
 
-  test("Primolar moves Ngiti up to Mid and back down, and the Owner sees the downgrade wait for the next due date", async ({ page }) => {
+  test("Primolar moves Ngiti up to Clinic and back down, and the Owner sees the downgrade wait for the next due date", async ({ page }) => {
     await operatorOpenClinic(page, "Ngiti Kids Dental");
     await page.getByRole("combobox", { name: "Plan" }).click();
-    await page.getByRole("option", { name: "Mid" }).click();
+    await page.getByRole("option", { name: "Clinic" }).click();
     await page.getByRole("button", { name: "Save plan" }).click();
-    await expect(page.getByText("Ngiti Kids Dental is on the Mid plan")).toBeVisible();
+    await expect(page.getByText("Ngiti Kids Dental is on the Clinic plan")).toBeVisible();
     await page.getByRole("combobox", { name: "Plan" }).click();
-    await page.getByRole("option", { name: "Small" }).click();
+    await page.getByRole("option", { name: "Starter" }).click();
     await page.getByRole("button", { name: "Save plan" }).click();
-    await expect(page.getByText("Ngiti Kids Dental moves to the Small plan on its next due date")).toBeVisible();
+    await expect(page.getByText("Ngiti Kids Dental moves to the Starter plan on its next due date")).toBeVisible();
     await signOutOperator(page);
 
     await signInAs(page, USERS.ngitiOwner);
     await openSettings(page, "Plan");
     const panel = planPanel(page);
-    await expect(panel.getByText("You're on the Mid plan")).toBeVisible();
-    await expect(panel.getByText(/Moves to Small on \d{1,2} \w+ \d{4}\. Nothing you have now is turned off\./)).toBeVisible();
+    await expect(panel.getByText("You're on the Clinic plan")).toBeVisible();
+    await expect(panel.getByText(/Moves to Starter on \d{1,2} \w+ \d{4}\. Nothing you have now is turned off\./)).toBeVisible();
   });
 
-  test("Bulilit's Owner, paid up on Mid, sees its allowances and no billing banner", async ({ page }) => {
+  test("Bulilit's Owner, paid up on Clinic, sees its allowances and no billing banner", async ({ page }) => {
     await signInAs(page, USERS.owner);
     await expect(page.getByText(OVERDUE)).toHaveCount(0);
     await expect(page.getByText(DUE_SOON)).toHaveCount(0);
     await openSettings(page, "Plan");
     const panel = planPanel(page);
-    await expect(panel.getByText("You're on the Mid plan")).toBeVisible();
+    await expect(panel.getByText("You're on the Clinic plan")).toBeVisible();
     await expect(panel.getByText("2 of 3")).toBeVisible();
-    await expect(panel.getByText("5 of 20")).toBeVisible();
+    await expect(panel.getByText("5 of 30")).toBeVisible();
     await expect(panel.getByText("Paid up", { exact: true })).toBeVisible();
   });
 });
@@ -331,7 +330,7 @@ test.describe("failed paths", () => {
     await expect(page.getByRole("link", { name: "See Settings → Plan" })).toHaveCount(0);
   });
 
-  test("Ngiti's Owner cancels a deactivation and the plan stays full", async ({ page }) => {
+  test("Ngiti's Owner cancels a deactivation and the login count stays the same", async ({ page }) => {
     await signInAs(page, USERS.ngitiOwner);
     await openSettings(page, "Staff");
     await staffRow(page, "Joy Tan").getByRole("button", { name: "Deactivate" }).click();
@@ -339,20 +338,20 @@ test.describe("failed paths", () => {
     await expect(dialog.getByText(/frees a\s+seat on your plan/)).toBeVisible();
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(dialog).toBeHidden();
-    await expect(staffCard(page).getByText("5 of 5 staff logins on your plan, yours included.")).toBeVisible();
-    await expect(staffCard(page).getByRole("button", { name: "Add staff" })).toBeDisabled();
+    await expect(staffCard(page).getByText("5 of 10 staff logins on your plan, yours included.")).toBeVisible();
+    await expect(staffCard(page).getByRole("button", { name: "Add staff" })).toBeEnabled();
   });
 
-  test("Ngiti's Owner can't reactivate a login when the plan is full again", async ({ page }) => {
+  test("Ngiti's Owner can reactivate a login after a new hire took the freed seat", async ({ page }) => {
     await signInAs(page, USERS.ngitiOwner);
     await openSettings(page, "Staff");
     await deactivate(page, "Joy Tan");
     await addStaff(page, "Andres Bonifacio", "andres@ngiti.demo");
-    await expect(staffCard(page).getByText("5 of 5 staff logins on your plan, yours included.")).toBeVisible();
+    await expect(staffCard(page).getByText("5 of 10 staff logins on your plan, yours included.")).toBeVisible();
+    // Starter has 10 logins since feature 16, revised: the plan is not full again, so Joy Tan comes back.
     await staffRow(page, "Joy Tan").getByRole("button", { name: "Reactivate" }).click();
-    await expect(page.getByText(STAFF_LIMIT).last()).toBeVisible();
-    await expect(staffRow(page, "Joy Tan").getByText(/Deactivated/)).toBeVisible();
-    await expect(staffCard(page).getByText("5 of 5 staff logins on your plan, yours included.")).toBeVisible();
+    await expect(page.getByText("Joy Tan can sign in again")).toBeVisible();
+    await expect(staffCard(page).getByText("6 of 10 staff logins on your plan, yours included.")).toBeVisible();
   });
 
   test("Ngiti's Owner can't archive the clinic's only branch", async ({ page }) => {
@@ -383,7 +382,7 @@ test.describe("failed paths", () => {
     await dialog.getByRole("button", { name: "Add staff" }).click();
     await expect(dialog.getByRole("alert")).toContainText("already signs in to Ipin Kids Dental");
     await dialog.getByRole("button", { name: "Cancel" }).click();
-    await expect(staffCard(page).getByText("1 of 5 staff logins on your plan, yours included.")).toBeVisible();
+    await expect(staffCard(page).getByText("1 of 10 staff logins on your plan, yours included.")).toBeVisible();
   });
 
   test("Ipin's Owner submitting an empty Add staff form is told what is missing and no seat is used", async ({ page }) => {
@@ -396,7 +395,7 @@ test.describe("failed paths", () => {
     await expect(dialog.getByLabel("Email")).toHaveAttribute("aria-invalid", "true");
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
-    await expect(staffCard(page).getByText("1 of 5 staff logins on your plan, yours included.")).toBeVisible();
+    await expect(staffCard(page).getByText("1 of 10 staff logins on your plan, yours included.")).toBeVisible();
   });
 
   test("Primolar's Record payment refuses an empty paid-on date and an over-long reference", async ({ page }) => {
@@ -459,24 +458,30 @@ test.describe("edge cases", () => {
     await expect(page.getByRole("tab", { name: "Plan" })).toHaveAttribute("aria-selected", "true");
   });
 
-  test("Ipin's Owner fills the plan to exactly 5 of 5 logins and Add staff turns off at the boundary", async ({ page }) => {
+  test("Ipin's Owner fills the plan to exactly 10 of 10 logins and Add staff turns off at the boundary", async ({ page }) => {
     await signInAs(page, USERS.ipinOwner);
     await openSettings(page, "Staff");
+    // Ipin starts with 1 login; eight hires make 9 of 10.
     const hires = [
       ["Liza Santos", "liza@ipin.demo"],
       ["Ma. Niña Ibáñez", "nina@ipin.demo"],
       ["Jun O'Hara", "jun@ipin.demo"],
+      ["Rosario Villar", "rosario@ipin.demo"],
+      ["Emilio Aguinaldo Jr.", "emilio@ipin.demo"],
+      ["Gabriela Silang", "gabriela@ipin.demo"],
+      ["Apolinario Mabini", "apolinario@ipin.demo"],
+      ["Melchora Aquino", "melchora@ipin.demo"],
     ];
     for (const [name, email] of hires) await addStaff(page, name!, email!);
-    await expect(staffCard(page).getByText("4 of 5 staff logins on your plan, yours included.")).toBeVisible();
+    await expect(staffCard(page).getByText("9 of 10 staff logins on your plan, yours included.")).toBeVisible();
     await expect(staffCard(page).getByRole("button", { name: "Add staff" })).toBeEnabled();
     await addStaff(page, "Pedro Peñaflor", "pedro@ipin.demo");
-    await expect(staffCard(page).getByText("5 of 5 staff logins on your plan, yours included.")).toBeVisible();
+    await expect(staffCard(page).getByText("10 of 10 staff logins on your plan, yours included.")).toBeVisible();
     await expect(staffCard(page).getByRole("button", { name: "Add staff" })).toBeDisabled();
     await expect(staffCard(page).getByRole("status")).toHaveText(STAFF_LIMIT);
   });
 
-  test("double-clicking Add staff on the last free seat creates only one login", async ({ page }) => {
+  test("double-clicking Add staff creates only one login", async ({ page }) => {
     await signInAs(page, USERS.ngitiOwner);
     await openSettings(page, "Staff");
     await deactivate(page, "Mae Dizon");
@@ -488,7 +493,7 @@ test.describe("edge cases", () => {
     await expect(page.getByRole("dialog", { name: "Rosa Magdalena is added" })).toBeVisible();
     await page.getByRole("button", { name: "I've passed it on" }).click();
     await expect(staffCard(page).getByRole("row", { name: /Rosa Magdalena/ })).toHaveCount(1);
-    await expect(staffCard(page).getByText("5 of 5 staff logins on your plan, yours included.")).toBeVisible();
+    await expect(staffCard(page).getByText("5 of 10 staff logins on your plan, yours included.")).toBeVisible();
   });
 
   test("double-clicking the deactivate confirm frees only one seat", async ({ page }) => {
@@ -497,7 +502,7 @@ test.describe("edge cases", () => {
     await staffRow(page, "Joy Tan").getByRole("button", { name: "Deactivate" }).click();
     await page.getByRole("dialog", { name: "Deactivate Joy Tan?" }).getByRole("button", { name: "Deactivate Joy Tan" }).dblclick();
     await expect(page.getByText("Joy Tan is deactivated").first()).toBeVisible();
-    await expect(staffCard(page).getByText("4 of 5 staff logins on your plan, yours included.")).toBeVisible();
+    await expect(staffCard(page).getByText("4 of 10 staff logins on your plan, yours included.")).toBeVisible();
     await expect(staffCard(page).getByRole("button", { name: "Reactivate" })).toHaveCount(1);
   });
 
@@ -517,7 +522,7 @@ test.describe("edge cases", () => {
     await expect(page.getByRole("dialog", { name: "Deactivate Dr. Rico Bautista?" })).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(staffCard(page).getByRole("button", { name: "Add staff" })).toBeDisabled();
+    await expect(staffCard(page).getByText("5 of 10 staff logins on your plan, yours included.")).toBeVisible();
   });
 
   test("the Owner's own login offers no Deactivate, so the Owner can't free a seat by locking themselves out", async ({ page }) => {
@@ -546,16 +551,16 @@ test.describe("edge cases", () => {
     await expect(staffCard(page).getByRole("button", { name: "Add staff" })).toBeEnabled();
   });
 
-  test("the disabled Add staff button is skipped by Tab but its reason is readable", async ({ page }) => {
+  test("the disabled Add branch button is skipped by Tab but its reason is readable", async ({ page }) => {
     await signInAs(page, USERS.ngitiOwner);
-    await openSettings(page, "Staff");
-    const add = staffCard(page).getByRole("button", { name: "Add staff" });
-    await page.getByRole("tab", { name: "Staff" }).focus();
+    await openSettings(page, "Branches");
+    const add = branchCard(page).getByRole("button", { name: "Add branch" });
+    await page.getByRole("tab", { name: "Branches" }).focus();
     for (let i = 0; i < 4; i++) {
       await page.keyboard.press("Tab");
       await expect(add).not.toBeFocused();
     }
-    await expect(staffCard(page).getByText(STAFF_LIMIT)).toBeVisible();
+    await expect(branchCard(page).getByText(BRANCH_LIMIT)).toBeVisible();
   });
 
   test("the overdue banner survives a reload and the browser's back button", async ({ page }) => {

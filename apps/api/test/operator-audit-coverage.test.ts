@@ -30,10 +30,10 @@ describe("every operator route that changes something is audited (B13a Step 5.3)
   });
   afterAll(() => app.close());
 
-  it("has the decorator on all 16 operator mutations, and on no read", () => {
+  it("has the decorator on all 18 operator mutations, and on no read", () => {
     const mutations = routes.filter((r) => !r.route.startsWith("GET ") && / \/operator\//.test(r.route) && !r.route.includes("/operator/auth/"));
     expect(mutations.filter((r) => !r.audited).map((r) => r.route)).toEqual([]);
-    expect(mutations).toHaveLength(16); // measured 2026-10-18: update deliberately when a route is added
+    expect(mutations).toHaveLength(18); // measured 2026-11-19 (the two support saves): update deliberately when a route is added
     expect(routes.filter((r) => r.route.startsWith("GET ") && r.audited).map((r) => r.route)).toEqual([]);
   });
 });

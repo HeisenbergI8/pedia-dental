@@ -4,11 +4,12 @@ import { StorageModule } from "../storage/storage.module";
 import { PaymentQrController } from "./payment-qr.controller";
 import { PlatformSettingsService } from "./platform-settings.service";
 import { PricesController } from "./prices.controller";
+import { SupportController } from "./support.controller";
 
 /** B12: Primolar's price list and payment QR. A leaf: sign-ups and subscriptions import it for prices and the lock. */
 @Module({
   imports: [OutboxModule, StorageModule],
-  controllers: [PricesController, PaymentQrController],
+  controllers: [PricesController, PaymentQrController, SupportController],
   providers: [PlatformSettingsService],
   exports: [PlatformSettingsService],
 })

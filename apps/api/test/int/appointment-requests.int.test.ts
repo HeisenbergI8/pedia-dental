@@ -1,5 +1,5 @@
 import { DEMO_CLINIC_ID } from "@pedia/seed";
-import { Appointment, AppointmentRequest, Patient, type RegisterPatientInput } from "@pedia/shared";
+import { Appointment, AppointmentRequest, Patient, REQUESTS_NOT_ON_PLAN, type RegisterPatientInput } from "@pedia/shared";
 import { addDays, format } from "date-fns";
 import { z } from "zod";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -112,6 +112,16 @@ describe("appointment requests (apps/web handlers.test.ts → requests)", () => 
     await ask(id, parent, body({ preferredDate: day(-2) })); // 400
     await t.ok(handled(r.id), AppointmentRequest);
     expect((await t.auditOf(id, "Appointment request")).map((e) => e.action)).toEqual(["create", "update"]);
+  });
+});
+
+describe("requests by plan (feature 16, revised)", () => {
+  it("refuses a Starter clinic's parent with the clinic's phone advice, while the inbox still answers", async () => {
+    const ngiti = t.platform.tenants.clinic_ngiti!.patients[0]!;
+    const ngitiParent = await t.as(["clinic_ngiti", `guardian.${ngiti.guardians[0]!.id}`]);
+    const res = await ask(ngiti.id, ngitiParent, {});
+    expect([res.status, res.text]).toEqual([409, REQUESTS_NOT_ON_PLAN]); // the plan before the body
+    expect((await t.call("get", "/appointment-requests", await t.as(NGITI_OWNER))).status).toBe(200);
   });
 });
 

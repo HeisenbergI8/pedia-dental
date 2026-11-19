@@ -21,10 +21,15 @@ const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
 export const QR_RULES: ImageRules = { maxBytes: 2 * 1024 * 1024, types: IMAGE_TYPES };
 export const RECEIPT_RULES: ImageRules = { maxBytes: 5 * 1024 * 1024, types: IMAGE_TYPES };
 
+const TYPE_NAME: Record<string, string> = { "image/png": "PNG", "image/jpeg": "JPG", "image/webp": "WebP" };
+
 /** Why this image can't be used, in the form's and the server's words, or undefined. */
 export function imageProblem(rules: ImageRules, file?: { type: string; size: number }): string | undefined {
   if (!file) return "Attach a screenshot of your receipt";
-  if (!rules.types.includes(file.type)) return "Choose a PNG, JPG or WebP image";
+  if (!rules.types.includes(file.type)) {
+    const names = rules.types.map((t) => TYPE_NAME[t] ?? t);
+    return `Choose a ${names.length > 1 ? `${names.slice(0, -1).join(", ")} or ${names.at(-1)}` : names[0]} image`;
+  }
   if (file.size > rules.maxBytes) return `The image must be ${rules.maxBytes / (1024 * 1024)} MB or smaller`;
   return undefined;
 }
@@ -34,6 +39,15 @@ export const ReceiptUploadInput = z.object({
   reference: z.string().trim().min(1, "Enter the reference number on your receipt").max(60, "Keep the reference under 60 characters"),
 });
 export type ReceiptUploadInput = z.infer<typeof ReceiptUploadInput>;
+
+/** POST /clinic/text-topups/receipts, the `data` part: how many packs, at most 20 a receipt (D2). */
+export const TextTopUpInput = ReceiptUploadInput.extend({
+  packs: z.coerce.number<string | number>().int("Choose a whole number of packs").min(1, "Buy at least 1 pack").max(20, "Buy at most 20 packs at a time"),
+});
+export type TextTopUpInput = z.infer<typeof TextTopUpInput>;
+
+/** D8: a clinic paused for non-payment pays its month before it buys texts. */
+export const TOPUP_PAUSED = "Pay your monthly fee first, then buy more texts.";
 
 export const ReceiptStatus = z.enum(["pending", "confirmed", "rejected"]);
 export type ReceiptStatus = z.infer<typeof ReceiptStatus>;
@@ -51,13 +65,17 @@ export const ReceiptView = z.strictObject({
   status: ReceiptStatus,
   rejectionReason: z.string().nullable(),
   periodStart: IsoDate.nullable(), // the month it pays (subscriptions); null for a sign-up's setup fee and first month
+  // Feature 16 (revised): a text top-up's packs and billed parts, fixed when sent (D3); null for every other receipt.
+  packs: z.number().int().positive().nullable(),
+  parts: z.number().int().positive().nullable(),
 });
 export type ReceiptView = z.infer<typeof ReceiptView>;
 
-/** Who sent it: a waiting sign-up or a clinic's subscription. */
+/** Who sent it: a waiting sign-up, a clinic's subscription, or a clinic's text top-up (one waiting at a time each). */
 export const ReceiptPayer = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("signup"), signupId: Id }),
   z.strictObject({ kind: z.literal("subscription"), clinicId: Id }),
+  z.strictObject({ kind: z.literal("text_topup"), clinicId: Id }),
 ]);
 export type ReceiptPayer = z.infer<typeof ReceiptPayer>;
 
@@ -67,6 +85,7 @@ export const ReceiptToCheck = z.strictObject({
   payer: z.discriminatedUnion("kind", [
     z.strictObject({ kind: z.literal("signup"), signupId: Id, signupReference: z.string(), clinicName: z.string() }),
     z.strictObject({ kind: z.literal("subscription"), clinicId: Id, clinicName: z.string() }),
+    z.strictObject({ kind: z.literal("text_topup"), clinicId: Id, clinicName: z.string() }),
   ]),
 });
 export type ReceiptToCheck = z.infer<typeof ReceiptToCheck>;

@@ -1,4 +1,5 @@
 import type { LoggedMessageKind } from "../schemas/message";
+import type { TextPackPrice } from "../schemas/signup";
 import type { Tier } from "../schemas/tenancy";
 import { isAccountText } from "./portal";
 import { FAILURE } from "./sending";
@@ -23,6 +24,15 @@ export const storageFullMessage = (tier: Tier) =>
 export const storageRefusal = (tier: Tier, usedBytes: number, addingBytes: number): string | undefined =>
   usedBytes + addingBytes > TIER_LIMITS[tier].storageBytes ? storageFullMessage(tier) : undefined;
 
+/**
+ * The month's text allowance in billed parts: the plan's, plus the top-up parts confirmed for that Manila month
+ * (D1: no rollover). Every reader of the cap goes through this, never `TIER_LIMITS[tier].textParts` alone.
+ */
+export const textAllowance = (tier: Tier, topUpParts: number) => TIER_LIMITS[tier].textParts + topUpParts;
+
+/** A top-up receipt's parts and amount: the pack on the list when it was sent (D3), times the packs. */
+export const textTopUpQuote = (pack: TextPackPrice, packs: number) => ({ parts: pack.parts * packs, amount: pack.price * packs });
+
 /** B12 decision 18: the text month is the Manila calendar month, from the server's Manila date (never a browser Date). */
 export const manilaMonth = (day: string) => day.slice(0, 7);
 
@@ -46,11 +56,14 @@ export function textAllowanceNotice(texts: { inUse: number; limit: number | null
   if (inUse >= limit) {
     return {
       level: "limit",
-      text: `You've used all ${limit} texts for ${monthName(month)} ${month.slice(0, 4)}. Automatic reminders are not sent until 1 ${nextMonthName(month)}; portal invites and password resets still go. Contact Primolar to upgrade for more.`,
+      text: `You've used all ${limit} texts for ${monthName(month)} ${month.slice(0, 4)}. Automatic reminders are not sent until 1 ${nextMonthName(month)} or until you buy more; portal invites and password resets still go. Buy more texts, or contact Primolar to upgrade.`,
     };
   }
   if (inUse >= limit * 0.8) {
-    return { level: "warning", text: `You've used ${inUse} of your ${limit} texts this month. At ${limit}, automatic reminders stop until 1 ${nextMonthName(month)}.` };
+    return {
+      level: "warning",
+      text: `You've used ${inUse} of your ${limit} texts this month. At ${limit}, automatic reminders stop until 1 ${nextMonthName(month)}. Buy more texts, or contact Primolar to upgrade.`,
+    };
   }
   return undefined;
 }

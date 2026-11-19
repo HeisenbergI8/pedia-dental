@@ -56,10 +56,18 @@ export type GetStartedInput = z.infer<typeof GetStartedInput>;
 export const PlanPrice = z.object({ setupFee: Centavos.nonnegative(), monthlyFee: Centavos.nonnegative() });
 export type PlanPrice = z.infer<typeof PlanPrice>;
 
+/** One text top-up pack (feature 16, revised): how many billed parts it adds and what it costs, VAT-inclusive. */
+export const TextPackPrice = z.object({
+  parts: z.number().int().min(1, "A pack adds at least 1 text").max(100_000, "A pack adds at most 100,000 texts"),
+  price: Centavos.nonnegative(),
+});
+export type TextPackPrice = z.infer<typeof TextPackPrice>;
+
 /** GET /signups/prices, GET and PUT /operator/prices: the operator's price list (billing #23). */
 export const PriceList = z.object({
   plans: z.object({ small: PlanPrice, mid: PlanPrice, big: PlanPrice }),
   designAddOn: Centavos.nonnegative(), // the same on every plan
+  textPack: TextPackPrice, // the same on every plan; bought at today's list, never priceOn (a top-up is not a month)
 });
 export type PriceList = z.infer<typeof PriceList>;
 

@@ -11,8 +11,7 @@ test.describe.configure({ timeout: 120_000 });
 const expect = baseExpect.configure({ timeout: 20_000 });
 
 const RUN = Date.now().toString(36);
-const STAFF_LIMIT = "Your Small plan includes 5 staff logins. Contact Primolar to upgrade.";
-const BRANCH_LIMIT = "Your Small plan includes 1 branch. Contact Primolar to upgrade.";
+const BRANCH_LIMIT = "Your Starter plan includes 1 branch. Contact Primolar to upgrade.";
 const BULILIT = { name: "Bulilit Smiles Pediatric Dental", contactEmail: "hello@bulilitsmiles.demo", tin: "123-456-789-000", brandColor: "#b0245e" };
 
 async function signInAs(page: Page, email: string) {
@@ -46,13 +45,12 @@ test("Settings reads B3's routes and, since B12, the subscription from the API",
   expect([await fromApi(await usage), await fromApi(await subscription)]).toEqual([true, true]);
 });
 
-test("Ngiti's Owner at 1 of 1 and 5 of 5: Add is off, and the API refuses on its own", async ({ page }) => {
+// Feature 16 (revised): Starter has 10 logins and Ngiti 5 (D19); the staff refusal is covered by the int tests.
+test("Ngiti's Owner at 1 of 1 branches: Add branch is off, and the API refuses on its own", async ({ page }) => {
   await signInAs(page, USERS.ngitiOwner);
-  await openTab(page, "staff", "/clinic/usage");
-  await expect(page.getByText("5 of 5 staff logins on your plan, yours included.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Add staff" })).toBeDisabled();
-  const staff = await page.request.post("/api/staff", { data: { fullName: "Nora Ramos", email: `nora.${RUN}@ngiti.demo`, role: "front_desk", branchIds: ["branch_ngiti_bacoor"] } });
-  expect([staff.status(), await staff.text()]).toEqual([409, STAFF_LIMIT]);
+  await openTab(page, "branches", "/clinic/usage");
+  await expect(page.getByText(/^1 of 1 open branch on your plan/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add branch" })).toBeDisabled();
   const branch = await page.request.post("/api/branches", { data: { name: "Kawit", address: "1 Kawit Road, Cavite", phone: "(046) 400 0000", openingHours: { opensAt: 480, closesAt: 1080, closedWeekdays: [0] } } });
   expect([branch.status(), await branch.text()]).toEqual([409, BRANCH_LIMIT]);
 });

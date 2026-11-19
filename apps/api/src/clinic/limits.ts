@@ -1,8 +1,8 @@
 import { ConflictException } from "@nestjs/common";
-import { TIER_LIMITS, accountUsage, canAddUnder, limitMessage, limitTier, type ClinicUsage, type Tier } from "@pedia/shared";
+import { TIER_LIMITS, accountUsage, canAddUnder, limitMessage, limitTier, textAllowance, type ClinicUsage, type Tier } from "@pedia/shared";
 
 /** What the plan's storage and text allowances count (B12 decisions 1, 2, 17, 18): bytes stored, billed parts in `month`. */
-export type AllowanceUse = { storageBytes: number; textParts: number; month: string };
+export type AllowanceUse = { storageBytes: number; textParts: number; textTopUp: number; month: string };
 import type { Tx } from "../prisma/transaction";
 
 /** The two limits a tier sets (decisions #5, #6). Cross-branch views are a report rule, not a count. */
@@ -24,7 +24,8 @@ export const usageOf = (tier: Tier, inUse: Record<Limit, number>, use: Allowance
   branches: { inUse: inUse.branches, limit: TIER_LIMITS[tier].branches },
   staffLogins: { inUse: inUse.staffLogins, limit: TIER_LIMITS[tier].staffLogins },
   storage: { inUse: use.storageBytes, limit: TIER_LIMITS[tier].storageBytes },
-  texts: { inUse: use.textParts, limit: TIER_LIMITS[tier].textParts },
+  texts: { inUse: use.textParts, limit: textAllowance(tier, use.textTopUp) },
+  textTopUp: use.textTopUp,
   month: use.month,
 });
 

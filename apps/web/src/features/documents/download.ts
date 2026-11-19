@@ -23,11 +23,13 @@ async function pdfLogo(url: string | null): Promise<string | undefined> {
 
 /** Builds the PDF in the browser and saves it. react-pdf (~1 MB) loads on the first download, not with the page. */
 export async function downloadPdf(content: DocContent): Promise<void> {
-  const [{ pdf }, { documentPdf }, logo] = await Promise.all([
+  const custom = content.letterhead.custom;
+  const [{ pdf }, { documentPdf }, logo, headerImage] = await Promise.all([
     import("@react-pdf/renderer"),
     import("./components/document-pdf"),
     pdfLogo(content.letterhead.logoUrl),
+    pdfLogo(custom && "imageUrl" in custom ? custom.imageUrl : null), // D11: drawn the same way as the logo
   ]);
-  const blob = await pdf(documentPdf(content, logo)).toBlob();
+  const blob = await pdf(documentPdf(content, logo, headerImage)).toBlob();
   saveFile(blob, content.fileName);
 }

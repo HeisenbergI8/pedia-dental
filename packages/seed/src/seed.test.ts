@@ -161,10 +161,11 @@ describe("demo accounts' branding and limits (chunk 20)", () => {
     // Ipin (chunk 23) is in the default look, so only the two branded clinics carry a logo.
     for (const a of [demo!, ngiti!]) expect(a.logoRef, a.name).toMatch(/^demo\/.+\.svg$/);
   });
-  it("puts Ngiti (Small) exactly at its limits, so the next branch or login is refused", () => {
+  it("puts Ngiti (Starter) at its branch limit with 5 of its 10 logins (D19: the limit tests add the other 5)", () => {
     const ngiti = p.tenants.clinic_ngiti!;
-    expect(accountUsage(ngiti)).toEqual({ branches: 1, staffLogins: TIER_LIMITS.small.staffLogins });
-    expect(canAddUnder("small", "staffLogins", accountUsage(ngiti).staffLogins)).toBe(false);
+    expect(accountUsage(ngiti)).toEqual({ branches: 1, staffLogins: 5 });
+    expect(canAddUnder("small", "branches", accountUsage(ngiti).branches)).toBe(false);
+    expect(canAddUnder("small", "staffLogins", accountUsage(ngiti).staffLogins)).toBe(true);
     expect(Object.values(p.tenants).every((t) => t.staffCredentials.length === 0)).toBe(true);
   });
 });

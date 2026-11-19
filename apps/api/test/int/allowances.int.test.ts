@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { INestApplication } from "@nestjs/common";
 import { seedPlatform } from "@pedia/seed";
-import { ClinicUsage, FAILURE, TIER_LIMITS, choiceDeclined, manilaMonth, storageFullMessage } from "@pedia/shared";
+import { ClinicUsage, FAILURE, GB, TIER_LIMITS, choiceDeclined, manilaMonth, storageFullMessage } from "@pedia/shared";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Hasher } from "../../src/auth/hashing";
@@ -47,8 +47,15 @@ const http = () => request(app.getHttpServer());
 const owner = async () => `pd_session=${await app.get(SessionService).openClinic(NGITI, OWNER.id)}`;
 const jpeg = (bytes: number) => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(bytes - 4, 7)]);
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+/** Filler rows of at most 1 GiB each: `bytes` is a 32-bit column, and Starter's 25 GB is more than one row holds. */
 const fill = (bytes: number) =>
-  inClinic(NGITI, () => prisma.storedFile.create({ data: { clinicId: NGITI, key: `clinics/${NGITI}/photos/filler.png`, area: "photos", bytes, createdAt: clock.now() } }));
+  inClinic(NGITI, () =>
+    prisma.storedFile.createMany({
+      data: Array.from({ length: Math.ceil(bytes / GB) }, (_, i) => ({
+        clinicId: NGITI, key: `clinics/${NGITI}/photos/filler-${i}.png`, area: "photos", bytes: Math.min(GB, bytes - i * GB), createdAt: clock.now(),
+      })),
+    }),
+  );
 const used = () => inClinic(NGITI, async () => (await prisma.storedFile.aggregate({ _sum: { bytes: true } }))._sum.bytes ?? 0);
 const photo = (cookie: string, body: Buffer) =>
   http().post(`/api/patients/${child.id}/photos`).set("Cookie", cookie)
@@ -105,8 +112,8 @@ describe("texts (decisions 2, 3, 18, 19, E9)", () => {
     await inClinic(NGITI, () => prisma.message.updateMany({ where: { dispatchedAt: { not: null } }, data: { dispatchedAt: null, segments: null } }));
   });
 
-  it("sends one of two reminders at 299 of 300 parts and fails the other; an invite still goes", async () => {
-    await dispatched(299, new Date(`${month}-01T09:00:00+08:00`));
+  it("sends one of two reminders at 499 of 500 parts and fails the other; an invite still goes", async () => {
+    await dispatched(TIER_LIMITS.small.textParts - 1, new Date(`${month}-01T09:00:00+08:00`));
     await queued("reminder_a", "appointment_reminder");
     await queued("reminder_b", "appointment_reminder");
     await Promise.all([app.get(OutboxWorker).drain(), app.get(OutboxWorker).drain()]);
@@ -119,15 +126,29 @@ describe("texts (decisions 2, 3, 18, 19, E9)", () => {
     expect(await statusOf("invite_c")).toBe("sent"); // account texts always go (decision 3)
   });
 
+  it("sends a template text again once a confirmed top-up raises the month's limit (feature 16, revised)", async () => {
+    await dispatched(TIER_LIMITS.small.textParts, new Date(`${month}-01T09:00:00+08:00`));
+    await queued("reminder_e", "appointment_reminder");
+    await app.get(OutboxWorker).drain();
+    expect(await statusOf("reminder_e")).toBe("failed"); // at the plan's limit
+    await prisma.textTopUp.create({
+      data: { clinicId: NGITI, month, packs: 1, parts: 100, invoiceNo: "PRM-INV-09999", method: "gcash", paidOn: new Date(`${month}-01T00:00:00Z`), amount: 15_000, recordedAt: clock.now() },
+    });
+    await queued("reminder_f", "appointment_reminder");
+    await app.get(OutboxWorker).drain();
+    expect(await statusOf("reminder_f")).toBe("sent");
+    expect(await statusOf("reminder_e")).toBe("failed"); // never sent later (B12 decision 19)
+  });
+
   it("doesn't count parts dispatched last month", async () => {
-    await dispatched(300, new Date(new Date(`${month}-01T00:00:00+08:00`).getTime() - 60 * 60_000)); // 11 PM on the last day before
+    await dispatched(TIER_LIMITS.small.textParts, new Date(new Date(`${month}-01T00:00:00+08:00`).getTime() - 60 * 60_000)); // 11 PM on the last day before
     await queued("reminder_d", "appointment_reminder");
     await app.get(OutboxWorker).drain();
     expect(await statusOf("reminder_d")).toBe("sent");
   });
 
   it("never refuses an invite for the limit (decision 3)", async () => {
-    await dispatched(300, new Date(`${month}-01T09:00:00+08:00`)); // the month's parts all used
+    await dispatched(TIER_LIMITS.small.textParts, new Date(`${month}-01T09:00:00+08:00`)); // the month's parts all used
     const kid = ngiti.patients.find((p) => p.guardians.some((g) => /^09\d{9}$/.test(g.phone)))!;
     const g = kid.guardians.find((x) => /^09\d{9}$/.test(x.phone))!;
     // Seeded parents are active: turn the login off so it can be invited again.

@@ -1,5 +1,5 @@
 import { http, HttpResponse } from "msw";
-import { PriceList, RecordUpfrontPaymentInput, RejectSignupInput, SignupInput, amountDue, type CreateAccountResult } from "@pedia/shared";
+import { PriceList, SupportSettings, RecordUpfrontPaymentInput, RejectSignupInput, SignupInput, amountDue, type CreateAccountResult } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { today } from "@/mocks/clock";
 import { persist, platform } from "@/mocks/db";
@@ -105,6 +105,16 @@ export const operatorSignupHandlers = [
   }),
 
   http.get(url("/operator/prices"), () => HttpResponse.json(platform.prices)),
+
+  // D12: Primolar's support email and chat link, what "Contact support" opens.
+  http.get(url("/operator/support"), () => HttpResponse.json(platform.support)),
+  http.put(url("/operator/support"), async ({ request }) => {
+    const parsed = SupportSettings.safeParse(await request.json());
+    if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
+    platform.support = parsed.data;
+    persist();
+    return HttpResponse.json(platform.support);
+  }),
 
   // Billing #23: whole centavos, never negative. Waiting sign-ups keep their quote (A2).
   http.put(url("/operator/prices"), async ({ request }) => {

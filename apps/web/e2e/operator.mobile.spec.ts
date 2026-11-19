@@ -16,7 +16,7 @@ test.describe("happy paths", () => {
     const list = page.getByRole("list", { name: "Clinic accounts" });
     await expect(list).toBeVisible();
     const ipin = list.getByRole("listitem").filter({ has: page.getByRole("link", { name: "Ipin Kids Dental" }) });
-    await expect(ipin).toContainText("Small");
+    await expect(ipin).toContainText("Starter");
     await expect(ipin).toContainText("Dr. Lara Santiago");
   });
 

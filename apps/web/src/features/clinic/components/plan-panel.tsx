@@ -1,8 +1,9 @@
 "use client";
+import { ComparePlansLink } from "@/features/plans/components/compare-plans-link";
 import type { ReactNode } from "react";
 import { format, parseISO } from "date-fns";
 import {
-  SUBSCRIPTION_STATE_LABEL, TIER_LABEL, TIER_LIMITS, formatBillingDate, formatPeso, formatStorage, type ClinicUsage, type SubscriptionView,
+  SUBSCRIPTION_STATE_LABEL, TIER_LABEL, TIER_LIMITS, TIER_SUPPORT, formatBillingDate, formatPeso, formatStorage, type ClinicUsage, type SubscriptionView,
 } from "@pedia/shared";
 import { Loading } from "@/components/brand";
 import { ErrorState } from "@/components/error-state";
@@ -13,7 +14,9 @@ import { ReceiptUpload } from "@/features/payments/components/receipt-upload";
 import { clinicReceiptImageUrl, useClinicUsage, useSubscription, useUploadReceipt } from "../api";
 import { BillingNotice } from "./billing-banner";
 import { TextAllowanceNotice } from "./usage-banner";
+import { ContactSupport } from "./contact-support";
 import { PaymentHistory } from "./payment-history";
+import { TextTopUpCard } from "./text-topup-card";
 
 /**
  * Read-only: Primolar changes the plan (billing #27). What is in use against the plan, what it includes, and the
@@ -21,6 +24,7 @@ import { PaymentHistory } from "./payment-history";
  */
 export function PlanPanel() {
   const usage = useClinicUsage();
+  const sub = useSubscription();
   if (usage.isLoading) return <Loading label="Loading your plan" />;
   if (!usage.data) return <ErrorState what="your plan" onRetry={() => void usage.refetch()} />;
   const { tier } = usage.data;
@@ -30,23 +34,39 @@ export function PlanPanel() {
     <div className="space-y-5">
       <SectionCard
         title={<>You&apos;re on the {TIER_LABEL[tier]} plan</>}
-        description="To change your plan, contact Primolar. An upgrade starts at once; a downgrade starts on your next due date."
+        description={<>To change your plan, contact Primolar. An upgrade starts at once; a downgrade starts on your next due date. <ComparePlansLink /></>}
       >
         <div className="grid gap-4 sm:grid-cols-2">
           <Allowance label="Open branches" allowance={usage.data.branches} />
           <Allowance label="Staff logins" allowance={usage.data.staffLogins} />
           <Allowance label="Storage" allowance={usage.data.storage} show={formatStorage} />
-          <Allowance label={`Texts in ${format(parseISO(`${usage.data.month}-01`), "MMMM")}`} allowance={usage.data.texts} />
+          <Allowance
+            label={`Texts in ${format(parseISO(`${usage.data.month}-01`), "MMMM")}`}
+            allowance={usage.data.texts}
+            note={usage.data.textTopUp > 0 ? `Includes ${usage.data.textTopUp.toLocaleString("en-PH")} texts you bought this month.` : undefined}
+          />
         </div>
-        <TextAllowanceNotice usage={usage.data} />
+        <TextAllowanceNotice usage={usage.data} canBuy={!sub.data?.pausedFor} />
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+          <div className="text-sm">
+            <h3 className="font-semibold">Your support: {TIER_SUPPORT[tier].label}</h3>
+            <p className="text-ink-muted">{TIER_SUPPORT[tier].detail}</p>
+          </div>
+          <ContactSupport tier={tier} />
+        </div>
         <div className="space-y-2 border-t border-line pt-4">
           <h3 className="text-sm font-semibold">Also on your plan</h3>
           <ul className="space-y-1 text-sm">
             <Feature on>Your logo, brand colour and heading font</Feature>
             <Feature on={limits.crossBranchViews}>Dashboard and finance views across branches</Feature>
+            <Feature on={limits.appointmentRequests}>Parents ask for appointments from the parent portal</Feature>
+            <Feature on={limits.customLetterhead}>A custom letterhead on your documents (your own header and footer, or an image)</Feature>
+            <Feature on>Patient records, charts, notes, treatment plans and your data export, on every plan</Feature>
           </ul>
         </div>
       </SectionCard>
+      {/* D8: a clinic paused for its monthly fee pays that first. */}
+      {sub.data && !sub.data.pausedFor && <TextTopUpCard />}
       <BillingCard />
     </div>
   );
@@ -122,7 +142,7 @@ function PayNow({ subscription: s }: { subscription: SubscriptionView }) {
 }
 
 /** "2 of 3", a meter, and over the limit after a downgrade, what that means (decision #9). Never colour alone. */
-function Allowance({ label, allowance: { inUse, limit }, show = String }: { label: string; allowance: ClinicUsage["branches"]; show?: (n: number) => string }) {
+function Allowance({ label, allowance: { inUse, limit }, show = String, note }: { label: string; allowance: ClinicUsage["branches"]; show?: (n: number) => string; note?: string }) {
   const over = limit !== null && inUse > limit;
   return (
     <div className="space-y-2 rounded-lg border border-line p-4">
@@ -133,6 +153,7 @@ function Allowance({ label, allowance: { inUse, limit }, show = String }: { labe
       {limit !== null && (
         <meter aria-label={`${label} in use`} min={0} max={limit} value={Math.min(inUse, limit)} className="h-2 w-full accent-brand" />
       )}
+      {note && <p className="text-sm text-ink-muted">{note}</p>}
       {over && <p className="text-sm text-ink-muted">Everything keeps working. You can&apos;t add more until you&apos;re under the limit.</p>}
     </div>
   );

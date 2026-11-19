@@ -2,7 +2,7 @@ import { expect as baseExpect, test, type Locator, type Page } from "@playwright
 import { DEMO_PASSWORD, USERS, signIn, pinSeededDay } from "./support/users";
 
 /*
- * Pilot tests for the Owner of a Mid-plan clinic: Dr. Paolo Villanueva at Bulilit Smiles (Imus and Dasmariñas).
+ * Pilot tests for the Owner of a Clinic-plan clinic: Dr. Paolo Villanueva at Bulilit Smiles (Imus and Dasmariñas).
  * Everything goes through the screen the way the Owner would use it: the sidebar, the Settings tabs, dialogs and
  * forms. Each test starts from fresh demo data (a new browser context).
  */
@@ -341,7 +341,7 @@ test.describe("happy paths", () => {
   test("owner adds a front desk login and sees the temporary password once", async ({ page }) => {
     await signInAsOwner(page);
     await openSettings(page, "Staff");
-    await expect(page.getByText("5 of 20 staff logins on your plan, yours included.", { exact: false })).toBeVisible();
+    await expect(page.getByText("5 of 30 staff logins on your plan, yours included.", { exact: false })).toBeVisible();
     await addStaff(page, { name: "Jose Rizal Mercado", email: "jose.mercado@bulilitsmiles.ph", branches: ["Dasmariñas"] });
     const { dialog } = await readTemporaryPassword(page, "Jose Rizal Mercado");
     await expect(valueOf(dialog, "Email")).toHaveText("jose.mercado@bulilitsmiles.ph");
@@ -356,12 +356,12 @@ test.describe("happy paths", () => {
     await expect(row).toContainText("Active");
     await expect(row).toContainText("Front desk");
     await expect(row).toContainText("Dasmariñas");
-    await expect(page.getByText(/^6 of 20 staff logins/)).toBeVisible();
+    await expect(page.getByText(/^6 of 30 staff logins/)).toBeVisible();
     // The password is nowhere on the page any more
     await expect(page.getByText("Temporary password")).toHaveCount(0);
 
     await page.getByRole("tab", { name: "Plan" }).click();
-    await expect(page.getByRole("tabpanel", { name: "Plan" }).getByText("6 of 20")).toBeVisible();
+    await expect(page.getByRole("tabpanel", { name: "Plan" }).getByText("6 of 30")).toBeVisible();
   });
 
   test("a new staff login signs in with the temporary password, chooses their own, and reads the confidentiality notice", async ({ page }) => {
@@ -417,7 +417,7 @@ test.describe("happy paths", () => {
     await confirm.getByRole("button", { name: "Deactivate Liza Cruz" }).click();
     await expect(toast(page, "Liza Cruz is deactivated")).toBeVisible();
     await expect(staffRow(page, "Liza Cruz")).toContainText("Deactivated");
-    await expect(page.getByText(/^4 of 20 staff logins/)).toBeVisible();
+    await expect(page.getByText(/^4 of 30 staff logins/)).toBeVisible();
 
     await page.reload();
     await page.getByRole("tab", { name: "Staff" }).click();
@@ -426,7 +426,7 @@ test.describe("happy paths", () => {
     await staffRow(page, "Liza Cruz").getByRole("button", { name: "Reactivate" }).click();
     await expect(toast(page, "Liza Cruz can sign in again")).toBeVisible();
     await expect(staffRow(page, "Liza Cruz")).toContainText("Active");
-    await expect(page.getByText(/^5 of 20 staff logins/)).toBeVisible();
+    await expect(page.getByText(/^5 of 30 staff logins/)).toBeVisible();
   });
 
   test("a deactivated front desk can no longer sign in, and can again once reactivated", async ({ page }) => {
@@ -455,9 +455,9 @@ test.describe("happy paths", () => {
     await signInAsOwner(page);
     await openSettings(page, "Plan");
     const plan = page.getByRole("tabpanel", { name: "Plan" });
-    await expect(plan.getByRole("heading", { name: "You're on the Mid plan" })).toBeVisible();
+    await expect(plan.getByRole("heading", { name: "You're on the Clinic plan" })).toBeVisible();
     await expect(plan.getByText("2 of 3")).toBeVisible();
-    await expect(plan.getByText("5 of 20")).toBeVisible();
+    await expect(plan.getByText("5 of 30")).toBeVisible();
     await expect(plan.getByText("Dashboard and finance views across branches · included")).toBeVisible();
     await expect(valueOf(plan, "Status")).toHaveText("Paid up");
     await expect(valueOf(plan, "Amount")).toContainText(/₱[\d,]+\.\d\d \(includes ₱[\d,]+\.\d\d VAT\)/);
@@ -582,7 +582,7 @@ test.describe("failed paths", () => {
     await dialog.getByRole("button", { name: "Add staff" }).click();
     await expect(dialog.getByRole("alert")).toContainText("already signs in to Bulilit Smiles Pediatric Dental");
     await dialog.getByRole("button", { name: "Cancel" }).click();
-    await expect(page.getByText(/^5 of 20 staff logins/)).toBeVisible();
+    await expect(page.getByText(/^5 of 30 staff logins/)).toBeVisible();
   });
 
   test("owner can't reuse the email of a login that was added earlier", async ({ page }) => {
@@ -603,7 +603,7 @@ test.describe("failed paths", () => {
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(dialog).toBeHidden();
     await expect(staffRow(page, "Half Filled")).toHaveCount(0);
-    await expect(page.getByText(/^5 of 20 staff logins/)).toBeVisible();
+    await expect(page.getByText(/^5 of 30 staff logins/)).toBeVisible();
   });
 
   test("owner cancels a deactivation and the login stays active", async ({ page }) => {
@@ -612,7 +612,7 @@ test.describe("failed paths", () => {
     await staffRow(page, "Dr. Miguel Santos").getByRole("button", { name: "Deactivate" }).click();
     await page.getByRole("dialog", { name: "Deactivate Dr. Miguel Santos?" }).getByRole("button", { name: "Cancel" }).click();
     await expect(staffRow(page, "Dr. Miguel Santos")).toContainText("Active");
-    await expect(page.getByText(/^5 of 20 staff logins/)).toBeVisible();
+    await expect(page.getByText(/^5 of 30 staff logins/)).toBeVisible();
   });
 
   test("the Owner's own login offers no Deactivate", async ({ page }) => {
@@ -653,7 +653,7 @@ test.describe("failed paths", () => {
     await addBranch(page, BACOOR);
     await expect(toast(page, "Bacoor added")).toBeVisible();
     await expect(page.getByRole("button", { name: "Add branch" })).toBeDisabled();
-    await expect(page.getByRole("status").filter({ hasText: "Your Mid plan includes 3 branches. Contact Primolar to upgrade." })).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: "Your Clinic plan includes 3 branches. Contact Primolar to upgrade." })).toBeVisible();
   });
 
   test("owner can't archive Imus while staff work only there, and is told who", async ({ page }) => {
@@ -730,7 +730,7 @@ test.describe("edge cases", () => {
     const { dialog: done } = await readTemporaryPassword(page, "Andres Bonifacio");
     await done.getByRole("button", { name: "I've passed it on" }).click();
     await expect(staffRow(page, "Andres Bonifacio")).toHaveCount(1);
-    await expect(page.getByText(/^6 of 20 staff logins/)).toBeVisible();
+    await expect(page.getByText(/^6 of 30 staff logins/)).toBeVisible();
   });
 
   test("Escape can't dismiss the one-time password, but does close an empty Add staff form", async ({ page }) => {
@@ -756,7 +756,7 @@ test.describe("edge cases", () => {
     await page.getByRole("tab", { name: "Staff" }).click();
     await expect(staffRow(page, "Apolinario Mabini")).toContainText("Active");
     await expect(page.getByText("Temporary password")).toHaveCount(0);
-    await expect(page.getByText(/^6 of 20 staff logins/)).toBeVisible();
+    await expect(page.getByText(/^6 of 30 staff logins/)).toBeVisible();
   });
 
   test("staff names with ñ, apostrophes and hyphens show exactly as typed", async ({ page }) => {

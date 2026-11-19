@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { OpeningHours } from "../schemas/tenancy";
 import {
   DEFAULT_OPENING_HOURS,
+  NEVER_LIMITED,
   TIER_LIMITS,
+  TIER_SUPPORT,
+  type TierLimits,
   accountUsage,
   archiveProblem,
   canAddUnder,
@@ -18,10 +21,27 @@ import {
 } from "./tenancy";
 
 describe("tier limits", () => {
-  it("matches decision #5: Small 1 branch and 5 logins, Mid 3 and 20, Big unlimited", () => {
+  it("never limits patient care: the switches are exactly the five scale and service ones", () => {
+    const switches = Object.keys(TIER_LIMITS.small).filter((k) => typeof TIER_LIMITS.small[k as keyof TierLimits] === "boolean");
+    expect(switches.sort()).toEqual(["appointmentRequests", "crossBranchViews", "customLetterhead", "designIncluded", "financeExport"]);
+    expect(NEVER_LIMITED).toContain("the chart");
+  });
+
+  it("only ever raises a limit from Starter to Pro (a downgrade is the only way to be over)", () => {
+    for (const k of ["branches", "staffLogins", "storageBytes", "textParts"] as const) {
+      const [s, m, b] = (["small", "mid", "big"] as const).map((t) => TIER_LIMITS[t][k] ?? Infinity);
+      expect(s! <= m! && m! <= b!).toBe(true);
+    }
+  });
+
+  it("gives every tier a support level (D12)", () => {
+    expect((["small", "mid", "big"] as const).map((t) => TIER_SUPPORT[t].channel)).toEqual(["email", "chat", "contact"]);
+  });
+
+  it("matches feature 16 (revised): Starter 1 branch and 10 logins, Clinic 3 and 30, Pro unlimited", () => {
     expect([TIER_LIMITS.small, TIER_LIMITS.mid, TIER_LIMITS.big].map((t) => [t.branches, t.staffLogins])).toEqual([
-      [1, 5],
-      [3, 20],
+      [1, 10],
+      [3, 30],
       [null, null],
     ]);
   });
@@ -29,7 +49,7 @@ describe("tier limits", () => {
   it("blocks only the next one, so a downgraded account keeps what it has", () => {
     expect(canAddUnder("small", "branches", 0)).toBe(true);
     expect(canAddUnder("small", "branches", 1)).toBe(false);
-    expect(canAddUnder("small", "staffLogins", 7)).toBe(false); // over the limit after a downgrade: no error, no new login
+    expect(canAddUnder("small", "staffLogins", 12)).toBe(false); // over the limit after a downgrade: no error, no new login
     expect(canAddUnder("big", "staffLogins", 10_000)).toBe(true);
   });
 
@@ -82,9 +102,9 @@ describe("limits in use (decisions #8, #10, #37)", () => {
   });
 
   it("says the limit and how to lift it, the same words everywhere", () => {
-    expect(limitMessage("small", "branches")).toBe("Your Small plan includes 1 branch. Contact Primolar to upgrade.");
-    expect(limitMessage("small", "staffLogins")).toBe("Your Small plan includes 5 staff logins. Contact Primolar to upgrade.");
-    expect(limitMessage("mid", "branches")).toBe("Your Mid plan includes 3 branches. Contact Primolar to upgrade.");
+    expect(limitMessage("small", "branches")).toBe("Your Starter plan includes 1 branch. Contact Primolar to upgrade.");
+    expect(limitMessage("small", "staffLogins")).toBe("Your Starter plan includes 10 staff logins. Contact Primolar to upgrade.");
+    expect(limitMessage("mid", "branches")).toBe("Your Clinic plan includes 3 branches. Contact Primolar to upgrade.");
   });
 
   it("never archives the last open branch, strands a login, or drops a booking (decision #22)", () => {

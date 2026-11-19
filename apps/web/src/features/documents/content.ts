@@ -46,7 +46,12 @@ export type DocBlock =
   | { kind: "signatures"; lines: { label: string; name?: string; detail?: string }[] };
 
 /** What heads every document (decisions #19, #31): the clinic, the branch it came from, its logo and brand ring. */
-export type Letterhead = { clinicName: string; branchLine: string; logoUrl: string | null; ring: string };
+/**
+ * `custom` (D11): a Clinic or Pro clinic's own lines under the standard header and in the footer, or its own image in
+ * place of the header. Absent for a clinic that never customised, so its documents look exactly as before.
+ */
+export type CustomLetterhead = { header: string[]; footer: string[] } | { imageUrl: string };
+export type Letterhead = { clinicName: string; branchLine: string; logoUrl: string | null; ring: string; custom?: CustomLetterhead };
 export type DocContent = { title: string; subtitle: string; blocks: DocBlock[]; footnote?: string; fileName: string; clinicName: string; letterhead: Letterhead };
 
 /** Everything a document can draw on: one patient's record plus reference data. */

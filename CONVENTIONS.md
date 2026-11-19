@@ -59,7 +59,7 @@ TanStack Query · React Hook Form + Zod 4 · Zustand (UI state, plus the demo se
 | HTTP | `apps/web/src/lib/api-client.ts` | The only `fetch` in the app |
 | Access rules | `packages/shared/src/domain/permissions.ts` | `ROLE_PERMISSIONS`: who may do what. The only place access is decided. `branches.all` = works at every branch (Owner). `today.view` = Today at a glance (all staff); `dashboard.view` = finance (admin); `patients.contact` = guardian phones and emails, emergency contact and address, **left out of every patient response** without it (admin and front desk: all; a parent: their own family). Responses parse with `PatientView`; the stored record is `Patient` |
 | Access gate | `apps/web/src/mocks/access.ts` | Route → permission (`RULES`), 401 / 403, parent ownership. `/operator/*` branches off before `sessionOf` (`operatorRefusal`); `/signups/*` and `/legal/*` too (`publicRefusal`, deny-by-default `PUBLIC_RULES`) |
-| Operator console | `apps/web/src/features/operator/`, `apps/web/src/app/operator/` | Primolar's console: clinic accounts, tiers, Owners, usage counts; sign-ups (record payment, fix, reject, approve), the price list, Set branding for Design it for me clinics; each clinic's subscription (record a month's payment, cancel). Its own sign-in, session store and routes; never a clinic user |
+| Operator console | `apps/web/src/features/operator/`, `apps/web/src/app/operator/` | Primolar's console: clinic accounts, tiers, Owners, usage counts; sign-ups (record payment, fix, reject, approve), the price list, Set branding for Design it for me clinics; each clinic's subscription (record a month's payment, cancel); text top-up receipts in Payments to check (first in the list), support details and each clinic's named contact. Its own sign-in, session store and routes; never a clinic user |
 | Public sign-up | `apps/web/src/features/signup/`, `apps/web/src/app/get-started/` | Get started form and the status page by reference. No sign-in; `/signups/*` answered outside every clinic |
 | Audit log | `apps/web/src/features/audit/` | B13c2a: `useAuditLog` (`useInfiniteQuery`, the cursor), the Settings → Privacy screen, the `GET /audit-log` handler |
 | Privacy requests | `apps/web/src/features/privacy-requests/` | B13c2b-1: the register's hooks, its card and dialogs in Settings → Privacy, and the `/privacy-requests` handlers (restriction on an approved erasure) |
@@ -131,6 +131,11 @@ the NestJS API through Next's `/api` rewrite (or, offline in `enabled` mode, an 
   `features/clinic/components/brand-fields.tsx` and the console's sign-up Look card. The clinic's logo comes from `ClinicContext.logoUrl` through
   `ClinicLogo`. Primolar's wordmark appears only on sign-in, the operator console, the cold-start loader and
   `PoweredByPrimolar`, plus the public sign-up frame.
+- Custom letterhead (D11): every clinic starts on the standard header (logo and branch address). Clinic and Pro may add
+  their own lines or upload a letterhead image (`GET/PUT /clinic/letterhead`, `/clinic/letterhead/image`;
+  `letterheadProblem`, `LETTERHEAD_IMAGE_RULES`). Documents read it through `useDocumentSources`
+  (`Letterhead.custom`), only when it isn't `standard`. After a downgrade the clinic keeps its letterhead, can't change
+  it, and can reset it. The image counts toward storage like the logo.
 - The heading font is on every plan (billing #8). The operator sets a clinic's look only for Design it for me
   (`PUT /operator/accounts/:id/branding`); every other look is the Owner's, in Settings → Clinic → Look.
 - Sign-up money: prices are VAT-inclusive centavos in `Platform.prices`. A sign-up's amount due is `amountDue`
@@ -154,6 +159,14 @@ the NestJS API through Next's `/api` rewrite (or, offline in `enabled` mode, an 
   (`SessionUser.billingOnly`, `BILLING_ONLY_ROUTES`). Plans carry storage and text allowances (`TIER_LIMITS`):
   storage is refused at upload (the API checks at its ledger), and a template text past the month's parts fails and is
   never sent later (the mock checks when it queues, the API when it sends); account texts always go.
+- Tiers (feature 16, revised 2026-11-19): the ids stay `small` / `mid` / `big`; the labels are Starter / Clinic / Pro
+  (`TIER_LABEL`). Limits and feature switches are `TIER_LIMITS` (`appointmentRequests`, `customLetterhead`,
+  `financeExport`, `designIncluded`); nothing in `NEVER_LIMITED` (patient care) may ever read a tier. A feature follows the
+  tier in force; a count follows `limitTier`. A month's text limit is the plan's plus that Manila month's confirmed top-ups
+  (`textAllowance`). Top-ups are bought like a month (QR + receipt, one waiting at a time, never while paused), confirmed
+  by the operator, expire with the month, and go on Primolar's books with a PRM-INV number from the same series as the
+  monthly invoices. Waiting top-ups sort first in Payments to check. Each tier's support channel is `TIER_SUPPORT`; the
+  addresses are data (`/operator/support`, a clinic's named contact), shown by `GET /clinic/support`.
 - Privacy (feature 18): the templates and their versions are `LEGAL_DOCUMENTS` (`domain/legal.ts`), labelled
   `PENDING_REVIEW` until a lawyer reviews them. A clinic's agreements are append-only in `Platform.agreements`;
   `termsOutdated` decides when the Owner must accept again. The gate blocks the Owner (terms) and a staff login
@@ -176,7 +189,7 @@ the NestJS API through Next's `/api` rewrite (or, offline in `enabled` mode, an 
   operator's export and purge (API-only scripts; `packages/infra/runbooks/clinic-data-return.md`). MSW has neither: the
   offline mode has no anonymisation or clinic purge, a deliberate deferral (no route changes).
 - Branch-level reports (Today, finance, daily collections) take `?branch=` (a branch id or `all`), resolved only by
-  `reportBranches(request)`. Who may ask for what is `reportBranchFilter` in `domain/tenancy.ts`: Mid and Big, two or
+  `reportBranches(request)`. Who may ask for what is `reportBranchFilter` in `domain/tenancy.ts`: Clinic and Pro (`mid`, `big`), two or
   more branches; `all` for the Owner.
 - Allergies and alerts must be visible on every patient screen (`PatientHeader`).
 - Parents sign in only once invited (B11): `Db.portalAccounts` holds each guardian's portal access (`invited`, `active`,
@@ -201,9 +214,9 @@ the NestJS API through Next's `/api` rewrite (or, offline in `enabled` mode, an 
 - **A new route needs its API controller and its MSW handler.** `passthrough.test.ts` fails when a handler's route is
   missing from `API_ROUTES`; a new web handler test needs a twin API test or a line in `apps/api/test/port-ledger.ts`.
 - In `enabled` mode only, mock data lives in `localStorage`. After changing `seed()` or `Db`, bump the key in `mocks/db.ts`
-  or clear storage, or you'll keep seeing old data. The key is `pedia-dental:mock-db:v32`; each bump gets a
+  or clear storage, or you'll keep seeing old data. The key is `pedia-dental:mock-db:v34`; each bump gets a
   one-line comment above it saying why.
-- The mock store is partitioned by clinic account: `Platform = { accounts, tenants, signups, prices, subscriptions, agreements, priceChanges, paymentQr, receipts }`
+- The mock store is partitioned by clinic account: `Platform = { accounts, tenants, signups, prices, subscriptions, agreements, priceChanges, paymentQr, receipts, support, supportContacts, textTopUps }`
   in `mocks/db.ts`. Sign-ups, prices, subscriptions and agreements are Primolar's, never inside a tenant. `db` is a
   live binding to the signed-in account's `Db`, repointed by `sessionOf()` (`selectTenant`). Never cache `db` in a
   module-level variable, and never call `selectTenant` from a feature handler. Stamp new records with
@@ -259,7 +272,7 @@ the NestJS API through Next's `/api` rewrite (or, offline in `enabled` mode, an 
   the operator, not the clinic user, on that prefix. Operator tests live in `mocks/operator.test.ts`, cross-branch
   report tests in `mocks/cross-branch.test.ts`. The same guard reads `features/operator/signup-mocks.ts`,
   `features/signup/mocks.ts`, `features/legal/mocks.ts`, `mocks/signups.ts`, `mocks/subscriptions.ts` and (B12)
-  `features/operator/payment-mocks.ts`, `mocks/receipts.ts` and `mocks/allowances.ts`: public,
+  `features/operator/payment-mocks.ts`, `mocks/receipts.ts`, `mocks/allowances.ts` and `mocks/text-topups.ts`: public,
   sign-up, legal and subscription code works on `platform` alone. Tests that move the clock (`setToday`) live only in `mocks/subscriptions.test.ts`: a moved
   clock pauses seeded clinics for every later test in that file. To show grace or the pause in the browser, set
   `localStorage["pedia-dental:demo-today"]` to a `yyyy-MM-dd` date and reload; remove it to go back. Sign-up

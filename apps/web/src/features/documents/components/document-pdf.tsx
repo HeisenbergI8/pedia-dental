@@ -15,6 +15,8 @@ const s = StyleSheet.create({
   page: { fontFamily: "Noto Sans", fontSize: 10, lineHeight: 1.45, color: INK, padding: 48, paddingBottom: 64 },
   header: { borderBottomWidth: 2, paddingBottom: 8, marginBottom: 16 },
   logo: { maxWidth: 180, maxHeight: 48, objectFit: "contain", marginBottom: 4 },
+  letterheadImage: { width: "100%", maxHeight: 110, objectFit: "contain", marginBottom: 6 }, // D11, decision 24: a strip across the top
+  letterheadFooter: { position: "absolute", bottom: 44, left: 48, right: 48, fontSize: 8, color: MUTED, textAlign: "center" },
   clinic: { fontSize: 14, fontWeight: 700, marginBottom: 2 },
   title: { fontSize: 12, fontWeight: 700, marginTop: 4, textTransform: "uppercase" },
   muted: { color: MUTED },
@@ -77,20 +79,32 @@ function Block({ block }: { block: DocBlock }) {
 }
 
 /** The PDF for any document. Returns the <Document> element so pdf() gets the type it expects. */
-export function documentPdf(content: DocContent, logo?: string) {
+export function documentPdf(content: DocContent, logo?: string, headerImage?: string) {
   const { letterhead } = content;
+  const lines = letterhead.custom && "header" in letterhead.custom ? letterhead.custom : { header: [], footer: [] };
   return (
     <Document title={content.title} author={content.clinicName} creator={content.clinicName}>
       <Page size="A4" style={s.page}>
         <View style={[s.header, { borderBottomColor: letterhead.ring }]}>
           {/* The logo carries the clinic's name; alt text isn't supported, the document metadata names it. */}
           {/* eslint-disable-next-line jsx-a11y/alt-text */}
-          {logo ? <Image src={logo} style={s.logo} /> : <Text style={s.clinic}>{letterhead.clinicName}</Text>}
-          <Text style={s.muted}>{letterhead.branchLine}</Text>
+          {headerImage ? (
+            // D11: the clinic's own letterhead image in place of the logo and address (it carries both).
+            // eslint-disable-next-line jsx-a11y/alt-text
+            <Image src={headerImage} style={s.letterheadImage} />
+          ) : (
+            <>
+              {/* eslint-disable-next-line jsx-a11y/alt-text */}
+              {logo ? <Image src={logo} style={s.logo} /> : <Text style={s.clinic}>{letterhead.clinicName}</Text>}
+              <Text style={s.muted}>{letterhead.branchLine}</Text>
+              {lines.header.map((l) => <Text key={l} style={s.muted}>{l}</Text>)}
+            </>
+          )}
           <Text style={s.title}>{content.title}</Text>
           <Text style={s.muted}>{content.subtitle}</Text>
         </View>
         {content.blocks.map((b, i) => <Block key={i} block={b} />)}
+        {lines.footer.length > 0 && <Text style={s.letterheadFooter} fixed>{lines.footer.join("  ·  ")}</Text>}
         {content.footnote && <Text style={s.footnote} fixed>{content.footnote}</Text>}
       </Page>
     </Document>

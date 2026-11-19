@@ -29,6 +29,9 @@ describe("smsSegments", () => {
     expect(smsSegments("a".repeat(480))).toBe(4);
     expect(smsSegments("₱".repeat(71))).toBe(2);
   });
+  it("counts a GSM extension character as two, as the provider bills it", () => {
+    expect([smsSegments("{".repeat(80)), smsSegments("{".repeat(81)), smsSegments("ñ".repeat(160)), smsSegments("✓".repeat(71))]).toEqual([1, 2, 1, 2]);
+  });
 });
 
 it("retries three times (decision 5)", () => {

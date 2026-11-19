@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from "@nestjs/common";
-import { FAILURE, LINK_MARK, MESSAGE_RETRY_DELAYS_MS, TIER_LIMITS, isAccountText, manilaMonth, nextSendingTime, smsNumber, smsSegments, textPartsRefusal, type LoggedMessageKind } from "@pedia/shared";
+import { FAILURE, LINK_MARK, MESSAGE_RETRY_DELAYS_MS, isAccountText, textAllowance, manilaMonth, nextSendingTime, smsNumber, smsSegments, textPartsRefusal, type LoggedMessageKind } from "@pedia/shared";
 import { addMonths, format, parseISO } from "date-fns";
 import { lockAccount } from "../clinic/account-lock";
 import { Clock } from "../common/clock";
@@ -84,8 +84,12 @@ export class MessageSendHandler implements OutboxHandler, OnModuleInit {
       const body = link ? m.body.replace(LINK_MARK, link) : m.body;
       const parts = smsSegments(body);
       // B12 decisions 2, 3, 19: past the month's parts a template text fails and is never sent later; account texts always go.
+      // Feature 16 (revised): the month's parts are the plan's plus that month's confirmed top-ups (textAllowance). A
+      // confirm takes this same account lock, so a claim sees a top-up whole or not at all.
       const { tier } = await tx.clinicAccount.findUniqueOrThrow({ where: { id: clinicId }, select: { tier: true } });
-      const refused = textPartsRefusal(m.kind as LoggedMessageKind, await partsIn(tx, manilaMonth(this.clock.today())), parts, TIER_LIMITS[tier].textParts);
+      const month = manilaMonth(this.clock.today());
+      const bought = (await tx.textTopUp.aggregate({ where: { clinicId, month }, _sum: { parts: true } }))._sum.parts ?? 0;
+      const refused = textPartsRefusal(m.kind as LoggedMessageKind, await partsIn(tx, month), parts, textAllowance(tier, bought));
       if (refused) {
         await tx.message.update({ where: { id: messageId }, data: { status: "failed", failureReason: refused }, select: { id: true } });
         await this.settled(tx, m);

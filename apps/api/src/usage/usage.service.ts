@@ -5,7 +5,8 @@ import { PrismaService } from "../prisma/prisma.service";
 import type { Tx } from "../prisma/transaction";
 
 /** What one clinic uses against its plan (B12 decisions 10, 17, 18). */
-export type ClinicCounts = { branches: number; staffLogins: number; patients: number; storageBytes: number; textParts: number };
+/** `textTopUp`: the parts bought for the month (feature 16, revised), added to the plan's texts. */
+export type ClinicCounts = { branches: number; staffLogins: number; patients: number; storageBytes: number; textParts: number; textTopUp: number };
 
 /** A Manila month's bounds as UTC text for raw SQL (the B8 trap: a Date is written as UTC text). */
 export function monthBounds(month: string): { from: string; to: string } {
@@ -25,7 +26,7 @@ export class UsageService {
   constructor(private readonly prisma: PrismaService) {}
 
   async forClinics(clinicIds: readonly string[], month: string, db: Tx | PrismaService = this.prisma): Promise<Map<string, ClinicCounts>> {
-    const result = new Map<string, ClinicCounts>(clinicIds.map((id) => [id, { branches: 0, staffLogins: 0, patients: 0, storageBytes: 0, textParts: 0 }]));
+    const result = new Map<string, ClinicCounts>(clinicIds.map((id) => [id, { branches: 0, staffLogins: 0, patients: 0, storageBytes: 0, textParts: 0, textTopUp: 0 }]));
     if (clinicIds.length === 0) return result;
     const ids = Prisma.join([...clinicIds]);
     const { from, to } = monthBounds(month);
@@ -38,6 +39,7 @@ export class UsageService {
         "textParts",
         db.$queryRaw<Row[]>`SELECT clinicId, SUM(segments) AS n FROM Message WHERE clinicId IN (${ids}) AND dispatchedAt >= ${from} AND dispatchedAt < ${to} GROUP BY clinicId`,
       ],
+      ["textTopUp", db.$queryRaw<Row[]>`SELECT clinicId, SUM(parts) AS n FROM TextTopUp WHERE clinicId IN (${ids}) AND month = ${month} GROUP BY clinicId`],
     ];
     for (const [key, query] of measures) {
       for (const row of await query) {

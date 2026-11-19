@@ -1,4 +1,5 @@
 "use client";
+import { ComparePlansLink } from "@/features/plans/components/compare-plans-link";
 import type { ReactNode } from "react";
 import { Controller, useFormContext, useWatch } from "react-hook-form";
 import {
@@ -87,6 +88,7 @@ export function SignupFields({
 }) {
   const form = useFormContext<SignupInput>();
   const branding = useWatch({ control: form.control, name: "branding" });
+  const tier = useWatch({ control: form.control, name: "account.tier" });
 
   return (
     <div className="space-y-6">
@@ -109,7 +111,7 @@ export function SignupFields({
       </Section>
 
       <Section title="Plan">
-        <FormField name="account.tier" label="Choose a plan" hint="Prices include VAT. Every plan has your logo, colour and heading font.">
+        <FormField name="account.tier" label="Choose a plan" hint={<>Prices include VAT. Every plan has your logo, colour and heading font. <ComparePlansLink /></>}>
           {(props) => (
             <Controller
               control={form.control}
@@ -183,7 +185,9 @@ export function SignupFields({
                     ? "Your logo, one colour and a heading font"
                     : c === "default"
                       ? "Primolar's colours, your clinic's name where a logo goes. Change it any time in Settings."
-                      : `Primolar designs your logo, colour and font: ${formatPeso(prices.designAddOn)}, once`,
+                      : TIER_LIMITS[tier].designIncluded
+                        ? `Primolar designs your logo, colour and font: included on the ${TIER_LABEL[tier]} plan`
+                        : `Primolar designs your logo, colour and font: ${formatPeso(prices.designAddOn)}, once`,
               }))}
             />
           )}

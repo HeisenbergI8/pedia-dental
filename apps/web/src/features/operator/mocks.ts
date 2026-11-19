@@ -6,6 +6,7 @@ import {
   OperatorLoginInput,
   RecordUpfrontPaymentInput,
   SetBrandingInput,
+  SupportContact,
   TransferOwnershipInput,
   accountUsage,
   brandColorProblem,
@@ -47,12 +48,12 @@ export function overviewOf(clinicId: string): AccountOverview {
   const tenant = platform.tenants[clinicId]!;
   const owner = tenant.staff.find((s) => s.isOwner);
   const { branches, staffLogins } = accountUsage(tenant);
-  const { storage, texts } = usageOf(tenant, account, manilaMonth(today())); // B12 decision 17
+  const { storage, texts, textTopUp } = usageOf(tenant, account, manilaMonth(today())); // B12 decision 17
   const agreement = latestAgreement(clinicId);
   return {
     account: { id, name, contactEmail, tier, status },
     owner: owner ? { staffId: owner.id, name: owner.fullName, email: staffEmail(owner) } : null,
-    usage: { branches, staffLogins, patients: tenant.patients.length, storage, texts },
+    usage: { branches, staffLogins, patients: tenant.patients.length, storage, texts, textTopUp },
     design: design ?? null,
     look: design ? { brandColor: account.brandColor, headingFont: account.headingFont ?? null, hasLogo: !!account.logoRef } : null,
     // Privacy #10: the agreement in force and a count of patients without consent. Never a name (#25).
@@ -214,6 +215,22 @@ export const operatorHandlers = [
     tenant.staff.find((s) => s.id === parsed.data.staffId)!.isOwner = true;
     persist();
     return HttpResponse.json(overviewOf(account.id));
+  }),
+
+  // D12: a clinic's named Primolar contact, shown by "Contact support" on Pro. Kept on any plan, so an upgrade has it.
+  http.get(url("/operator/accounts/:id/support-contact"), ({ params }) => {
+    const found = findAccount(params.id);
+    if (!found) return notFound();
+    return HttpResponse.json(platform.supportContacts[found.account.id] ?? null);
+  }),
+  http.put(url("/operator/accounts/:id/support-contact"), async ({ params, request }) => {
+    const found = findAccount(params.id);
+    if (!found) return notFound();
+    const parsed = SupportContact.safeParse(await request.json());
+    if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
+    platform.supportContacts[found.account.id] = parsed.data;
+    persist();
+    return HttpResponse.json(parsed.data);
   }),
 
   /**

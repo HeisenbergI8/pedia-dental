@@ -10,7 +10,9 @@ export { emptyDb, seedPlatform, type Db, type Platform } from "@pedia/seed";
 // v30: B11: each Db gains `portalAccounts` (every seeded guardian active); parents sign in only while active.
 // v31: B12: Platform gains priceChanges, paymentQr and receipts (Ipin's pending receipt); each Db gains storedFiles.
 // v32: B13c2b: each Db gains privacyRequests; patients may carry restrictedAt.
-const KEY = "pedia-dental:mock-db:v32";
+// v34: feature 16 (revised), D11: each Db may carry a custom letterhead.
+// v33: feature 16 (revised): new prices and the text pack; Platform gains support and supportContacts (and, in phase 4, top-ups).
+const KEY = "pedia-dental:mock-db:v34";
 
 function load(): Platform {
   if (typeof window === "undefined") return seedPlatform();

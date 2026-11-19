@@ -29,7 +29,7 @@ test.describe("happy paths", () => {
     await field(page, "Clinic name").fill(name);
     await field(page, "Contact email").fill(`hi.${id.toLowerCase()}@pinoy.ph`);
     await field(page, "TIN").fill("987654321");
-    await page.getByRole("radio", { name: /^Mid/ }).tap();
+    await page.getByRole("radio", { name: /^Clinic/ }).tap();
     await field(page, "Branch name").fill("Cebu");
     await field(page, "Address").fill("Osmeña Blvd, Cebu City");
     await field(page, "Phone").fill("0932 555 1234");
@@ -38,7 +38,7 @@ test.describe("happy paths", () => {
     await page.getByRole("checkbox", { name: /I'm authorised/ }).tap();
     await page.getByRole("button", { name: "Send sign-up" }).tap();
     await expect(page.getByRole("heading", { level: 1, name: `Thank you. ${name} is signed up` })).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByText(`${name} · Mid plan · Use the default look`)).toBeVisible();
+    await expect(page.getByText(`${name} · Clinic plan · Use the default look`)).toBeVisible();
     await expectWithinScreen(page, page.getByRole("button", { name: "Copy reference" }));
     await expectWithinScreen(page, page.getByRole("region", { name: "Amount due" }));
   });
@@ -48,7 +48,7 @@ test.describe("edge cases", () => {
   test("every part of the form fits the phone's width, with the look options and the logo picker", async ({ page }) => {
     await page.goto("/get-started");
     await expect(page.getByRole("button", { name: "Send sign-up" })).toBeVisible();
-    for (const r of [/^Small/, /^Mid/, /^Big/, /^Use my own/, /^Use the default look/, /^Design it for me/]) {
+    for (const r of [/^Starter/, /^Clinic/, /^Pro/, /^Use my own/, /^Use the default look/, /^Design it for me/]) {
       await expectWithinScreen(page, page.getByRole("radio", { name: r }));
     }
     await page.getByRole("radio", { name: /^Use my own/ }).tap();

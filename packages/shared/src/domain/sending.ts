@@ -27,8 +27,10 @@ export function smsNumber(phone: string | undefined): string | undefined {
 /** How many texts a body costs: 160 GSM characters in one, 153 per part when split. Non-GSM text: 70 / 67. */
 export function smsSegments(body: string): number {
   const gsm = /^[\x20-\x7E\n\r£¥èéùìòÇØøÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ¡ÄÖÑÜ§¿äöñüà€]*$/.test(body);
+  // The GSM extension characters take two septets each, as the provider bills them.
+  const length = gsm ? body.length + (body.match(/[\^{}[\]~\\|€]/g)?.length ?? 0) : body.length;
   const [one, part] = gsm ? [160, 153] : [70, 67];
-  return body.length <= one ? 1 : Math.ceil(body.length / part);
+  return length <= one ? 1 : Math.ceil(length / part);
 }
 
 /** The reasons a text shows as failed in /messages. Plain words; never an error message from a library. */

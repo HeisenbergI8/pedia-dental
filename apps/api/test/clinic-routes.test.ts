@@ -20,6 +20,11 @@ const B3_ROUTES: [Method, string][] = [
   ["get", "/clinic/logo"],
   ["put", "/clinic/logo"],
   ["delete", "/clinic/logo"],
+  ["get", "/clinic/letterhead"], // D11
+  ["put", "/clinic/letterhead"],
+  ["get", "/clinic/letterhead/image"],
+  ["put", "/clinic/letterhead/image"],
+  ["delete", "/clinic/letterhead/image"],
   ["get", "/clinic/usage"],
   ["post", "/branches"],
   ["put", "/branches/b1"],

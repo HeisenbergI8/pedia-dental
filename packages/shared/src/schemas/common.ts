@@ -18,6 +18,8 @@ const isCalendarDay = (s: string) => {
 /** Calendar date, YYYY-MM-DD, a day that exists. Pass a message to word the error for a specific field. */
 export const isoDate = (message = "Enter a date") => z.string().regex(/^\d{4}-\d{2}-\d{2}$/, message).refine(isCalendarDay, message);
 export const IsoDate = isoDate();
+/** A Manila calendar month, "2026-11": the text allowance's month and a top-up's (B12 decision 18). */
+export const YearMonth = z.string().regex(/^\d{4}-\d{2}$/);
 /** Full timestamp, ISO 8601. */
 export const IsoDateTime = z.string().datetime({ offset: true });
 

@@ -37,6 +37,7 @@ written request (an operator script, see "A clinic leaving").
 | Branch | account | While the clinic subscribes, then with its records; returned with the clinic's data and then deleted at its written request (db:clinic-purge) | db:clinic-purge |  |
 | Chair | account | While the clinic subscribes, then with its records; returned with the clinic's data and then deleted at its written request (db:clinic-purge) | db:clinic-purge |  |
 | ClinicAccount | account | Kept: name, TIN and plan are Primolar's books; a purge removes the logo and sets purgedAt (confirm with counsel) | db:clinic-purge | yes |
+| ClinicLetterhead | account | While the clinic subscribes, then with its records; returned with the clinic's data and then deleted at its written request (db:clinic-purge) | db:clinic-purge |  |
 | Credential | account | Until the login is removed; returned with the clinic's data and then deleted at its written request (db:clinic-purge) | db:clinic-purge |  |
 | MessageTemplate | account | While the clinic subscribes, then with its records; returned with the clinic's data and then deleted at its written request (db:clinic-purge) | db:clinic-purge |  |
 | NoteTemplate | account | While the clinic subscribes, then with its records; returned with the clinic's data and then deleted at its written request (db:clinic-purge) | db:clinic-purge |  |
@@ -71,6 +72,7 @@ written request (an operator script, see "A clinic leaving").
 | Subscription | money | As the tax law requires for books and receipts (confirm with counsel; proposed 10 years) | kept | yes |
 | SubscriptionLine | money | As the tax law requires for books and receipts (confirm with counsel; proposed 10 years) | kept | yes |
 | SubscriptionPayment | money | As the tax law requires for books and receipts (confirm with counsel; proposed 10 years) | kept | yes |
+| TextTopUp | money | As the tax law requires for books and receipts (confirm with counsel; proposed 10 years) | kept | yes |
 | Appointment | personal data | While the clinic subscribes; after an approved erasure, anonymised once the record's retention ends (RECORD_RETENTION, confirm with counsel; privacy.anonymise ships off); returned or deleted with the clinic's data at its written request (db:clinic-purge) | privacy.anonymise | yes |
 | AppointmentRequest | personal data | While the clinic subscribes; after an approved erasure, anonymised once the record's retention ends (RECORD_RETENTION, confirm with counsel; privacy.anonymise ships off); returned or deleted with the clinic's data at its written request (db:clinic-purge) | privacy.anonymise | yes |
 | DueItem | personal data | While the clinic subscribes; after an approved erasure, anonymised once the record's retention ends (RECORD_RETENTION, confirm with counsel; privacy.anonymise ships off); returned or deleted with the clinic's data at its written request (db:clinic-purge) | privacy.anonymise | yes |

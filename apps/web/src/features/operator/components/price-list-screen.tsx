@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useOperatorPrices, useSavePrices } from "../api";
 import { PaymentQrCard } from "./payment-qr-card";
+import { SupportSettingsCard } from "./support-cards";
 
 /** Pesos as typed: whole or to the centavo, never negative. Blank is refused, never read as ₱0 (a free plan is a typed 0). */
 const Peso = z.coerce
@@ -21,16 +22,27 @@ const Peso = z.coerce
   .min(1, "Enter an amount in pesos")
   .pipe(z.coerce.number<string>({ message: "Enter an amount in pesos" }).min(0, "Can't be below zero").multipleOf(0.01, "Up to two decimal places"));
 const PlanPesos = z.object({ setupFee: Peso, monthlyFee: Peso });
-const PriceForm = z.object({ plans: z.object({ small: PlanPesos, mid: PlanPesos, big: PlanPesos }), designAddOn: Peso });
+const Texts = z.coerce
+  .string()
+  .trim()
+  .min(1, "Enter how many texts a pack adds")
+  .pipe(z.coerce.number<string>({ message: "Enter a whole number of texts" }).int("Enter a whole number of texts").min(1, "A pack adds at least 1 text").max(100_000, "A pack adds at most 100,000 texts"));
+const PriceForm = z.object({
+  plans: z.object({ small: PlanPesos, mid: PlanPesos, big: PlanPesos }),
+  designAddOn: Peso,
+  textPack: z.object({ parts: Texts, price: Peso }),
+});
 type PriceForm = z.infer<typeof PriceForm>;
 
 const toForm = (p: PriceList): PriceForm => ({
   plans: Object.fromEntries(Tier.options.map((t) => [t, { setupFee: p.plans[t].setupFee / 100, monthlyFee: p.plans[t].monthlyFee / 100 }])) as PriceForm["plans"],
   designAddOn: p.designAddOn / 100,
+  textPack: { parts: p.textPack.parts, price: p.textPack.price / 100 },
 });
 const toPrices = (f: PriceForm): PriceList => ({
   plans: Object.fromEntries(Tier.options.map((t) => [t, { setupFee: pesos(f.plans[t].setupFee), monthlyFee: pesos(f.plans[t].monthlyFee) }])) as PriceList["plans"],
   designAddOn: pesos(f.designAddOn),
+  textPack: { parts: f.textPack.parts, price: pesos(f.textPack.price) },
 });
 
 /** Billing #22, #23, A2, A8: VAT-inclusive pesos. New sign-ups are quoted from these; waiting ones keep their quote. */
@@ -43,6 +55,7 @@ export function PriceListScreen() {
       {prices.error && <ErrorState what="the price list" onRetry={() => void prices.refetch()} />}
       {prices.data && <PriceFields key={JSON.stringify(prices.data)} prices={prices.data} />}
       <PaymentQrCard />
+      <SupportSettingsCard />
     </div>
   );
 }
@@ -74,10 +87,27 @@ function PriceFields({ prices }: { prices: PriceList }) {
             </div>
           </SectionCard>
         ))}
-        <SectionCard title="Design it for me" description="One fixed add-on, the same on every plan (billing #23).">
+        <SectionCard title="Design it for me" description={`One fixed add-on, the same on every plan except ${TIER_LABEL.big}, which includes it.`}>
           <FormField name="designAddOn" label="Design add-on (₱)">
             <Input inputMode="decimal" className="sm:w-56" {...form.register("designAddOn")} />
           </FormField>
+        </SectionCard>
+        <SectionCard
+          title="Text top-ups"
+          description={
+            preview
+              ? `Clinics buy texts in packs, the same on every plan: ${formatPeso(Math.round(preview.textPack.price / preview.textPack.parts))} a text.`
+              : "Clinics buy texts in packs, the same on every plan."
+          }
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField name="textPack.parts" label="Texts in a pack">
+              <Input inputMode="numeric" {...form.register("textPack.parts")} />
+            </FormField>
+            <FormField name="textPack.price" label="Pack price (₱)">
+              <Input inputMode="decimal" {...form.register("textPack.price")} />
+            </FormField>
+          </div>
         </SectionCard>
         {save.error && <p role="alert" className="text-sm text-danger">{save.error.message}</p>}
         <Button type="submit" disabled={save.isPending || !form.formState.isDirty}>{save.isPending ? "Saving" : "Save price list"}</Button>

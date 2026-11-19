@@ -63,6 +63,10 @@ export const primolarInvoiceNo = (n: number) => `PRM-INV-${String(n).padStart(5,
 export const subscriptionMonthLine = (tier: Tier, periodStart: string) =>
   `Primolar ${TIER_LABEL[tier]} plan, month from ${formatBillingDate(periodStart)}`;
 
+/** Feature 16 (revised): a text top-up's line, on its acknowledgment and in the payment history. */
+export const textTopUpLine = (t: { packs: number; parts: number; month: string }) =>
+  `Text top-up, ${t.packs} pack${t.packs === 1 ? "" : "s"} (${t.parts.toLocaleString("en-PH")} texts) for ${format(parseISO(`${t.month}-01`), "MMMM yyyy")}`;
+
 /** Billing #27: an upgrade applies at once, a downgrade on the next due date. Plans are ordered as `Tier` lists them. */
 export const isTierUpgrade = (from: Tier, to: Tier) => Tier.options.indexOf(to) > Tier.options.indexOf(from);
 

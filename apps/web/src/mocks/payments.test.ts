@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupServer } from "msw/node";
 import { z } from "zod";
-import { CreateAccountResult, PaymentQrView, RECEIPT_PENDING, ReceiptToCheck, SignupStatusView, SubscriptionView } from "@pedia/shared";
+import { ClinicUsage, CreateAccountResult, PaymentQrView, RECEIPT_PENDING, ReceiptToCheck, SignupStatusView, SubscriptionView, TextTopUpsView } from "@pedia/shared";
 import { SEED_FILES } from "@pedia/seed";
 import { ApiError, api } from "@/lib/api-client";
 import { env } from "@/lib/env";
@@ -116,5 +116,67 @@ describe("a sign-up's receipt (decision 7)", () => {
     expect((await api(`/signups/${reference}`, SignupStatusView)).paid).toBe(true);
     asOperator();
     expect((await api("/operator/signups/signup_hagikgik/approve", CreateAccountResult, send("POST"))).overview.account.name).toBe(sent.clinicName);
+  });
+});
+
+describe("text top-ups (feature 16, revised)", () => {
+  const topUp = (packs: number, reference = "GC 7001") => api("/clinic/text-topups/receipts", TextTopUpsView, form({ packs, reference }, png()));
+
+  it("sells packs by QR, puts them first in Payments to check, and adds the parts to this month once confirmed", async () => {
+    asStaff(NGITI_OWNER);
+    const before = await api("/clinic/usage", ClinicUsage);
+    const view = await api("/clinic/text-topups", TextTopUpsView);
+    expect([view.pack, view.partsThisMonth]).toEqual([platform.prices.textPack, 0]);
+    const sent = await topUp(2);
+    expect(sent.receipts[0]).toMatchObject({ status: "pending", packs: 2, parts: 200, amountDue: 2 * platform.prices.textPack.price });
+    expect(await message(topUp(1))).toBe(RECEIPT_PENDING); // one waits at a time (decision 21)
+
+    asOperator();
+    const [first] = await toCheck();
+    expect(first!.payer).toMatchObject({ kind: "text_topup", clinicId: "clinic_ngiti", clinicName: "Ngiti Kids Dental" }); // D14
+    await confirm(first!.id);
+
+    asStaff(NGITI_OWNER);
+    const after = await api("/clinic/usage", ClinicUsage);
+    expect([after.textTopUp, after.texts.limit]).toEqual([200, before.texts.limit! + 200]);
+    expect((await api("/clinic/text-topups", TextTopUpsView)).partsThisMonth).toBe(200);
+    const [bought] = (await api("/clinic/subscription", SubscriptionView)).topUps; // on the books (D10)
+    expect(bought).toMatchObject({ packs: 2, parts: 200, method: "gcash", reference: "GC 7001", invoiceNo: expect.stringMatching(/^PRM-INV-\d{5}$/) });
+  });
+
+  it("shows a rejected top-up's reason, and takes a new one after it", async () => {
+    asStaff(NGITI_OWNER);
+    await topUp(1, "GC 7002");
+    asOperator();
+    const id = (await toCheck()).find((r) => r.payer.kind === "text_topup")!.id;
+    await api(`/operator/receipts/${id}/reject`, ReceiptToCheck, send("POST", { reason: "The amount on the receipt is ₱100" }));
+    asStaff(NGITI_OWNER);
+    expect((await api("/clinic/text-topups", TextTopUpsView)).receipts[0]).toMatchObject({ status: "rejected", rejectionReason: "The amount on the receipt is ₱100" });
+    expect((await topUp(1, "GC 7003")).receipts[0]!.status).toBe("pending");
+  });
+
+  it("takes a monthly receipt while a top-up waits, each in its own slot", async () => {
+    for (const r of platform.receipts) if (r.payer.kind !== "signup" && r.payer.clinicId === "clinic_ngiti" && r.status === "pending") r.status = "rejected"; // a clean start
+    asStaff(NGITI_OWNER);
+    await topUp(1, "GC 7101");
+    const view = await api("/clinic/subscription/receipts", SubscriptionView, form({ reference: "GC 7102" }, png()));
+    expect(view.receipts[0]).toMatchObject({ status: "pending", reference: "GC 7102" }); // decision 21: one per payer
+  });
+
+  it("confirms a top-up at the pack price it was sent at, even after the price changes", async () => {
+    const pending = platform.receipts.find((r) => r.payer.kind === "text_topup" && r.payer.clinicId === "clinic_ngiti" && r.status === "pending")!;
+    const quoted = { ...pending };
+    asOperator();
+    const prices = platform.prices;
+    await api("/operator/prices", z.unknown(), send("PUT", { ...prices, textPack: { parts: 50, price: prices.textPack.price * 2 } }));
+    await confirm(pending.id);
+    expect(platform.textTopUps.find((t) => t.receiptId === pending.id)).toMatchObject({ parts: quoted.parts, amount: quoted.amountDue, packs: 1 }); // D3
+    await api("/operator/prices", z.unknown(), send("PUT", prices));
+  });
+
+  it("is the Owner's only", async () => {
+    asStaff(BULILIT_DESK);
+    expect(await status(api("/clinic/text-topups", TextTopUpsView))).toBe(403);
+    expect(await status(topUp(1))).toBe(403);
   });
 });

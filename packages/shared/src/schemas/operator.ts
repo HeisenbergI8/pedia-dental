@@ -34,7 +34,8 @@ export const AccountOverview = z.strictObject({
     staffLogins: z.number().int().nonnegative(), // active logins, the Owner included (#37)
     patients: z.number().int().nonnegative(), // a count: the operator never sees a patient record (#25)
     storage: Allowance, // B12 decision 17: bytes stored against the plan
-    texts: Allowance, // billed parts this Manila month against the plan
+    texts: Allowance, // billed parts this Manila month against the plan (plus that month's top-ups)
+    textTopUp: z.number().int().nonnegative(), // feature 16 (revised): the parts bought this month, inside texts.limit
   }),
   // Billing #17: null unless the clinic chose Design it for me; then whether Primolar has delivered it yet.
   design: DesignStatus.nullable(),

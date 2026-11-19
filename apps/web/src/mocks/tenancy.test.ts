@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupServer } from "msw/node";
 import { z } from "zod";
 import { addDays, startOfDay } from "date-fns";
-import { Appointment, ClinicContext, FinanceSummary, Patient, Payment, Session, SessionUser, StaffMember, TodaySummary, depositBalance, invoiceBalance, type RegisterPatientInput, IDEMPOTENCY_HEADER } from "@pedia/shared";
+import { Appointment, AppointmentRequest, REQUESTS_NOT_ON_PLAN, ClinicContext, FinanceSummary, Patient, Payment, Session, SessionUser, StaffMember, TodaySummary, depositBalance, invoiceBalance, type RegisterPatientInput, IDEMPOTENCY_HEADER } from "@pedia/shared";
 import { api } from "@/lib/api-client";
 import { platform } from "./db";
 import { handle } from "./demo-accounts";
@@ -104,6 +104,16 @@ describe("clinic account isolation", () => {
     // A repeat view inside the audit window isn't logged again, so check presence, not the last row.
     expect(platform.tenants.clinic_ngiti!.auditEvents.some((e) => e.actorId === "ngiti_staff_tan" && e.clinicId === "clinic_ngiti")).toBe(true);
     expect(platform.tenants.clinic_demo!.auditEvents.some((e) => e.actorId.startsWith("ngiti_") || e.clinicId !== "clinic_demo")).toBe(false);
+  });
+});
+
+describe("requests by plan (feature 16, revised)", () => {
+  it("refuses a Starter clinic's parent with the clinic's phone advice, while the inbox still answers", async () => {
+    const ngiti = platform.tenants.clinic_ngiti!.patients[0]!;
+    signIn(NGITI(`guardian.${ngiti.guardians[0]!.id}`));
+    await expect(api(`/patients/${ngiti.id}/appointment-requests`, AppointmentRequest, send("POST", {}))).rejects.toMatchObject({ status: 409, message: REQUESTS_NOT_ON_PLAN });
+    signIn(NGITI("ngiti_staff_lim"));
+    expect(await api("/appointment-requests", z.array(AppointmentRequest))).toBeInstanceOf(Array);
   });
 });
 

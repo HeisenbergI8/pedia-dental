@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException, type OnModuleInit } from "@nestjs/common";
-import { AppointmentRequestStatus, CreateAppointmentRequestInput, type AppointmentRequest } from "@pedia/shared";
+import { ConflictException, Injectable, NotFoundException, type OnModuleInit } from "@nestjs/common";
+import { AppointmentRequestStatus, CreateAppointmentRequestInput, REQUESTS_NOT_ON_PLAN, TIER_LIMITS, type AppointmentRequest } from "@pedia/shared";
 import { AuditService } from "../audit/audit.service";
 import { RecordOwners } from "../auth/record-owners";
+import { ownClinicId } from "../clinic/account-lock";
 import { Clock } from "../common/clock";
 import { refuse } from "../common/refusal";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
@@ -62,6 +63,10 @@ export class AppointmentRequestsService implements OnModuleInit {
   async create(patientId: string, body: unknown, guardianId: string | undefined): Promise<AppointmentRequest> {
     return runInTransaction(this.prisma, async (tx) => {
       await lockPatient(tx, patientId);
+      // Feature 16: Clinic and Pro only, by the tier in force (never limitTier). Pending requests made before a
+      // downgrade stay listed and can still be handled: the reads and /handled are not gated.
+      const { tier } = await tx.clinicAccount.findUniqueOrThrow({ where: { id: ownClinicId() }, select: { tier: true } });
+      if (!TIER_LIMITS[tier].appointmentRequests) throw new ConflictException(REQUESTS_NOT_ON_PLAN);
       const input = new ZodValidationPipe(CreateAppointmentRequestInput).transform(body);
       const pending = await tx.appointmentRequest.findFirst({ where: { patientId, status: "pending" }, select: { id: true } });
       refuse(requestRefusal(input.preferredDate, this.clock.today(), !!pending));

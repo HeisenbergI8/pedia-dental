@@ -20,7 +20,7 @@ const RUN = Date.now().toString(36).toUpperCase();
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 const IMUS_ADDRESS = "12 Nueno Avenue, Imus, Cavite";
 const NOTICE_HEADING = "Bulilit Smiles Pediatric Dental's privacy notice";
-const STAFF_LIMIT = "Your Small plan includes 5 staff logins. Contact Primolar to upgrade.";
+const BRANCH_LIMIT = "Your Starter plan includes 1 branch. Contact Primolar to upgrade.";
 const OVERDUE = /Your Primolar payment is overdue\. Pay by \d{1,2} \w+ \d{4} to keep your clinic running\./;
 const BULILIT_COLOUR = "#b0245e";
 /** A day well ahead and never a Sunday, so the booking and its clash meet nothing the seed booked. */
@@ -246,22 +246,23 @@ test("4 · the Owner shows all branches, is refused #e07a48 and offered #b04f18,
 
   await viaApi(page, /^\/api\/clinic\/usage$/, "GET", 200, () => page.goto("/settings?tab=plan"));
   const plan = page.getByRole("tabpanel", { name: "Plan" });
-  await expect(plan.getByText("You're on the Mid plan")).toBeVisible();
+  await expect(plan.getByText("You're on the Clinic plan")).toBeVisible();
   await expect(plan.getByText("2 of 3")).toBeVisible();
-  await expect(plan.getByText("5 of 20")).toBeVisible();
+  await expect(plan.getByText("5 of 30")).toBeVisible();
 });
 
 // ---------- 5. A small clinic at its limit ----------
 
-test("5 · Ngiti at 5 of 5: Add staff is off, with the Small plan's sentence", async ({ page }) => {
+// Feature 16 (revised): Starter has 10 logins and Ngiti 5 (D19), so the limit shown is the branch.
+test("5 · Ngiti at 1 of 1: Add branch is off, with the Starter plan's sentence", async ({ page }) => {
   await signInAs(page, USERS.ngitiOwner);
-  await viaApi(page, /^\/api\/clinic\/usage$/, "GET", 200, () => page.goto("/settings?tab=staff"));
-  const card = page.getByRole("tabpanel", { name: "Staff" });
-  await expect(card.getByText("5 of 5 staff logins on your plan, yours included.")).toBeVisible();
-  const add = card.getByRole("button", { name: "Add staff" });
+  await viaApi(page, /^\/api\/clinic\/usage$/, "GET", 200, () => page.goto("/settings?tab=branches"));
+  const card = page.getByRole("tabpanel", { name: "Branches" });
+  await expect(card.getByText(/^1 of 1 open branch on your plan/)).toBeVisible();
+  const add = card.getByRole("button", { name: "Add branch" });
   await expect(add).toBeDisabled();
-  await expect(card.getByRole("status")).toHaveText(STAFF_LIMIT);
-  await expect(add).toHaveAccessibleDescription(STAFF_LIMIT);
+  await expect(card.getByRole("status")).toHaveText(BRANCH_LIMIT);
+  await expect(add).toHaveAccessibleDescription(BRANCH_LIMIT);
 });
 
 // ---------- 6. Primolar's console ----------
@@ -273,9 +274,9 @@ test("6 · the console lists every clinic with its counts, and pauses and reacti
     await expect(table.getByRole("columnheader", { name: header, exact: true })).toBeVisible();
   }
   const bulilit = rowOf(page, "Bulilit Smiles Pediatric Dental");
-  await expect(bulilit).toContainText("Mid");
+  await expect(bulilit).toContainText("Clinic");
   await expect(bulilit).toContainText(/\d+ of 3/);
-  await expect(rowOf(page, "Ngiti Kids Dental")).toContainText("5 of 5");
+  await expect(rowOf(page, "Ngiti Kids Dental")).toContainText("5 of 10");
   await expect(rowOf(page, "Ipin Kids Dental")).toContainText("Dr. Lara Santiago");
 
   await openClinic(page, "Ipin Kids Dental");

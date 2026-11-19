@@ -37,6 +37,7 @@ export const RETENTION_SCHEDULE = {
   // The clinic's setup and logins
   Branch: SETUP, Staff: SETUP, Chair: SETUP, Procedure: SETUP, NoteTemplate: SETUP, MessageTemplate: SETUP,
   Acknowledgement: { ...SETUP, holds: "audit trail", counsel: true }, PrivacyNotice: SETUP,
+  ClinicLetterhead: SETUP, // D11: the letterhead's text and its image's key (the file is the StoredFile ledger's)
   Credential: { holds: "account", keep: "Until the login is removed" + PURGED, enforcedBy: "db:clinic-purge" },
   Session: { holds: "system", keep: "30 minutes idle, 8 hours at most", enforcedBy: "auth.sweep" },
   PortalLink: { holds: "system", keep: "30 days after the link expires", enforcedBy: "portal.prune-links" },
@@ -47,7 +48,7 @@ export const RETENTION_SCHEDULE = {
   ClinicAccount: { holds: "account", keep: "Kept: name, TIN and plan are Primolar's books; a purge removes the logo and sets purgedAt (confirm with counsel)", enforcedBy: "db:clinic-purge", counsel: true },
   Agreement: { holds: "audit trail", keep: "As long as any obligation under it can be raised (confirm with counsel)", enforcedBy: "kept", counsel: true },
   Signup: { holds: "account", keep: "Kept; a rejected sign-up's files go after 30 days", enforcedBy: "signups.purge-rejected-files" },
-  Subscription: BOOKS, SubscriptionPayment: BOOKS, SubscriptionLine: BOOKS, InvoiceCounter: BOOKS, PaymentReceipt: BOOKS,
+  Subscription: BOOKS, SubscriptionPayment: BOOKS, SubscriptionLine: BOOKS, InvoiceCounter: BOOKS, PaymentReceipt: BOOKS, TextTopUp: BOOKS,
   PlatformSettings: { holds: "system", keep: "Kept", enforcedBy: "kept" }, PriceChange: { holds: "money", keep: "Kept: the prices Primolar's invoices were billed at (confirm with counsel)", enforcedBy: "kept", counsel: true },
   OperatorUser: { holds: "account", keep: "While the person works for Primolar", enforcedBy: "kept" },
   OperatorSession: { holds: "system", keep: "30 minutes idle, 8 hours at most", enforcedBy: "auth.sweep" },

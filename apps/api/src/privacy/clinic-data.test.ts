@@ -8,7 +8,7 @@ describe("the clinic data scripts (B13c2b-2)", () => {
   // On failure: a model was added or changed scope. Decide it (export? purge or keep?) and update these lists deliberately.
   it("exports the clinic's own tables, not the system's", () => {
     expect(EXPORT_MODELS).toEqual([
-      "Acknowledgement", "Appointment", "AppointmentRequest", "AuditEvent", "Branch", "Chair", "ChartEntry", "ClinicalNote",
+      "Acknowledgement", "Appointment", "AppointmentRequest", "AuditEvent", "Branch", "Chair", "ChartEntry", "ClinicLetterhead", "ClinicalNote",
       "ClinicalPhoto", "DueItem", "GrowthRecord", "Invoice", "InvoiceLine", "Message", "MessageTemplate", "NoteTemplate",
       "Patient", "PatientConsent", "PatientDocument", "PatientGuardian", "PatientPrivacyConsent", "Payment", "PlanItem", "PortalAccount",
       "PrivacyChoice", "PrivacyNotice", "PrivacyRequest", "Procedure", "ReceiptCounter", "Staff", "Visit",

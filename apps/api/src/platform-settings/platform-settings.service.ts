@@ -1,5 +1,8 @@
-import { BadRequestException, Injectable, Logger } from "@nestjs/common";
-import { PaymentQrInput, PaymentQrView, PriceChange, PriceList, QR_RULES, monthlyFeeOn, type Tier } from "@pedia/shared";
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import {
+  PaymentQrInput, PaymentQrView, PriceChange, PriceList, QR_RULES, clinicSupportView, monthlyFeeOn,
+  type ClinicSupportView, type SupportContact, type SupportSettings, type Tier,
+} from "@pedia/shared";
 import type { Request } from "express";
 import { Clock } from "../common/clock";
 import { requireContext } from "../common/request-context";
@@ -13,7 +16,7 @@ import { PlatformFilesService } from "../storage/platform-files.service";
 
 const ID = "primolar";
 type Db = Tx | PrismaService;
-type Fees = Pick<SettingsRow, "smallSetupFee" | "smallMonthlyFee" | "midSetupFee" | "midMonthlyFee" | "bigSetupFee" | "bigMonthlyFee" | "designAddOn">;
+type Fees = Pick<SettingsRow, "smallSetupFee" | "smallMonthlyFee" | "midSetupFee" | "midMonthlyFee" | "bigSetupFee" | "bigMonthlyFee" | "designAddOn" | "textPackParts" | "textPackPrice">;
 
 const toList = (r: Fees): PriceList => ({
   plans: {
@@ -22,15 +25,21 @@ const toList = (r: Fees): PriceList => ({
     big: { setupFee: r.bigSetupFee, monthlyFee: r.bigMonthlyFee },
   },
   designAddOn: r.designAddOn,
+  textPack: { parts: r.textPackParts, price: r.textPackPrice },
 });
 const toFees = (l: PriceList): Fees => ({
   smallSetupFee: l.plans.small.setupFee, smallMonthlyFee: l.plans.small.monthlyFee, midSetupFee: l.plans.mid.setupFee,
   midMonthlyFee: l.plans.mid.monthlyFee, bigSetupFee: l.plans.big.setupFee, bigMonthlyFee: l.plans.big.monthlyFee, designAddOn: l.designAddOn,
+  textPackParts: l.textPack.parts, textPackPrice: l.textPack.price,
 });
 const toChange = (r: ChangeRow): PriceChange => PriceChange.parse({ on: r.on.toISOString().slice(0, 10), before: toList(r) });
 const sameList = (a: PriceList, b: PriceList) => JSON.stringify(toFees(a)) === JSON.stringify(toFees(b));
 
 export const NO_QR_IMAGE = "Primolar hasn't added payment details yet";
+const ACCOUNT_NOT_FOUND = "Clinic account not found"; // the console's words (operator-accounts.service.ts)
+const SUPPORT_CONTACT = { supportContactName: true, supportContactPhone: true, supportContactEmail: true } as const;
+const toContact = (r: { supportContactName: string | null; supportContactPhone: string | null; supportContactEmail: string | null }): SupportContact | null =>
+  r.supportContactName ? { name: r.supportContactName, phone: r.supportContactPhone, email: r.supportContactEmail } : null;
 
 /**
  * The price list and Primolar's payment QR (B12 decisions 5, 11, 23): the only reader and writer of PlatformSettings and
@@ -83,6 +92,41 @@ export class PlatformSettingsService {
     });
     this.log.log({ operatorId: requireContext().operatorId }, "Price list saved"); // operator actions: ids only (no clinic trail)
     return saved;
+  }
+
+  /** D12: Primolar's support email and chat link (GET /operator/support). */
+  async support(): Promise<SupportSettings> {
+    const r = await this.prisma.platformSettings.findUniqueOrThrow({ where: { id: ID }, select: { supportEmail: true, supportChatUrl: true } });
+    return { email: r.supportEmail, chatUrl: r.supportChatUrl };
+  }
+
+  /** PUT /operator/support. */
+  async saveSupport(s: SupportSettings): Promise<SupportSettings> {
+    await this.prisma.platformSettings.update({ where: { id: ID }, data: { supportEmail: s.email, supportChatUrl: s.chatUrl }, select: { id: true } });
+    this.log.log({ operatorId: requireContext().operatorId }, "Support details saved");
+    return s;
+  }
+
+  /** GET /operator/accounts/:id/support-contact: the clinic's named contact, kept on any plan so an upgrade has it. */
+  async supportContact(clinicId: string): Promise<SupportContact | null> {
+    const r = await this.prisma.clinicAccount.findUnique({ where: { id: clinicId }, select: SUPPORT_CONTACT });
+    if (!r) throw new NotFoundException(ACCOUNT_NOT_FOUND);
+    return toContact(r);
+  }
+
+  /** PUT /operator/accounts/:id/support-contact. */
+  async saveSupportContact(clinicId: string, c: SupportContact): Promise<SupportContact> {
+    const { count } = await this.prisma.clinicAccount.updateMany({
+      where: { id: clinicId }, data: { supportContactName: c.name, supportContactPhone: c.phone, supportContactEmail: c.email },
+    });
+    if (!count) throw new NotFoundException(ACCOUNT_NOT_FOUND);
+    return c;
+  }
+
+  /** GET /clinic/support (D12): what "Contact support" shows this clinic's Owner. */
+  async clinicSupport(clinicId: string): Promise<ClinicSupportView> {
+    const r = await this.prisma.clinicAccount.findUniqueOrThrow({ where: { id: clinicId }, select: { tier: true, ...SUPPORT_CONTACT } });
+    return clinicSupportView(r.tier, await this.support(), toContact(r));
   }
 
   async qr(db: Db = this.prisma): Promise<PaymentQrView | null> {

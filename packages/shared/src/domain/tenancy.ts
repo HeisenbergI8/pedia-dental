@@ -1,6 +1,6 @@
 import { Role } from "../schemas/common";
 import type { StaffMember } from "../schemas/clinic";
-import type { Branch, OpeningHours, Tier } from "../schemas/tenancy";
+import type { Branch, ClinicSupportView, OpeningHours, SupportContact, SupportSettings, Tier } from "../schemas/tenancy";
 import { rolesCan } from "./permissions";
 
 /**
@@ -14,14 +14,76 @@ export type TierLimits = {
   /** B12 decisions 1, 2: every plan has both. Storage in bytes; texts in billed SMS parts a Manila calendar month. */
   storageBytes: number;
   textParts: number;
+  /** Feature 16 (revised 2026-11-19): parents may ask for an appointment in the portal. */
+  appointmentRequests: boolean;
+  /** D11: the clinic may customise its letterhead (text or an image). The standard header (logo, colour) is every tier's (D4). */
+  customLetterhead: boolean;
+  /** The financial dashboard's export (not built yet, D5). Never the clinic's own data export: that is NEVER_LIMITED. */
+  financeExport: boolean;
+  /** Design it for me costs nothing extra at sign-up. */
+  designIncluded: boolean;
 };
 const GIB = 1024 ** 3;
 
-/** Decisions #5, #6. Enforced in the handler and the UI by Owner settings; read here, never re-typed. */
+/**
+ * Decisions #5, #6, revised 2026-11-19 (ROADMAP feature 16). Enforced in the handler and the UI; read here, never
+ * re-typed. Limits only ever rose in the revision, so no existing clinic is over a limit because of it.
+ */
 export const TIER_LIMITS: Record<Tier, TierLimits> = {
-  small: { branches: 1, staffLogins: 5, crossBranchViews: false, storageBytes: 2 * GIB, textParts: 300 },
-  mid: { branches: 3, staffLogins: 20, crossBranchViews: true, storageBytes: 10 * GIB, textParts: 1000 },
-  big: { branches: null, staffLogins: null, crossBranchViews: true, storageBytes: 50 * GIB, textParts: 3000 },
+  small: {
+    branches: 1, staffLogins: 10, crossBranchViews: false, storageBytes: 25 * GIB, textParts: 500,
+    appointmentRequests: false, customLetterhead: false, financeExport: false, designIncluded: false,
+  },
+  mid: {
+    branches: 3, staffLogins: 30, crossBranchViews: true, storageBytes: 100 * GIB, textParts: 1500,
+    appointmentRequests: true, customLetterhead: true, financeExport: false, designIncluded: false,
+  },
+  big: {
+    branches: null, staffLogins: null, crossBranchViews: true, storageBytes: 500 * GIB, textParts: 5000,
+    appointmentRequests: true, customLetterhead: true, financeExport: true, designIncluded: true,
+  },
+};
+
+/** The yes/no features a tier switches. Never one of NEVER_LIMITED (guarded in tenancy.test.ts). */
+export type TierFeature = "crossBranchViews" | "appointmentRequests" | "customLetterhead" | "financeExport" | "designIncluded";
+
+/**
+ * Tiers differ by scale and service, never by patient care (ROADMAP feature 16). Nothing here may ever be a
+ * TierFeature or read TIER_LIMITS. Listed so the guard test and a reviewer can check it.
+ */
+export const NEVER_LIMITED = [
+  "patient profiles", "allergy banners", "the chart", "clinical notes", "treatment plans", "privacy and consent",
+  "exporting the clinic's own data",
+] as const;
+
+const FEATURE_NAME: Record<Exclude<TierFeature, "designIncluded">, string> = {
+  crossBranchViews: "Views across branches",
+  appointmentRequests: "Appointment requests from the parent portal",
+  customLetterhead: "A custom letterhead",
+  financeExport: "Exporting the financial dashboard",
+};
+
+/** GET /clinic/support: the tier's channel with only the address that channel uses (D12). The mock and the API. */
+export const clinicSupportView = (tier: Tier, settings: SupportSettings, contact: SupportContact | null): ClinicSupportView => {
+  const { channel } = TIER_SUPPORT[tier];
+  return { tier, channel, email: settings.email, chatUrl: channel === "email" ? null : settings.chatUrl, contact: channel === "contact" ? contact : null };
+};
+
+/** Feature 16 (revised): a parent's words when the clinic's plan has no portal appointment requests. API and mock. */
+export const REQUESTS_NOT_ON_PLAN = "This clinic takes appointments by phone. Please call the clinic to book.";
+
+/** The refusal for a feature the plan lacks, in the decision #8 voice. Shown to staff; parents get their own words. */
+export const featureMessage = (tier: Tier, feature: Exclude<TierFeature, "designIncluded">) =>
+  `${FEATURE_NAME[feature]} is not on the ${TIER_LABEL[tier]} plan. Contact Primolar to upgrade.`;
+
+/**
+ * D12: each tier's support, as Settings → Plan, the Plans page and the console show it. The channel decides what
+ * "Contact support" opens. The addresses are data (Phase 3), never hard-coded here. No reply-time promise (D26).
+ */
+export const TIER_SUPPORT: Record<Tier, { channel: "email" | "chat" | "contact"; label: string; detail: string }> = {
+  small: { channel: "email", label: "Email support", detail: "Email us, plus help setting up." },
+  mid: { channel: "chat", label: "Priority chat", detail: "Chat with us; your questions are answered first." },
+  big: { channel: "contact", label: "Your own Primolar contact", detail: "A named person to call or message, plus help moving your old records in." },
 };
 
 /**
@@ -77,8 +139,8 @@ export function usableBranches(roles: readonly Role[], branchIds: readonly strin
 export const worksAt = (staff: Pick<StaffMember, "role" | "alsoRoles" | "isOwner" | "branchIds" | "deactivatedAt">, branch: Branch) =>
   isActiveStaff(staff) && usableBranches(rolesOf(staff), staff.branchIds, [branch]).length > 0;
 
-/** What the operator and the Owner call each tier. */
-export const TIER_LABEL: Record<Tier, string> = { small: "Small", mid: "Mid", big: "Big" };
+/** What the operator and the Owner call each tier. The ids stay `small` / `mid` / `big` in code, data and the API. */
+export const TIER_LABEL: Record<Tier, string> = { small: "Starter", mid: "Clinic", big: "Pro" };
 
 /** Can sign in and be chosen for new work. A deactivated login keeps its name on what it recorded (decision #23). */
 export const isActiveStaff = (staff: Pick<StaffMember, "deactivatedAt">) => !staff.deactivatedAt;

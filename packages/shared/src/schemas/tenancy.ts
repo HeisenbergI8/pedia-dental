@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ClinicScoped, Id } from "./common";
+import { ClinicScoped, Id, IsoDateTime, YearMonth } from "./common";
 
 /** What the clinic account is on. Limits per tier are TIER_LIMITS (domain/tenancy.ts), never `if` statements. */
 export const Tier = z.enum(["small", "mid", "big"]);
@@ -99,7 +99,55 @@ export const ClinicUsage = z.object({
   branches: Allowance,
   staffLogins: Allowance,
   storage: Allowance,
-  texts: Allowance,
-  month: z.string().regex(/^\d{4}-\d{2}$/),
+  texts: Allowance, // limit = the plan's parts + this month's top-ups (textAllowance)
+  textTopUp: z.number().int().nonnegative(), // the top-up part of texts.limit
+  month: YearMonth,
 });
 export type ClinicUsage = z.infer<typeof ClinicUsage>;
+
+/** D12: Primolar's support addresses (GET and PUT /operator/support). Null until the operator sets them. */
+export const SupportSettings = z.object({
+  email: z.string().trim().toLowerCase().email("Enter an email address, like help@primolar.ph").nullable(),
+  // https only: the Owner's dialog opens it as a link, so no other scheme (javascript:, data:) may get in.
+  chatUrl: z.string().trim().url("Enter the chat link, starting with https://").refine((u) => /^https:\/\//i.test(u), "Enter the chat link, starting with https://").nullable(),
+});
+export type SupportSettings = z.infer<typeof SupportSettings>;
+
+/** D12: a Pro clinic's named Primolar contact (GET and PUT /operator/accounts/:id/support-contact). */
+export const SupportContact = z.object({
+  name: z.string().trim().min(1, "Enter the contact's name").max(120),
+  phone: z.string().trim().max(32).nullable(),
+  email: z.string().trim().toLowerCase().email("Enter an email address, like ana@primolar.ph").nullable(),
+});
+export type SupportContact = z.infer<typeof SupportContact>;
+
+/** GET /clinic/support (the Owner, D12, decision 21): what "Contact support" shows for this clinic's plan. */
+export const ClinicSupportView = z.object({
+  tier: Tier,
+  channel: z.enum(["email", "chat", "contact"]),
+  email: z.string().nullable(),
+  chatUrl: z.string().nullable(),
+  contact: SupportContact.nullable(),
+});
+export type ClinicSupportView = z.infer<typeof ClinicSupportView>;
+
+/** D11: how this clinic's documents are headed. `standard` until the Owner customises (every tier's default, D4). */
+export const LetterheadMode = z.enum(["standard", "text", "image"]);
+export type LetterheadMode = z.infer<typeof LetterheadMode>;
+
+/** PUT /clinic/letterhead: the Owner's choice and the text lines (the image has its own route). */
+export const UpdateLetterheadInput = z.object({
+  mode: LetterheadMode,
+  tagline: z.string().trim().max(80, "Keep the tagline under 80 characters").nullable(),
+  listBranches: z.boolean(), // every open branch's address in the footer, from the branches (never retyped)
+  socialLinks: z.array(z.string().trim().min(1).max(80, "Keep each link under 80 characters")).max(3, "Add up to 3 links"),
+  dentistLine: z.string().trim().max(120, "Keep it under 120 characters").nullable(), // decision 25: free text
+  footerNote: z.string().trim().max(160, "Keep the note under 160 characters").nullable(),
+});
+export type UpdateLetterheadInput = z.infer<typeof UpdateLetterheadInput>;
+
+/** GET /clinic/letterhead: every staff member reads it, since documents need it. */
+export const LetterheadSettings = UpdateLetterheadInput.extend({
+  imageUpdatedAt: IsoDateTime.nullable(), // the uploaded letterhead image, if any (GET /clinic/letterhead/image)
+});
+export type LetterheadSettings = z.infer<typeof LetterheadSettings>;

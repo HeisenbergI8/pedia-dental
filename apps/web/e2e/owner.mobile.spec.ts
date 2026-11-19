@@ -23,9 +23,9 @@ test.describe("happy paths", () => {
   test("owner checks the plan's usage on a phone", async ({ page }) => {
     await openSettingsOnPhone(page, "Plan");
     const plan = page.getByRole("tabpanel", { name: "Plan" });
-    await expect(plan.getByRole("heading", { name: "You're on the Mid plan" })).toBeVisible();
+    await expect(plan.getByRole("heading", { name: "You're on the Clinic plan" })).toBeVisible();
     await expect(plan.getByText("2 of 3")).toBeVisible();
-    await expect(plan.getByText("5 of 20")).toBeVisible();
+    await expect(plan.getByText("5 of 30")).toBeVisible();
   });
 
   test("owner adds a staff login on a phone and can read and dismiss the temporary password", async ({ page }) => {
@@ -40,7 +40,7 @@ test.describe("happy paths", () => {
     await expect(done.getByText("Temporary password", { exact: true })).toBeInViewport();
     await done.getByRole("button", { name: "I've passed it on" }).click();
     await expect(done).toBeHidden();
-    await expect(page.getByText(/^6 of 20 staff logins/)).toBeVisible();
+    await expect(page.getByText(/^6 of 30 staff logins/)).toBeVisible();
   });
 });
 

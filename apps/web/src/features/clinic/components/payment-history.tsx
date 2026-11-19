@@ -2,19 +2,28 @@
 import { useState } from "react";
 import { DownloadIcon } from "lucide-react";
 import { toast } from "sonner";
-import { TIER_LABEL, formatBillingDate, formatPeso, type SubscriptionPayment, type SubscriptionView } from "@pedia/shared";
+import { TIER_LABEL, formatBillingDate, formatPeso, textTopUpLine, type SubscriptionPayment, type SubscriptionView, type TextTopUp } from "@pedia/shared";
 import { Button } from "@/components/ui/button";
-import { downloadPrimolarInvoice } from "../primolar-invoice";
+import { downloadPrimolarInvoice, downloadPrimolarTopUpReceipt } from "../primolar-invoice";
 
-/** Billing #31, #33: every payment to Primolar, newest first, each with its invoice. The table scrolls on a phone, not the page. */
+type Row = { kind: "month"; p: SubscriptionPayment } | { kind: "topup"; p: TextTopUp };
+
+/**
+ * Billing #31, #33, feature 16 (D10): every payment to Primolar, months and text top-ups together, newest first, each
+ * with its PDF. The table scrolls on a phone, not the page.
+ */
 export function PaymentHistory({ subscription }: { subscription: SubscriptionView }) {
   const [busy, setBusy] = useState<string>();
-  if (subscription.payments.length === 0) return <p className="text-sm text-ink-muted">No payments recorded yet.</p>;
+  const rows: Row[] = [
+    ...subscription.payments.map((p) => ({ kind: "month" as const, p })),
+    ...subscription.topUps.map((p) => ({ kind: "topup" as const, p })),
+  ].sort((a, b) => b.p.paidOn.localeCompare(a.p.paidOn) || b.p.recordedAt.localeCompare(a.p.recordedAt));
+  if (rows.length === 0) return <p className="text-sm text-ink-muted">No payments recorded yet.</p>;
 
-  const download = (p: SubscriptionPayment) => {
-    setBusy(p.id);
-    downloadPrimolarInvoice(subscription.billedTo, p)
-      .catch(() => toast.error("The invoice couldn't be made. Try again."))
+  const download = (r: Row) => {
+    setBusy(r.p.id);
+    (r.kind === "month" ? downloadPrimolarInvoice(subscription.billedTo, r.p) : downloadPrimolarTopUpReceipt(subscription.billedTo, r.p))
+      .catch(() => toast.error("The PDF couldn't be made. Try again."))
       .finally(() => setBusy(undefined));
   };
 
@@ -29,19 +38,25 @@ export function PaymentHistory({ subscription }: { subscription: SubscriptionVie
             <th scope="col" className="py-2 pr-3 font-semibold">Paid on</th>
             <th scope="col" className="py-2 pr-3 font-semibold">For</th>
             <th scope="col" className="py-2 pr-3 text-right font-semibold">Amount</th>
-            <th scope="col" className="py-2"><span className="sr-only">Invoice PDF</span></th>
+            <th scope="col" className="py-2"><span className="sr-only">PDF</span></th>
           </tr>
         </thead>
         <tbody>
-          {subscription.payments.map((p) => (
-            <tr key={p.id} className="border-b border-line last:border-0">
-              <td className="py-2 pr-3 tabular-nums">{p.invoiceNo}</td>
-              <td className="py-2 pr-3">{formatBillingDate(p.paidOn)}</td>
-              <td className="py-2 pr-3">{TIER_LABEL[p.tier]} plan, from {formatBillingDate(p.periodStart)}</td>
-              <td className="py-2 pr-3 text-right tabular-nums">{formatPeso(p.amount)}</td>
+          {rows.map((r) => (
+            <tr key={r.p.id} className="border-b border-line last:border-0">
+              <td className="py-2 pr-3 tabular-nums">{r.p.invoiceNo}</td>
+              <td className="py-2 pr-3">{formatBillingDate(r.p.paidOn)}</td>
+              <td className="py-2 pr-3">{r.kind === "month" ? `${TIER_LABEL[r.p.tier]} plan, from ${formatBillingDate(r.p.periodStart)}` : textTopUpLine(r.p)}</td>
+              <td className="py-2 pr-3 text-right tabular-nums">{formatPeso(r.p.amount)}</td>
               <td className="py-2 text-right">
-                <Button variant="outline" size="sm" disabled={busy === p.id} onClick={() => download(p)} aria-label={`Download invoice ${p.invoiceNo}`}>
-                  <DownloadIcon aria-hidden /> Invoice
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy === r.p.id}
+                  onClick={() => download(r)}
+                  aria-label={`Download ${r.kind === "month" ? "invoice" : "acknowledgment"} ${r.p.invoiceNo}`}
+                >
+                  <DownloadIcon aria-hidden /> {r.kind === "month" ? "Invoice" : "Acknowledgment"}
                 </Button>
               </td>
             </tr>

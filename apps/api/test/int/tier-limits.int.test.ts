@@ -30,22 +30,28 @@ const as = async (clinicId: string, accountId: string) => `pd_session=${await se
 const post = (path: string, cookie: string, body?: object) => request(app.getHttpServer()).post(`/api${path}`).set("Cookie", cookie).send(body);
 const front = (email: string) => ({ fullName: "Parallel Person", email, role: "front_desk", branchIds: ["branch_ngiti_bacoor"] });
 const statuses = (rs: request.Response[]) => rs.map((r) => r.status).sort();
+/** Starter has 10 logins (feature 16, revised) and Ngiti is seeded with 5 (D19): fill it to the limit first. */
+const fillNgiti = async (owner: string) => {
+  for (let i = 1; i <= 5; i++) expect((await post("/staff", owner, front(`fill${i}@ngiti.demo`))).status).toBe(201);
+};
 
 describe("tier limits hold under concurrent requests (B3, Decision 4)", () => {
   it("two adds racing for Ngiti's last seat leave exactly one login", async () => {
     const owner = await as("clinic_ngiti", "ngiti_staff_lim");
-    expect((await post("/staff/ngiti_staff_tan/deactivate", owner)).status).toBe(200); // 4 of 5
+    await fillNgiti(owner);
+    expect((await post("/staff/ngiti_staff_tan/deactivate", owner)).status).toBe(200); // 9 of 10
     const results = await Promise.all([post("/staff", owner, front("a@ngiti.demo")), post("/staff", owner, front("b@ngiti.demo"))]);
     expect(statuses(results)).toEqual([201, 409]);
-    expect(await inClinic("clinic_ngiti", () => prisma.staff.count({ where: { deactivatedAt: null } }))).toBe(5);
+    expect(await inClinic("clinic_ngiti", () => prisma.staff.count({ where: { deactivatedAt: null } }))).toBe(10);
   });
 
   it("a reactivation and an add racing for one seat leave exactly one", async () => {
     const owner = await as("clinic_ngiti", "ngiti_staff_lim");
+    await fillNgiti(owner);
     await post("/staff/ngiti_staff_tan/deactivate", owner);
     const results = await Promise.all([post("/staff/ngiti_staff_tan/reactivate", owner), post("/staff", owner, front("c@ngiti.demo"))]);
     expect(statuses(results).filter((s) => s === 409)).toHaveLength(1);
-    expect(await inClinic("clinic_ngiti", () => prisma.staff.count({ where: { deactivatedAt: null } }))).toBe(5);
+    expect(await inClinic("clinic_ngiti", () => prisma.staff.count({ where: { deactivatedAt: null } }))).toBe(10);
   });
 
   it("two branches racing for Bulilit's third slot leave exactly one", async () => {
@@ -55,7 +61,7 @@ describe("tier limits hold under concurrent requests (B3, Decision 4)", () => {
     expect(await inClinic("clinic_demo", () => prisma.branch.count({ where: { archived: false } }))).toBe(3);
   });
 
-  it("two adds of one email at once leave one login (Mid has room, so only the email can refuse)", async () => {
+  it("two adds of one email at once leave one login (Clinic has room, so only the email can refuse)", async () => {
     const owner = await as("clinic_demo", "staff_villanueva");
     const body = { fullName: "Twin", email: "twin@bulilit.demo", role: "front_desk", branchIds: ["branch_imus"] };
     expect(statuses(await Promise.all([post("/staff", owner, body), post("/staff", owner, body)]))).toEqual([201, 409]);
@@ -63,6 +69,7 @@ describe("tier limits hold under concurrent requests (B3, Decision 4)", () => {
 
   it("never blocks another clinic: Ngiti's lock doesn't hold up Bulilit", async () => {
     const [ngiti, demo] = [await as("clinic_ngiti", "ngiti_staff_lim"), await as("clinic_demo", "staff_villanueva")];
+    await fillNgiti(ngiti);
     const results = await Promise.all([post("/staff", ngiti, front("full@ngiti.demo")), post("/staff", demo, { ...front("free@bulilit.demo"), branchIds: ["branch_imus"] })]);
     expect(results.map((r) => r.status)).toEqual([409, 201]);
   });

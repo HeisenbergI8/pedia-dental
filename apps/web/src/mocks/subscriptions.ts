@@ -8,7 +8,6 @@ import {
   nextBoundary,
   settleStep,
   unpaidFrom,
-  primolarInvoiceNo,
   subscriptionDueOn,
   subscriptionMonthLine,
   subscriptionStatus,
@@ -25,6 +24,7 @@ import {
 import { today } from "./clock";
 import { accountById, persist, platform } from "./db";
 import { paymentQrView, receiptsOfClinic } from "./receipts";
+import { nextInvoiceNo, topUpsOf } from "./text-topups";
 
 /**
  * Billing #25–#30: one subscription per clinic, in `Platform.subscriptions`. Everything here reads the platform, never
@@ -32,7 +32,6 @@ import { paymentQrView, receiptsOfClinic } from "./receipts";
  */
 export const subscriptionOf = (clinicId: string): Subscription | undefined => platform.subscriptions.find((s) => s.clinicId === clinicId);
 
-const nextInvoiceNo = () => primolarInvoiceNo(platform.subscriptions.reduce((n, s) => n + s.payments.length, 0) + 1);
 
 /** B12 decision 11: a month is billed at the price list in force when it began (`priceOn`). */
 const monthlyFee = (tier: Tier, periodStart: string) => monthlyFeeOn(platform.priceChanges, platform.prices, tier, periodStart);
@@ -194,6 +193,7 @@ export function subscriptionView(clinicId: string): SubscriptionView {
     cancelledAt: sub.cancelledAt ?? null,
     pausedFor: sub.pause ?? null,
     payments: [...sub.payments].reverse(),
+    topUps: topUpsOf(clinicId),
     receipts: receiptsOfClinic(clinicId),
     paymentQr: paymentQrView(),
     today: today(),

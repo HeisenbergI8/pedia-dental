@@ -2,6 +2,9 @@ import { HttpResponse } from "msw";
 import type { z } from "zod";
 import {
   RECEIPT_PENDING,
+  manilaMonth,
+  TOPUP_PAUSED,
+  textTopUpQuote,
   imageProblem,
   unpaidFrom,
   type ConfirmReceiptInput,
@@ -10,12 +13,15 @@ import {
   type ReceiptPayer,
   type ReceiptToCheck,
   type ReceiptView,
+  type TextTopUpsView,
 } from "@pedia/shared";
 import { SEED_FILES, SEED_RECEIPT_REF } from "@pedia/seed";
 import { getBlob, putBlob } from "./blob-store";
 import { accountById, persist, platform } from "./db";
 import { fileResponse } from "./signups";
+import { today } from "./clock";
 import { recordSubscriptionPayment, subscriptionOf, subscriptionView } from "./subscriptions";
+import { recordTopUp, topUpPartsIn } from "./text-topups";
 
 /*
  * B12: Primolar's payment QR and the receipts clinics send (decisions 5–8, 21–24). Platform-level, like the sign-ups:
@@ -65,12 +71,12 @@ export async function keepImage(prefix: string, file: Blob): Promise<string> {
 }
 
 const samePayer = (a: ReceiptPayer, b: ReceiptPayer) =>
-  a.kind === "signup" ? b.kind === "signup" && a.signupId === b.signupId : b.kind === "subscription" && a.clinicId === b.clinicId;
+  a.kind === "signup" ? b.kind === "signup" && a.signupId === b.signupId : b.kind === a.kind && a.clinicId === b.clinicId;
 /** Newest first. */
 const receiptsOf = (payer: ReceiptPayer) => platform.receipts.filter((r) => samePayer(r.payer, payer)).sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
 
-export const receiptView = ({ id, reference, amountDue, uploadedAt, status, rejectionReason, periodStart }: PaymentReceipt): ReceiptView => ({
-  id, reference, amountDue, uploadedAt, status, rejectionReason, periodStart,
+export const receiptView = ({ id, reference, amountDue, uploadedAt, status, rejectionReason, periodStart, packs, parts }: PaymentReceipt): ReceiptView => ({
+  id, reference, amountDue, uploadedAt, status, rejectionReason, periodStart, packs, parts,
 });
 export const latestReceipt = (payer: ReceiptPayer): ReceiptView | null => {
   const [latest] = receiptsOf(payer);
@@ -80,15 +86,18 @@ export const receiptsOfClinic = (clinicId: string): ReceiptView[] => receiptsOf(
 
 /** A receipt with whom it is from (the operator's view). */
 export function toCheck(r: PaymentReceipt): ReceiptToCheck {
-  if (r.payer.kind === "subscription") return { ...receiptView(r), payer: { ...r.payer, clinicName: accountById(r.payer.clinicId)?.name ?? "" } };
+  if (r.payer.kind !== "signup") return { ...receiptView(r), payer: { ...r.payer, clinicName: accountById(r.payer.clinicId)?.name ?? "" } };
   const { signupId } = r.payer;
   const signup = platform.signups.find((s) => s.id === signupId);
   return { ...receiptView(r), payer: { kind: "signup", signupId, signupReference: signup?.reference ?? "", clinicName: signup?.account.name ?? "" } };
 }
 
-/** Payments to check (decision 8): pending only, oldest first. */
+/** Payments to check (decision 8): pending only, text top-ups first (D14), then oldest first. */
 export const receiptsToCheck = (): ReceiptToCheck[] =>
-  platform.receipts.filter((r) => r.status === "pending").sort((a, b) => a.uploadedAt.localeCompare(b.uploadedAt)).map(toCheck);
+  platform.receipts
+    .filter((r) => r.status === "pending")
+    .sort((a, b) => Number(b.payer.kind === "text_topup") - Number(a.payer.kind === "text_topup") || a.uploadedAt.localeCompare(b.uploadedAt))
+    .map(toCheck);
 
 /** Decisions 6, 21: a clinic's receipt for its first unpaid month, at what that month costs now. One waits at a time. */
 export async function addClinicReceipt(clinicId: string, reference: string, file: File): Promise<string | undefined> {
@@ -98,7 +107,30 @@ export async function addClinicReceipt(clinicId: string, reference: string, file
   if (receiptsOf(payer).some((r) => r.status === "pending")) return RECEIPT_PENDING;
   const { nextAmount } = subscriptionView(clinicId);
   platform.receipts.push({
-    id: `receipt_${crypto.randomUUID()}`, payer, reference, amountDue: nextAmount, periodStart: unpaidFrom(sub),
+    id: `receipt_${crypto.randomUUID()}`, payer, reference, amountDue: nextAmount, periodStart: unpaidFrom(sub), packs: null, parts: null,
+    uploadedAt: new Date().toISOString(), status: "pending", rejectionReason: null, fileRef: await keepImage(`receipt_${clinicId}`, file),
+  });
+  persist();
+  return undefined;
+}
+
+/** GET /clinic/text-topups: the pack on sale, this month's bought parts, the QR and the top-up receipts sent. */
+export function textTopUpsView(clinicId: string): TextTopUpsView {
+  const month = manilaMonth(today());
+  return {
+    pack: platform.prices.textPack, month, partsThisMonth: topUpPartsIn(clinicId, month), paymentQr: paymentQrView(),
+    receipts: receiptsOf({ kind: "text_topup", clinicId }).map(receiptView),
+  };
+}
+
+/** Feature 16 (revised): a top-up receipt at today's pack price (D3), one waiting at a time (21); not while paused (D8). */
+export async function addTopUpReceipt(clinicId: string, packs: number, reference: string, file: File): Promise<string | undefined> {
+  if (subscriptionOf(clinicId)?.pause) return TOPUP_PAUSED;
+  const payer: ReceiptPayer = { kind: "text_topup", clinicId };
+  if (receiptsOf(payer).some((r) => r.status === "pending")) return RECEIPT_PENDING;
+  const { parts, amount } = textTopUpQuote(platform.prices.textPack, packs);
+  platform.receipts.push({
+    id: `receipt_${crypto.randomUUID()}`, payer, reference, amountDue: amount, periodStart: null, packs, parts,
     uploadedAt: new Date().toISOString(), status: "pending", rejectionReason: null, fileRef: await keepImage(`receipt_${clinicId}`, file),
   });
   persist();
@@ -113,7 +145,7 @@ export async function addSignupReceipt(signupId: string, reference: string, file
   const payer: ReceiptPayer = { kind: "signup", signupId };
   if (receiptsOf(payer).some((r) => r.status === "pending")) return RECEIPT_PENDING;
   platform.receipts.push({
-    id: `receipt_${crypto.randomUUID()}`, payer, reference, amountDue: signup.quote.total, periodStart: null,
+    id: `receipt_${crypto.randomUUID()}`, payer, reference, amountDue: signup.quote.total, periodStart: null, packs: null, parts: null,
     uploadedAt: new Date().toISOString(), status: "pending", rejectionReason: null, fileRef: await keepImage(`receipt_${signupId}`, file),
   });
   persist();
@@ -137,6 +169,9 @@ export function confirmReceipt(receipt: PaymentReceipt, input: ConfirmReceiptInp
     if (receipt.amountDue !== subscriptionView(clinicId).nextAmount) return "The amount due has changed since this receipt was sent. Reject it and ask for a new one.";
     const refused = recordSubscriptionPayment(clinicId, { ...input, reference: receipt.reference });
     if (refused) return refused;
+  } else if (receipt.payer.kind === "text_topup") {
+    // D3: no re-pricing at confirm; the parts and amount were fixed when the Owner sent it.
+    recordTopUp({ ...receipt, payer: receipt.payer }, input);
   } else {
     const { signupId } = receipt.payer;
     const signup = platform.signups.find((s) => s.id === signupId)!;

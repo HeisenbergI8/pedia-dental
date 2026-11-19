@@ -1,8 +1,11 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { INestApplication } from "@nestjs/common";
 import { DEMO_PASSWORD, seedPlatform } from "@pedia/seed";
 import {
-  AddStaffResult, Branch, CONFIDENTIALITY_NOTICE, ClinicContext, ClinicUsage, DEFAULT_OPENING_HOURS, Session, StaffMember,
-  type AddStaffInput, type BranchInput,
+  AddStaffResult, Branch, CONFIDENTIALITY_NOTICE, ClinicContext, ClinicUsage, DEFAULT_OPENING_HOURS, LetterheadSettings, Session, StaffMember,
+  featureMessage, type AddStaffInput, type BranchInput,
 } from "@pedia/shared";
 import request from "supertest";
 import { z } from "zod";
@@ -16,12 +19,13 @@ import { createIntApp } from "./support/int-app";
 
 /** apps/web/src/mocks/owner-settings.test.ts, against the API (CHUNKS B3 done-when). Cases share one seeded database. */
 const platform = seedPlatform();
+const STORAGE_DIR = mkdtempSync(join(tmpdir(), "owner-settings-")); // D11: the letterhead image
 let app: INestApplication;
 let prisma: PrismaService;
 let sessions: SessionService;
 
 beforeAll(async () => {
-  app = await createIntApp();
+  app = await createIntApp({ env: { STORAGE_DIR } });
   prisma = app.get(PrismaService);
   sessions = app.get(SessionService);
   await resetDatabase(prisma);
@@ -37,7 +41,7 @@ const EXAMPLE_NEW = "EXAMPLE-chosen-at-first-sign-in";
 const EXAMPLE_WRONG = "EXAMPLE-wrong";
 
 const as = async ([clinicId, accountId]: Login) => `pd_session=${await sessions.openClinic(clinicId, accountId)}`;
-const call = (method: "get" | "post" | "put", path: string, cookie = "", body?: unknown) =>
+const call = (method: "get" | "post" | "put" | "delete", path: string, cookie = "", body?: unknown) =>
   request(app.getHttpServer())[method](`/api${path}`).set("Cookie", cookie).send(body as object);
 const ok = async <T extends z.ZodType>(res: Promise<request.Response>, schema: T, status = 200): Promise<z.infer<T>> => {
   const r = await res;
@@ -50,18 +54,24 @@ const login = (email: string, password: string) => call("post", "/auth/login", "
 const branch = (name: string): BranchInput => ({ name, address: `1 ${name} Road, Cavite`, phone: "(046) 400 0000", openingHours: DEFAULT_OPENING_HOURS });
 const newcomer = (email: string): AddStaffInput => ({ fullName: "Nora Ramos", email, role: "front_desk", branchIds: ["branch_ngiti_bacoor"] });
 
-describe("Small tier at its limits (done-when)", () => {
-  it("shows Ngiti at 1 of 1 branches and 5 of 5 logins", async () => {
-    const usage = await ok(call("get", "/clinic/usage", await as(NGITI_OWNER)), ClinicUsage);
-    expect(usage).toMatchObject({ tier: "small", branches: { inUse: 1, limit: 1 }, staffLogins: { inUse: 5, limit: 5 } });
+describe("Starter tier at its limits (done-when)", () => {
+  beforeAll(async () => {
+    // Starter has 10 logins (feature 16, revised); Ngiti is seeded with 5 (D19). Fill it so the refusal is reachable.
+    const owner = await as(NGITI_OWNER);
+    for (let i = 1; i <= 5; i++) await ok(call("post", "/staff", owner, newcomer(`fill${i}@ngiti.demo`)), AddStaffResult, 201);
   });
 
-  it("refuses a second branch and a sixth login, naming the limit and how to lift it", async () => {
+  it("shows Ngiti at 1 of 1 branches and 10 of 10 logins", async () => {
+    const usage = await ok(call("get", "/clinic/usage", await as(NGITI_OWNER)), ClinicUsage);
+    expect(usage).toMatchObject({ tier: "small", branches: { inUse: 1, limit: 1 }, staffLogins: { inUse: 10, limit: 10 } });
+  });
+
+  it("refuses a second branch and an eleventh login, naming the limit and how to lift it", async () => {
     const cookie = await as(NGITI_OWNER);
     const b = await call("post", "/branches", cookie, branch("Kawit"));
-    expect([b.status, b.text]).toEqual([409, "Your Small plan includes 1 branch. Contact Primolar to upgrade."]);
+    expect([b.status, b.text]).toEqual([409, "Your Starter plan includes 1 branch. Contact Primolar to upgrade."]);
     const s = await call("post", "/staff", cookie, newcomer("nora@ngiti.demo"));
-    expect([s.status, s.text]).toEqual([409, "Your Small plan includes 5 staff logins. Contact Primolar to upgrade."]);
+    expect([s.status, s.text]).toEqual([409, "Your Starter plan includes 10 staff logins. Contact Primolar to upgrade."]);
     // The limit is checked before the body (the mock's order): an empty body still gets the 409.
     expect((await call("post", "/staff", cookie, {})).status).toBe(409);
   });
@@ -89,7 +99,7 @@ describe("deactivating frees a seat (decisions #10, #23)", () => {
     added = await ok(call("post", "/staff", owner, newcomer("nora@ngiti.demo")), AddStaffResult, 201);
     expect(added.temporaryPassword).toMatch(/^[A-Za-z2-9]{4}-[A-Za-z2-9]{4}-[A-Za-z2-9]{4}$/);
     expect(added.pin).toMatch(/^\d{4}$/);
-    expect((await ok(call("get", "/clinic/usage", owner), ClinicUsage)).staffLogins).toEqual({ inUse: 5, limit: 5 });
+    expect((await ok(call("get", "/clinic/usage", owner), ClinicUsage)).staffLogins).toEqual({ inUse: 10, limit: 10 });
     // Her name stays for what she recorded; the temporary password is never served again, nor stored in the clear.
     const staff = await ok(call("get", "/staff", owner), z.array(StaffMember));
     expect(staff.find((s) => s.id === "ngiti_staff_tan")?.fullName).toBe("Joy Tan");
@@ -181,14 +191,14 @@ describe("one login per email, and who sees staff emails (audit findings)", () =
   });
 });
 
-describe("archiving frees a branch slot (Mid, decisions #10, #22)", () => {
+describe("archiving frees a branch slot (Clinic, decisions #10, #22)", () => {
   let third: Branch;
 
   it("adds a third branch, refuses a fourth, and allows it once one is archived", async () => {
     const owner = await as(DEMO_OWNER);
     third = await ok(call("post", "/branches", owner, branch("Bacoor")), Branch, 201);
     const fourth = await call("post", "/branches", owner, branch("Kawit"));
-    expect([fourth.status, fourth.text]).toEqual([409, "Your Mid plan includes 3 branches. Contact Primolar to upgrade."]);
+    expect([fourth.status, fourth.text]).toEqual([409, "Your Clinic plan includes 3 branches. Contact Primolar to upgrade."]);
     expect((await ok(call("post", `/branches/${third.id}/archive`, owner), Branch)).archived).toBe(true);
     expect((await ok(call("post", "/branches", owner, branch("Kawit")), Branch, 201)).archived).toBe(false);
     // The archived one leaves the switcher (decision #22) but stays in GET /branches for old records, in order.
@@ -198,7 +208,7 @@ describe("archiving frees a branch slot (Mid, decisions #10, #22)", () => {
 
   it("won't reopen the archived branch while the plan is full", async () => {
     const res = await call("post", `/branches/${third.id}/reopen`, await as(DEMO_OWNER));
-    expect([res.status, res.text]).toEqual([409, "Your Mid plan includes 3 branches. Contact Primolar to upgrade."]);
+    expect([res.status, res.text]).toEqual([409, "Your Clinic plan includes 3 branches. Contact Primolar to upgrade."]);
   });
 
   it("won't archive a branch some staff work only at, and says who", async () => {
@@ -235,5 +245,57 @@ describe("archiving frees a branch slot (Mid, decisions #10, #22)", () => {
     const admin = await as(DEMO_ADMIN);
     expect((await call("post", "/staff", admin, newcomer("x@bulilit.demo"))).status).toBe(403);
     expect((await call("post", "/branches", admin, branch("Silang"))).status).toBe(403);
+  });
+});
+
+describe("custom letterhead (D11, decisions 22, 24)", () => {
+  const DEMO_FRONT_DESK: Login = ["clinic_demo", "staff_cruz"];
+  const text = { mode: "text", tagline: "Gentle care for little teeth", listBranches: true, socialLinks: ["fb.com/bulilit"], dentistLine: null, footerNote: "Open Saturdays" } as const;
+  // A real 1×1 PNG: the API sniffs the bytes (the web's test sends a PNG header and zeros).
+  const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+  const putImage = (cookie: string, body = PNG, contentType = "image/png") =>
+    request(app.getHttpServer()).put("/api/clinic/letterhead/image").set("Cookie", cookie).attach("file", body, { filename: "letterhead.png", contentType });
+
+  it("refuses a custom letterhead on Starter, but lets any plan go back to standard", async () => {
+    const owner = await as(NGITI_OWNER);
+    const refused = await call("put", "/clinic/letterhead", owner, text);
+    expect([refused.status, refused.text]).toEqual([409, featureMessage("small", "customLetterhead")]);
+    const image = await putImage(owner);
+    expect([image.status, image.text]).toEqual([409, featureMessage("small", "customLetterhead")]);
+    expect((await ok(call("put", "/clinic/letterhead", owner, { ...text, mode: "standard" }), LetterheadSettings)).mode).toBe("standard");
+    expect((await call("delete", "/clinic/letterhead/image", owner)).status).toBe(200); // removing is allowed on any plan
+  });
+
+  it("saves a Clinic plan's own text, and every staff member reads it", async () => {
+    const owner = await as(DEMO_OWNER);
+    expect((await ok(call("get", "/clinic/letterhead", owner), LetterheadSettings)).mode).toBe("standard"); // never customised
+    expect((await call("put", "/clinic/letterhead", owner, { ...text, mode: "image" })).text).toBe("Upload the letterhead image first");
+    expect((await call("put", "/clinic/letterhead", owner, { ...text, socialLinks: ["a", "b", "c", "d"] })).status).toBe(400);
+    expect(await ok(call("put", "/clinic/letterhead", owner, text), LetterheadSettings)).toMatchObject({ ...text, imageUpdatedAt: null });
+    const frontDesk = await as(DEMO_FRONT_DESK); // front desk makes documents
+    expect((await ok(call("get", "/clinic/letterhead", frontDesk), LetterheadSettings)).tagline).toBe(text.tagline);
+    expect((await call("put", "/clinic/letterhead", frontDesk, text)).status).toBe(403);
+    const none = await call("get", "/clinic/letterhead/image", frontDesk);
+    expect([none.status, none.text]).toEqual([404, "This clinic has no letterhead image"]);
+  });
+
+  it("stores a letterhead image, counted toward storage, and goes back to standard when it is removed", async () => {
+    const owner = await as(DEMO_OWNER);
+    const before = (await ok(call("get", "/clinic/usage", owner), ClinicUsage)).storage.inUse;
+    const svg = await putImage(owner, Buffer.from("<svg xmlns='http://www.w3.org/2000/svg'/>"), "image/svg+xml");
+    expect([svg.status, svg.text]).toEqual([400, "Choose a PNG or JPG image"]); // the shared imageProblem's words
+    const saved = await ok(putImage(owner), LetterheadSettings);
+    expect([saved.mode, !!saved.imageUpdatedAt, saved.tagline]).toEqual(["image", true, text.tagline]); // the text is kept
+    expect((await ok(call("get", "/clinic/usage", owner), ClinicUsage)).storage.inUse).toBe(before + PNG.length);
+    const replaced = await ok(putImage(owner), LetterheadSettings); // the old image leaves the ledger as the new one joins it
+    expect(replaced.mode).toBe("image");
+    expect((await ok(call("get", "/clinic/usage", owner), ClinicUsage)).storage.inUse).toBe(before + PNG.length);
+    // Streamed from the API's own origin, never a 302 to S3: the PDF draws it into a canvas (audit finding 1).
+    const file = await call("get", "/clinic/letterhead/image", await as(DEMO_FRONT_DESK)).buffer(true);
+    expect([file.status, file.headers["content-type"], file.headers.location, Buffer.compare(file.body as Buffer, PNG)]).toEqual([200, "image/png", undefined, 0]);
+    const removed = await ok(call("delete", "/clinic/letterhead/image", owner), LetterheadSettings);
+    expect([removed.mode, removed.imageUpdatedAt]).toEqual(["standard", null]);
+    expect((await ok(call("get", "/clinic/usage", owner), ClinicUsage)).storage.inUse).toBe(before);
+    expect((await call("get", "/clinic/letterhead/image", owner)).status).toBe(404);
   });
 });

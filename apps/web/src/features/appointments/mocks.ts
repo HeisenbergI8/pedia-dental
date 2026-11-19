@@ -5,7 +5,9 @@ import {
   BookAppointmentInput,
   ChangeAppointmentStatusInput,
   CreateAppointmentRequestInput,
+  REQUESTS_NOT_ON_PLAN,
   RESTRICTED_BOOKING_MESSAGE,
+  TIER_LIMITS,
   RescheduleAppointmentInput,
   canReschedule,
   canTransition,
@@ -20,7 +22,7 @@ import {
 } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { activeBranch, sessionOf } from "@/mocks/access";
-import { currentClinicId, db, persist } from "@/mocks/db";
+import { currentAccount, currentClinicId, db, persist } from "@/mocks/db";
 import { cancelQueued, queueBookingMessages, queueMessage } from "@/mocks/outbox";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
@@ -152,6 +154,7 @@ export const appointmentHandlers = [
   http.post(url("/patients/:id/appointment-requests"), async ({ params, request }) => {
     const patient = db.patients.find((p) => p.id === params.id);
     if (!patient) return new HttpResponse("Patient not found", { status: 404 });
+    if (!TIER_LIMITS[currentAccount().tier].appointmentRequests) return new HttpResponse(REQUESTS_NOT_ON_PLAN, { status: 409 });
     const parsed = CreateAppointmentRequestInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
     if (parsed.data.preferredDate < format(new Date(), "yyyy-MM-dd")) {

@@ -10,7 +10,10 @@ import { RECEIPT_COLUMNS, payerOf, payerWhere, toReceiptToCheck, toReceiptView, 
 export const RECEIPT_NOT_FOUND = "Receipt not found";
 export const ALREADY_CHECKED = "This receipt has already been checked";
 
-export type NewReceipt = { payer: ReceiptPayer; reference: string; amountDue: number; periodStart: string | null; fileKey: string; bytes: number };
+export type NewReceipt = {
+  payer: ReceiptPayer; reference: string; amountDue: number; periodStart: string | null; fileKey: string; bytes: number;
+  packs?: number; parts?: number; // a text top-up's, fixed when sent (D3)
+};
 
 /**
  * The receipts clinics and sign-ups send after paying by QR (B12 decisions 6–8, 21–24): the only reader and writer of
@@ -29,7 +32,8 @@ export class ReceiptRecordsService {
     if (await tx.paymentReceipt.findFirst({ where: { ...payerWhere(r.payer), status: "pending" }, select: { id: true } })) throw new ConflictException(RECEIPT_PENDING);
     await tx.paymentReceipt.create({
       data: {
-        purpose: r.payer.kind, signupId: r.payer.kind === "signup" ? r.payer.signupId : null, clinicId: r.payer.kind === "subscription" ? r.payer.clinicId : null,
+        purpose: r.payer.kind, signupId: r.payer.kind === "signup" ? r.payer.signupId : null, clinicId: r.payer.kind === "signup" ? null : r.payer.clinicId,
+        packs: r.packs ?? null, parts: r.parts ?? null,
         periodStart: r.periodStart ? new Date(`${r.periodStart}T00:00:00.000Z`) : null, amountDue: r.amountDue, reference: r.reference,
         fileKey: r.fileKey, bytes: r.bytes, uploadedAt: this.clock.now(), status: "pending",
       },
@@ -74,6 +78,12 @@ export class ReceiptRecordsService {
     return rows.map(toReceiptView);
   }
 
+  /** A clinic's text top-up receipts, newest first (GET /clinic/text-topups). */
+  async topUpsOf(clinicId: string): Promise<ReceiptView[]> {
+    const rows = await this.prisma.paymentReceipt.findMany({ where: payerWhere({ kind: "text_topup", clinicId }), orderBy: [{ uploadedAt: "desc" }, { id: "desc" }], select: RECEIPT_COLUMNS });
+    return rows.map(toReceiptView);
+  }
+
   /** Decision 8: Payments to check, pending only, oldest first, with whom each is from (one query per kind: no N+1). */
   async pending(): Promise<ReceiptToCheck[]> {
     const rows = await this.prisma.paymentReceipt.findMany({ where: { status: "pending" }, orderBy: [{ uploadedAt: "asc" }, { id: "asc" }], select: RECEIPT_COLUMNS });
@@ -84,6 +94,8 @@ export class ReceiptRecordsService {
     const signups = new Map(
       (await this.prisma.signup.findMany({ where: { id: { in: signupIds } }, select: { id: true, reference: true, name: true } })).map((s) => [s.id, { reference: s.reference, name: s.name }]),
     );
+    // D14: waiting text top-ups first (a stable sort keeps the rest oldest first). The list is pending only, so small.
+    rows.sort((a, b) => Number(b.purpose === "text_topup") - Number(a.purpose === "text_topup"));
     return rows.map((r) => toReceiptToCheck(r, { clinics, signups }));
   }
 
@@ -104,7 +116,8 @@ export class ReceiptRecordsService {
     if (id.length > 191) return undefined;
     const row = await this.prisma.paymentReceipt.findUnique({ where: { id }, select: { clinicId: true, purpose: true, fileKey: true, reference: true } });
     if (!row?.fileKey) return undefined;
-    if (scope !== "operator" && (row.purpose !== "subscription" || row.clinicId !== scope.clinicId)) return undefined;
+    // A clinic's own subscription and text top-up receipts; never a sign-up's.
+    if (scope !== "operator" && (row.purpose === "signup" || row.clinicId !== scope.clinicId)) return undefined;
     return this.files.link(row.fileKey, { fileName: "payment-receipt" });
   }
 

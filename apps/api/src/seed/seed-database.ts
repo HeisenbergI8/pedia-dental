@@ -208,10 +208,11 @@ const standingData = (s: StoredStanding) => ({ lastVisitOn: day(s.lastVisitOn), 
  * files under platform keys (no ledger row: platform files aren't a clinic's storage, E2).
  */
 async function seedBilling(prisma: PrismaService, platform: Platform, files?: FileStorage): Promise<void> {
-  const { plans, designAddOn } = platform.prices;
+  const { plans, designAddOn, textPack } = platform.prices;
   const fees = {
     smallSetupFee: plans.small.setupFee, smallMonthlyFee: plans.small.monthlyFee, midSetupFee: plans.mid.setupFee,
     midMonthlyFee: plans.mid.monthlyFee, bigSetupFee: plans.big.setupFee, bigMonthlyFee: plans.big.monthlyFee, designAddOn,
+    textPackParts: textPack.parts, textPackPrice: textPack.price,
   };
   const qr = { paymentQrKey: null, paymentQrCaption: null, paymentQrUpdatedAt: null }; // decision 23: none seeded
   await prisma.platformSettings.upsert({ where: { id: "primolar" }, create: { id: "primolar", ...fees, ...qr }, update: { ...fees, ...qr } });
@@ -230,7 +231,8 @@ async function seedBilling(prisma: PrismaService, platform: Platform, files?: Fi
     await prisma.paymentReceipt.create({
       data: {
         id: r.id, purpose: r.payer.kind, signupId: r.payer.kind === "signup" ? r.payer.signupId : null,
-        clinicId: r.payer.kind === "subscription" ? r.payer.clinicId : null, periodStart: r.periodStart ? dateOnly(r.periodStart) : null,
+        clinicId: r.payer.kind === "signup" ? null : r.payer.clinicId, periodStart: r.periodStart ? dateOnly(r.periodStart) : null,
+        packs: r.packs, parts: r.parts,
         amountDue: r.amountDue, reference: r.reference, fileKey: key, bytes: key ? png.length : 0, uploadedAt: new Date(r.uploadedAt),
         status: r.status, decidedAt: r.decidedAt ? new Date(r.decidedAt) : null, rejectionReason: r.rejectionReason,
       },

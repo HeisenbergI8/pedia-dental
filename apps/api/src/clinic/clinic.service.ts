@@ -121,7 +121,7 @@ export class ClinicService {
   async usage(): Promise<ClinicUsage> {
     const month = manilaMonth(this.clock.today());
     const c = await this.usageCounts.forClinic(ownClinicId(), month);
-    return usageOf(await this.tier(), { branches: c.branches, staffLogins: c.staffLogins }, { storageBytes: c.storageBytes, textParts: c.textParts, month });
+    return usageOf(await this.tier(), { branches: c.branches, staffLogins: c.staffLogins }, { storageBytes: c.storageBytes, textParts: c.textParts, textTopUp: c.textTopUp, month });
   }
 
   /** PUT /clinic: name, contact email and TIN (decision #18). Tier and status are the operator's (B12). */

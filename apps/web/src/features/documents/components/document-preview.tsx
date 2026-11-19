@@ -4,15 +4,27 @@ import type { DocBlock, DocContent } from "../content";
 
 /** The document as it will print, as real text: accessible and readable on a phone. */
 export function DocumentPreview({ content }: { content: DocContent }) {
+  const custom = content.letterhead.custom;
+  const lines = custom && "header" in custom ? custom : { header: [], footer: [] };
   return (
     <article aria-label={`Preview of the ${content.title.toLowerCase()}`} className="mx-auto w-full max-w-2xl space-y-4 rounded-xl border border-line bg-surface p-5 text-sm shadow-card sm:p-8">
       <header className="space-y-0.5 border-b-2 border-brand-ring pb-3">
-        <ClinicLogo className="mb-1 w-36" />
-        <p className="text-xs text-ink-muted">{content.letterhead.branchLine}</p>
+        {custom && "imageUrl" in custom ? (
+          // D11: the clinic's own letterhead image carries its logo and address.
+          // eslint-disable-next-line @next/next/no-img-element -- served by the API, replaced by the Owner any time
+          <img src={custom.imageUrl} alt={`${content.letterhead.clinicName} letterhead`} className="mb-1 max-h-28 w-full object-contain" />
+        ) : (
+          <>
+            <ClinicLogo className="mb-1 w-36" />
+            <p className="text-xs text-ink-muted">{content.letterhead.branchLine}</p>
+            {lines.header.map((l) => <p key={l} className="text-xs text-ink-muted">{l}</p>)}
+          </>
+        )}
         <h3 className="font-semibold tracking-wide uppercase">{content.title}</h3>
         <p className="text-ink-muted">{content.subtitle}</p>
       </header>
       {content.blocks.map((b, i) => <PreviewBlock key={i} block={b} />)}
+      {lines.footer.length > 0 && <p className="border-t border-line pt-3 text-center text-xs text-ink-muted">{lines.footer.join(" · ")}</p>}
       {content.footnote && <p className="border-t border-line pt-3 text-xs text-ink-muted">{content.footnote}</p>}
     </article>
   );

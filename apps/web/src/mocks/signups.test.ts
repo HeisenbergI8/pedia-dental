@@ -59,7 +59,9 @@ describe("the public Get started form (billing #4–#11)", () => {
       expect(view.reference).toMatch(/^PRM-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
       expect(view.quote).toEqual(amountDue(platform.prices, view.tier, choice));
     }
-    expect(designed.quote.designAddOn).toBe(platform.prices.designAddOn);
+    expect(designed.quote.designAddOn).toBe(0); // Pro includes Design it for me (feature 16, revised)
+    const designedMid = await submit(form("designed-mid", { choice: "designed", brief: "Sunny, calm" }, "mid"), { references: [png()] });
+    expect(designedMid.quote.designAddOn).toBe(platform.prices.designAddOn);
     expect(own.quote.designAddOn).toBe(0);
 
     const stored = (ref: string) => platform.signups.find((s) => s.reference === ref)!;

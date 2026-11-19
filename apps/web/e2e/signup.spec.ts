@@ -70,7 +70,7 @@ async function fillClinic(page: Page, c: Clinic) {
   await field(page, "Email").fill(c.ownerEmail);
 }
 
-const plan = (page: Page, name: "Small" | "Mid" | "Big") => page.getByRole("radio", { name: new RegExp(`^${name}`) });
+const plan = (page: Page, name: "Starter" | "Clinic" | "Pro") => page.getByRole("radio", { name: new RegExp(`^${name}`) });
 const look = (page: Page, name: "Use my own" | "Use the default look" | "Design it for me") =>
   page.getByRole("radio", { name: new RegExp(`^${name}`) });
 
@@ -196,7 +196,7 @@ test.describe("happy paths", () => {
     const c = clinic();
     await openGetStarted(page);
     await fillClinic(page, c);
-    await plan(page, "Mid").click();
+    await plan(page, "Clinic").click();
     await look(page, "Use my own").click();
     await chooseLogo(page);
     await expect(page.getByRole("img", { name: "logo.png" })).toBeVisible();
@@ -207,7 +207,7 @@ test.describe("happy paths", () => {
 
     await expect(page.getByRole("heading", { level: 1, name: `Thank you. ${c.name} is signed up` })).toBeVisible();
     await expect(page.getByText("Waiting for setup fee")).toBeVisible();
-    await expect(page.getByText(`${c.name} · Mid plan · Use my own`)).toBeVisible();
+    await expect(page.getByText(`${c.name} · Clinic plan · Use my own`)).toBeVisible();
     const reference = await readReference(page);
 
     // Primolar's operator, on the same device.
@@ -245,7 +245,7 @@ test.describe("happy paths", () => {
     await page.getByRole("checkbox", { name: "The Owner also treats patients (a dentist)" }).uncheck();
     await expect(look(page, "Use the default look")).toBeChecked();
     await submitSignup(page);
-    await expect(page.getByText(`${c.name} · Small plan · Use the default look`)).toBeVisible();
+    await expect(page.getByText(`${c.name} · Starter plan · Use the default look`)).toBeVisible();
 
     await openSignupInConsole(page, c.name);
     await expect(page.getByText(`${c.owner} · ${c.ownerEmail}`, { exact: true })).toBeVisible(); // not a dentist
@@ -263,19 +263,19 @@ test.describe("happy paths", () => {
     const c = clinic();
     await openGetStarted(page);
     await fillClinic(page, c);
-    await plan(page, "Big").click();
+    await plan(page, "Clinic").click(); // Pro includes the design, so the fee is shown on Clinic
     await look(page, "Design it for me").click();
     await field(page, "Your brief").fill("Masaya at payapa: mint green and sunny yellow, walang pula. Para sa mga batang takot sa dentista.");
     await chooseFiles(page, /^Looks you like/, [png("ref-1.png"), png("ref-2.png")]);
     await expect(page.getByRole("img", { name: "ref-1.png" })).toBeVisible();
     await expect(page.getByRole("img", { name: "ref-2.png" })).toBeVisible();
     await expect(amountRow(page, "Design it for me")).toHaveText(/7,500/);
-    await expect(amountRow(page, "Total")).toHaveText(/37,500/);
+    await expect(amountRow(page, "Total")).toHaveText(/42,499/);
     await expect(page.getByText(/the setup fee and your first month, and the design/)).toBeVisible();
     await submitSignup(page);
 
-    await expect(page.getByText(`${c.name} · Big plan · Design it for me`)).toBeVisible();
-    await expect(amountRow(page, "Total")).toHaveText(/37,500/);
+    await expect(page.getByText(`${c.name} · Clinic plan · Design it for me`)).toBeVisible();
+    await expect(amountRow(page, "Total")).toHaveText(/42,499/);
 
     await openSignupInConsole(page, c.name);
     await expect(page.getByText(/walang pula/)).toBeVisible();
@@ -284,24 +284,28 @@ test.describe("happy paths", () => {
 
   test("the amount due follows the plan and look the clinic picks, VAT included", async ({ page }) => {
     await openGetStarted(page);
-    await expect(plan(page, "Small")).toBeChecked();
+    await expect(plan(page, "Starter")).toBeChecked();
     await expect(amountRow(page, "Setup fee")).toHaveText(/5,000/);
-    await expect(amountRow(page, "First month")).toHaveText(/2,500/);
-    await expect(amountRow(page, "Total")).toHaveText(/7,500/);
-    await expect(amountDue(page)).toContainText(/Includes VAT \(12%\) of .*803\.57/);
+    await expect(amountRow(page, "First month")).toHaveText(/15,000/);
+    await expect(amountRow(page, "Total")).toHaveText(/20,000/);
+    await expect(amountDue(page)).toContainText(/Includes VAT \(12%\) of .*2,142\.86/);
 
-    await plan(page, "Mid").click();
-    await expect(amountRow(page, "Total")).toHaveText(/15,000/);
-    await expect(amountDue(page)).toContainText(/1,607\.14/);
-
-    await plan(page, "Big").click();
-    await expect(amountRow(page, "Total")).toHaveText(/30,000/);
-
+    await plan(page, "Clinic").click();
+    await expect(amountRow(page, "Total")).toHaveText(/34,999/);
+    await expect(amountDue(page)).toContainText(/3,749\.89/);
     await look(page, "Design it for me").click();
-    await expect(amountRow(page, "Total")).toHaveText(/37,500/);
+    await expect(amountRow(page, "Design it for me")).toHaveText(/7,500/);
+    await expect(amountRow(page, "Total")).toHaveText(/42,499/);
+
+    // Pro includes the design: no add-on row, and the total is the same with or without it.
+    await plan(page, "Pro").click();
+    await expect(page.getByText("Primolar designs your logo, colour and font: included on the Pro plan")).toBeVisible();
+    await expect(amountRow(page, "Design it for me")).toHaveCount(0);
+    await expect(amountRow(page, "Total")).toHaveText(/64,999/);
+    await expect(amountDue(page)).toContainText(/6,964\.18/);
     await look(page, "Use my own").click();
     await expect(amountRow(page, "Design it for me")).toHaveCount(0);
-    await expect(amountRow(page, "Total")).toHaveText(/30,000/);
+    await expect(amountRow(page, "Total")).toHaveText(/64,999/);
   });
 
   test("a client checks the status of a sign-up with the reference from the thank-you page", async ({ page }) => {
@@ -310,7 +314,7 @@ test.describe("happy paths", () => {
     await expect(page.getByRole("heading", { level: 1, name: `Thank you. ${HAGIKGIK.name} is signed up` })).toBeVisible();
     await expect(page.getByText("Waiting for setup fee")).toBeVisible();
     await expect(page.getByText("Primolar will send you payment details.")).toBeVisible(); // B12 decision 23: no QR yet
-    await expect(page.getByText(`${HAGIKGIK.name} · Mid plan · Design it for me`)).toBeVisible();
+    await expect(page.getByText(`${HAGIKGIK.name} · Clinic plan · Design it for me`)).toBeVisible();
     // A bookmarked status page still opens after a reload.
     await page.reload();
     await expect(page.getByText(HAGIKGIK.reference, { exact: true })).toBeVisible();
@@ -585,11 +589,11 @@ test.describe("edge cases", () => {
     await openGetStarted(page);
     await field(page, "Clinic name").fill(c.name);
     await field(page, "Contact email").fill(c.contactEmail);
-    await plan(page, "Big").click();
+    await plan(page, "Pro").click();
     await page.reload();
     await expect(sendButton(page)).toBeVisible();
     await expect(field(page, "Clinic name")).toHaveValue("");
-    await expect(plan(page, "Small")).toBeChecked();
+    await expect(plan(page, "Starter")).toBeChecked();
     // Nothing reached Primolar, so the same name can still be sent.
     await fillClinic(page, c);
     await submitSignup(page);
@@ -621,7 +625,7 @@ test.describe("edge cases", () => {
       address: "Blk 5 Lot 7, Brgy. Sto. Niño, Parañaque",
     });
     await signUp(page, c);
-    await expect(page.getByText(`${c.name} · Small plan · Use the default look`)).toBeVisible();
+    await expect(page.getByText(`${c.name} · Starter plan · Use the default look`)).toBeVisible();
     await openSignupInConsole(page, c.name);
     await expect(page.getByText(`${c.owner} · ${c.ownerEmail} · dentist`)).toBeVisible();
     await expect(page.getByText(new RegExp(escape(c.address)))).toBeVisible();
@@ -672,12 +676,14 @@ test.describe("edge cases", () => {
     await page.keyboard.type(c.contactEmail);
     await page.keyboard.press("Tab");
     await page.keyboard.type(c.tin);
+    await page.keyboard.press("Tab"); // the plan hint's "Compare plans" link (opens /plans in a new tab)
+    await expect(page.getByRole("link", { name: /Compare plans/ })).toBeFocused();
     await page.keyboard.press("Tab"); // the plan: one tab stop, arrows choose
-    await expect(plan(page, "Small")).toBeFocused();
+    await expect(plan(page, "Starter")).toBeFocused();
     await page.keyboard.press("ArrowRight"); // arrows move between plans (Radix radio group)...
-    await expect(plan(page, "Mid")).toBeFocused();
+    await expect(plan(page, "Clinic")).toBeFocused();
     await page.keyboard.press("Space"); // ...and Space picks the focused one, whether or not the arrow already did
-    await expect(plan(page, "Mid")).toBeChecked();
+    await expect(plan(page, "Clinic")).toBeChecked();
     await page.keyboard.press("Tab");
     await expect(field(page, "Branch name")).toBeFocused();
     await page.keyboard.type(c.branch);
@@ -695,7 +701,7 @@ test.describe("edge cases", () => {
     await sendButton(page).focus();
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(/\/get-started\/PRM-/, { timeout: 15_000 });
-    await expect(page.getByText(`${c.name} · Mid plan · Use the default look`)).toBeVisible();
+    await expect(page.getByText(`${c.name} · Clinic plan · Use the default look`)).toBeVisible();
   });
 
   test("the Terms and the DPA open from the form without losing what was typed", async ({ page, context }) => {

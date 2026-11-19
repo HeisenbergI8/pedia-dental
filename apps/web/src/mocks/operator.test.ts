@@ -17,6 +17,9 @@ import {
   SessionUser,
   limitMessage,
   type CreateAccountInput,
+  ClinicSupportView,
+  SupportContact,
+  SupportSettings,
 } from "@pedia/shared";
 import { read } from "@/design/source";
 import { signupFormData } from "@/features/signup/form-data";
@@ -117,7 +120,7 @@ describe("the operator never reaches clinic data (decision #25)", () => {
   });
 
   it("keeps operator and sign-up handlers out of the tenant binding (decision #25, billing #4)", () => {
-    const files = ["features/operator/mocks.ts", "features/operator/signup-mocks.ts", "features/signup/mocks.ts", "mocks/signups.ts", "mocks/subscriptions.ts", "features/legal/mocks.ts", "features/operator/payment-mocks.ts", "mocks/receipts.ts", "mocks/allowances.ts"];
+    const files = ["features/operator/mocks.ts", "features/operator/signup-mocks.ts", "features/signup/mocks.ts", "mocks/signups.ts", "mocks/subscriptions.ts", "features/legal/mocks.ts", "features/operator/payment-mocks.ts", "mocks/receipts.ts", "mocks/allowances.ts", "mocks/text-topups.ts"];
     for (const file of files) {
       const src = read(file);
       expect(src, file).not.toMatch(/\b(selectTenant|sessionOf|activeBranch|currentClinicId|currentAccount)\b/);
@@ -138,6 +141,26 @@ const TALA: CreateAccountInput = {
 };
 const multipart = (data: unknown, files?: Parameters<typeof signupFormData>[1]) => ({ method: "POST", body: signupFormData(data, files) });
 const asStaff = (token: string) => cookies(`pd_session=${token}`);
+
+describe("support details (feature 16, revised)", () => {
+  it("keeps Primolar's support details and a clinic's named contact, and shows each Owner only their plan's channel (D12)", async () => {
+    asOperator();
+    const settings = { email: "help@primolar.ph", chatUrl: "https://chat.primolar.ph" };
+    expect(await api("/operator/support", SupportSettings, send("PUT", settings))).toEqual(settings);
+    expect(await status(api("/operator/support", SupportSettings, send("PUT", { ...settings, chatUrl: "javascript:alert(1)" })))).toBe(400); // https only
+    const contact = { name: "Ana Reyes", phone: "0917 555 0101", email: "ana@primolar.ph" };
+    expect(await api("/operator/accounts/clinic_demo/support-contact", SupportContact, send("PUT", contact))).toEqual(contact);
+    expect(await api("/operator/accounts/clinic_demo/support-contact", SupportContact.nullable())).toEqual(contact);
+    expect(await status(api("/operator/accounts/nope/support-contact", SupportContact, send("PUT", contact)))).toBe(404);
+
+    cookies(`pd_session=${DEMO_OWNER}`); // Clinic plan: chat, never the named contact (that's Pro's)
+    expect(await api("/clinic/support", ClinicSupportView)).toEqual({ tier: "mid", channel: "chat", email: settings.email, chatUrl: settings.chatUrl, contact: null });
+    cookies("pd_session=demo.clinic_ngiti.ngiti_staff_lim"); // Starter: email only
+    expect(await api("/clinic/support", ClinicSupportView)).toMatchObject({ channel: "email", chatUrl: null, contact: null });
+    cookies("pd_session=demo.clinic_demo.staff_delacruz"); // an admin: the Owner's only (decision 21)
+    expect(await status(api("/clinic/support", ClinicSupportView))).toBe(403);
+  });
+});
 
 describe("operator account actions (chunk 21 done-when)", () => {
   let created: CreateAccountResult;

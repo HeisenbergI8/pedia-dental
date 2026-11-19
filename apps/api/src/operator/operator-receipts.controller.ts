@@ -5,6 +5,7 @@ import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { RECEIPT_NOT_FOUND, ReceiptRecordsService } from "../receipt-records/receipt-records.service";
 import { SignupsService } from "../signups/signups.service";
 import { SubscriptionRecordsService } from "../subscription-records/subscription-records.service";
+import { TextTopUpsService } from "../text-topups/text-topups.service";
 import { OperatorAudited } from "../operator-audit/operator-audited";
 
 /**
@@ -17,9 +18,10 @@ export class OperatorReceiptsController {
     private readonly receipts: ReceiptRecordsService,
     private readonly subscriptions: SubscriptionRecordsService,
     private readonly signups: SignupsService,
+    private readonly topUps: TextTopUpsService,
   ) {}
 
-  /** Pending only, oldest first. */
+  /** Pending only: waiting text top-ups first (D14), then oldest first. */
   @Get()
   pending(): Promise<ReceiptToCheck[]> {
     return this.receipts.pending();
@@ -39,6 +41,7 @@ export class OperatorReceiptsController {
   async confirm(@Param("id") id: string, @Body(new ZodValidationPipe(ConfirmReceiptInput)) input: ConfirmReceiptInput): Promise<ReceiptToCheck> {
     const payer = await this.receipts.payer(id);
     if (payer.kind === "subscription") await this.subscriptions.confirmReceipt(payer.clinicId, id, input);
+    else if (payer.kind === "text_topup") await this.topUps.confirmReceipt(payer.clinicId, id, input);
     else await this.signups.confirmReceipt(payer.signupId, id, input);
     return this.receipts.toCheck(id);
   }
@@ -49,6 +52,7 @@ export class OperatorReceiptsController {
   async reject(@Param("id") id: string, @Body(new ZodValidationPipe(RejectReceiptInput)) { reason }: RejectReceiptInput): Promise<ReceiptToCheck> {
     const payer = await this.receipts.payer(id);
     if (payer.kind === "subscription") await this.subscriptions.rejectReceipt(payer.clinicId, id, reason);
+    else if (payer.kind === "text_topup") await this.topUps.rejectReceipt(payer.clinicId, id, reason);
     else await this.signups.rejectReceipt(payer.signupId, id, reason);
     return this.receipts.toCheck(id);
   }

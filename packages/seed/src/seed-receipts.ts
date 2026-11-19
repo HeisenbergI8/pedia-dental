@@ -20,6 +20,8 @@ export function seedReceipts(subscriptions: Subscription[]): PaymentReceipt[] {
       reference: "GC 5012 3344 7781",
       amountDue: SEED_PRICES.plans.small.monthlyFee,
       periodStart: subscriptionDueOn(ipin.anchor, ipin.paidMonths),
+      packs: null,
+      parts: null,
       uploadedAt: new Date(`${yesterday}T21:14:00+08:00`).toISOString(),
       status: "pending",
       rejectionReason: null,

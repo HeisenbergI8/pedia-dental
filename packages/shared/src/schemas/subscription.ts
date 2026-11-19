@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { Centavos, Id, IsoDate, IsoDateTime } from "./common";
+import { Centavos, Id, IsoDate, IsoDateTime, YearMonth } from "./common";
 import { PaymentQrView, ReceiptView } from "./payments";
-import { UpfrontPayment } from "./signup";
+import { TextPackPrice, UpfrontPayment } from "./signup";
 import { Tier } from "./tenancy";
 
 /** One line on a Primolar invoice (S15). Not the clinic's `InvoiceLine`, which bills a patient. */
@@ -69,8 +69,34 @@ export const SubscriptionView = z.strictObject({
   cancelledAt: IsoDateTime.nullable(),
   pausedFor: SubscriptionPause.nullable(),
   payments: z.array(SubscriptionPayment), // newest first
+  topUps: z.lazy(() => z.array(TextTopUp)), // D10: text top-ups paid, newest first
   receipts: z.array(ReceiptView), // B12: this clinic's receipts, newest first (decisions 6, 21)
   paymentQr: PaymentQrView.nullable(), // B12 decision 23: null until the operator adds one
   today: IsoDate, // the server's date, so a form's "paid on" default follows the demo clock
 });
 export type SubscriptionView = z.infer<typeof SubscriptionView>;
+
+/**
+ * Feature 16 (revised): a confirmed text top-up, parts added to one Manila month (D1: they expire with it). Append-only.
+ * D10: on Primolar's books like a month, with an acknowledgment number from the same PRM-INV series.
+ */
+export const TextTopUp = UpfrontPayment.extend({
+  id: Id,
+  clinicId: Id,
+  invoiceNo: z.string().regex(/^PRM-INV-\d{5}$/),
+  month: YearMonth, // the Manila month it was confirmed in (D7)
+  packs: z.number().int().positive(),
+  parts: z.number().int().positive(),
+  receiptId: Id.nullable(),
+});
+export type TextTopUp = z.infer<typeof TextTopUp>;
+
+/** GET /clinic/text-topups: the pack on sale now, this month's bought parts, the QR, and the top-up receipts sent. */
+export const TextTopUpsView = z.strictObject({
+  pack: TextPackPrice,
+  month: YearMonth,
+  partsThisMonth: z.number().int().nonnegative(),
+  paymentQr: PaymentQrView.nullable(),
+  receipts: z.array(ReceiptView), // newest first
+});
+export type TextTopUpsView = z.infer<typeof TextTopUpsView>;

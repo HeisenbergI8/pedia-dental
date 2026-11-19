@@ -25,6 +25,10 @@ import type {
   Procedure,
   Signup,
   StaffMember,
+  LetterheadSettings,
+  SupportContact,
+  SupportSettings,
+  TextTopUp,
   StaffCredential,
   StaffPin,
   Subscription,
@@ -77,6 +81,7 @@ export type Db = {
   acknowledgements: Acknowledgement[]; // privacy #20, #21: who read which notice or confidentiality version, when
   portalAccounts: PortalAccount[]; // B11: each guardian's portal access; never served (a parent is a login only while active)
   storedFiles: StoredFileRecord[]; // B12 decision 16: what counts toward the plan's storage (the API's StoredFile ledger)
+  letterhead?: LetterheadSettings & { imageRef?: string }; // D11: absent = standard (never customised)
   privacyRequests: PrivacyRequest[]; // B13c2b: the request register (the API's PrivacyRequest); `patientName` added when served
 };
 
@@ -110,6 +115,9 @@ export type Platform = {
   priceChanges: PriceChange[]; // B12 decision 11: each change keeps the list in force before its day
   paymentQr: PaymentQr | null; // B12 decision 5; null until the operator uploads one (23)
   receipts: PaymentReceipt[]; // B12 decisions 6, 7: receipts from Owners and sign-ups, checked by the operator
+  support: SupportSettings; // D12: Primolar's support email and chat link; null until the operator sets them
+  supportContacts: Record<string, SupportContact>; // D12: a Pro clinic's named contact, by clinic id
+  textTopUps: TextTopUp[]; // feature 16 (revised): confirmed top-ups; Primolar's, like subscriptions, never in a tenant
 };
 
 export const seedPlatform = (): Platform => {
@@ -131,5 +139,8 @@ export const seedPlatform = (): Platform => {
     priceChanges: [],
     paymentQr: null,
     receipts: seedReceipts(subscriptions),
+    support: { email: null, chatUrl: null },
+    supportContacts: {},
+    textTopUps: [],
   };
 };

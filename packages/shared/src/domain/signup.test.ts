@@ -19,6 +19,7 @@ const PRICES: PriceList = {
     big: { setupFee: pesos(20000), monthlyFee: pesos(10000) },
   },
   designAddOn: pesos(7500),
+  textPack: { parts: 100, price: pesos(150) },
 };
 
 describe("amount due (billing #22, #24)", () => {
@@ -27,6 +28,7 @@ describe("amount due (billing #22, #24)", () => {
     expect(amountDue(PRICES, "small", "default").designAddOn).toBe(0);
     const designed = amountDue(PRICES, "mid", "designed");
     expect(designed).toMatchObject({ setupFee: pesos(10000), firstMonth: pesos(5000), designAddOn: pesos(7500), total: pesos(22500) });
+    expect(amountDue(PRICES, "big", "designed").designAddOn).toBe(0); // Pro includes it (feature 16, revised)
   });
 
   it("shows the VAT inside a VAT-inclusive price, to the centavo", () => {

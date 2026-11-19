@@ -130,6 +130,33 @@ model ClinicAccount {
   headingFont  HeadingFont?
   /// B13c2b-2 (D13): when db:clinic-purge finished deleting this clinic's data. The row and Primolar's books stay.
   purgedAt     DateTime?
+  /// D12: Pro's named Primolar contact for this clinic, set by the operator. Null until set.
+  supportContactName  String? @db.VarChar(120)
+  supportContactPhone String? @db.VarChar(32)
+  supportContactEmail String? @db.VarChar(191)
+}
+
+/// Mirrors LetterheadMode in packages/shared/src/schemas/tenancy.ts.
+enum LetterheadMode {
+  standard
+  text
+  image
+}
+
+/// D11: the clinic's custom letterhead (LetterheadSettings in @pedia/shared). No row = STANDARD_LETTERHEAD. Clinic and
+/// Pro set it; after a downgrade it is kept and may only go back to standard (decision 22). Sizes are the Zod limits.
+model ClinicLetterhead {
+  clinicId       String         @id
+  mode           LetterheadMode
+  tagline        String?        @db.VarChar(80)
+  listBranches   Boolean
+  /// At most 3 links of at most 80 characters (UpdateLetterheadInput).
+  socialLinks    Json
+  dentistLine    String?        @db.VarChar(120)
+  footerNote     String?        @db.VarChar(160)
+  /// The uploaded image's storage key (area "branding", in the StoredFile ledger). Null when there is none.
+  imageKey       String?        @db.VarChar(191)
+  imageUpdatedAt DateTime?
 }
 
 /// One location of a clinic account. Archived, never deleted (decision #22).
@@ -1217,6 +1244,7 @@ enum SubscriptionPause {
 enum ReceiptPurpose {
   signup
   subscription
+  text_topup
 }
 
 /// Mirrors ReceiptStatus in packages/shared/src/schemas/payments.ts.
@@ -1237,6 +1265,12 @@ model PlatformSettings {
   bigSetupFee        Int
   bigMonthlyFee      Int
   designAddOn        Int
+  /// Feature 16 (revised): one text top-up pack. Centavos, VAT-inclusive.
+  textPackParts      Int       @default(100)
+  textPackPrice      Int       @default(15000)
+  /// D12: Primolar's support addresses, shown by "Contact support". Null until the operator sets them.
+  supportEmail       String?   @db.VarChar(191)
+  supportChatUrl     String?   @db.VarChar(500)
   paymentQrKey       String?   @db.VarChar(191)
   paymentQrCaption   String?   @db.VarChar(120)
   paymentQrUpdatedAt DateTime?
@@ -1254,6 +1288,8 @@ model PriceChange {
   bigSetupFee     Int
   bigMonthlyFee   Int
   designAddOn     Int
+  textPackParts   Int      @default(100)
+  textPackPrice   Int      @default(15000)
   createdAt       DateTime
 
   @@index([on])
@@ -1364,6 +1400,27 @@ model SubscriptionLine {
   @@unique([paymentId, position])
 }
 
+/// Feature 16 (revised): parts a confirmed top-up receipt added to one Manila month. Append-only; no rollover (D1).
+/// D10: on Primolar's books like SubscriptionPayment, numbered from the same PRM-INV series.
+model TextTopUp {
+  id         String        @id @default(cuid(2))
+  clinicId   String
+  /// "2026-11": the Manila month it was confirmed in (D7).
+  month      String        @db.Char(7)
+  packs      Int
+  parts      Int
+  invoiceNo  String        @unique @db.VarChar(16)
+  method     PaymentMethod
+  reference  String?       @db.VarChar(60)
+  paidOn     DateTime      @db.Date
+  amount     Int
+  receiptId  String?       @unique
+  recordedAt DateTime
+
+  @@index([clinicId, month])
+  @@index([clinicId, recordedAt])
+}
+
 /// Gapless PRM-INV-##### (one row, id "primolar"): always the last lock taken (E6).
 model InvoiceCounter {
   id   String @id
@@ -1378,6 +1435,9 @@ model PaymentReceipt {
   signupId        String?
   clinicId        String?
   periodStart     DateTime?      @db.Date
+  /// Feature 16 (revised): a text top-up's packs and billed parts, fixed when sent (D3). Null for every other purpose.
+  packs           Int?
+  parts           Int?
   amountDue       Int
   reference       String         @db.VarChar(60)
   fileKey         String?        @db.VarChar(191)

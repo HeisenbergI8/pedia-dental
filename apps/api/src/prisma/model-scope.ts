@@ -55,6 +55,7 @@ export const MODEL_SCOPE = {
   StoredFile: "clinic",
   PortalAccount: "clinic", // B11
   PrivacyRequest: "clinic", // B13c2b: the request register. Not append-only: a request is closed in place, once.
+  ClinicLetterhead: "clinic", // D11: the custom letterhead, one row per clinic. Not append-only: the Owner edits it in place.
   // Platform: Primolar's own records
   ClinicAccount: "platform",
   Agreement: "platform",
@@ -81,6 +82,7 @@ export const MODEL_SCOPE = {
   SubscriptionLine: "platform",
   InvoiceCounter: "platform",
   PaymentReceipt: "platform",
+  TextTopUp: "platform", // feature 16 (revised): Primolar's books, like SubscriptionPayment
   OperatorAuditEvent: "platform",
 } as const satisfies Record<Prisma.ModelName, ModelScope>;
 
@@ -102,4 +104,6 @@ export const APPEND_ONLY: ReadonlySet<string> = new Set<Prisma.ModelName>([
   "ClinicalPhoto", "PatientDocument",
   // B12: a saved price list, a month paid to Primolar and its invoice lines.
   "PriceChange", "SubscriptionPayment", "SubscriptionLine",
+  // Feature 16 (revised): a confirmed text top-up.
+  "TextTopUp",
 ]);

@@ -49,7 +49,7 @@ type NewClinic = {
   phone?: string;
   owner: string;
   ownerEmail: string;
-  plan?: "Small" | "Mid" | "Big";
+  plan?: "Starter" | "Clinic" | "Pro";
 };
 
 const uid = () => Math.random().toString(36).slice(2, 7);
@@ -142,12 +142,12 @@ test.describe("happy paths", () => {
       await expect(table.getByRole("columnheader", { name: header, exact: true })).toBeVisible();
     }
     const bulilit = rowOf(page, "Bulilit Smiles Pediatric Dental");
-    await expect(bulilit).toContainText("Mid");
+    await expect(bulilit).toContainText("Clinic");
     await expect(bulilit).toContainText("Dr. Paolo Villanueva");
     await expect(bulilit).toContainText("owner@gmail.com");
     await expect(bulilit).toContainText(/\d+ of 3/);
-    await expect(rowOf(page, "Ngiti Kids Dental")).toContainText("Small");
-    await expect(rowOf(page, "Ngiti Kids Dental")).toContainText("5 of 5");
+    await expect(rowOf(page, "Ngiti Kids Dental")).toContainText("Starter");
+    await expect(rowOf(page, "Ngiti Kids Dental")).toContainText("5 of 10");
     await expect(rowOf(page, "Ipin Kids Dental")).toContainText("Dr. Lara Santiago");
     await expect(table.getByRole("row")).toHaveCount(4); // header + 3 seeded clinics
   });
@@ -189,7 +189,7 @@ test.describe("happy paths", () => {
   });
 
   test("operator creates a clinic signed up by phone and its Owner signs in with the one-time password", async ({ page }) => {
-    const c = aClinic({ plan: "Mid" });
+    const c = aClinic({ plan: "Clinic" });
     await openConsole(page);
     const dialog = await openNewClinicDialog(page);
     await fillNewClinic(dialog, c);
@@ -203,7 +203,7 @@ test.describe("happy paths", () => {
     await expect(done).toBeHidden();
 
     const row = rowOf(page, c.name);
-    await expect(row).toContainText("Mid");
+    await expect(row).toContainText("Clinic");
     await expect(row).toContainText(c.owner);
     await expect(row).toContainText("1 of 3");
     await expect(row).toContainText("Active");
@@ -268,23 +268,23 @@ test.describe("happy paths", () => {
     await expect(page.getByRole("link", { name: "Hagikgik Kids Dental" })).toBeVisible();
   });
 
-  test("operator upgrades Ngiti to Mid and the list shows the new plan", async ({ page }) => {
+  test("operator upgrades Ngiti to Clinic and the list shows the new plan", async ({ page }) => {
     await openConsole(page);
     await openClinic(page, "Ngiti Kids Dental");
     const save = page.getByRole("button", { name: "Save plan" });
     await expect(save).toBeDisabled();
-    await choose(page, page, "Plan", "Mid");
+    await choose(page, page, "Plan", "Clinic");
     await save.click();
-    await expect(page.getByText("Ngiti Kids Dental is on the Mid plan")).toBeVisible();
+    await expect(page.getByText("Ngiti Kids Dental is on the Clinic plan")).toBeVisible();
     await page.getByRole("link", { name: "Clinic accounts" }).first().click();
-    await expect(rowOf(page, "Ngiti Kids Dental")).toContainText("Mid");
-    await expect(rowOf(page, "Ngiti Kids Dental")).toContainText("5 of 20");
+    await expect(rowOf(page, "Ngiti Kids Dental")).toContainText("Clinic");
+    await expect(rowOf(page, "Ngiti Kids Dental")).toContainText("5 of 30");
   });
 
-  test("operator can't downgrade Bulilit to Small while it uses more than Small includes (B12 decision 12)", async ({ page }) => {
+  test("operator can't downgrade Bulilit to Starter while it uses more than Starter includes (B12 decision 12)", async ({ page }) => {
     await openConsole(page);
     await openClinic(page, "Bulilit Smiles Pediatric Dental");
-    await choose(page, page, "Plan", "Small");
+    await choose(page, page, "Plan", "Starter");
     await expect(page.getByText(/the Owner must archive branches or deactivate logins before the plan can go down/)).toBeVisible();
     await expect(page.getByRole("button", { name: "Save plan" })).toBeDisabled();
   });
@@ -677,8 +677,8 @@ test.describe("edge cases", () => {
     await expect(page.getByText("Payment recorded")).toBeVisible();
     await page.getByRole("button", { name: "Fix details" }).click();
     const dialog = page.getByRole("dialog", { name: "Fix Hagikgik Kids Dental" });
-    await dialog.getByRole("radio", { name: /^Small/ }).click();
-    await expect(dialog.getByText(/The setup fee is already recorded for the Mid plan/)).toBeVisible();
+    await dialog.getByRole("radio", { name: /^Starter/ }).click();
+    await expect(dialog.getByText(/The setup fee is already recorded for the Clinic plan/)).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Save changes" })).toBeDisabled();
   });
 

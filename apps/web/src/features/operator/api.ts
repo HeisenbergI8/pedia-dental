@@ -11,6 +11,8 @@ import {
   ReceiptToCheck,
   Signup,
   SubscriptionView,
+  SupportContact,
+  SupportSettings,
   type ConfirmReceiptInput,
   type CreateAccountInput,
   type OperatorLoginInput,
@@ -35,6 +37,8 @@ export const operatorKeys = {
   prices: () => [...operatorKeys.all, "prices"] as const,
   paymentQr: () => [...operatorKeys.all, "payment-qr"] as const,
   receipts: () => [...operatorKeys.all, "receipts"] as const,
+  support: () => [...operatorKeys.all, "support"] as const,
+  supportContact: (id: string) => [...operatorKeys.all, "accounts", id, "support-contact"] as const,
 };
 const post = (body?: unknown) => ({ method: "POST", ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 
@@ -107,6 +111,15 @@ export const useCancelSubscription = (id: string) =>
   useAccountAction(() => api(`/operator/accounts/${id}/subscription/cancel`, SubscriptionView, post()));
 
 /** B12 decision 5: Primolar's one payment QR. null until the first upload. */
+/** D12: Primolar's support email and chat link, and a clinic's named contact (Pro). */
+export const useSupportSettings = () => useQuery({ queryKey: operatorKeys.support(), queryFn: () => api("/operator/support", SupportSettings) });
+export const useSaveSupportSettings = () =>
+  useAccountAction((input: SupportSettings) => api("/operator/support", SupportSettings, { method: "PUT", body: JSON.stringify(input) }));
+export const useSupportContact = (id: string) =>
+  useQuery({ queryKey: operatorKeys.supportContact(id), queryFn: () => api(`/operator/accounts/${id}/support-contact`, SupportContact.nullable()) });
+export const useSaveSupportContact = (id: string) =>
+  useAccountAction((input: SupportContact) => api(`/operator/accounts/${id}/support-contact`, SupportContact, { method: "PUT", body: JSON.stringify(input) }));
+
 export const usePaymentQr = () => useQuery({ queryKey: operatorKeys.paymentQr(), queryFn: () => api("/operator/payment-qr", PaymentQrView.nullable()) });
 export const useSavePaymentQr = () =>
   useAccountAction(({ input, file }: { input: PaymentQrInput; file?: File }) =>

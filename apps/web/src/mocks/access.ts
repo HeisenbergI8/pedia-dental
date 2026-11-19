@@ -94,7 +94,7 @@ export function reportBranches(request: Request): string[] | Response {
   const asked = new URL(request.url).searchParams.get("branch");
   if (!asked || asked === device.id) return [device.id];
   const { tier } = currentAccount();
-  if (!TIER_LIMITS[tier].crossBranchViews) return deny(403, "Reports across branches come with the Mid and Big plans. Contact Primolar to upgrade.");
+  if (!TIER_LIMITS[tier].crossBranchViews) return deny(403, "Reports across branches come with the Clinic and Pro plans. Contact Primolar to upgrade.");
   const filter = reportBranchFilter(tier, session.roles, usableBranchesOf(session));
   if (!filter) return deny(403, "Reports across branches need two open branches you work at");
   if (asked === ALL_BRANCHES) return filter.all ? db.branches.map((b) => b.id) : deny(403, "Only the clinic's Owner sees all branches together");
@@ -134,6 +134,8 @@ const RULES: Rule[] = [
   // Reference data: not personal data, so not audited
   { method: "GET", path: "/clinic", permission: "clinic.view" },
   { method: "GET", path: "/clinic/logo", permission: "clinic.view" }, // parents too: the portal shows the clinic's logo
+  { method: "GET", path: "/clinic/letterhead", permission: "clinic.view" }, // D11: every staff member makes documents
+  { method: "GET", path: "/clinic/letterhead/image", permission: "clinic.view" },
   { method: "GET", path: "/branches", permission: "clinic.view" }, // archived ones too: old receipts name their branch
   { method: "GET", path: "/staff", permission: "clinic.view" },
   { method: "GET", path: "/chairs", permission: "clinic.view" },
@@ -141,10 +143,13 @@ const RULES: Rule[] = [
   { method: "GET", path: "/note-templates", permission: "clinic.view" },
   // Owner settings (decision #11): the account, its branding, branches and staff logins
   { method: "GET", path: "/clinic/usage", permission: "clinic.manage" },
+  { method: "GET", path: "/clinic/support", permission: "clinic.manage" },
   { method: "GET", path: "/clinic/subscription", permission: "clinic.manage" }, // billing #31: the Owner's alone
   // B12 decisions 6, 24: the Owner's receipts; staff and parents never see them.
   { method: "POST", path: "/clinic/subscription/receipts", permission: "clinic.manage", audit: "Primolar payment receipt" },
   { method: "GET", path: "/clinic/subscription/receipts/:id/image", permission: "clinic.manage" },
+  { method: "GET", path: "/clinic/text-topups", permission: "clinic.manage" }, // feature 16 (revised): the Owner's
+  { method: "POST", path: "/clinic/text-topups/receipts", permission: "clinic.manage", audit: "Text top-up receipt" },
   // Privacy #19, #22: the clinic's notice (public anyway, so reading it isn't audited) and the Owner's new version
   { method: "GET", path: "/clinic/privacy-notice", permission: "clinic.view" },
   { method: "PUT", path: "/clinic/privacy-notice", permission: "clinic.manage", audit: "Privacy notice", action: "update" },
@@ -152,6 +157,9 @@ const RULES: Rule[] = [
   { method: "PUT", path: "/clinic/branding", permission: "clinic.manage" },
   { method: "PUT", path: "/clinic/logo", permission: "clinic.manage" },
   { method: "DELETE", path: "/clinic/logo", permission: "clinic.manage" },
+  { method: "PUT", path: "/clinic/letterhead", permission: "clinic.manage" },
+  { method: "PUT", path: "/clinic/letterhead/image", permission: "clinic.manage" },
+  { method: "DELETE", path: "/clinic/letterhead/image", permission: "clinic.manage" },
   { method: "POST", path: "/branches", permission: "clinic.manage" },
   { method: "PUT", path: "/branches/:id", permission: "clinic.manage" },
   { method: "POST", path: "/branches/:id/archive", permission: "clinic.manage" },
@@ -265,6 +273,8 @@ export const OPERATOR_RULES: Pick<Rule, "method" | "path">[] = [
   { method: "GET", path: "/operator/accounts/:id/staff" },
   { method: "POST", path: "/operator/accounts/:id/owner" },
   { method: "PUT", path: "/operator/accounts/:id/branding" },
+  { method: "GET", path: "/operator/accounts/:id/support-contact" },
+  { method: "PUT", path: "/operator/accounts/:id/support-contact" },
   { method: "GET", path: "/operator/accounts/:id/subscription" },
   { method: "POST", path: "/operator/accounts/:id/subscription/payments" },
   { method: "POST", path: "/operator/accounts/:id/subscription/cancel" },
@@ -276,6 +286,8 @@ export const OPERATOR_RULES: Pick<Rule, "method" | "path">[] = [
   { method: "POST", path: "/operator/signups/:id/approve" },
   { method: "GET", path: "/operator/prices" },
   { method: "PUT", path: "/operator/prices" },
+  { method: "GET", path: "/operator/support" },
+  { method: "PUT", path: "/operator/support" },
   // B12: the payment QR and Payments to check (decisions 5–8).
   { method: "GET", path: "/operator/payment-qr" },
   { method: "PUT", path: "/operator/payment-qr" },

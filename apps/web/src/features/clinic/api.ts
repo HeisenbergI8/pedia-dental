@@ -8,16 +8,21 @@ import {
   Chair,
   ClinicAccount,
   ClinicContext,
+  ClinicSupportView,
   ClinicUsage,
+  LetterheadSettings,
   PrivacyNoticeView,
   Procedure,
   StaffMember,
   SubscriptionView,
+  TextTopUpsView,
   worksAt,
   type AddStaffInput,
   type BranchInput,
   type ReceiptUploadInput,
   type SavePrivacyNoticeInput,
+  type TextTopUpInput,
+  type UpdateLetterheadInput,
   type UpdateBrandingInput,
   type UpdateClinicProfileInput,
 } from "@pedia/shared";
@@ -33,6 +38,9 @@ export const clinicKeys = {
   context: ["clinic"] as const,
   usage: ["clinic", "usage"] as const,
   subscription: ["clinic", "subscription"] as const,
+  textTopUps: ["clinic", "text-topups"] as const,
+  support: ["clinic", "support"] as const,
+  letterhead: ["clinic", "letterhead"] as const,
   privacyNotice: ["clinic", "privacy-notice"] as const,
   branches: ["branches"] as const,
   staff: ["staff"] as const,
@@ -123,6 +131,47 @@ export function useUploadReceipt() {
     onSuccess: (view) => qc.setQueryData(clinicKeys.subscription, view),
   });
 }
+/** Feature 16 (revised): the Owner's text top-ups (GET /clinic/text-topups). */
+export function useTextTopUps(enabled = true) {
+  return useQuery({ queryKey: clinicKeys.textTopUps, queryFn: () => api("/clinic/text-topups", TextTopUpsView), enabled });
+}
+
+/** Sends a top-up receipt. The texts are added only once Primolar confirms it, so only the top-ups refresh here. */
+export function useBuyTextTopUp() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ input, file }: { input: TextTopUpInput; file: File }) =>
+      api("/clinic/text-topups/receipts", TextTopUpsView, { method: "POST", body: imageFormData(input, file) }),
+    onSuccess: (view) => qc.setQueryData(clinicKeys.textTopUps, view),
+  });
+}
+
+/** D11: the clinic's letterhead. Every staff member reads it: documents are made at the front desk and the chair. */
+export function useLetterhead() {
+  return useQuery({ queryKey: clinicKeys.letterhead, queryFn: () => api("/clinic/letterhead", LetterheadSettings) });
+}
+/** The uploaded letterhead image; the date keeps a replaced image from coming out of the cache. */
+export const letterheadImageUrl = (updatedAt: string) => `${env.apiUrl}/clinic/letterhead/image?v=${encodeURIComponent(updatedAt)}`;
+
+function useLetterheadMutation<I>(fn: (input: I) => Promise<LetterheadSettings>) {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: fn, onSuccess: (l) => { qc.setQueryData(clinicKeys.letterhead, l); void qc.invalidateQueries({ queryKey: clinicKeys.usage }); } });
+}
+export const useSaveLetterhead = () =>
+  useLetterheadMutation((input: UpdateLetterheadInput) => api("/clinic/letterhead", LetterheadSettings, json("PUT", input)));
+export const useUploadLetterheadImage = () =>
+  useLetterheadMutation((file: File) => {
+    const body = new FormData();
+    body.set("file", file);
+    return api("/clinic/letterhead/image", LetterheadSettings, { method: "PUT", body });
+  });
+export const useRemoveLetterheadImage = () => useLetterheadMutation(() => api("/clinic/letterhead/image", LetterheadSettings, { method: "DELETE" }));
+
+/** D12: what "Contact support" shows for this clinic's plan. Asked for only when the dialog opens. */
+export function useClinicSupport(enabled: boolean) {
+  return useQuery({ queryKey: clinicKeys.support, queryFn: () => api("/clinic/support", ClinicSupportView), enabled });
+}
+
 /** For <img> and a "view" link: the browser sends the clinic cookie with it, as with the logo. */
 export const clinicReceiptImageUrl = (id: string) => `${env.apiUrl}/clinic/subscription/receipts/${id}/image`;
 

@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { format, parseISO } from "date-fns";
 import { CheckCircle2Icon } from "lucide-react";
 import { toast } from "sonner";
-import { CreateAppointmentRequestInput, TimeOfDay, canTransition, type Appointment } from "@pedia/shared";
+import { CreateAppointmentRequestInput, REQUESTS_NOT_ON_PLAN, TIER_LIMITS, TimeOfDay, canTransition, type Appointment } from "@pedia/shared";
 import { FormField } from "@/components/form-field";
 import { SectionCard } from "@/components/section-card";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,7 @@ import {
   usePatientRequests,
   useRequestAppointment,
 } from "@/features/appointments/api";
-import { useStaff } from "@/features/clinic/api";
+import { useClinic, useStaff } from "@/features/clinic/api";
 import { useActiveChild } from "../use-child";
 import { Loading } from "@/components/brand";
 import { ErrorState } from "@/components/error-state";
@@ -67,6 +67,8 @@ export function PortalAppointments() {
   const staff = useStaff().data ?? [];
   const dentist = (id: string) => staff.find((s) => s.id === id)?.fullName ?? "your dentist";
   const past = rows.filter((a) => !upcoming(rows).includes(a)).reverse().slice(0, 10);
+  // Feature 16: portal requests are on Clinic and Pro. Nothing shows until the plan is known, so the form never flickers.
+  const tier = useClinic().data?.account.tier;
 
   return (
     <div className="space-y-5">
@@ -93,7 +95,12 @@ export function PortalAppointments() {
       </SectionCard>
 
       <Can permission="appointments.request">
-        <RequestAppointment />
+        {tier && TIER_LIMITS[tier].appointmentRequests && <RequestAppointment />}
+        {tier && !TIER_LIMITS[tier].appointmentRequests && (
+          <SectionCard title="Request an appointment">
+            <p className="text-sm text-ink-muted">{REQUESTS_NOT_ON_PLAN}</p>
+          </SectionCard>
+        )}
       </Can>
 
       {past.length > 0 && (

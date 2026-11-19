@@ -74,7 +74,7 @@ describe("the public Get started form on MySQL (billing #4–#11)", () => {
       expect(SignupStatusView.parse(res.body)).toMatchObject({ status: "waiting", paid: false, branding: choice, rejectionReason: null, quote: amountDue(SEED_PRICES, tier, choice) });
       expect(res.body.reference).toMatch(/^PRM-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
     }
-    expect([own.body.quote.designAddOn, designed.body.quote.designAddOn]).toEqual([0, SEED_PRICES.designAddOn]);
+    expect([own.body.quote.designAddOn, designed.body.quote.designAddOn]).toEqual([0, 0]); // Pro includes Design it for me (feature 16, revised)
     expect((await signupOf(own.body.reference)).branding).toMatchObject({ brandColor: "#0d6e8c" });
     expect((await signupOf(plain.body.reference)).logoRef).toBeUndefined();
   });

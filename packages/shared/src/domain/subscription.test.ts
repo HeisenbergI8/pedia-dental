@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PriceList } from "../schemas/signup";
-import { downgradeProblem, isTierUpgrade, limitTier, priceOn, primolarInvoiceNo, settleStep, subscriptionDueOn, subscriptionReminder, subscriptionStatus } from "./subscription";
+import { downgradeProblem, isTierUpgrade, limitTier, priceOn, primolarInvoiceNo, settleStep, subscriptionDueOn, subscriptionMonthLine, subscriptionReminder, subscriptionStatus, textTopUpLine } from "./subscription";
 
 describe("subscriptionDueOn (billing #26)", () => {
   it("falls on the last day of a shorter month for an approval on the 31st, then returns to the 31st", () => {
@@ -61,14 +61,19 @@ describe("subscriptionReminder (billing #32)", () => {
 describe("invoice numbers and plan order", () => {
   it("numbers invoices PRM-INV-00001 upward", () => expect(primolarInvoiceNo(42)).toBe("PRM-INV-00042"));
 
-  it("orders the plans Small < Mid < Big", () => {
+  it("labels an invoice with the plan's new name (feature 16, revised)", () => {
+    expect(subscriptionMonthLine("small", "2026-10-21")).toBe("Primolar Starter plan, month from 21 October 2026");
+    expect(textTopUpLine({ packs: 2, parts: 200, month: "2026-11" })).toBe("Text top-up, 2 packs (200 texts) for November 2026");
+  });
+
+  it("orders the plans Starter < Clinic < Pro", () => {
     expect(isTierUpgrade("small", "mid")).toBe(true);
     expect(isTierUpgrade("big", "mid")).toBe(false);
     expect(isTierUpgrade("mid", "mid")).toBe(false);
   });
 });
 
-const list = (small: number): PriceList => ({ plans: { small: { setupFee: 0, monthlyFee: small }, mid: { setupFee: 0, monthlyFee: 2 }, big: { setupFee: 0, monthlyFee: 3 } }, designAddOn: 0 });
+const list = (small: number): PriceList => ({ plans: { small: { setupFee: 0, monthlyFee: small }, mid: { setupFee: 0, monthlyFee: 2 }, big: { setupFee: 0, monthlyFee: 3 } }, designAddOn: 0, textPack: { parts: 100, price: 0 } });
 
 describe("prices by the month's start (B12 decision 11)", () => {
   it("bills a month that began before a change at the old list, and from the change's day at the new one", () => {
@@ -102,7 +107,7 @@ describe("settleStep (S2, B12 E5)", () => {
 
 describe("downgrades (B12 decision 12, E13)", () => {
   it("refuses one while the clinic is over the smaller plan, naming what to remove", () => {
-    expect(downgradeProblem("small", { branches: 2, staffLogins: 5 })).toContain("2 open branches and 5 staff logins. The Small plan includes 1 branch and 5 staff logins");
+    expect(downgradeProblem("small", { branches: 2, staffLogins: 5 })).toContain("2 open branches and 5 staff logins. The Starter plan includes 1 branch and 10 staff logins");
     expect(downgradeProblem("small", { branches: 1, staffLogins: 5 })).toBeUndefined();
   });
   it("checks additions against the smaller plan while a downgrade waits", () => {

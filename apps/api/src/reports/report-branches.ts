@@ -9,7 +9,7 @@ import type { Refusal } from "../common/refusal";
 export function reportBranches(asked: string | undefined, device: Branch, tier: Tier, roles: readonly Role[], usable: Branch[], every: Branch[]): string[] | Refusal {
   if (!asked || asked === device.id) return [device.id];
   const no = (message: string): Refusal => ({ status: 403, message });
-  if (!TIER_LIMITS[tier].crossBranchViews) return no("Reports across branches come with the Mid and Big plans. Contact Primolar to upgrade.");
+  if (!TIER_LIMITS[tier].crossBranchViews) return no("Reports across branches come with the Clinic and Pro plans. Contact Primolar to upgrade.");
   const filter = reportBranchFilter(tier, roles, usable);
   if (!filter) return no("Reports across branches need two open branches you work at");
   if (asked === ALL_BRANCHES) return filter.all ? every.map((b) => b.id) : no("Only the clinic's Owner sees all branches together");

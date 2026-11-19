@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { AccountOverview, TIER_LIMITS, manilaMonth, termsOutdated, type AgreementRecord } from "@pedia/shared";
+import { AccountOverview, TIER_LIMITS, manilaMonth, termsOutdated, textAllowance, type AgreementRecord } from "@pedia/shared";
 import { Prisma } from "../generated/prisma/client.ts";
 import { Clock } from "../common/clock";
 import { PrismaService } from "../prisma/prisma.service";
@@ -55,7 +55,8 @@ export class AccountOverviewService {
           usage: {
             branches: c.branches, staffLogins: c.staffLogins, patients: c.patients,
             storage: { inUse: c.storageBytes, limit: TIER_LIMITS[a.tier].storageBytes },
-            texts: { inUse: c.textParts, limit: TIER_LIMITS[a.tier].textParts },
+            texts: { inUse: c.textParts, limit: textAllowance(a.tier, c.textTopUp) },
+            textTopUp: c.textTopUp,
           },
           design,
           look: design ? { brandColor: a.brandColor, headingFont: a.headingFont ?? null, hasLogo: !!a.logoRef } : null,

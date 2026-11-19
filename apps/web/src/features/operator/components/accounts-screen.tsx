@@ -2,7 +2,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { PlusIcon } from "lucide-react";
-import { TIER_LABEL, type AccountOverview } from "@pedia/shared";
+import { TIER_LABEL, TIER_SUPPORT, type AccountOverview } from "@pedia/shared";
 import { Loading } from "@/components/brand";
 import { DataList } from "@/components/data-list";
 import { ErrorState } from "@/components/error-state";
@@ -49,6 +49,7 @@ export function AccountsScreen() {
             },
             { key: "status", header: "Status", mobile: "trailing", cell: (r) => <StatusBadge status={r.account.status} /> },
             { key: "tier", header: "Plan", mobile: "meta", cell: (r) => TIER_LABEL[r.account.tier] },
+            { key: "support", header: "Support", mobile: "meta", cell: (r) => TIER_SUPPORT[r.account.tier].label },
             { key: "owner", header: "Owner", mobile: "meta", cell: (r) => <Owner row={r} /> },
             { key: "branches", header: "Branches", mobile: "meta", numeric: true, cell: (r) => <Use row={r} limit="branches" /> },
             { key: "staff", header: "Staff logins", mobile: "meta", numeric: true, cell: (r) => <Use row={r} limit="staffLogins" /> },

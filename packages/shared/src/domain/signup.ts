@@ -1,6 +1,7 @@
 import type { AmountDue, BrandingChoice, PriceList, Signup } from "../schemas/signup";
 import type { Tier } from "../schemas/tenancy";
 import { differenceInCalendarDays, parseISO } from "date-fns";
+import { TIER_LIMITS } from "./tenancy";
 
 /** Billing #22: every price includes 12% VAT. */
 export const VAT_RATE = 0.12;
@@ -11,7 +12,8 @@ export const vatPart = (inclusive: number) => Math.round((inclusive * VAT_RATE) 
 /** Billing #24: setup fee + first month (+ the design add-on), in one payment, quoted from today's price list (A2). */
 export function amountDue(prices: PriceList, tier: Tier, choice: BrandingChoice): AmountDue {
   const { setupFee, monthlyFee } = prices.plans[tier];
-  const designAddOn = choice === "designed" ? prices.designAddOn : 0;
+  // Feature 16 (revised): Pro includes Design it for me.
+  const designAddOn = choice === "designed" && !TIER_LIMITS[tier].designIncluded ? prices.designAddOn : 0;
   const total = setupFee + monthlyFee + designAddOn;
   return { setupFee, firstMonth: monthlyFee, designAddOn, total, vat: vatPart(total) };
 }

@@ -2,8 +2,10 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupServer } from "msw/node";
 import { z } from "zod";
 import { AccountOverview, ClinicUsage, FAILURE, GB, PortalAccess, storageFullMessage } from "@pedia/shared";
+import { manilaMonthOf } from "./allowances";
 import { ApiError, api } from "@/lib/api-client";
-import { platform, selectTenant } from "./db";
+import { accountById, platform, selectTenant } from "./db";
+import { usageOf } from "./allowances";
 import { handlers } from "./handlers";
 import { queueMessage } from "./outbox";
 
@@ -29,7 +31,7 @@ afterAll(() => {
 
 describe("storage (decisions 1, 16)", () => {
   it("refuses an upload that would pass the plan, storing and counting nothing", async () => {
-    ngiti().storedFiles.push({ key: "filler", area: "photos", bytes: 2 * GB - 10 - ngiti().storedFiles.reduce((n, f) => n + f.bytes, 0) });
+    ngiti().storedFiles.push({ key: "filler", area: "photos", bytes: 25 * GB - 10 - ngiti().storedFiles.reduce((n, f) => n + f.bytes, 0) });
     const before = ngiti().storedFiles.length;
     asStaff(NGITI_OWNER);
     const kid = ngiti().patients[0]!.id;
@@ -53,12 +55,42 @@ describe("texts (decisions 2, 3, 18, 19)", () => {
     selectTenant("clinic_ngiti");
     const kid = ngiti().patients.find((p) => !p.privacyChoices?.some((c) => !c.reminders))!;
     const now = new Date().toISOString();
-    ngiti().messages.push({ ...ngiti().messages[0]!, id: "filler_text", patientId: kid.id, status: "sent", sendAt: now, body: "x".repeat(153 * 300) });
+    ngiti().messages.push({ ...ngiti().messages[0]!, id: "filler_text", patientId: kid.id, status: "sent", sendAt: now, body: "x".repeat(153 * 500) });
     expect(queueMessage({ kind: "birthday", patientId: kid.id, sendAt: now })).toMatchObject({ status: "failed", failureReason: FAILURE.textLimit });
     asStaff(NGITI_OWNER);
     const usage = await api("/clinic/usage", ClinicUsage);
-    expect(usage.texts.inUse).toBeGreaterThanOrEqual(300);
-    expect(usage.storage).toEqual({ inUse: 2 * GB - 10, limit: 2 * GB });
+    expect(usage.texts.inUse).toBeGreaterThanOrEqual(500);
+    expect(usage.storage).toEqual({ inUse: 25 * GB - 10, limit: 25 * GB });
+  });
+
+  it("sends a template text again once a confirmed top-up raises the month's limit (feature 16, revised)", async () => {
+    selectTenant("clinic_ngiti");
+    const kid = ngiti().patients.find((p) => !p.privacyChoices?.some((c) => !c.reminders))!;
+    const now = new Date().toISOString();
+    expect(queueMessage({ kind: "birthday", patientId: kid.id, sendAt: now })).toMatchObject({ status: "failed" }); // still at the limit
+    platform.textTopUps.push({
+      id: "topup_test", clinicId: "clinic_ngiti", invoiceNo: "PRM-INV-09999", month: manilaMonthOf(now),
+      packs: 1, parts: 100, receiptId: null, amount: 15_000, method: "gcash", paidOn: now.slice(0, 10), recordedAt: now,
+    });
+    try {
+      expect(queueMessage({ kind: "birthday", patientId: kid.id, sendAt: now })).toMatchObject({ status: "queued" });
+    } finally {
+      platform.textTopUps = platform.textTopUps.filter((t) => t.id !== "topup_test");
+    }
+  });
+
+  it("counts a top-up only in the month it was confirmed for, never the next", () => {
+    platform.textTopUps.push({
+      id: "topup_month", clinicId: "clinic_demo", invoiceNo: "PRM-INV-09998", month: "2026-10", packs: 1, parts: 100, receiptId: null,
+      amount: 15_000, method: "gcash", paidOn: "2026-10-31", recordedAt: "2026-10-31T10:00:00.000Z",
+    });
+    try {
+      const account = accountById("clinic_demo")!;
+      const tenant = platform.tenants.clinic_demo!;
+      expect([usageOf(tenant, account, "2026-10").textTopUp, usageOf(tenant, account, "2026-11").textTopUp]).toEqual([100, 0]); // D1
+    } finally {
+      platform.textTopUps = platform.textTopUps.filter((t) => t.id !== "topup_month");
+    }
   });
 
   it("shows the console the same usage as the Owner (decision 17)", async () => {

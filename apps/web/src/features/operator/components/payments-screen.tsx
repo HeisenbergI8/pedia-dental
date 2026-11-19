@@ -20,11 +20,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { METHOD_LABEL } from "@/features/billing/api";
 import { receiptImageUrl, useConfirmReceipt, useReceiptsToCheck, useRejectReceipt } from "../api";
 
-const forWhat = (r: ReceiptToCheck) => (r.periodStart ? `The month from ${format(parseISO(r.periodStart), "d MMMM yyyy")}` : "Setup fee and first month");
+const forWhat = (r: ReceiptToCheck) =>
+  r.payer.kind === "text_topup"
+    ? `Text top-up, ${r.packs} pack${r.packs === 1 ? "" : "s"} (${(r.parts ?? 0).toLocaleString("en-PH")} texts)`
+    : r.periodStart
+      ? `The month from ${format(parseISO(r.periodStart), "d MMMM yyyy")}`
+      : "Setup fee and first month";
 /** The day it was sent, in Manila: the default "paid on". */
 const manilaDay = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
 
-/** B12 decision 8: every receipt waiting for Primolar, oldest first. Confirm records the payment; reject sends the reason. */
+/** B12 decision 8: every receipt waiting for Primolar, text top-ups first (D14), then oldest first. Confirm records the payment; reject sends the reason. */
 export function PaymentsScreen() {
   const receipts = useReceiptsToCheck();
   const [open, setOpen] = useState<{ kind: "confirm" | "reject"; receipt: ReceiptToCheck }>();

@@ -6,11 +6,13 @@ import { amountDue, pesos, type PriceList, type Signup } from "@pedia/shared";
  */
 export const SEED_PRICES: PriceList = {
   plans: {
-    small: { setupFee: pesos(5000), monthlyFee: pesos(2500) },
-    mid: { setupFee: pesos(10000), monthlyFee: pesos(5000) },
-    big: { setupFee: pesos(20000), monthlyFee: pesos(10000) },
+    // Feature 16 (revised 2026-11-19): monthly fees VAT-inclusive. Setup fees unchanged (D6).
+    small: { setupFee: pesos(5000), monthlyFee: pesos(15000) },
+    mid: { setupFee: pesos(10000), monthlyFee: pesos(24999) },
+    big: { setupFee: pesos(20000), monthlyFee: pesos(44999) },
   },
   designAddOn: pesos(7500),
+  textPack: { parts: 100, price: pesos(150) }, // ₱1.50 a text (D2)
 };
 
 /**

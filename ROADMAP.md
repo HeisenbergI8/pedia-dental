@@ -177,7 +177,7 @@ Turns the single-clinic app into a product many clinics use. Decisions settled o
   dental business. It has exactly one **Owner**, one or more **branches** (physical locations), and
   **staff** (Admin, Dentist, Front desk), each assigned to one or more branches. Parents use the portal
   and are never staff. Any staff role, the Owner included, can also hold a clinical role.
-- **Tiers (revised 2026-11-19, not built yet):** plain names that say who each tier is for. The code keeps the ids
+- **Tiers (revised 2026-11-19, built 2026-11-19):** plain names that say who each tier is for. The code keeps the ids
   `small`, `mid` and `big`; only the labels (`TIER_LABEL`) change. ₱15,000 a month is the baseline (Starter).
 
   | | Starter (`small`) | Clinic (`mid`) ⭐ | Pro (`big`) |
@@ -188,10 +188,10 @@ Turns the single-clinic app into a product many clinics use. Decisions settled o
   | Parent SMS a month (automatic) | 500 | 1,500 | 5,000 |
   | Photo and X-ray storage | 25 GB | 100 GB | 500 GB |
   | Parent portal | ✓ | ✓ + appointment requests | ✓ + appointment requests |
-  | Documents | all 9 types | all 9, on the clinic's letterhead | all 9, on the clinic's letterhead |
+  | Documents | all 9 types, with the clinic's logo | all 9, plus a custom letterhead (own header and footer, or an image) | all 9, plus a custom letterhead |
   | Financial dashboard | full, one branch | cross-branch | cross-branch + export |
   | Logo, brand colour and heading font | ✓ | ✓ | ✓ + "Design it for me" included |
-  | Support | chat + setup help | priority | dedicated contact + old-records migration |
+  | Support | email + setup help | priority chat | your own named contact + old-records migration |
 
   - **Never limited on any tier:** patient profiles, allergy banners, the chart, clinical notes, treatment plans,
     privacy and consent, and exporting the clinic's own data. Tiers differ by scale and service, not by patient care.
@@ -234,7 +234,8 @@ Turns the single-clinic app into a product many clinics use. Decisions settled o
   the colour's tints, shades and dark-mode version and refuses a colour that fails WCAG AA contrast,
   suggesting the nearest that passes. A heading font from a shortlist of six rounded fonts, on every plan
   since feature 17 (it was Big-only); it applies to headings and the clinic name only. The clinic's logo replaces Primolar's everywhere staff
-  and parents look (sidebar, portal, receipts, letterheads, PDFs); with no logo, the clinic name shows in
+  and parents look (sidebar, portal, receipts, letterheads, PDFs; on Clinic and Pro the Owner may also customise the
+  letterhead, decisions in `.claude/plans/feature-tier-revision-sms-topups-plan/decisions.md`); with no logo, the clinic name shows in
   its heading font. Primolar's wordmark stays on the sign-in page, the operator console, and a small
   "Powered by Primolar" line.
 - **Later:** per-clinic web addresses; real email invites; per-branch price lists; operator impersonation for

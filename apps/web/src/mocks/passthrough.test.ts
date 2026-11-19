@@ -12,6 +12,8 @@ const B12_ROUTES = 25 + 5 + 3;
 const B13C2A_ROUTES = 2;
 /** B13c2b: the privacy request register (list, log, close). */
 const B13C2B_ROUTES = 3;
+/** Feature 16 (revised): GET /clinic/support, GET and PUT /operator/support, GET and PUT /operator/accounts/:id/support-contact. */
+const TIERS_ROUTES = 5 + 2 + 5; // + the letterhead (D11): GET/PUT, and the image GET/PUT/DELETE // + GET /clinic/text-topups, POST /clinic/text-topups/receipts
 
 const routes = [{ method: "GET", path: "/branches" }, { method: "POST", path: "/staff/:id/deactivate" }];
 
@@ -91,7 +93,7 @@ describe("which routes the API serves", () => {
       ["POST", "/auth/password-link"], ["POST", "/auth/password-link/accept"], ["POST", "/auth/password-reset"], ["GET", "/auth/demo-texts"],
     ] as const;
     for (const [method, path] of b11) expect(api(method, path), `${method} ${path}`).toBe(true);
-    expect(API_ROUTES).toHaveLength(14 + b3.length + b4.length + b5.length + b6.length + b7.length + b8.length + b9.length + b10.length + b11.length + B12_ROUTES + B13C2A_ROUTES + B13C2B_ROUTES);
+    expect(API_ROUTES).toHaveLength(14 + b3.length + b4.length + b5.length + b6.length + b7.length + b8.length + b9.length + b10.length + b11.length + B12_ROUTES + B13C2A_ROUTES + B13C2B_ROUTES + TIERS_ROUTES);
     // B13c2a serves the copy; DELETE /notes/:id isn't a route (exact method).
     expect([api("POST", "/patients/p1/exports"), api("DELETE", "/notes/n1")]).toEqual([true, false]);
     expect([api("GET", "/privacy-requests"), api("POST", "/privacy-requests"), api("POST", "/privacy-requests/r1/close")]).toEqual([true, true, true]); // B13c2b

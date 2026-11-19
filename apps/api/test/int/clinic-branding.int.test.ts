@@ -48,7 +48,7 @@ describe("branding (owner-settings.test.ts, decisions #28–#31)", () => {
     expect((await context(cookie)).account.brandColor).toBe("#0d6e8c");
   });
 
-  it("lets a Small clinic choose a heading font (billing #8)", async () => {
+  it("lets a Starter clinic choose a heading font (billing #8)", async () => {
     const cookie = await as(NGITI_OWNER);
     const saved = await http().put("/api/clinic/branding").set("Cookie", cookie).send({ brandColor: "#1e5fb4", headingFont: "nunito" });
     expect(ClinicAccount.parse(saved.body).headingFont).toBe("nunito");

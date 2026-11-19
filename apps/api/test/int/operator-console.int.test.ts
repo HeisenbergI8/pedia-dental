@@ -41,6 +41,26 @@ beforeEach(async () => {
 const http = () => request(app.getHttpServer());
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 
+describe("support details (feature 16, revised)", () => {
+  it("keeps Primolar's support details and a clinic's named contact, and shows each Owner only their plan's channel (D12)", async () => {
+    const settings = { email: "help@primolar.ph", chatUrl: "https://chat.primolar.ph" };
+    const put = await http().put("/api/operator/support").set("Cookie", op).send(settings);
+    expect([put.status, put.body]).toEqual([200, settings]);
+    expect((await http().put("/api/operator/support").set("Cookie", op).send({ ...settings, chatUrl: "javascript:alert(1)" })).status).toBe(400); // https only
+    const contact = { name: "Ana Reyes", phone: "0917 555 0101", email: "ana@primolar.ph" };
+    expect((await http().put(`/api/operator/accounts/${DEMO_CLINIC_ID}/support-contact`).set("Cookie", op).send(contact)).body).toEqual(contact);
+    expect((await http().get(`/api/operator/accounts/${DEMO_CLINIC_ID}/support-contact`).set("Cookie", op)).body).toEqual(contact);
+    expect((await http().put("/api/operator/accounts/nope/support-contact").set("Cookie", op).send(contact)).status).toBe(404);
+
+    const owner = (await signIn(app, "owner@gmail.com")).cookie; // Clinic plan: chat, never the named contact
+    expect((await http().get("/api/clinic/support").set("Cookie", owner)).body).toEqual({ tier: "mid", channel: "chat", email: settings.email, chatUrl: settings.chatUrl, contact: null });
+    const ngitiOwner = (await signIn(app, "owner@ngiti.demo")).cookie; // Starter: email only
+    expect((await http().get("/api/clinic/support").set("Cookie", ngitiOwner)).body).toMatchObject({ channel: "email", chatUrl: null, contact: null });
+    const admin = (await signIn(app, "admin@gmail.com")).cookie;
+    expect((await http().get("/api/clinic/support").set("Cookie", admin)).status).toBe(403); // the Owner's only (decision 21)
+  });
+});
+
 describe("the console's accounts on MySQL (decision #25)", () => {
   it("lists every account by name with counts only: no patient field anywhere", async () => {
     const res = await http().get("/api/operator/accounts").set("Cookie", op);

@@ -1,17 +1,24 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
-import { PatientDocument, branchLine, deriveBrandPalette, type GenerateDocumentInput } from "@pedia/shared";
+import { PatientDocument, branchLine, deriveBrandPalette, letterheadLines, type Branch, type GenerateDocumentInput, type LetterheadSettings } from "@pedia/shared";
 import { api } from "@/lib/api-client";
 import { useInvoices, usePayments } from "@/features/billing/api";
 import { useChartEntries } from "@/features/chart/api";
-import { useActiveBranch, useBranches, useClinic, useProcedures, useStaff } from "@/features/clinic/api";
+import { letterheadImageUrl, useActiveBranch, useBranches, useClinic, useLetterhead, useProcedures, useStaff } from "@/features/clinic/api";
 import { useMessageTemplates } from "@/features/messages/api";
 import { useNoteTemplates, useNotes } from "@/features/notes/api";
 import { usePatient } from "@/features/patients/api";
 import { usePlan } from "@/features/plan/api";
 import { useVisits } from "@/features/visits/api";
-import type { DocSources } from "./content";
+import type { CustomLetterhead, DocSources } from "./content";
+
+/** D11: the custom part of the letterhead, or undefined for the standard one (every clinic that never customised). */
+function customLetterhead(l: LetterheadSettings, branches: Branch[]): CustomLetterhead | undefined {
+  if (l.mode === "image") return l.imageUpdatedAt ? { imageUrl: letterheadImageUrl(l.imageUpdatedAt) } : undefined;
+  if (l.mode === "text") return letterheadLines(l, branches.filter((b) => !b.archived).map(branchLine));
+  return undefined;
+}
 
 export const documentKeys = {
   all: ["documents"] as const,
@@ -59,11 +66,12 @@ export function useDocumentSources(patientId: string): {
   const invoices = useInvoices(patientId);
   const payments = usePayments(patientId);
   const messageTemplates = useMessageTemplates();
-  const all = [clinic, branches, patient, staff, procedures, visits, notes, noteTemplates, chart, plan, invoices, payments, messageTemplates];
+  const letterhead = useLetterhead();
+  const all = [clinic, letterhead, branches, patient, staff, procedures, visits, notes, noteTemplates, chart, plan, invoices, payments, messageTemplates];
   const error = all.find((q) => q.error)?.error ?? null;
   const refetch = () => all.filter((q) => q.error).forEach((q) => void q.refetch());
   const isRefetching = all.some((q) => q.isRefetching);
-  if (!clinic.data || !active || !branches.data || !patient.data || !staff.data || !procedures.data || !visits.data || !notes.data || !noteTemplates.data || !chart.data || !plan.data || !invoices.data || !payments.data || !messageTemplates.data) {
+  if (!clinic.data || !letterhead.data || !active || !branches.data || !patient.data || !staff.data || !procedures.data || !visits.data || !notes.data || !noteTemplates.data || !chart.data || !plan.data || !invoices.data || !payments.data || !messageTemplates.data) {
     return { isLoading: !error, error, refetch, isRefetching };
   }
   return {
@@ -74,6 +82,7 @@ export function useDocumentSources(patientId: string): {
         branchLine: branchLine(active),
         logoUrl: clinic.data.logoUrl,
         ring: deriveBrandPalette(clinic.data.account.brandColor).light["brand-ring"],
+        custom: customLetterhead(letterhead.data, branches.data),
       },
       branches: branches.data,
       patient: patient.data,

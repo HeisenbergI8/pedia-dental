@@ -5,7 +5,7 @@ import { USERS, expectSignedIn, signIn } from "./support/users";
 
 test.describe.configure({ timeout: 180_000 });
 const SLOW = { timeout: 30_000 };
-const STAFF_LIMIT = "Your Small plan includes 5 staff logins. Contact Primolar to upgrade.";
+const BRANCH_LIMIT = "Your Starter plan includes 1 branch. Contact Primolar to upgrade.";
 const OVERDUE = /Your Primolar payment is overdue\. Pay by \d{1,2} \w+ \d{4} to keep your clinic running\./;
 
 async function signInOnPhone(page: Page, email: string) {
@@ -29,12 +29,12 @@ test.describe("happy paths", () => {
     await expect(page.getByRole("status").filter({ hasText: OVERDUE })).toBeVisible();
   });
 
-  test("Ngiti's Owner on a phone reads why Add staff is off", async ({ page }) => {
+  test("Ngiti's Owner on a phone reads why Add branch is off", async ({ page }) => {
     await signInOnPhone(page, USERS.ngitiOwner);
-    await openSettingsOnPhone(page, "Staff");
-    const panel = page.getByRole("tabpanel", { name: "Staff" });
-    await expect(panel.getByRole("button", { name: "Add staff" })).toBeDisabled(SLOW);
-    await expect(panel.getByText(STAFF_LIMIT)).toBeVisible();
+    await openSettingsOnPhone(page, "Branches");
+    const panel = page.getByRole("tabpanel", { name: "Branches" });
+    await expect(panel.getByRole("button", { name: "Add branch" })).toBeDisabled(SLOW);
+    await expect(panel.getByText(BRANCH_LIMIT)).toBeVisible();
   });
 });
 

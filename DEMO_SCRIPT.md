@@ -8,10 +8,10 @@ reset. To start from a clean copy now, ask Primolar for a reset.
 
 The demo has three clinics and one waiting to join:
 
-- **Bulilit Smiles Pediatric Dental** (Mid plan): two branches, Imus and Dasmariñas, raspberry branding. Paid up.
-- **Ngiti Kids Dental** (Small plan): one branch in Bacoor, blue branding, at its 5-login limit. Paid up, with its next
+- **Bulilit Smiles Pediatric Dental** (Clinic plan): two branches, Imus and Dasmariñas, raspberry branding. Paid up.
+- **Ngiti Kids Dental** (Starter plan): one branch in Bacoor, blue branding, at its 1-branch limit (5 of 10 logins). Paid up, with its next
   payment due in about 2 days.
-- **Ipin Kids Dental** (Small plan): Primolar's default look, a few days overdue and in its 7-day grace period.
+- **Ipin Kids Dental** (Starter plan): Primolar's default look, a few days overdue and in its 7-day grace period.
 - **Hagikgik Kids Dental**: signed up through the Get started form (Design it for me) and waiting for its setup fee.
 
 | Login | Who |
@@ -71,13 +71,14 @@ record they open is written to the audit trail.
    dark.
 3. **Settings → Staff.** The Owner adds and deactivates staff logins. A new login gets a temporary password shown
    once, and must choose its own at first sign-in.
-4. **Settings → Plan.** "2 of 3 branches", "5 of 20 staff logins": what Bulilit's Mid plan allows.
+4. **Settings → Plan.** "2 of 3 branches", "5 of 30 staff logins": what Bulilit's Clinic plan allows, its support
+   level, and **Buy more texts** for this month.
 
 ## 5. A small clinic at its limit (20 s) · owner@ngiti.demo
 
 1. Ngiti looks like its own product: blue, its own logo.
-2. **Settings → Staff.** 5 of 5 logins: **Add staff** is off, with "Your Small plan includes 5 staff logins. Contact
-   Primolar to upgrade." Deactivate someone and the seat frees up.
+2. **Settings → Branches.** 1 of 1 branch: **Add branch** is off, with "Your Starter plan includes 1 branch. Contact
+   Primolar to upgrade." An upgrade to Clinic opens two more branches at once.
 
 ## 6. Primolar's console (40 s) · operator@primolar.demo at `/operator`
 

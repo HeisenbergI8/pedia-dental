@@ -27,7 +27,7 @@ const MODELS = Object.keys(MODEL_SCOPE).sort() as Model[];
 /** D9: the clinic's own tables, minus the system's (StoredFile, IdempotencyKey). Total by construction. */
 export const EXPORT_MODELS: readonly Model[] = MODELS.filter((m) => MODEL_SCOPE[m] === "clinic" && RETENTION_SCHEDULE[m].holds !== "system");
 /** D12: Primolar's own records about the clinic (its books, its agreements, how it signed up). Kept by a purge. */
-export const KEEP_ON_PURGE: readonly Model[] = ["Agreement", "PaymentReceipt", "Signup", "Subscription", "SubscriptionPayment"];
+export const KEEP_ON_PURGE: readonly Model[] = ["Agreement", "PaymentReceipt", "Signup", "Subscription", "SubscriptionPayment", "TextTopUp"];
 /** D12: every table holding this clinic's rows, but Primolar's. Total by construction (a clinicId column decides). */
 export const PURGE_MODELS: readonly Model[] = MODELS.filter((m) => "clinicId" in fieldsOf(m) && !KEEP_ON_PURGE.includes(m));
 

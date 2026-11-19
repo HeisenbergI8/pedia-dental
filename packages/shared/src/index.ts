@@ -32,6 +32,7 @@ export * from "./domain/chart";
 export * from "./domain/notes";
 export * from "./domain/growth";
 export * from "./domain/plan";
+export * from "./domain/letterhead";
 export * from "./domain/money";
 export * from "./domain/recall";
 export * from "./domain/appointments";

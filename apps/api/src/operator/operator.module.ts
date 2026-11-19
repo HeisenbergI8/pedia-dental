@@ -1,3 +1,4 @@
+import { TextTopUpsModule } from "../text-topups/text-topups.module";
 import { Module } from "@nestjs/common";
 import { SignupsModule } from "../signups/signups.module";
 import { SubscriptionRecordsModule } from "../subscription-records/subscription-records.module";
@@ -13,7 +14,7 @@ import { StorageModule } from "../storage/storage.module";
 
 /** B12: Primolar's console. Outside every clinic: clinic data is read and written in that clinic's context, by id. */
 @Module({
-  imports: [SignupsModule, SubscriptionRecordsModule, ReceiptRecordsModule, UsageModule, OutboxModule, StorageModule],
+  imports: [SignupsModule, SubscriptionRecordsModule, ReceiptRecordsModule, UsageModule, OutboxModule, StorageModule, TextTopUpsModule],
   controllers: [OperatorAccountsController, OperatorSignupsController, OperatorReceiptsController],
   providers: [AccountOverviewService, OperatorAccountsService],
 })

@@ -9,10 +9,12 @@ import {
   ClinicContext,
   ClinicUsage,
   DEFAULT_OPENING_HOURS,
+  LetterheadSettings,
   LoginResult,
   Patient,
   Session,
   StaffMember,
+  featureMessage,
   type AddStaffInput,
   type BranchInput,
 } from "@pedia/shared";
@@ -40,22 +42,28 @@ afterAll(() => {
   vi.unstubAllGlobals();
 });
 
-describe("Small tier at its limits (done-when)", () => {
-  it("shows Ngiti at 1 of 1 branches and 5 of 5 logins", async () => {
+describe("Starter tier at its limits (done-when)", () => {
+  beforeAll(async () => {
+    // Starter has 10 logins (feature 16, revised); Ngiti is seeded with 5 (D19). Fill it so the refusal is reachable.
     signIn(NGITI_OWNER);
-    const usage = await api("/clinic/usage", ClinicUsage);
-    expect(usage).toMatchObject({ tier: "small", branches: { inUse: 1, limit: 1 }, staffLogins: { inUse: 5, limit: 5 } });
+    for (let i = 1; i <= 5; i++) await api("/staff", AddStaffResult, send("POST", newcomer(`fill${i}@ngiti.demo`)));
   });
 
-  it("refuses a second branch and a sixth login, naming the limit and how to lift it", async () => {
+  it("shows Ngiti at 1 of 1 branches and 10 of 10 logins", async () => {
+    signIn(NGITI_OWNER);
+    const usage = await api("/clinic/usage", ClinicUsage);
+    expect(usage).toMatchObject({ tier: "small", branches: { inUse: 1, limit: 1 }, staffLogins: { inUse: 10, limit: 10 } });
+  });
+
+  it("refuses a second branch and an eleventh login, naming the limit and how to lift it", async () => {
     signIn(NGITI_OWNER);
     await expect(api("/branches", Branch, send("POST", branch("Kawit")))).rejects.toMatchObject({
       status: 409,
-      message: "Your Small plan includes 1 branch. Contact Primolar to upgrade.",
+      message: "Your Starter plan includes 1 branch. Contact Primolar to upgrade.",
     });
     await expect(api("/staff", AddStaffResult, send("POST", newcomer("nora@ngiti.demo")))).rejects.toMatchObject({
       status: 409,
-      message: "Your Small plan includes 5 staff logins. Contact Primolar to upgrade.",
+      message: "Your Starter plan includes 10 staff logins. Contact Primolar to upgrade.",
     });
   });
 
@@ -84,7 +92,7 @@ describe("deactivating frees a seat (decisions #10, #23)", () => {
     added = await api("/staff", AddStaffResult, send("POST", newcomer("nora@ngiti.demo")));
     expect(added.temporaryPassword).toMatch(/^[A-Za-z2-9]{4}-[A-Za-z2-9]{4}-[A-Za-z2-9]{4}$/);
     expect(added.pin).toMatch(/^\d{4}$/);
-    expect((await api("/clinic/usage", ClinicUsage)).staffLogins).toEqual({ inUse: 5, limit: 5 });
+    expect((await api("/clinic/usage", ClinicUsage)).staffLogins).toEqual({ inUse: 10, limit: 10 });
     // Her name stays for what she recorded; the temporary password is never served again.
     const staff = await api("/staff", z.array(StaffMember));
     expect(staff.find((s) => s.id === "ngiti_staff_tan")?.fullName).toBe("Joy Tan");
@@ -172,13 +180,13 @@ describe("one login per email, and who sees staff emails (audit findings)", () =
   });
 });
 
-describe("archiving frees a branch slot (Mid, decisions #10, #22)", () => {
+describe("archiving frees a branch slot (Clinic, decisions #10, #22)", () => {
   it("adds a third branch, refuses a fourth, and allows it once one is archived", async () => {
     signIn(DEMO_OWNER);
     const third = await api("/branches", Branch, send("POST", branch("Bacoor")));
     await expect(api("/branches", Branch, send("POST", branch("Kawit")))).rejects.toMatchObject({
       status: 409,
-      message: "Your Mid plan includes 3 branches. Contact Primolar to upgrade.",
+      message: "Your Clinic plan includes 3 branches. Contact Primolar to upgrade.",
     });
     expect((await api(`/branches/${third.id}/archive`, Branch, send("POST"))).archived).toBe(true);
     expect((await api("/branches", Branch, send("POST", branch("Kawit")))).archived).toBe(false);
@@ -217,7 +225,7 @@ describe("branding (decisions #28–#31)", () => {
     expect((await api("/clinic", ClinicContext)).account.brandColor).toBe("#0d6e8c");
   });
 
-  it("lets a Small clinic choose a heading font (billing #8)", async () => {
+  it("lets a Starter clinic choose a heading font (billing #8)", async () => {
     signIn(NGITI_OWNER);
     const saved = await api("/clinic/branding", ClinicAccount, send("PUT", { brandColor: "#1e5fb4", headingFont: "nunito" }));
     expect(saved.headingFont).toBe("nunito");
@@ -252,5 +260,41 @@ describe("branding (decisions #28–#31)", () => {
     const profile = { name: "Ngiti Kids Dental", contactEmail: "hello@ngiti.demo", tin: "234567890" };
     await expect(api("/clinic", ClinicAccount, send("PUT", profile))).rejects.toMatchObject({ status: 400 });
     expect((await api("/clinic", ClinicAccount, send("PUT", { ...profile, tin: "234-567-890-0001" }))).tin).toBe("234-567-890-0001");
+  });
+});
+
+describe("custom letterhead (D11, decisions 22, 24)", () => {
+  const text = { mode: "text", tagline: "Gentle care for little teeth", listBranches: true, socialLinks: ["fb.com/bulilit"], dentistLine: null, footerNote: "Open Saturdays" } as const;
+  const png = () => {
+    const form = new FormData();
+    form.set("file", new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47]), new Uint8Array(1000)], "letterhead.png", { type: "image/png" }));
+    return form;
+  };
+
+  it("refuses a custom letterhead on Starter, but lets any plan go back to standard", async () => {
+    signIn(NGITI_OWNER);
+    await expect(api("/clinic/letterhead", LetterheadSettings, send("PUT", text))).rejects.toMatchObject({ status: 409, message: featureMessage("small", "customLetterhead") });
+    await expect(api("/clinic/letterhead/image", LetterheadSettings, { method: "PUT", body: png() })).rejects.toMatchObject({ status: 409 });
+    expect((await api("/clinic/letterhead", LetterheadSettings, send("PUT", { ...text, mode: "standard" }))).mode).toBe("standard");
+  });
+
+  it("saves a Clinic plan's own text, and every staff member reads it", async () => {
+    signIn(DEMO_OWNER);
+    expect((await api("/clinic/letterhead", LetterheadSettings)).mode).toBe("standard"); // never customised
+    expect(await api("/clinic/letterhead", LetterheadSettings, send("PUT", text))).toMatchObject({ ...text, imageUpdatedAt: null });
+    signIn("demo.clinic_demo.staff_cruz"); // front desk makes documents
+    expect((await api("/clinic/letterhead", LetterheadSettings)).tagline).toBe(text.tagline);
+    await expect(api("/clinic/letterhead", LetterheadSettings, send("PUT", text))).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("stores a letterhead image, counted toward storage, and goes back to standard when it is removed", async () => {
+    signIn(DEMO_OWNER);
+    const before = (await api("/clinic/usage", ClinicUsage)).storage.inUse;
+    const saved = await api("/clinic/letterhead/image", LetterheadSettings, { method: "PUT", body: png() });
+    expect([saved.mode, !!saved.imageUpdatedAt]).toEqual(["image", true]);
+    expect((await api("/clinic/usage", ClinicUsage)).storage.inUse).toBe(before + 1004);
+    const removed = await api("/clinic/letterhead/image", LetterheadSettings, { method: "DELETE" });
+    expect([removed.mode, removed.imageUpdatedAt]).toEqual(["standard", null]);
+    expect((await api("/clinic/usage", ClinicUsage)).storage.inUse).toBe(before);
   });
 });
