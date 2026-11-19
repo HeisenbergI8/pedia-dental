@@ -177,14 +177,33 @@ Turns the single-clinic app into a product many clinics use. Decisions settled o
   dental business. It has exactly one **Owner**, one or more **branches** (physical locations), and
   **staff** (Admin, Dentist, Front desk), each assigned to one or more branches. Parents use the portal
   and are never staff. Any staff role, the Owner included, can also hold a clinical role.
-- **Tiers:**
+- **Tiers (revised 2026-11-19, not built yet):** named after a child's dentition stages. The code keeps the ids
+  `small`, `mid` and `big`; only the labels (`TIER_LABEL`) change. ₱15,000 a month is the baseline (Primary).
 
-  | | Small | Mid | Big |
+  | | Primary (`small`) | Mixed (`mid`) ⭐ | Permanent (`big`) |
   |---|---|---|---|
+  | Monthly price (VAT-inclusive) | ₱15,000 | ₱24,999 | ₱44,999 |
   | Branches | 1 | up to 3 | unlimited |
-  | Staff logins (the Owner counts) | 5 | 20 | unlimited |
-  | Cross-branch dashboard and finance | — | ✓ | ✓ |
-  | Logo, brand colour and heading font | ✓ | ✓ | ✓ |
+  | Staff logins (the Owner counts) | 10 | 30 | unlimited |
+  | Parent SMS a month (automatic) | 500 | 1,500 | 5,000 |
+  | Photo and X-ray storage | 25 GB | 100 GB | 500 GB |
+  | Parent portal | ✓ | ✓ + appointment requests | ✓ + appointment requests |
+  | Documents | all 9 types | all 9, on the clinic's letterhead | all 9, on the clinic's letterhead |
+  | Financial dashboard | full, one branch | cross-branch | cross-branch + export |
+  | Logo, brand colour and heading font | ✓ | ✓ | ✓ + "Design it for me" included |
+  | Support | chat + setup help | priority | dedicated contact + old-records migration |
+
+  - **Never limited on any tier:** patient profiles, allergy banners, the chart, clinical notes, treatment plans,
+    privacy and consent, and exporting the clinic's own data. Tiers differ by scale and service, not by patient care.
+  - **Cost guardrails:** SMS is the only cost that grows fast (Semaphore, about ₱0.50–1.00 per 160 characters, so a
+    longer message counts as 2). Caps are hard; top-ups sell at about ₱1.50 a text. Storage caps are hard too, with an
+    upgrade or a storage add-on at the limit. Estimated in November 2026: fixed infrastructure (ALB, Fargate, RDS, a
+    NAT gateway if there are private subnets, CloudWatch, Vercel Pro) is about ₱6,000–10,000 a month, and each clinic's
+    SMS plus storage at full use is about ₱300 / ₱1,650 / ₱5,700. Prices are VAT-inclusive (12%), and PayMongo, once
+    added, takes about 2.5–3.5% of each payment. Check the figures against AWS's calculator and Semaphore's rates
+    before launch.
+  - **Open:** the trial and annual billing that feature 17 ruled out are worth reconsidering (a 14-day Permanent trial;
+    annual billing with 2 months free).
 
 - **What belongs where:** the clinic account owns patients and charts, the procedure price list,
   message templates and recalls (filterable by branch), plus its name, logo, contact email and TIN.
@@ -240,7 +259,7 @@ account in", "no payments" and "font on Big only".
     branding from the console ("Design in progress" → "Delivered").
 - **Prices:** Philippine pesos, VAT-inclusive. A setup fee and a monthly fee per plan, plus one design add-on, in a
   price list the operator edits. Paid upfront: setup + first month (+ design). Monthly only: no annual billing,
-  trial or promo codes.
+  trial or promo codes. Monthly fees per tier: see feature 16 (₱15,000 / ₱24,999 / ₱44,999).
 - **Subscription rules:** due monthly on the approval date (the last day of shorter months). Upgrades apply at
   once, downgrades on the next due date, no part-month charges. A missed payment gets 7 days' grace with a banner
   for the Owner, then the clinic is paused (staff out, parents read-only, nothing deleted). A late payment
