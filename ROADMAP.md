@@ -632,8 +632,6 @@ document asks again; every record shows who accepted which version and when.
   balance.
 - Responsive check at phone width; keyboard pass; empty and error states.
 - Deploy to Vercel; write a 5-minute demo script for the client.
-- Record a narrated demo video that follows the script: every feature, each role and what it can't
-  reach (RBAC), and the screens at phone, tablet and laptop sizes.
 
 **Done when:** the client can open a link and walk the demo script without your help.
 
