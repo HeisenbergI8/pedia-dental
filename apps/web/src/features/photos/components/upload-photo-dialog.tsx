@@ -70,6 +70,15 @@ export function UploadPhotoDialog({ patientId }: { patientId: string }) {
     setOpen(next);
   }
 
+  // The visit list can still be loading when the dialog opens (a visit started a moment ago): link the current visit
+  // once it's known, unless the visit was already chosen.
+  const currentId = current?.id;
+  useEffect(() => {
+    if (open && currentId && !form.getFieldState("visitId").isDirty && form.getValues("visitId") === NONE) {
+      form.setValue("visitId", currentId);
+    }
+  }, [open, currentId, form]);
+
   function onSubmit({ file, stage, tooth, visitId, ...rest }: FormValues) {
     upload.mutate(
       {
