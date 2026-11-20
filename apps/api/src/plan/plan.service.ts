@@ -11,7 +11,8 @@ import { PrismaService } from "../prisma/prisma.service";
 import { clinicData } from "../prisma/tenant-scope";
 import { runInTransaction, type Tx } from "../prisma/transaction";
 import { PLAN_COLUMNS, PLAN_ORDER, toPlanItem } from "./plan.rows";
-import { PLAN_ITEM_NOT_FOUND, addRefusal, findingRefusal, statusRefusal } from "./plan.rules";
+import { CHART_COLUMNS, CHART_ORDER, toChartEntry } from "../chart/chart.rows";
+import { PLAN_ITEM_NOT_FOUND, addRefusal, findingRefusal, goneToothRefusal, statusRefusal } from "./plan.rules";
 
 const OPEN = ["planned", "in_progress"] as const;
 
@@ -46,13 +47,17 @@ export class PlanService implements OnModuleInit {
     return rows.map(toPlanItem);
   }
 
-  /** POST /patients/:id/plan: 404 → 400 issues → 400 "Unknown procedure" → 400 "… is planned per tooth" → the finding's 400s and 409. */
+  /** POST /patients/:id/plan: 404 → 400 issues → 400 "Unknown procedure" → 400 "… is planned per tooth" → 409 tooth gone → the finding's 400s and 409. */
   async add(patientId: string, body: unknown): Promise<PlanItem> {
     return runInTransaction(this.prisma, async (tx) => {
       await lockPatient(tx, patientId); // the 404, and every patient write locks first (CONVENTIONS → Traps)
       const input = new ZodValidationPipe(AddPlanItemInput).transform(body);
       const procedure = await this.clinic.procedure(input.procedureCode, tx);
       refuse(addRefusal(procedure, input));
+      if (input.tooth !== undefined) {
+        const chart = await tx.chartEntry.findMany({ where: { patientId }, select: CHART_COLUMNS, orderBy: [...CHART_ORDER] });
+        refuse(goneToothRefusal(input.tooth, chart.map(toChartEntry)));
+      }
       if (input.sourceChartEntryId) {
         // Read under the patient's lock, so a double click can't plan one finding twice.
         const finding = await tx.chartEntry.findUnique({ where: { id: input.sourceChartEntryId }, select: { patientId: true, tooth: true } });

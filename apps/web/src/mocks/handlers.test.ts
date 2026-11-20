@@ -630,6 +630,16 @@ describe("treatment plan", () => {
     await add(patient.id); // a declined item can be planned again
   });
 
+  it("plans no work on a tooth the chart records as extracted (#28)", async () => {
+    const patient = await api("/patients", Patient, send("POST", newPatient));
+    const visit = await api(`/patients/${patient.id}/visits`, Visit, send("POST", { dentistId: "staff_reyes" }));
+    await api(`/patients/${patient.id}/chart`, ChartEntry, send("POST", { visitId: visit.id, tooth: 74, surfaces: [], condition: "extracted" }));
+    const add = (body: object) => api(`/patients/${patient.id}/plan`, PlanItem, send("POST", { fee: 1, ...body }));
+    await expect(add({ procedureCode: "restoration", tooth: 74 })).rejects.toMatchObject({ status: 409, message: "Tooth 74 is recorded as extracted or missing" });
+    await add({ procedureCode: "restoration", tooth: 75 });
+    await add({ procedureCode: "fluoride" }); // whole-mouth work is unaffected
+  });
+
   it("completes a follow-up item with a signed follow-up note", async () => {
     const patient = await api("/patients", Patient, send("POST", newPatient));
     const item = await api(`/patients/${patient.id}/plan`, PlanItem, send("POST", { procedureCode: "follow_up", fee: 50000 }));

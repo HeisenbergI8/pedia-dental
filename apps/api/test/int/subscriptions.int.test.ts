@@ -141,6 +141,8 @@ describe("the nightly settle and the check at sign-in (decision 4)", () => {
     };
     const missing = await post(null);
     expect([missing.status, missing.text]).toEqual([400, IDEMPOTENCY_KEY_MISSING]);
+    const future = await post(crypto.randomUUID(), { ...body, paidOn: "2099-12-31" }); // issue 13: today at the latest
+    expect([future.status, future.text]).toEqual([400, "The date paid can't be in the future"]);
     const key = crypto.randomUUID();
     const first = await post(key);
     expect(first.status).toBe(201);

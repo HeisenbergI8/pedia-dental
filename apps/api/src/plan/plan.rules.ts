@@ -1,4 +1,4 @@
-import type { AddPlanItemInput, PlanItem, Procedure } from "@pedia/shared";
+import { deriveChart, isToothGone, type AddPlanItemInput, type ChartEntry, type PlanItem, type Procedure, type ToothNumber } from "@pedia/shared";
 import type { Refusal } from "../common/refusal";
 
 export const PLAN_ITEM_NOT_FOUND = "Plan item not found"; // plan/mocks.ts:43
@@ -8,6 +8,12 @@ export function addRefusal(procedure: Pick<Procedure, "name" | "perTooth"> | und
   if (!procedure) return { status: 400, message: "Unknown procedure" };
   if (procedure.perTooth && input.tooth === undefined) return { status: 400, message: `${procedure.name} is planned per tooth` };
   return undefined;
+}
+
+/** No work is planned on a tooth the chart records as extracted or missing (#28). `entries`: this child's chart. */
+export function goneToothRefusal(tooth: ToothNumber | undefined, entries: ChartEntry[]): Refusal | undefined {
+  if (tooth === undefined || !isToothGone(deriveChart(entries).get(tooth))) return undefined;
+  return { status: 409, message: `Tooth ${tooth} is recorded as extracted or missing` };
 }
 
 /**

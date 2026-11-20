@@ -68,6 +68,8 @@ describe("appointment requests (apps/web handlers.test.ts → requests)", () => 
     expect(bad.status).toBe(400);
     const yesterday = await ask(id, parent, body({ preferredDate: day(-1) }));
     expect([yesterday.status, yesterday.text]).toEqual([400, "Pick today or a later date"]);
+    const far = await ask(id, parent, body({ preferredDate: "2099-12-31" })); // issue 13: about a year ahead at most
+    expect([far.status, JSON.stringify(far.body)]).toEqual([400, expect.stringContaining("Pick a date within the next year")]);
     const sunday = await ask(id, parent, body({ preferredDate: nextSunday() })); // issue 13: no branch opens that weekday
     expect([sunday.status, sunday.text]).toEqual([400, "The clinic is closed on Sundays. Pick another day."]);
     await t.ok(ask(id, parent, body({ preferredDate: openDay(0) })), AppointmentRequest, 201); // today passes (Monday on a Sunday)

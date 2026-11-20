@@ -1,6 +1,6 @@
 "use client";
 import { ComparePlansLink } from "@/features/plans/components/compare-plans-link";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
   DENTIST_LINE_NOTE, LETTERHEAD_IMAGE_RULES, TIER_LIMITS, UpdateLetterheadInput, branchLine, deriveBrandPalette, imageProblem, letterheadLines,
@@ -18,10 +18,17 @@ import type { DocContent } from "@/features/documents/content";
 import { DocumentPreview } from "@/features/documents/components/document-preview";
 import { letterheadImageUrl, useClinic, useLetterhead, useRemoveLetterheadImage, useSaveLetterhead, useUploadLetterheadImage } from "../api";
 
-const MODES: { value: LetterheadMode; label: string }[] = [
+/** "Own text" on wider screens, "Text" on a phone: the three fit a 320 px screen (#41). The hidden one isn't read out. */
+const ownLabel = (word: string) => (
+  <>
+    <span className="sm:hidden">{word}</span>
+    <span className="hidden sm:inline">Own {word.toLowerCase()}</span>
+  </>
+);
+const MODES: { value: LetterheadMode; label: ReactNode }[] = [
   { value: "standard", label: "Standard" },
-  { value: "text", label: "Own text" }, // short: the three fit a phone's width (bot report #41)
-  { value: "image", label: "Own image" },
+  { value: "text", label: ownLabel("Text") },
+  { value: "image", label: ownLabel("Image") },
 ];
 
 /**

@@ -96,6 +96,18 @@ describe("treatment plan (apps/web handlers.test.ts → treatment plan)", () => 
     await t.ok(add(id, from({}), admin), PlanItem, 201); // a declined item can be planned again
   });
 
+  it("plans no work on a tooth the chart records as extracted (#28)", async () => {
+    const admin = await t.as(ADMIN);
+    const id = await t.register();
+    const visit = await t.start(id, admin);
+    await t.ok(t.call("post", `/patients/${id}/chart`, admin, { visitId: visit.id, tooth: 74, surfaces: [], condition: "extracted" }), ChartEntry, 201);
+    await t.complete(visit.id, admin);
+    const res = await add(id, { procedureCode: "restoration", tooth: 74, fee: 1 }, admin);
+    expect([res.status, res.text]).toEqual([409, "Tooth 74 is recorded as extracted or missing"]);
+    await t.ok(add(id, { procedureCode: "restoration", tooth: 75, fee: 1 }, admin), PlanItem, 201);
+    await t.ok(add(id, { procedureCode: "fluoride", fee: 1 }, admin), PlanItem, 201); // whole-mouth work is unaffected
+  });
+
   it("lets front desk and a parent read a plan, and only staff with plan.write change it", async () => {
     const own = demo().planItems[0]!.patientId;
     const desk = await t.as(FRONT_DESK);

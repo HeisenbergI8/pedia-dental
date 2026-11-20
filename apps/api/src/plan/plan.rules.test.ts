@@ -1,6 +1,6 @@
-import type { AddPlanItemInput } from "@pedia/shared";
+import type { AddPlanItemInput, ChartEntry } from "@pedia/shared";
 import { describe, expect, it } from "vitest";
-import { addRefusal, findingRefusal, statusRefusal } from "./plan.rules";
+import { addRefusal, findingRefusal, goneToothRefusal, statusRefusal } from "./plan.rules";
 
 const input = (tooth?: number): AddPlanItemInput => ({ procedureCode: "x", fee: 100, ...(tooth && { tooth }) }) as AddPlanItemInput;
 
@@ -20,6 +20,18 @@ describe("plan rules (plan/mocks.ts)", () => {
     expect(findingRefusal(finding, "p2", { tooth: 74 }, undefined)).toEqual({ status: 400, message: "Unknown chart finding" });
     expect(findingRefusal(finding, "p1", { tooth: 75 }, undefined)).toEqual({ status: 400, message: "This finding is on tooth 74" });
     expect(findingRefusal(finding, "p1", { tooth: 74 }, "Restoration")).toEqual({ status: 409, message: "Restoration for this finding is already on the plan" });
+  });
+
+  it("plans no work on a tooth recorded as extracted or missing (#28)", () => {
+    const entry = (id: string, tooth: number, condition: string, recordedAt: string, supersedes?: string) =>
+      ({ id, tooth, condition, surfaces: [], recordedAt, ...(supersedes && { supersedes }) }) as unknown as ChartEntry;
+    const pulled = [entry("e1", 74, "caries", "2026-01-01T00:00:00Z"), entry("e2", 74, "extracted", "2026-02-01T00:00:00Z")];
+    expect(goneToothRefusal(74, pulled)).toEqual({ status: 409, message: "Tooth 74 is recorded as extracted or missing" });
+    expect(goneToothRefusal(75, pulled)).toBeUndefined();
+    expect(goneToothRefusal(undefined, pulled)).toBeUndefined();
+    expect(goneToothRefusal(54, [entry("m", 54, "missing", "2026-01-01T00:00:00Z")])).toEqual({ status: 409, message: "Tooth 54 is recorded as extracted or missing" });
+    // A mistaken "extracted", corrected to caries, leaves the tooth plannable.
+    expect(goneToothRefusal(74, [...pulled, entry("e3", 74, "caries", "2026-03-01T00:00:00Z", "e2")])).toBeUndefined();
   });
 
   it("never changes a done item", () => {

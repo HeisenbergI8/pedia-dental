@@ -7,12 +7,12 @@ Your normal database `pedia_dental` was never touched.
 ## Update: fixes (same evening)
 
 All 47 issues were worked on and re-tested by three independent testers on the same bot stack, plus the full checks
-(unit tests, MySQL tests, both web builds, and 476/476 offline browser tests). Most are fully fixed. Known gaps, on purpose:
+(unit tests, MySQL tests, both web builds, and 476/476 offline browser tests). Most are fully fixed.
+Follow-up (2026-11-20): #13's untried parts now have MySQL tests (a request for 2099, a payment dated 2099, both refused);
+#28 refuses plan work on a tooth the chart records as extracted or missing; #41's switch reads "Standard / Text / Image"
+on a phone and fits at 320 px. Known gaps, kept on purpose:
 - **#10** the "limit reached" notice now shows when fewer than 5 text parts are left (not after the first failed text).
-- **#13** parent request dates: refused in the past, more than a year ahead, or on a day no branch opens.
 - **#22** the guardian name still starts with the child's surname (kept by design); the typing glitch is gone.
-- **#28** a plan item on an already-extracted tooth is still accepted (needs the derived chart; later).
-- **#41** at 320 px wide the "Own image" label clips by about 4 px (fine at 375 px).
 - **#16/#17** need checking after deploy: Vercel's own upload size limit, and that Vercel sets the real client address.
   Off Vercel, the web proxy sends no client address, so all callers share one sign-in rate-limit bucket.
 

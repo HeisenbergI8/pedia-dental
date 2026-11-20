@@ -1,5 +1,5 @@
 import { http, HttpResponse, delay } from "msw";
-import { AddPlanItemInput, SetPlanItemStatusInput, type PlanItem } from "@pedia/shared";
+import { AddPlanItemInput, SetPlanItemStatusInput, deriveChart, isToothGone, type PlanItem } from "@pedia/shared";
 import { env } from "@/lib/env";
 import { currentClinicId, db, persist } from "@/mocks/db";
 
@@ -23,6 +23,11 @@ export const planHandlers = [
     if (!procedure) return new HttpResponse("Unknown procedure", { status: 400 });
     if (procedure.perTooth && parsed.data.tooth === undefined) {
       return new HttpResponse(`${procedure.name} is planned per tooth`, { status: 400 });
+    }
+    // No work on a tooth the chart records as extracted or missing (#28).
+    const t = parsed.data.tooth;
+    if (t !== undefined && isToothGone(deriveChart(db.chartEntries.filter((e) => e.patientId === params.id)).get(t))) {
+      return new HttpResponse(`Tooth ${t} is recorded as extracted or missing`, { status: 409 });
     }
     // From a chart finding: this child's, on the item's tooth, and the same procedure not open for it already (#28).
     const { sourceChartEntryId: entryId, tooth, procedureCode } = parsed.data;
