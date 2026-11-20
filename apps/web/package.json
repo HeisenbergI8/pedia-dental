@@ -47,7 +47,7 @@
     "eslint-config-next": "15.5.29",
     "msw": "^3.0.1",
     "tailwindcss": "^4",
-    "typescript": "^5",
+    "typescript": "^7",
     "vitest": "^5.0.3"
   },
   "msw": {
