@@ -3,7 +3,6 @@ import {
   DOCUMENT_TYPE_LABEL,
   LEGAL_DOCUMENTS,
   NOTE_MESSAGES,
-  PENDING_REVIEW,
   accountSummary,
   branchLine,
   currentChoices,
@@ -228,7 +227,7 @@ export function buildDocument(choice: GenerateDocumentInput, src: DocSources, no
             : []),
           { kind: "signatures", lines: [{ label: "Parent or guardian", name: consent?.guardianName ?? guardian.fullName }, { label: "Recorded by", name: consent?.recordedByName ?? issuer?.fullName }] },
         ],
-        { subtitle: `Version ${form.version} · issued ${formatDate(today)}`, footnote: `${PENDING_REVIEW}. Form version ${form.version}.` },
+        { subtitle: `Version ${form.version} · issued ${formatDate(today)}`, footnote: `Form version ${form.version}.` },
       );
     }
     case "referral_letter":

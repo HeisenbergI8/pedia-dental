@@ -88,7 +88,7 @@ async function chooseUploadKind(page: Page, kind: "Medical document (clearance, 
 test.describe("happy paths", () => {
   test("parent reads the clinic's privacy notice with both children's consents and opens the portal", async ({ page }) => {
     await signInToNotice(page);
-    await expect(page.getByText("Version 1 · Template, pending legal review")).toBeVisible();
+    await expect(page.getByText("Version 1", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Your consents on record" })).toBeVisible();
     await expect(page.getByText("Mazie", { exact: true })).toBeVisible();
     await expect(page.getByText("Mika", { exact: true })).toBeVisible();

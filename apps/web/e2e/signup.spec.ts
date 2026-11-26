@@ -716,7 +716,7 @@ test.describe("edge cases", () => {
     await page.getByRole("link", { name: "Terms of Service" }).click();
     const terms = await popup;
     await expect(terms).toHaveURL(/\/legal\/terms/);
-    await expect(terms.getByText(/Template, pending legal review/i).first()).toBeVisible();
+    await expect(terms.getByRole("heading", { level: 1, name: "Terms of Service" })).toBeVisible();
     await terms.close();
     await expect(field(page, "Clinic name")).toHaveValue("Ngiti ng Bayan");
   });

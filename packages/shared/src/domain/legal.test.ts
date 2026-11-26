@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COUNSEL, LEGAL_DOCUMENTS, choiceDeclined, noticeTemplate, termsOutdated } from "./legal";
+import { LEGAL_DOCUMENTS, choiceDeclined, noticeTemplate, termsOutdated } from "./legal";
 
 const agreement = (termsVersion: number, dpaVersion: number) => ({
   termsVersion,
@@ -18,10 +18,9 @@ describe("legal templates (privacy #2–#6)", () => {
     }
   });
 
-  it("leaves retention and hosting to counsel (#4, #5)", () => {
-    for (const key of ["dpa", "privacy"] as const) {
-      expect(JSON.stringify(LEGAL_DOCUMENTS[key]), key).toContain(COUNSEL);
-    }
+  it("states hosting and has no placeholder left in any document", () => {
+    for (const key of ["dpa", "privacy"] as const) expect(JSON.stringify(LEGAL_DOCUMENTS[key]), key).toContain("AWS) in Singapore");
+    for (const doc of Object.values(LEGAL_DOCUMENTS)) expect(JSON.stringify(doc), doc.key).not.toMatch(/to be confirmed|counsel/i);
   });
 
   it("fills the clinic's name into the notice template and leaves no placeholder", () => {

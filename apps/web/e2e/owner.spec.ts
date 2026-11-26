@@ -475,17 +475,18 @@ test.describe("happy paths", () => {
     expect(file.suggestedFilename()).toMatch(/\.pdf$/i);
   });
 
-  test("Primolar's Terms, Privacy Policy and Data Processing Agreement are marked as templates pending legal review", async ({ page, context }) => {
+  test("Primolar's Terms, Privacy Policy and Data Processing Agreement open as final documents, with no placeholders", async ({ page, context }) => {
     await page.goto("/login");
     await page.getByRole("navigation", { name: "Privacy and terms" }).getByRole("link", { name: "Terms" }).click();
     await expect(page).toHaveURL(/\/legal\/terms/);
     await expect(page.getByRole("heading", { level: 1, name: "Terms of Service" })).toBeVisible();
-    await expect(page.getByText("Template, pending legal review")).toBeVisible();
+    await expect(page.getByText(/pending legal review|to be confirmed by counsel/i)).toHaveCount(0);
 
     await page.getByRole("navigation", { name: "Privacy and terms" }).getByRole("link", { name: "Privacy" }).click();
     await expect(page).toHaveURL(/\/legal\/privacy/);
     await expect(page.getByRole("heading", { level: 1, name: "Primolar Privacy Policy" })).toBeVisible();
-    await expect(page.getByText("Template, pending legal review")).toBeVisible();
+    await expect(page.getByText("John Ross Rivera, Primolar's Data Protection Officer: privacy@primolar.ph.")).toBeVisible();
+    await expect(page.getByText(/pending legal review|to be confirmed by counsel/i)).toHaveCount(0);
 
     // The DPA is linked from the Get started form's agreement
     await page.goto("/get-started");
@@ -493,7 +494,7 @@ test.describe("happy paths", () => {
     await page.getByRole("link", { name: "Data Processing Agreement" }).click();
     const dpa = await popup;
     await expect(dpa.getByRole("heading", { level: 1, name: "Data Processing Agreement" })).toBeVisible();
-    await expect(dpa.getByText("Template, pending legal review")).toBeVisible();
+    await expect(dpa.getByText(/pending legal review|to be confirmed by counsel/i)).toHaveCount(0);
   });
 });
 

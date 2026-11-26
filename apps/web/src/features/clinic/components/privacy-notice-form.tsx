@@ -3,7 +3,7 @@ import Link from "next/link";
 import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { PENDING_REVIEW, SavePrivacyNoticeInput, noticeTemplate } from "@pedia/shared";
+import { SavePrivacyNoticeInput, noticeTemplate } from "@pedia/shared";
 import { Loading } from "@/components/brand";
 import { FormField } from "@/components/form-field";
 import { SectionCard } from "@/components/section-card";
@@ -33,7 +33,7 @@ export function PrivacyNoticeForm() {
   return (
     <SectionCard
       title="Privacy notice"
-      description={`Version ${notice.version}, saved ${formatDate(notice.at.slice(0, 10))} by ${notice.savedByName}. Saving makes a new version, which every parent reads again. ${PENDING_REVIEW}: have your lawyer check it.`}
+      description={`Version ${notice.version}, saved ${formatDate(notice.at.slice(0, 10))} by ${notice.savedByName}. Saving makes a new version, which every parent reads again.`}
     >
       <FormProvider {...form}>
         <form onSubmit={submit} noValidate className="grid gap-4">

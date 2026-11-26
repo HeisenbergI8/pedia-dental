@@ -1,7 +1,6 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
-import { PENDING_REVIEW } from "@pedia/shared";
 import { LoadingScreen } from "@/components/brand";
 import { ErrorState } from "@/components/error-state";
 import { Button } from "@/components/ui/button";
@@ -43,10 +42,7 @@ export function AcknowledgeScreen() {
         <header className="space-y-1">
           <p className="text-sm font-semibold text-ink-muted">{p.clinicName}</p>
           <h1 className="text-2xl font-semibold tracking-tight">{p.title}</h1>
-          <p className="text-sm text-ink-muted">
-            Version {p.version}
-            {p.kind !== "confidentiality" && ` · ${PENDING_REVIEW}`}
-          </p>
+          <p className="text-sm text-ink-muted">Version {p.version}</p>
         </header>
         <div className="space-y-3 leading-relaxed">
           {p.paragraphs.map((t) => (

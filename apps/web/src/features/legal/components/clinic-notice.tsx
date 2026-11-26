@@ -1,6 +1,5 @@
 "use client";
 import { SearchXIcon } from "lucide-react";
-import { PENDING_REVIEW } from "@pedia/shared";
 import { Loading } from "@/components/brand";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
@@ -24,7 +23,7 @@ export function ClinicNotice({ clinicId }: { clinicId: string }) {
           <header className="space-y-2">
             <h1 className="text-3xl font-semibold tracking-tight">{n.clinicName} privacy notice</h1>
             <p className="text-sm text-ink-muted">
-              Version {n.version} · {formatDate(n.at.slice(0, 10))} · {n.version === 1 ? "from Primolar's template" : `edited by ${n.clinicName}`} ({PENDING_REVIEW.toLowerCase()})
+              Version {n.version} · {formatDate(n.at.slice(0, 10))} · {n.version === 1 ? "from Primolar's template" : `edited by ${n.clinicName}`}
             </p>
           </header>
           {n.body.split(/\n{2,}/).map((p) => (

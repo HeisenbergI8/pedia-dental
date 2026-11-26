@@ -1,24 +1,19 @@
 import type { AgreementRecord, PrivacyChoice } from "../schemas/legal";
 import type { PhotoType } from "../schemas/photo";
 
-/** Privacy #2: every template carries this until a lawyer reviews it. */
-export const PENDING_REVIEW = "Template, pending legal review";
-/** Privacy #4, #5: what the lawyer fills in. */
-export const COUNSEL = "[to be confirmed by counsel]";
-
 export type LegalDocKey = "terms" | "dpa" | "privacy" | "notice" | "consent";
 export type LegalSection = { heading: string; paragraphs: string[] };
 export type LegalDocument = { key: LegalDocKey; title: string; version: number; date: string; sections: LegalSection[] };
 
 /** Privacy #22, P25: Primolar's Data Protection Officer, named in the Privacy Policy. */
-export const PRIMOLAR_DPO = { name: "John Ross Rivera", email: `privacy@primolar.ph ${COUNSEL}` };
+export const PRIMOLAR_DPO = { name: "John Ross Rivera", email: "privacy@primolar.ph" };
 
 const HOSTING =
-  `Records are stored with reputable cloud providers, which may be outside the Philippines, under contracts that require ` +
-  `protection equal to the Data Privacy Act's. Where and with whom: ${COUNSEL}.`;
+  "Records are stored with Amazon Web Services (AWS) in Singapore, and the website is served by Vercel, under contracts " +
+  "that require protection equal to the Data Privacy Act's.";
 const RETENTION =
   `Records are kept while the clinic subscribes, and after cancellation until the clinic asks in writing for them to be ` +
-  `returned or deleted, unless a law requires a longer period. Retention period: ${COUNSEL}.`;
+  "returned or deleted, unless a law requires a longer period.";
 
 const CLINIC_NOTICE = [
   "{clinic} collects and uses personal information about your child and you so it can give your child dental care. This notice explains how, as the Data Privacy Act of 2012 (RA 10173) requires.",
@@ -26,7 +21,7 @@ const CLINIC_NOTICE = [
   "Why: to examine and treat your child, keep an accurate clinical record, book visits and remind you of them, bill you, and meet our legal duties.",
   "Your choices: treatment records are needed to give care. Clinical photos and reminder messages are optional, and you can switch them on or off at any time in the parent portal or by asking us.",
   "Who sees it: our dentists and staff, each with their own login, and every access is logged. We keep our records with Primolar, a clinic software provider, which handles them only for us under a data processing agreement. We share records with others, such as a specialist or your HMO, only with your consent or when the law requires.",
-  `How long we keep it: while your child is our patient, and afterwards for as long as the law on health records requires: ${COUNSEL}.`,
+  "How long we keep it: while your child is our patient, and afterwards for as long as the law on health records requires.",
   "Your rights: you may ask to see, correct or get a copy of your child's records, object to a use, or complain to the National Privacy Commission. Treatment records we must keep can't be deleted on request; to withdraw your consent to them, contact us.",
   "Questions: contact our privacy contact, named below.",
 ];
@@ -36,7 +31,7 @@ export const noticeTemplate = (clinicName: string) => CLINIC_NOTICE.map((p) => p
 
 const DATE = "2026-10-13";
 
-/** The five templates (privacy #2). Raising a version asks again: the Owner for terms and DPA (#9). */
+/** The five legal documents (privacy #2). Raising a version asks again: the Owner for terms and DPA (#9). */
 export const LEGAL_DOCUMENTS: Record<LegalDocKey, LegalDocument> = {
   terms: {
     key: "terms",
@@ -50,9 +45,9 @@ export const LEGAL_DOCUMENTS: Record<LegalDocKey, LegalDocument> = {
       { heading: "Fees", paragraphs: ["The clinic pays the setup fee and the first month upfront, then a monthly fee on its due date. Prices include VAT. A clinic 7 days overdue is paused until it pays; its records are kept."] },
       { heading: "The clinic's data", paragraphs: ["The clinic owns its patients' records. Primolar handles them only to provide the service, as the Data Processing Agreement sets out. That agreement is part of these terms."] },
       { heading: "Ending the subscription", paragraphs: ["Either side may end the subscription with written notice. Primolar keeps, returns or deletes the clinic's records as the Data Processing Agreement describes."] },
-      { heading: "Liability", paragraphs: [`Primolar provides the service with reasonable care and skill. Clinical decisions remain the dentist's. Primolar's total liability in a year is limited to the fees the clinic paid that year: ${COUNSEL}.`] },
+      { heading: "Liability", paragraphs: ["Primolar provides the service with reasonable care and skill. Clinical decisions remain the dentist's. Primolar's total liability in a year is limited to the fees the clinic paid that year."] },
       { heading: "Changes", paragraphs: ["Primolar may update these terms. The clinic's Owner is asked to accept a new version at their next sign-in; other staff keep working meanwhile."] },
-      { heading: "Governing law", paragraphs: [`These terms are governed by the laws of the Philippines. Venue: ${COUNSEL}.`] },
+      { heading: "Governing law", paragraphs: ["These terms are governed by the laws of the Philippines."] },
     ],
   },
   dpa: {
@@ -64,10 +59,10 @@ export const LEGAL_DOCUMENTS: Record<LegalDocKey, LegalDocument> = {
       { heading: "Roles", paragraphs: ["Under the Data Privacy Act of 2012 (RA 10173) and its rules, the clinic is the personal information controller and Primolar is its personal information processor. Children's health records are sensitive personal information."] },
       { heading: "Instructions", paragraphs: ["Primolar processes patient, guardian and staff data only on the clinic's instructions, which are the clinic's use of the service, and only to provide it. Primolar never sells the data or uses it for its own marketing."] },
       { heading: "Confidentiality", paragraphs: ["Everyone at Primolar who can reach clinic data is bound to keep it confidential. Primolar's console shows clinic accounts, plans and counts, never patient records."] },
-      { heading: "Security", paragraphs: [`Primolar applies organisational, physical and technical measures suited to sensitive personal information, including personal logins, access by role and a log of who opened which record. Encryption and backups: ${COUNSEL}.`] },
+      { heading: "Security", paragraphs: ["Primolar applies organisational, physical and technical measures suited to sensitive personal information, including personal logins, access by role and a log of who opened which record. Data is encrypted in transit and at rest, and the database is backed up daily, with backups kept for 30 days."] },
       { heading: "Hosting and transfers", paragraphs: [HOSTING] },
       { heading: "Subprocessors", paragraphs: ["Primolar may use subprocessors, such as hosting and message delivery, under written contracts that bind them to the same duties. Primolar tells the clinic before adding one."] },
-      { heading: "Breaches", paragraphs: [`Primolar tells the clinic without undue delay after discovering a breach affecting clinic data, so the clinic can notify the National Privacy Commission and the families affected. Deadline: ${COUNSEL}.`] },
+      { heading: "Breaches", paragraphs: ["Primolar tells the clinic within 24 hours of discovering a breach affecting clinic data, so the clinic can notify the National Privacy Commission and the families affected within the 72 hours the law requires."] },
       { heading: "Helping the clinic", paragraphs: ["Primolar helps the clinic answer parents' requests to see, correct or object to the use of their data, and any inquiry from the National Privacy Commission."] },
       { heading: "Retention, return and deletion", paragraphs: [RETENTION] },
       { heading: "Checks", paragraphs: ["The clinic may ask for information showing Primolar meets this agreement, once a year or after a breach."] },
@@ -92,7 +87,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocKey, LegalDocument> = {
   },
   notice: {
     key: "notice",
-    title: "Clinic privacy notice (template)",
+    title: "Clinic privacy notice",
     version: 1,
     date: DATE,
     sections: [{ heading: "Notice", paragraphs: CLINIC_NOTICE.map((p) => p.replaceAll("{clinic}", "The clinic")) }],
