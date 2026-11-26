@@ -212,6 +212,16 @@ describe("PrimolarService", () => {
     template.hasResourceProperties("AWS::Logs::LogGroup", { LogGroupName: "/primolar/api", RetentionInDays: 90 });
   });
 
+  it("emails the alert topic on every console sign-in, with no all-clear email after", () => {
+    const [alarm] = Object.values(template.findResources("AWS::CloudWatch::Alarm", { Properties: { MetricName: "ConsoleSignIns" } }));
+    expect(alarm?.Properties).toMatchObject({
+      AlarmName: "primolar-console-sign-in", Namespace: "Primolar/API", Statistic: "Sum", Threshold: 0,
+      ComparisonOperator: "GreaterThanThreshold", TreatMissingData: "notBreaching",
+    });
+    expect(alarm?.Properties.AlarmActions).toHaveLength(1);
+    expect(alarm?.Properties.OKActions).toBeUndefined();
+  });
+
   it("gives each task an environment the API's own loadEnv accepts at start-up (APP_ENV=production)", async () => {
     const { loadEnv } = await import("../../../apps/api/src/config/env");
     for (const family of ["primolar-api", "primolar-api-web"]) {

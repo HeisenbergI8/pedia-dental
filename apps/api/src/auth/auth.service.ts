@@ -20,6 +20,7 @@ import { SessionService } from "./session.service";
 import { SIGN_IN_FLOOR_MS, failNoSoonerThan } from "./sign-in-timing";
 import { matchTotp } from "./totp";
 import { SubscriptionRecordsService } from "../subscription-records/subscription-records.service";
+import { MetricsService } from "../metrics/metrics.service";
 import { OperatorAuditService } from "../operator-audit/operator-audit.service";
 
 /** The body's token (decision 1). The real one is set only as the httpOnly cookie; the shared schema still wants a string. */
@@ -79,6 +80,7 @@ export class AuthService {
     private readonly subscriptions: SubscriptionRecordsService,
     private readonly operatorAudit: OperatorAuditService,
     private readonly limits: RateLimitService,
+    private readonly metrics: MetricsService,
   ) {}
 
   /** An entry in the account it names, signed in or not (the mock's `logEach`: selectTenant, then recordAudit). */
@@ -310,6 +312,7 @@ export class AuthService {
     await this.limits.passwordRight(bucket);
     const token = await this.sessions.openOperator(op.id);
     await this.operatorAudit.tryRecordFor(op, "sign_in", "Console", "Signed in");
+    this.metrics.countConsoleSignIn();
     return { token, session: { token: OPERATOR_COOKIE_TOKEN, operator: { id: op.id, name: op.name, email: op.email } } };
   }
 

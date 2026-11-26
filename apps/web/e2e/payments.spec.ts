@@ -80,7 +80,8 @@ test("a rejected receipt shows the Owner the reason, and they send a new one fro
   await page.getByRole("tab", { name: "Plan" }).click();
   const panel = page.getByRole("tabpanel", { name: "Plan" });
   await expect(panel.getByRole("alert").filter({ hasText: "Not accepted: The amount is ₱100 short. Send a new receipt." })).toBeVisible(SLOW);
-  await expect(panel.getByRole("img", { name: "Primolar's payment QR code" })).toBeVisible();
+  // The plan's own QR (the text top-up card has another).
+  await expect(panel.getByRole("figure", { name: /₱15,000\.00/ }).getByRole("img", { name: "Primolar's payment QR code" })).toBeVisible();
   const form = panel.getByRole("form", { name: "Send your receipt" });
   await form.getByRole("button", { name: "Send receipt" }).click();
   await expect(form.getByText("Attach a screenshot of your receipt")).toBeVisible();

@@ -20,9 +20,9 @@ In `packages/infra/cdk.json` → `context`:
 | Setting | Example | Notes |
 | --- | --- | --- |
 | `apiDomain` | `api.primolar.ph` | The API's own host name |
-| `webOrigins` | `https://app.primolar.ph` | Every https origin the web is served from, comma-separated, exact (no path, no trailing slash) |
+| `webOrigins` | `https://app.primolar.ph,https://ops.primolar.ph` | Every https origin the web is served from, comma-separated, exact (no path, no trailing slash). The console has its own (step 9) |
 | `webUrl` | `https://app.primolar.ph` | Where texted invite and reset links open; its origin must be in `webOrigins` |
-| `alertEmail` | `ops@…` | Alarms and the budget |
+| `alertEmail` | `alerts@primolar.ph` | Alarms, the budget, and an email when someone signs in to the console |
 | `githubRepo` | `HeisenbergI8/pedia-dental` | Owner/name: only this repository's `production` environment may deploy |
 | `trustProxyHops` | `2` | Leave it until step 10 |
 | `appEnv`, `demoLogins` | `production`, `false` | See the go-live checklist before changing |
@@ -150,8 +150,15 @@ Project → Settings → Environment Variables → **Production**:
   Mark it **Sensitive**. The proxy adds it as `X-Primolar-Origin`; without it the load balancer and the API answer
   403. Same environments as `API_PROXY_TARGET`. Never a `NEXT_PUBLIC_` name: it must stay on the server.
 - `NEXT_PUBLIC_API_MOCKING` = `disabled`, for Production and Preview (B13c1: no deployment runs MSW).
+- `OPS_HOST` = `ops.primolar.ph`, Production only. The console then opens only there: `app.primolar.ph/operator`
+  answers 404, and every other page on `ops.primolar.ph` goes to the console (`apps/web/src/middleware.ts`).
 
-Then redeploy the web, and sign in on it once.
+Project → Settings → Domains → **Add** `ops.primolar.ph` (free: a sub-address of the domain we own; Vercel adds its DNS
+record itself, since the domain's DNS is on Vercel).
+
+Then redeploy the web, and sign in on it once. Sign in to the console at `https://ops.primolar.ph`: `alertEmail` gets
+a "primolar-console-sign-in" email within a few minutes (sign-ins a minute or two apart share one email). If one ever comes that wasn't us, change the password and run
+the two-step enrolment again.
 
 ## 10. Measure `TRUST_PROXY_HOPS` (B13a Q3)
 

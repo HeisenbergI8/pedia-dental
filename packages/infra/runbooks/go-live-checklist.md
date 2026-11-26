@@ -72,6 +72,7 @@ Tick every line before real clinics' data goes in. Each line names how to check 
   (B13c1 decisions.md L1), until the "at scale" chunk.
 - [ ] B13c2's Data Privacy Act items (export and deletion requests, retention, NPC registration) are done.
 - [ ] The operator's password is strong and stored in a password manager, and the operator is enrolled in two-step sign-in (`first-time-setup.md` step 11): production refuses an operator without it.
+- [ ] The console opens only at `https://ops.primolar.ph` (`OPS_HOST`): `https://app.primolar.ph/operator` answers 404, and signing in to the console emails `alerts@primolar.ph` within a few minutes.
 
 ## Known limits at go-live (accepted)
 

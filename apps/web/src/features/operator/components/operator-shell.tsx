@@ -66,7 +66,8 @@ export function OperatorShell({ children }: { children: ReactNode }) {
       </header>
       <nav aria-label="Console" className="border-b border-line bg-surface">
         {/* `relative` keeps the badge's sr-only words inside the scroll box; otherwise they widen the page on a phone. */}
-        <ul className="relative mx-auto flex max-w-5xl gap-1 overflow-x-auto px-4 sm:px-6">
+        {/* A phone gets four equal columns whose words wrap, so every area and the payments count stay in view. */}
+        <ul className="relative mx-auto grid max-w-5xl grid-cols-4 px-2 sm:flex sm:gap-1 sm:px-6">
           {NAV.map((n) => {
             const here = n.match(pathname);
             return (
@@ -74,12 +75,12 @@ export function OperatorShell({ children }: { children: ReactNode }) {
                 <Link
                   href={n.href}
                   aria-current={here ? "page" : undefined}
-                  className={cn("inline-flex h-11 items-center border-b-2 px-3 text-sm font-semibold whitespace-nowrap", here ? "border-brand text-ink" : "border-transparent text-ink-muted hover:text-ink")}
+                  className={cn("flex min-h-11 h-full flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 border-b-2 px-1 py-1.5 text-center text-sm leading-tight font-semibold sm:inline-flex sm:h-11 sm:flex-nowrap sm:px-3 sm:py-0 sm:whitespace-nowrap", here ? "border-brand text-ink" : "border-transparent text-ink-muted hover:text-ink")}
                 >
                   {n.label}
                   {/* B12 decision 8: how many wait, as a number beside the words; hidden at 0. */}
                   {n.href === "/operator/payments" && waiting > 0 && (
-                    <span className="ml-1.5 rounded-full bg-brand px-1.5 text-xs text-brand-ink tabular-nums">
+                    <span className="rounded-full bg-brand px-1.5 text-xs text-brand-ink tabular-nums">
                       {waiting}
                       <span className="sr-only"> waiting</span>
                     </span>

@@ -5,11 +5,13 @@ import { config, MAX_PROXY_BODY_BYTES, middleware } from "./middleware";
 
 const ORIGIN_VALUE = "x".repeat(40); // a stand-in, not a real value
 const call = (url: string, headers: Record<string, string> = {}) => middleware(new NextRequest(url, { headers }));
+/** A page request as a server sees it: the address asked for arrives in Host, while the URL may carry the server's own. */
+const page = (host: string, path: string) => call(`http://localhost:3000${path}`, { host });
 afterEach(() => vi.unstubAllEnvs());
 
 describe("the /api proxy (#2: the origin lock)", () => {
-  it("runs on /api only", () => {
-    expect(config.matcher).toBe("/api/:path*");
+  it("runs on /api and on pages, never on Next's own files", () => {
+    expect(config.matcher).toEqual(["/api/:path*", "/((?!_next/|.*\\..*).*)"]);
   });
 
   it("forwards to API_PROXY_TARGET with the path and query, adding the origin secret", () => {
@@ -60,5 +62,35 @@ describe("the /api proxy (#2: the origin lock)", () => {
     const res = call("http://localhost:3000/api/patients");
     expect(res.headers.get("x-middleware-rewrite")).toBeNull();
     expect(res.headers.get("x-middleware-next")).toBe("1");
+  });
+});
+
+describe("the console's own address (OPS_HOST)", () => {
+  it("changes nothing without OPS_HOST", () => {
+    vi.stubEnv("OPS_HOST", "");
+    expect(page("app.example.com", "/operator").headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("answers 404 for the console on the clinic app's address", async () => {
+    vi.stubEnv("OPS_HOST", "ops.example.com");
+    const res = page("app.example.com", "/operator/payments");
+    expect([res.status, await res.text()]).toEqual([404, "Not found"]);
+    expect(page("app.example.com", "/login").headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("serves the console on its own address, hidden from search, and sends anything else there to it", () => {
+    vi.stubEnv("OPS_HOST", "ops.example.com");
+    const consolePage = page("ops.example.com", "/operator/payments");
+    expect(consolePage.headers.get("x-middleware-next")).toBe("1");
+    expect(consolePage.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+    const home = page("ops.example.com", "/");
+    expect([home.status, home.headers.get("location")]).toEqual([307, "http://ops.example.com/operator"]);
+    expect(page("ops.example.com:8443", "/login").headers.get("location")).toBe("http://ops.example.com:8443/operator"); // a port is kept
+  });
+
+  it("still proxies /api on the console's address", () => {
+    vi.stubEnv("OPS_HOST", "ops.example.com");
+    vi.stubEnv("API_PROXY_TARGET", "https://api.example.com");
+    expect(page("ops.example.com", "/api/operator/receipts").headers.get("x-middleware-rewrite")).toBe("https://api.example.com/api/operator/receipts");
   });
 });

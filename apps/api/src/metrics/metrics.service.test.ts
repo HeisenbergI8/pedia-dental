@@ -14,14 +14,15 @@ describe("the metrics lines (B13a Step 4.1)", () => {
     const metrics = new MetricsService(prisma(), false);
     for (const status of [200, 200, 503]) metrics.observe("GET /api/reports/today", status, 12.4);
     metrics.observe("GET /api/health", 200, 1);
+    metrics.countConsoleSignIn();
     const [totals, route, extra] = (await metrics.flush(NOW)) as Line[];
-    expect(totals).toMatchObject({ Service: "api", Requests: 4, ServerErrors: 1, UnhandledErrors: 0 });
+    expect(totals).toMatchObject({ Service: "api", Requests: 4, ServerErrors: 1, UnhandledErrors: 0, ConsoleSignIns: 1 });
     expect(totals!._aws).toMatchObject({ Timestamp: NOW.getTime(), CloudWatchMetrics: [{ Namespace: NAMESPACE, Dimensions: [["Service"]] }] });
     expect(route).toMatchObject({ Route: "GET /api/reports/today", LatencyMs: [12, 12, 12] });
     expect(route!._aws.CloudWatchMetrics[0]!.Metrics).toEqual([{ Name: "LatencyMs", Unit: "Milliseconds" }]);
     expect(extra).toBeUndefined();
     const next = (await metrics.flush(NOW)) as Line[];
-    expect([next.length, next[0]!.Requests]).toEqual([1, 0]);
+    expect([next.length, next[0]!.Requests, next[0]!.ConsoleSignIns]).toEqual([1, 0, 0]);
   });
 
   it("keeps at most 100 latency samples per route", async () => {

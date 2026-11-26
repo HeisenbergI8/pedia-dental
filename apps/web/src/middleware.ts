@@ -20,6 +20,32 @@ export const BODY_TOO_LARGE = "Files must be under 10 MB";
  * API_PROXY_TARGET (the MSW-only demo): no proxy. Unset ORIGIN_SECRET (local): no header, and the local API checks none.
  */
 export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  if (pathname === "/api" || pathname.startsWith("/api/")) return proxy(request);
+  return consoleHost(request);
+}
+
+/**
+ * Primolar's console lives on its own address (OPS_HOST, e.g. ops.primolar.ph): there every page but the console sends
+ * you to it, and the clinic app's address answers 404 for /operator. The API still refuses anyone without an operator
+ * session; this only keeps the console out of the clinics' sight. Unset OPS_HOST (local, previews): no change.
+ */
+function consoleHost(request: NextRequest) {
+  const opsHost = process.env.OPS_HOST;
+  if (!opsHost) return NextResponse.next();
+  const { pathname } = request.nextUrl;
+  // The Host header, not nextUrl: under `next start` nextUrl's host is the server's own, whatever address was asked for.
+  const asked = request.headers.get("host") ?? request.nextUrl.host;
+  const onOps = asked.split(":")[0] === opsHost;
+  const isConsole = pathname === "/operator" || pathname.startsWith("/operator/");
+  if (onOps && !isConsole) return NextResponse.redirect(new URL("/operator", `${request.nextUrl.protocol}//${asked}`));
+  if (!onOps && isConsole) return new NextResponse("Not found", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } });
+  const res = NextResponse.next();
+  if (onOps) res.headers.set("x-robots-tag", "noindex, nofollow");
+  return res;
+}
+
+function proxy(request: NextRequest) {
   const target = process.env.API_PROXY_TARGET;
   if (!target) return NextResponse.next();
   if (Number(request.headers.get("content-length") ?? 0) > MAX_PROXY_BODY_BYTES) {
@@ -46,4 +72,5 @@ function setClientAddress(request: NextRequest, headers: Headers): void {
   if (client) headers.set("x-forwarded-for", client);
 }
 
-export const config = { matcher: "/api/:path*" };
+// The /api proxy, plus every page (not Next's own files or anything with a file extension) for the console's address.
+export const config = { matcher: ["/api/:path*", "/((?!_next/|.*\\..*).*)"] };

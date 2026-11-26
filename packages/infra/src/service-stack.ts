@@ -262,6 +262,17 @@ export class ServiceStack extends Stack {
       alarm.addAlarmAction(notify);
       alarm.addOkAction(notify);
     }
+    // A sign-in to Primolar's console emails the alert address, so one that wasn't us is seen at once. An alarm emails
+    // when it turns on, so sign-ins in the same or back-to-back minutes share one email. No "OK" email: only noise.
+    new cloudwatch.Alarm(this, "ConsoleSignIn", {
+      alarmName: "primolar-console-sign-in",
+      alarmDescription: "Someone signed in to Primolar's console. If it wasn't one of us, change the password and reset two-step sign-in now.",
+      metric: apiMetric("ConsoleSignIns", "Sum"),
+      threshold: 0,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+      evaluationPeriods: 1,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    }).addAlarmAction(notify);
     // B13a E7: errors grouped by their stable fingerprint.
     new logs.QueryDefinition(this, "ErrorsByFingerprint", {
       queryDefinitionName: "Primolar errors by fingerprint",

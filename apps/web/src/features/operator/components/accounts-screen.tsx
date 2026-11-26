@@ -1,14 +1,14 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import { PlusIcon } from "lucide-react";
+import { CheckCircle2Icon, PlusIcon } from "lucide-react";
 import { TIER_LABEL, TIER_SUPPORT, type AccountOverview } from "@pedia/shared";
 import { Loading } from "@/components/brand";
 import { DataList } from "@/components/data-list";
 import { ErrorState } from "@/components/error-state";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { useAccounts } from "../api";
+import { useAccounts, useReceiptsToCheck, useSignups } from "../api";
 import { allowance } from "./allowance";
 import { CreateAccountDialog } from "./create-account-dialog";
 import { StatusBadge } from "./status-badge";
@@ -29,6 +29,7 @@ export function AccountsScreen() {
           </Button>
         }
       />
+      <ToDo accounts={accounts.data} />
       {accounts.isLoading && <Loading label="Loading clinic accounts" />}
       {accounts.error && <ErrorState what="the clinic accounts" onRetry={() => void accounts.refetch()} />}
       {accounts.data && (
@@ -49,16 +50,56 @@ export function AccountsScreen() {
             },
             { key: "status", header: "Status", mobile: "trailing", cell: (r) => <StatusBadge status={r.account.status} /> },
             { key: "tier", header: "Plan", mobile: "meta", cell: (r) => TIER_LABEL[r.account.tier] },
-            { key: "support", header: "Support", mobile: "meta", cell: (r) => TIER_SUPPORT[r.account.tier].label },
+            { key: "support", header: "Support", mobile: "detail", cell: (r) => TIER_SUPPORT[r.account.tier].label },
             { key: "owner", header: "Owner", mobile: "meta", cell: (r) => <Owner row={r} /> },
-            { key: "branches", header: "Branches", mobile: "meta", numeric: true, cell: (r) => <Use row={r} limit="branches" /> },
-            { key: "staff", header: "Staff logins", mobile: "meta", numeric: true, cell: (r) => <Use row={r} limit="staffLogins" /> },
-            { key: "patients", header: "Patients", mobile: "meta", numeric: true, cell: (r) => r.usage.patients },
+            { key: "branches", header: "Branches", mobile: "detail", numeric: true, cell: (r) => <Use row={r} limit="branches" /> },
+            { key: "staff", header: "Staff logins", mobile: "detail", numeric: true, cell: (r) => <Use row={r} limit="staffLogins" /> },
+            { key: "patients", header: "Patients", mobile: "detail", numeric: true, cell: (r) => r.usage.patients },
           ]}
         />
       )}
       {creating && <CreateAccountDialog onClose={() => setCreating(false)} />}
     </div>
+  );
+}
+
+/** What needs the operator today, before the list: each count links to where it is done. */
+function ToDo({ accounts }: { accounts?: AccountOverview[] }) {
+  const receipts = useReceiptsToCheck().data;
+  const signups = useSignups().data;
+  if (!receipts || !signups || !accounts) return null;
+  const items = [
+    { href: "/operator/payments", count: receipts.length, one: "payment to check", many: "payments to check" },
+    { href: "/operator/signups", count: signups.filter((s) => s.status === "waiting").length, one: "sign-up waiting", many: "sign-ups waiting" },
+    { href: "/operator", count: accounts.filter((a) => a.account.status === "suspended").length, one: "clinic paused", many: "clinics paused", quiet: true },
+    { href: "/operator", count: accounts.filter((a) => a.design === "in_progress").length, one: "design to deliver", many: "designs to deliver", quiet: true },
+  ].filter((i) => i.count > 0);
+  return (
+    <section aria-labelledby="todo" className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
+      <h2 id="todo" className="text-base font-semibold">To do</h2>
+      {items.length === 0 ? (
+        <p className="mt-2 flex items-center gap-2 text-sm text-ink-muted">
+          <CheckCircle2Icon aria-hidden className="size-4 text-success" /> Nothing waiting. New receipts and sign-ups show here.
+        </p>
+      ) : (
+        <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+          {items.map((i) =>
+            i.quiet ? (
+              <li key={i.one} className="flex min-h-11 items-center gap-3 rounded-xl bg-ground px-3 text-sm">
+                <span className="text-lg font-semibold tabular-nums">{i.count}</span> {i.count === 1 ? i.one : i.many}
+              </li>
+            ) : (
+              <li key={i.one}>
+                <Link href={i.href} className="flex min-h-11 items-center gap-3 rounded-xl border border-brand-ring bg-brand-subtle px-3 text-sm font-semibold text-brand-tint-ink hover:border-brand">
+                  <span className="text-lg tabular-nums">{i.count}</span> {i.count === 1 ? i.one : i.many}
+                  <span aria-hidden className="ml-auto text-brand">→</span>
+                </Link>
+              </li>
+            ),
+          )}
+        </ul>
+      )}
+    </section>
   );
 }
 

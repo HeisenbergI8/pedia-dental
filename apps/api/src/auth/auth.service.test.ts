@@ -94,11 +94,13 @@ function setup(env: Partial<Env> = {}) {
   const subscriptions = { settle: async () => {} };
   const operatorAudit = { tryRecordFor: async (_op: unknown, action: string, _record: string, detail: string) => { operatorAudits.push(`${action}: ${detail}`); } };
   const limits = new FakeLimits();
+  const consoleSignIns: string[] = [];
+  const metrics = { countConsoleSignIn: () => consoleSignIns.push("in") };
   const fullEnv = { APP_ENV: "local", DEMO_LOGINS: false, ...env } as Env;
-  const auth = new AuthService(identity as never, sessions as never, hasher as never, audit as never, prisma as never, clock, fullEnv, subscriptions as never, operatorAudit as never, limits as never);
+  const auth = new AuthService(identity as never, sessions as never, hasher as never, audit as never, prisma as never, clock, fullEnv, subscriptions as never, operatorAudit as never, limits as never, metrics as never);
   auth.signInFloorMs = 0;
   const run = <T>(fn: () => Promise<T>, user?: string) => requestContext.run({ requestId: "t", operator: false, ...(user ? { clinicId: "c1", user: actor(user) } : {}) } as RequestContext, fn);
-  return { auth, audits, operatorAudits, closed, operator, run };
+  return { auth, audits, operatorAudits, consoleSignIns, closed, operator, run };
 }
 
 /** The status and message an HttpException carries, or the error itself. */
@@ -180,7 +182,7 @@ describe("the operator's two-step sign-in (security review #8)", () => {
   const notTheCode = () => (codeAt() === "000000" ? "111111" : "000000");
 
   it("asks an enrolled operator for the code, takes a right one once, and refuses a wrong or reused one", async () => {
-    const { auth, operator, operatorAudits, run } = setup();
+    const { auth, operator, operatorAudits, consoleSignIns, run } = setup();
     operator.totpSecret = totpKey;
     expect(await refusal(run(() => login(auth)))).toEqual([401, CODE_NEEDED_MESSAGE]);
     expect(await refusal(run(() => login(auth, notTheCode())))).toEqual([401, CODE_WRONG_MESSAGE]);
@@ -189,6 +191,7 @@ describe("the operator's two-step sign-in (security review #8)", () => {
     expect(await refusal(run(() => login(auth, codeAt(-1))))).toEqual([401, CODE_WRONG_MESSAGE]); // older than the one used
     expect((await run(() => login(auth, codeAt(1)))).token).toBe("operator-token"); // the next step, early (clock drift)
     expect(operatorAudits.filter((a) => a.includes("two-step"))).toHaveLength(3);
+    expect(consoleSignIns).toHaveLength(2); // only the two that got in count towards the sign-in alert
   });
 
   it("refuses a wrong password before it ever asks for a code", async () => {
