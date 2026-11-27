@@ -47,7 +47,9 @@ export function useSetPassword() {
     mutationFn: (input: SetPasswordInput) => api("/auth/password-link/accept", Session, { method: "POST", body: JSON.stringify(input) }),
     onSuccess: (session) => {
       signIn(session);
-      qc.removeQueries();
+      // Every cached answer belonged to the signed-out visitor, except this page's own link check: dropping that one
+      // made the still-open page ask again before the redirect, and the used link then read "expired".
+      qc.removeQueries({ predicate: (q) => q.queryKey[0] !== "password-link" });
       router.replace(ROLE_HOME[session.user.role]);
     },
   });

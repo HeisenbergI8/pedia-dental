@@ -41,6 +41,6 @@ export const FAILURE = {
   notConfirmed: "Not confirmed by the SMS provider",
   textLimit: "Monthly text limit reached", // B12 decision 19: logged, never sent later
   clinicPaused: "Clinic paused", // audit #24: a paused clinic's template texts fail, never sent later; account texts still go
-  // Text-abuse limits: held by the platform's daily cap until after its appointment, so never sent.
-  dailyCap: "Held by Primolar's daily text limit until after the appointment",
+  // Text-abuse limits: the platform's daily cap would have held it until after its appointment, so it was never sent.
+  dailyCap: "Not sent: Primolar's daily text limit was reached before the appointment",
 } as const;

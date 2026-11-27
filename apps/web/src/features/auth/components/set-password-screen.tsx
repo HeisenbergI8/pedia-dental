@@ -48,7 +48,8 @@ export function SetPasswordScreen() {
   if (token === null || link.isLoading) {
     return (
       <AuthCard title="Set your password">
-        <Loading label="Checking your link" />
+        <p className="text-sm text-ink-muted">Checking your link…</p>
+        <Loading label="Checking your link" compact />
       </AuthCard>
     );
   }

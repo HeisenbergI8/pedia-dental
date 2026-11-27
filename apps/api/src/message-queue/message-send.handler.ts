@@ -157,6 +157,8 @@ export class MessageSendHandler implements OutboxHandler, OnModuleInit {
             return { permanent: FAILURE.dailyCap };
           }
           this.log.warn(`Daily text cap reached (${used} of ${cap} parts): message ${messageId} waits for tomorrow`);
+          // The log shows when it will really go (8 AM tomorrow), not a time already past, so staff don't read it as stuck.
+          await tx.message.update({ where: { id: messageId }, data: { sendAt: tomorrow }, select: { id: true } });
           return { defer: tomorrow };
         }
       }

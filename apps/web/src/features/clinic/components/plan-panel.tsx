@@ -13,7 +13,6 @@ import { ReceiptList } from "@/features/payments/components/receipt-list";
 import { ReceiptUpload } from "@/features/payments/components/receipt-upload";
 import { clinicReceiptImageUrl, useClinicUsage, useSubscription, useUploadReceipt } from "../api";
 import { BillingNotice } from "./billing-banner";
-import { TextAllowanceNotice } from "./usage-banner";
 import { ContactSupport } from "./contact-support";
 import { PaymentHistory } from "./payment-history";
 import { TextTopUpCard } from "./text-topup-card";
@@ -51,7 +50,6 @@ export function PlanPanel() {
             note={usage.data.textTopUp > 0 ? `Includes ${usage.data.textTopUp.toLocaleString("en-PH")} texts you bought this month.` : undefined}
           />
         </div>
-        <TextAllowanceNotice usage={usage.data} canBuy={!sub.data?.pausedFor} />
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
           <div className="text-sm">
             <h3 className="font-semibold">Your support: {TIER_SUPPORT[tier].label}</h3>

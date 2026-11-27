@@ -80,9 +80,12 @@ export function textAllowanceNotice(texts: { inUse: number; limit: number | null
   return undefined;
 }
 
-/** The invite refused before it is queued, when this month's texts can't carry it (staff send invites: they count). */
+/**
+ * The invite refused before it is queued, when this month's texts can't carry it (staff send invites: they count).
+ * Front desk sends most invites and has no Plan tab, so it names the Owner, who can buy more.
+ */
 export const inviteTextsUsedUpMessage = (month: string) =>
-  `Your clinic has used this month's texts, so the invite can't be sent. Buy more texts under Settings → Plan, or invite again on 1 ${nextMonthName(month)}.`;
+  `Your clinic has used this month's texts, so the invite can't be sent. The clinic's Owner can buy more under Settings → Plan, or invite again on 1 ${nextMonthName(month)}.`;
 
 /**
  * The platform's daily ceiling on billed parts across every clinic (text-abuse limits, 2026-11-27): a safety net for a
