@@ -80,7 +80,7 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         if: steps.tag.outputs.build == 'true' && steps.pushed.outputs.exists != 'true'
       - name: Build and push the image
         if: steps.tag.outputs.build == 'true' && steps.pushed.outputs.exists != 'true'
