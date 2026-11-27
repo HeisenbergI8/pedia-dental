@@ -91,11 +91,16 @@ A deploy that fails with `AccessDenied` in the stack's events names the missing 
 
 - Until then, leave `semaphoreSecretArn` and `smsSenderName` empty. Texts go to the log driver, which is safe (B9
   decision 11).
-- Once Semaphore has approved the account:
+- Wait until Semaphore has approved both the account and the sender name **PRIMOLAR** (up to 5 business days). A key
+  without an approved sender name makes every send fail, and the driver marks those texts refused.
+- Then, together:
+  0. Get a fresh API key from Semaphore first (regenerate it, or ask their support). The first key was seen in a
+     setup session's screenshots on 2026-11-27, so it must not be the one stored.
   1. Run `aws secretsmanager create-secret --name primolar/semaphore-api-key --secret-string '<key>'`.
   2. Put the returned ARN in `semaphoreSecretArn`.
-  3. Once the sender name is approved, set `smsSenderName` to `PRIMOLAR`.
-- The change goes out with the next deploy (step 7).
+  3. Set `smsSenderName` to `PRIMOLAR`.
+- The change goes out with the next deploy (step 7). Then run the Semaphore lines of the go-live checklist (real
+  delivery to your phone, no "test" texts, full links, credits).
 
 ## 6. GitHub environment
 

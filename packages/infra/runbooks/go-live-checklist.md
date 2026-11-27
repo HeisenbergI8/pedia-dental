@@ -28,10 +28,18 @@ Tick every line before real clinics' data goes in. Each line names how to check 
 
 - [ ] **S3 covers `platform/*` as well as `clinics/*`.** Proof: in the operator console, upload the payment QR, then
   open it. Upload a clinic photo and open it.
-- [ ] Semaphore account approved and the key stored (`semaphoreSecretArn`). Without it, texts go to the log driver
-  only.
-- [ ] Sender name **PRIMOLAR** approved by Semaphore, then `smsSenderName` = `PRIMOLAR`. Send one test recall text
-  between 8 AM and 8 PM Manila.
+- [ ] Sender name **PRIMOLAR** approved by Semaphore (Account → Sender Names shows it approved). Only then store the
+  key (`semaphoreSecretArn`) and set `smsSenderName` = `PRIMOLAR`, in the same deploy. Without an approved sender
+  name Semaphore errors on every send and the driver marks every text refused. Without the key, texts go to the log
+  driver only.
+- [ ] Send one recall text between 8 AM and 8 PM Manila to your own phone. It must arrive, not just show "Sent":
+  Semaphore's "sent" means handed to the network, not delivered.
+- [ ] No text starts with the word "test" (any case): the networks drop those silently. Check clinic templates and
+  your own trial text.
+- [ ] Every link in a text is a full `https://` address on the real domain. Smart silently blocks shortened links
+  (bit.ly and the like). The app builds links from `WEB_URL`, so this holds as long as nobody adds a shortener.
+- [ ] Credits topped up, and you know the balance (Semaphore dashboard). Texts with a link usually cost 2 credits
+  (153 characters per part past 160). Credits expire 12 months after the last top-up.
 
 ## Health and alerts
 
