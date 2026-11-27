@@ -101,7 +101,7 @@ written request (an operator script, see "A clinic leaving").
   law's period is proposed as 10 years) and the clinic's audit trail. How long a child's record is kept after the last
   visit is a legal threshold (for minors often counted from the age of majority): *confirm with counsel*.
 - **The operator trail** is pruned only when `OPERATOR_AUDIT_KEEP_DAYS` is set (unset keeps it forever; the minimum is
-  365; proposed 1826, five years): *confirm with counsel* before setting it. It is not in `packages/infra/cdk.json` yet.
+  365; proposed 1826, five years): *confirm with counsel* before setting it. It is not in the API's settings (`packages/infra/terraform/run.tf`) yet.
 - **Erasure:** a record is restricted at once (B13c2b-1) and anonymised only when its legal retention ends, by
   `privacy.anonymise` (03:30). The periods are `RECORD_RETENTION` in `packages/shared/src/domain/retention.ts`: the
   later of N years after the last visit and the age of M. Both are unset: *confirm with counsel*. The job ships
@@ -117,15 +117,18 @@ written request (an operator script, see "A clinic leaving").
   (`GET /audit-log`, also open to admins through the API); refused requests are logged as `denied`.
 - Passwords hashed with argon2id; httpOnly, secure session cookies with idle and absolute timeouts; rate-limited
   sign-in.
-- TLS between the browser and the load balancer. No TLS between the API and the database yet (B13b I5).
-- AWS ap-southeast-1: RDS storage encryption, S3 server-side encryption with Block Public Access, files opened only
-  through 5-minute private links that are checked and logged each time.
-- RDS backups with point-in-time restore kept 30 days, and a restore drill (`packages/infra/runbooks/restore-drill.md`).
+- TLS between the browser and Vercel, and between Vercel and the API (Cloud Run's own HTTPS address). The API reaches
+  the database only through the Cloud SQL connector, which encrypts the connection; the database has no open network
+  address.
+- Google Cloud asia-southeast1 (Singapore): Cloud SQL encryption at rest, Cloud Storage encryption at rest with public
+  access prevention, files opened only through 5-minute private links that are checked and logged each time.
+- Cloud SQL: 30 daily backups and 7 days of point-in-time recovery, and a restore drill
+  (`packages/infra/runbooks/restore-drill.md`).
 - Logs never carry patient data (the redaction list, `PERSONAL_FIELDS` in `apps/api/src/logging/logger.ts`, tested).
 
 ## Sub-processors
 
-- **Amazon Web Services** (ap-southeast-1): compute, database, files and logs.
+- **Google Cloud** (Google Asia Pacific Pte. Ltd., asia-southeast1, Singapore): compute, database, files and logs.
 - **Vercel**: serves the web app; it stores no patient data (every record comes from the API).
 - **Semaphore**: sends texts; receives the guardian's mobile number and the text's words.
 - Each needs a data processing agreement on file: *confirm with counsel*.
@@ -176,5 +179,6 @@ A clinic asks Primolar **in writing** for its data to be returned, deleted, or b
 - **Delete:** `db:clinic-purge` runs only after the subscription has ended, the account is paused and the clinic's
   name is typed. It deletes every row and file of the clinic. Primolar keeps the account row, its own invoices and
   receipts, the agreements and the sign-up: *confirm with counsel*.
-- **Copies that remain:** S3 versions up to 35 days, database backups up to 30 days. The clinic is told in writing.
+- **Copies that remain:** old file versions in Cloud Storage up to 35 days, database backups up to 30 days
+  (point-in-time logs up to 7). The clinic is told in writing.
 - Both scripts are recorded in the operator trail.

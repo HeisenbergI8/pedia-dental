@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import { loadScriptEnv, loadEnv } from "./env";
 
 describe("loadEnv", () => {
+  it("drains 12 s after SIGTERM by default, and takes Cloud Run's shorter time", () => {
+    const base = { DATABASE_URL: "mysql://u:p@h/db" };
+    expect(loadEnv({ ...base, SHUTDOWN_GRACE_MS: "1000" }).SHUTDOWN_GRACE_MS).toBe(1000);
+    expect(() => loadEnv({ ...base, SHUTDOWN_GRACE_MS: "30000" })).toThrow(/SHUTDOWN_GRACE_MS is at most 25000/);
+  });
+
   it("applies defaults", () => {
     expect(loadEnv({ DATABASE_URL: "mysql://u:p@h/db" })).toEqual({
       DATABASE_URL: "mysql://u:p@h/db",
@@ -10,6 +16,7 @@ describe("loadEnv", () => {
       CORS_ORIGIN: ["http://localhost:3000"],
       TRUST_PROXY_HOPS: 0,
       METRICS_INTERVAL_S: 0,
+      SHUTDOWN_GRACE_MS: 12_000,
       LOG_LEVEL: "info",
       DEMO_LOGINS: false,
       DEMO_DAILY_RESET: false,

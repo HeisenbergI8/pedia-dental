@@ -19,7 +19,7 @@ describe("legal templates (privacy #2–#6)", () => {
   });
 
   it("states hosting and has no placeholder left in any document", () => {
-    for (const key of ["dpa", "privacy"] as const) expect(JSON.stringify(LEGAL_DOCUMENTS[key]), key).toContain("AWS) in Singapore");
+    for (const key of ["dpa", "privacy"] as const) expect(JSON.stringify(LEGAL_DOCUMENTS[key]), key).toContain("Google Cloud (Google Asia Pacific Pte. Ltd.) in Singapore");
     for (const doc of Object.values(LEGAL_DOCUMENTS)) expect(JSON.stringify(doc), doc.key).not.toMatch(/to be confirmed|counsel/i);
   });
 

@@ -9,8 +9,8 @@ export type LegalDocument = { key: LegalDocKey; title: string; version: number; 
 export const PRIMOLAR_DPO = { name: "John Ross Rivera", email: "privacy@primolar.ph" };
 
 const HOSTING =
-  "Records are stored with Amazon Web Services (AWS) in Singapore, and the website is served by Vercel, under contracts " +
-  "that require protection equal to the Data Privacy Act's.";
+  "Records are stored with Google Cloud (Google Asia Pacific Pte. Ltd.) in Singapore, and the website is served by Vercel, under " +
+  "contracts that require protection equal to the Data Privacy Act's.";
 const RETENTION =
   `Records are kept while the clinic subscribes, and after cancellation until the clinic asks in writing for them to be ` +
   "returned or deleted, unless a law requires a longer period.";

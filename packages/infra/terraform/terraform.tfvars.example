@@ -1,0 +1,16 @@
+# Copy to terraform.tfvars (git-ignored) and fill in. No secrets here: Terraform generates them.
+project_id         = ""                 # Google Cloud project id
+billing_account_id = ""                 # Billing → Account management, like 0X0X0X-0X0X0X-0X0X0X
+web_origins        = ["https://app.primolar.ph", "https://ops.primolar.ph"]
+web_url            = "https://app.primolar.ph"
+alert_email        = "alerts@primolar.ph"
+github_repo        = "HeisenbergI8/pedia-dental"
+app_env            = "production"
+demo_logins        = false
+trust_proxy_hops   = 2                  # measured at go-live (first-time setup, "Measure TRUST_PROXY_HOPS")
+# First deploy: "master". After the first release job has run once: "app", then apply again (#34).
+api_database_user = "master"
+semaphore_enabled = false               # true once the Semaphore key is in Secret Manager
+sms_sender_name   = ""                  # "PRIMOLAR" once Semaphore approves it
+monthly_budget_amount = 80
+budget_currency       = "USD"           # the billing account's own currency

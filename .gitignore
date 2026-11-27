@@ -4,6 +4,13 @@ node_modules
 .next-*/
 out
 cdk.out
+# Terraform (packages/infra/terraform): local working files, state, and the filled-in settings
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+*.auto.tfvars
+crash.log
 dist
 coverage
 .env

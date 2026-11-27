@@ -32,7 +32,7 @@ pnpm run check      # typecheck + all tests
 apps/web/           Next.js app
 apps/api/           NestJS + Prisma + MySQL backend (apps/api/README.md)
 packages/shared/    Zod schemas, types and domain logic, shared by the web and the API
-packages/infra/     AWS CDK: the API on AWS, its deploy workflow and runbooks (packages/infra/README.md)
+packages/infra/     Terraform: the API on Google Cloud, its deploy workflow and runbooks (packages/infra/README.md)
 CONVENTIONS.md      How the code is organised and the rules it follows. Read before adding a feature.
 apps/api/CONVENTIONS.md  The same for the backend.
 ROADMAP.md          What each feature does, and the order to build them in.

@@ -1,13 +1,14 @@
-# Deploy the API to AWS (B13b). Run by hand: Actions → deploy → Run workflow, on master.
+# Deploy the API to Google Cloud (Cloud Run). Run by hand: Actions → deploy → Run workflow, on master.
 # Before the first run: packages/infra/runbooks/first-time-setup.md. Each run: packages/infra/runbooks/deploy.md.
-# Signs in with GitHub OIDC as the deploy role from the foundation stack (no stored AWS keys). Its ARN is the
-# `production` environment's variable AWS_DEPLOY_ROLE_ARN. Never deploys the foundation: that is done by hand.
+# Signs in with GitHub OIDC through Workload Identity Federation as primolar-deploy (no stored Google keys). The
+# `production` environment's variables: GCP_PROJECT_ID, GCP_WORKLOAD_IDENTITY_PROVIDER, GCP_DEPLOY_SERVICE_ACCOUNT.
+# Never runs Terraform (the owner does, by hand): it changes only the image of the release job and of the service.
 name: deploy
 on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: "Rollback: redeploy an image already in ECR (its commit SHA). Skips the build and the migrations. Empty = build and deploy this commit."
+        description: "Rollback: redeploy an image already in Artifact Registry (its commit SHA). Skips the build and the migrations. Empty = build and deploy this commit."
         required: false
         default: ""
 
@@ -27,9 +28,11 @@ jobs:
     environment: production
     timeout-minutes: 45
     env:
-      AWS_REGION: ap-southeast-1
-      REPOSITORY: primolar-api
-      SERVICE_STACK: PrimolarService
+      REGION: asia-southeast1
+      REGISTRY: asia-southeast1-docker.pkg.dev
+      IMAGE: asia-southeast1-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/primolar/primolar-api
+      SERVICE: primolar-api
+      RELEASE_JOB: primolar-release
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -53,30 +56,25 @@ jobs:
           green=$(gh run list --workflow api.yml --commit "$GITHUB_SHA" --status success --json databaseId --jq length)
           test "$green" -gt 0 || { echo "::error::No successful 'check' run for $GITHUB_SHA. Wait for CI, or fix it first."; exit 1; }
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0, version from package.json's packageManager
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
-          node-version-file: .nvmrc
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile --filter "@pedia/infra..."
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
 
-      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
-        with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ap-southeast-1
-      - uses: aws-actions/amazon-ecr-login@7290e214a610b32bc0eef81748948b6d466a8783 # v2.2.0
-        id: ecr
+      - name: Sign Docker in to Artifact Registry
+        run: gcloud auth configure-docker "$REGISTRY" --quiet
 
-      - name: Rollback target exists in ECR
+      - name: Rollback target exists in Artifact Registry
         if: steps.tag.outputs.build == 'false'
-        run: aws ecr describe-images --repository-name "$REPOSITORY" --image-ids imageTag=${{ steps.tag.outputs.tag }} > /dev/null
+        run: gcloud artifacts docker images describe "$IMAGE:${{ steps.tag.outputs.tag }}" > /dev/null
 
-      # ECR tags are immutable: a re-run for the same commit (after a later step failed) reuses its image, migrations included.
+      # Tags are immutable: a re-run for the same commit (after a later step failed) reuses its image, migrations included.
       - name: Image already pushed for this commit?
         id: pushed
         if: steps.tag.outputs.build == 'true'
         run: |
-          if aws ecr describe-images --repository-name "$REPOSITORY" --image-ids imageTag=${{ steps.tag.outputs.tag }} > /dev/null 2>&1; then
+          if gcloud artifacts docker images describe "$IMAGE:${{ steps.tag.outputs.tag }}" > /dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
@@ -92,52 +90,35 @@ jobs:
           file: apps/api/Dockerfile
           push: true
           provenance: false
-          tags: ${{ steps.ecr.outputs.registry }}/primolar-api:${{ steps.tag.outputs.tag }}
+          tags: ${{ env.IMAGE }}:${{ steps.tag.outputs.tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Read the tag the services run now
-        id: current
+      # The first deploy pushes the image, then stops here: Terraform creates the service and the job with it.
+      - name: The service and the release job exist
         env:
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
-          if out=$(aws cloudformation describe-stacks --stack-name "$SERVICE_STACK" \
-              --query "Stacks[0].Outputs[?OutputKey=='ImageTagInUse'].OutputValue" --output text 2>&1); then
-            # A first deploy that failed leaves the stack in ROLLBACK_COMPLETE, with no outputs.
-            echo "$out" | grep -Eq '^[0-9a-f]{7,40}$' || { echo "::error::$SERVICE_STACK has no ImageTagInUse ('$out'): a failed first deploy? See runbooks/deploy.md, 'A first deploy that failed'."; exit 1; }
-            echo "tag=$out" >> "$GITHUB_OUTPUT"
-          elif echo "$out" | grep -q "does not exist"; then
-            echo "::notice::First deploy: $SERVICE_STACK is created with $TAG before its first migration (runbooks/deploy.md)."
-            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          else
-            echo "$out"; exit 1
+          if ! gcloud run services describe "$SERVICE" --region "$REGION" --format='value(metadata.name)' > /dev/null 2>&1 \
+            || ! gcloud run jobs describe "$RELEASE_JOB" --region "$REGION" --format='value(metadata.name)' > /dev/null 2>&1; then
+            echo "::error::$SERVICE or $RELEASE_JOB doesn't exist yet. First deploy: the image $TAG is pushed. Now apply Terraform with -var initial_image_tag=$TAG (runbooks/first-time-setup.md), then run this workflow again."
+            exit 1
+          fi
+          echo "Running now: $(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(spec.template.spec.containers[0].image)'). To roll back, run this workflow with that image's tag."
+
+      - name: Run the release job (prisma migrate deploy)
+        if: steps.tag.outputs.build == 'true'
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          gcloud run jobs update "$RELEASE_JOB" --region "$REGION" --image "$IMAGE:$TAG" --quiet
+          if ! gcloud run jobs execute "$RELEASE_JOB" --region "$REGION" --wait --quiet; then
+            echo "::error::The release job failed: migrations failed and the service was NOT updated. Read its log (Cloud Run → Jobs → $RELEASE_JOB → the newest execution), then runbooks/rollback.md."
+            exit 1
           fi
 
-      - name: Point the release task at the new image
-        if: steps.tag.outputs.build == 'true'
-        working-directory: packages/infra
-        run: >-
-          pnpm exec cdk deploy "$SERVICE_STACK" --exclusively --require-approval never
-          --parameters "$SERVICE_STACK:ReleaseImageTag=${{ steps.tag.outputs.tag }}"
-          --parameters "$SERVICE_STACK:ImageTag=${{ steps.current.outputs.tag }}"
-          --outputs-file "$RUNNER_TEMP/outputs.json"
-
-      - name: Run the release task (prisma migrate deploy)
-        if: steps.tag.outputs.build == 'true'
-        run: |
-          out() { jq -r --arg key "$1" '.PrimolarService[$key]' "$RUNNER_TEMP/outputs.json"; }
-          cluster=$(out ClusterName)
-          task=$(aws ecs run-task --cluster "$cluster" --task-definition "$(out ReleaseTaskDefinitionArn)" --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[$(out TaskSubnetIds)],securityGroups=[$(out TaskSecurityGroupId)],assignPublicIp=ENABLED}" \
-            --started-by "deploy-$GITHUB_RUN_ID" --query 'tasks[0].taskArn' --output text)
-          echo "Release task $task. Log: /primolar/api, stream primolar-api-release/release/${task##*/}"
-          aws ecs wait tasks-stopped --cluster "$cluster" --tasks "$task"
-          code=$(aws ecs describe-tasks --cluster "$cluster" --tasks "$task" --query 'tasks[0].containers[0].exitCode' --output text)
-          test "$code" = "0" || { echo "::error::The release task exited $code: migrations failed and the services were NOT updated. Read its log, then runbooks/rollback.md."; exit 1; }
-
-      - name: Update the services to the new image
-        working-directory: packages/infra
-        run: >-
-          pnpm exec cdk deploy "$SERVICE_STACK" --exclusively --require-approval never
-          --parameters "$SERVICE_STACK:ReleaseImageTag=${{ steps.tag.outputs.tag }}"
-          --parameters "$SERVICE_STACK:ImageTag=${{ steps.tag.outputs.tag }}"
+      # Waits until the new revision passes /api/health/ready; if it never does, traffic stays on the old one.
+      - name: Update the service to the new image
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: gcloud run services update "$SERVICE" --region "$REGION" --image "$IMAGE:$TAG" --quiet

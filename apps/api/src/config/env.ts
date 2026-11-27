@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PRIVACY_REQUEST_DUE_WORKING_DAYS_DEFAULT, RECORD_RETENTION, retentionConfirmed } from "@pedia/shared";
+import { SHUTDOWN_GRACE_MS } from "../health/readiness";
 
 /** "true"/"1" or "false"/"0" only: Zod's default also takes yes/on/enabled, and a typo should stop startup. */
 const flag = () => z.stringbool({ truthy: ["true", "1"], falsy: ["false", "0"] });
@@ -18,6 +19,10 @@ const Env = z.object({
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(3).default(0),
   // B13a: seconds between the metrics lines (CloudWatch EMF). 0 = no metrics lines (local default, tests).
   METRICS_INTERVAL_S: z.coerce.number().int().min(0).default(0),
+  // How long ready answers 503 after SIGTERM before the app closes (health/readiness.ts). The default suits a load
+  // balancer's health checks. Cloud Run stops routing before SIGTERM and kills 10 s after it, so it sets 1000
+  // (packages/infra/terraform/run.tf). At most 25 s, so a typo can't outlast any platform's stop timeout.
+  SHUTDOWN_GRACE_MS: z.coerce.number().int().min(0).max(25_000, "SHUTDOWN_GRACE_MS is at most 25000").default(SHUTDOWN_GRACE_MS),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   // A demo deployment: `prisma db seed` may run, and the sign-in page's one-click logins (DemoLogin) are served (B2c).
   DEMO_LOGINS: flag().default(false),
@@ -46,7 +51,7 @@ const Env = z.object({
   // B10 (E11): the S3-compatible driver. Unset S3_BUCKET: the local-disk driver under STORAGE_DIR.
   S3_BUCKET: z.string().min(3).optional(),
   S3_REGION: z.string().min(1).default("ap-southeast-1"),
-  // R2 or MinIO; unset for Amazon S3.
+  // Cloud Storage (https://storage.googleapis.com), R2 or MinIO; unset for Amazon S3.
   S3_ENDPOINT: z.url().optional(),
   S3_FORCE_PATH_STYLE: flag().default(false),
   // Both or neither; neither = the SDK's default chain (an IAM role in production). Checked by fileStorageOf.
@@ -66,7 +71,7 @@ const Env = z.object({
   // B11: the web app's address, which texted invite and reset links open. Set it in production (the default is dev's).
   WEB_URL: z.url().default("http://localhost:3000"),
   // #2: the origin lock. Every request but the health probes must carry it in X-Primolar-Origin (origin-check.ts),
-  // which only the web's /api proxy sends. Required outside APP_ENV=local (from Secrets Manager, primolar/origin-secret).
+  // which only the web's /api proxy sends. Required outside APP_ENV=local (from Secret Manager, primolar-origin-secret).
   ORIGIN_SECRET: z.string().min(32, "ORIGIN_SECRET must be at least 32 characters").optional(),
 }).superRefine((env, ctx) => {
   // #2: a hosted API answers only its own web's proxy.

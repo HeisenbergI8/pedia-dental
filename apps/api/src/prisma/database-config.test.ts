@@ -36,4 +36,15 @@ describe("databaseConfig (#15: TLS to RDS)", () => {
     expect(() => databaseConfig(`mysql://u:${FAKE}@h/db?sslcert=/nowhere.pem`, readCa)).toThrow(/nowhere/);
     expect(() => databaseConfig(`mysql://u:${FAKE}@h/db?sslcert=${BUNDLE}&connectionLimit=5`, readCa)).toThrow(/connectionLimit/);
   });
+
+  it("connects through the Cloud SQL socket when the URL names one (Cloud Run), with no TLS settings", () => {
+    const socket = "/cloudsql/primolar-test:asia-southeast1:primolar-db";
+    const url = `mysql://primolar_app:${FAKE}@localhost/primolar?socket=${socket}`;
+    expect(databaseConfig(url, readCa)).toEqual({ socketPath: socket, user: "primolar_app", password: FAKE, database: "primolar" });
+  });
+
+  it("refuses a socket URL that also carries another parameter: the driver settings would drop it", () => {
+    const url = `mysql://primolar_app:${FAKE}@localhost/primolar?socket=/cloudsql/x:y:z&sslcert=${BUNDLE}`;
+    expect(() => databaseConfig(url, readCa)).toThrow(/with socket, no other parameter is supported \(found sslcert\)/);
+  });
 });

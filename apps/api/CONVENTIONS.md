@@ -12,7 +12,8 @@ restricted child when retention ends, shipped off until counsel gives the period
 purge scripts with their runbook; B13c2b-1: the privacy request register and
 restriction on an approved erasure; B13c2a: the copy of records, the audit-log reader, the
 retention schedule with two prunes, `PRIVACY_OPERATIONS.md`; B13c1: mocks off everywhere, the port ledger, the API-backed
-demo with its nightly reset, and the load test; B13b: AWS CDK in `packages/infra`; the AWS deploy itself is the owner's).
+demo with its nightly reset, and the load test; B13b: AWS CDK in `packages/infra`,
+replaced by Terraform for Google Cloud on 2026-11-27; every Google Cloud step is the owner's).
 B13a added the production
 build (`build.mjs`), the image (`Dockerfile`), `APP_ENV`, helmet and `trust proxy`, liveness and readiness probes,
 EMF metrics, error fingerprints and the operator's audit trail. The runtime core (request context, `Clock`, logs, tenant scoping,
@@ -272,7 +273,8 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   a `.ts` extension (`allowImportingTsExtensions`).
 - **`PrismaService` connects lazily**, so the API starts while MySQL is down. `/api/health/live` never touches the
   database (the container's check). `/api/health/ready` (and `/api/health`) answers 503 within 2 s when the database
-  doesn't answer, and while the process shuts down (the load balancer's check).
+  doesn't answer, and while the process shuts down (Cloud Run's startup probe
+  and the uptime check).
 - **The shadow database** (`pedia_dental_shadow`, for `migrate dev`) is created by `docker/mysql-init.sql`, which runs
   only when the volume is first created. If it's missing, `docker compose down -v && pnpm --filter api db:up` (this
   wipes local data).
@@ -333,15 +335,15 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **`identityOf(req)`** is set only where the guard loaded a clinic session (clinic routes, and `/auth/*` when a cookie
   was presented).
 - **Integration tests that sign in repeatedly** clear `RateLimitCounter` in `beforeEach`: the limit counts per address.
-- **Behind a proxy, set `TRUST_PROXY_HOPS`** (1 behind the ALB alone; behind Vercel → ALB it defaults to 2 and is
-  measured at go-live: `packages/infra/runbooks/first-time-setup.md` step 10), or every client shares one rate-limit
+- **Behind a proxy, set `TRUST_PROXY_HOPS`** (behind Vercel → Cloud Run it defaults to 2 and is measured at go-live:
+  `packages/infra/runbooks/first-time-setup.md` section 12), or every client shares one rate-limit
   bucket. `configureHttp` (`http-setup.ts`) applies it with helmet and CORS, in `main.ts`
   and both test apps.
 - **`APP_ENV` other than `local` refuses dev defaults:** https `CORS_ORIGIN` and `WEB_URL`, secure cookies and
   `S3_BUCKET` are required; `production` also refuses `DEMO_LOGINS`. `CORS_ORIGIN` entries must be exact origins.
 - **`DEMO_DAILY_RESET` is demo-only** (`APP_ENV=demo` and `DEMO_LOGINS=true`, else the API refuses to start). On the
   background instance it wipes and reseeds at 03:40 Manila and seeds an empty database at start-up; it keeps
-  `_prisma_migrations` and `JobLock`. Infra sets it from `cdk.json`'s `demoDailyReset`.
+  `_prisma_migrations` and `JobLock`. Infra sets it from `terraform.tfvars`' `demo_daily_reset`.
 - **"Ported" is the ledger** (`test/port-ledger.ts`, checked in `pnpm run check`): every case of the web's handler tests
   maps to an API test that exists (or a twin title). A new web handler test needs a ledger line or a twin.
 - **The load test's database name must end in `_load`** (`load:seed` refuses anything else). The targets are
@@ -422,15 +424,16 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   "no" that landed in between queues the file's deletion (B10 E6).
 - **`StorageService` writes the `StoredFile` ledger** (every put and delete), so unit tests that build `StorageModule`
   must provide `PrismaService` and `Clock`. Logos and patient photos stored before B10 have no ledger row.
-- **The S3 bucket stays private** (Block Public Access, SSE-S3, no CORS: the browser only follows links), with
-  versioning on and no expiry of current files (nothing is deleted on purpose; old versions go after 35 days), and
-  the API's IAM role limited to `s3:PutObject`/`GetObject`/`DeleteObject` on `clinics/*` and `platform/*`, plus
-  `s3:ListBucket` so a missing key answers `NoSuchKey`, not 403 (B13b, `packages/infra/src/service-stack.ts`). A presigned link never names the child (D #11):
+- **The files bucket stays private** (Cloud Storage with public access prevention, encrypted at rest, no CORS: the
+  browser only follows links), with versioning on and no expiry of current files (nothing is deleted on purpose; old
+  versions go after 35 days). The API reaches it through the S3-compatible API (`S3_ENDPOINT=https://storage.googleapis.com`,
+  `S3_REGION=auto`, path style) with an HMAC key whose account (`primolar-files`) has object rights on this bucket only,
+  which include listing, so a missing key answers `NoSuchKey`, not 403 (`packages/infra/terraform/storage.tf`). A presigned link never names the child (D #11):
   `S3FileStorage.link` puts `<kind>-<short hash>.<ext>` in `response-content-disposition` and ignores the caller's
   `fileName`, which only the local driver (`/files/:token`, streamed by the API) shows; a stored SVG is always an
   attachment (D #31). The 302's `Location` and the request's `Referer` are redacted from the logs. Presigned
   URLs need the host clock NTP-synced. Credentials: both `S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY` or neither (the
-  SDK's default chain, an IAM role in production).
+  SDK's default chain). In production they are the HMAC key pair from Secret Manager.
 - **A database seeded before B10 has no photos, documents or ledger rows:** use a fresh one. `db:seed` writes the
   seeded photos' files through the API's own driver (`fileStorageOf`).
 - **Records that share a time sort by id**, not insertion order: give seeded records that must read in order distinct
@@ -503,9 +506,9 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
 - **The ledger row now comes before the file** (B12 E8): `StorageService.store` checks the plan's storage under the
   account lock and inserts the `StoredFile` row, then stores the file and removes the row if that fails. A crash between
   leaves an over-count, never an uncounted file.
-- **The S3 role allows `platform/*` as well as `clinics/*`** (B13b): the QR, sign-up files and receipts live there.
-  A new key prefix needs the same grant in `packages/infra/src/service-stack.ts`, or S3 answers 403 in production
-  while local disk works.
+- **The files key covers `platform/*` as well as `clinics/*`**: the QR, sign-up files and receipts live there. On
+  Google Cloud the key's account has rights on the whole bucket, so a new key prefix needs no grant; check it with an
+  upload in production anyway (go-live checklist, "Carried from B12").
 - **B12's jobs:** `subscriptions.settle` at 00:05 Manila (also run at every successful sign-in, before the active check)
   and `signups.purge-rejected-files` at 03:15 Manila, 30-minute leases.
 - **Sign-ups (5) and sign-up receipts (10) are limited per address per rolling hour** (`RATE_LIMITS.signup`,
@@ -514,9 +517,11 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
   clinic's and names clinic roles. Sign-in, a wrong password for a known operator and sign-out are recorded too; a
   failed insert is logged and counted, never failing the request (`tryRecord`). A new clinic's first event (the Terms
   accepted at sign-up) goes in through `AuditService.recordFor`.
-- **Metrics are CloudWatch EMF lines on stdout** (`MetricsService`, namespace `Primolar/API`, every
+- **Metrics are EMF-shaped JSON lines on stdout** (`MetricsService`, namespace `Primolar/API`, every
   `METRICS_INTERVAL_S`): request and 5xx counts, `UnhandledErrors`, latency for `TRACKED_ROUTES`, and the outbox backlog
-  on the background instance. Unexpected errors log a `fingerprint` (name + first three frames, never the message).
+  on the background instance. Cloud Logging reads them as `jsonPayload`, and log-based metrics in
+  `packages/infra/terraform/monitoring.tf` alert on their field names: renaming a field breaks an alert. Unexpected
+  errors log a `fingerprint` (name + first three frames, never the message).
 - **A database seeded before B12 has no billing rows** (prices, sign-ups, subscriptions, receipts): use a fresh one.
   The migration writes the two singletons (`PlatformSettings`, `InvoiceCounter`), so a live database works without the seed.
 
@@ -645,7 +650,8 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
     clinic's parents still sign in, read-only (11). After setting a password, the privacy notice, then the portal (22).
   - The seeded parents are active on the demo password, in development and tests only (13).
 - **Photos and documents** (B10, decisions in the B10 plan's `decisions.md`, settled with the user before planning):
-  - Amazon S3 in ap-southeast-1 in production through an S3-compatible driver (R2 by config); local disk in development
+  - Cloud Storage in Singapore in production through the S3-compatible driver (decided as Amazon S3 in B10; R2 by
+    config); local disk in development
     and tests (1). Uploads go through the API, checked, then streamed to storage; never presigned uploads (2, E1).
   - Opening a file is a 302 to a private link valid `FILE_LINK_SECONDS` (300), `no-store`, re-checked and audited on
     every open (3, E2). Three isolation layers: tenant-scoped rows, `StorageService` links only its clinic's keys, and
@@ -698,11 +704,16 @@ The root `CONVENTIONS.md` → "Domain rules" applies in full. These are the part
     in one transaction in the new clinic's context and copies the logo after commit (E7).
 - **Production and operations** (B13a, decisions E1–E10 in its plan): `APP_ENV` local / demo / production; one image,
   two commands (service and `prisma migrate deploy`); esbuild + SWC bundle; liveness and readiness probes with a 12 s
-  drain on SIGTERM; CloudWatch EMF metrics and error fingerprints, no vendor; the operator's trail in its own table,
+  drain on SIGTERM (`SHUTDOWN_GRACE_MS`, 1000 on Cloud Run); EMF-shaped metrics lines and error fingerprints, no vendor; the operator's trail in its own table,
   written after the change (E9).
-- **AWS** (B13b, I1–I22 in its plan): CDK in `packages/infra`, two stacks; no NAT gateway; RDS MySQL 8.4 single-AZ,
-  30 days of point-in-time restore; `DATABASE_URL` built in the container; exactly one task runs background work;
-  manual OIDC deploys; no TLS to RDS yet (I5).
+- **Google Cloud** (the GCP migration plan, `.claude/plans/feature-gcp-migration-plan/decisions.md`; it replaced B13b's
+  AWS CDK, kept under the git tag `archive/aws-cdk`): Terraform in `packages/infra/terraform`, applied by the owner;
+  one Cloud Run service, one instance always on with CPU always on, running the jobs and the outbox (no scale to
+  zero); migrations in the Cloud Run job `primolar-release`; Cloud SQL MySQL 8.4 (`db-f1-micro`, one zone), 30 daily
+  backups and 7 days of point-in-time recovery, reached only through the Cloud SQL socket (`DATABASE_URL` built in
+  the container with `?socket=`, `databaseConfig`); Cloud Storage through the S3-compatible driver; Secret Manager;
+  no load balancer or WAF, so the API's origin check is the only lock; Vercel's `API_PROXY_TARGET` is the `run.app`
+  address; manual deploys through GitHub OIDC and Workload Identity Federation.
 - **Mocks off** (B13c1, E1–E12 and L1 in its plan):
   - No deployment runs MSW; it stays as the offline `enabled` mode (E2, E3).
   - The demo's help follows `/auth/demo-accounts`, not the mocking mode (E4).

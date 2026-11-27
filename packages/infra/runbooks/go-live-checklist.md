@@ -1,37 +1,40 @@
 # Go-live checklist
 
-Tick every line before real clinics' data goes in. Each line names how to check it.
+Tick every line before real clinics' data goes in. Each line says how to check it. "Setup section N" means
+[first-time setup](first-time-setup.md), section N.
 
 ## Account and access
 
-- [ ] Root user has MFA and no access keys (IAM → Security credentials).
-- [ ] You work as an IAM Identity Center administrator, not root.
-- [ ] No IAM users or access keys exist for CI: `aws iam list-users` shows none for GitHub. Deploys use OIDC.
-- [ ] The GitHub environment `production` is limited to `master`.
-- [ ] CDK's CloudFormation role is not an administrator: `aws iam list-attached-role-policies --role-name
-  cdk-hnb659fds-cfn-exec-role-<account>-ap-southeast-1` lists only `primolar-cfn-execution` (first-time setup, step 3).
+- [ ] **The billing account is upgraded to paid** (Console → Billing: no "Free trial" banner). A trial account stops
+  every resource when the trial ends (2027-02-25) or the credit runs out.
+- [ ] Your Google account has two-step sign-in on.
+- [ ] Only you have the Owner role on the project (Console → IAM & Admin → IAM). No user has a service account key:
+  Console → IAM & Admin → Service accounts → each `primolar-*` account → Keys is empty.
+- [ ] The state bucket `gs://<project id>-tfstate` is private: nobody but you has a Storage role on the project, and
+  `gcloud storage buckets describe gs://<project id>-tfstate` shows `public_access_prevention: enforced`.
+- [ ] The GitHub environment `production` is limited to `master`, and has the three `GCP_*` variables, no
+  `AWS_DEPLOY_ROLE_ARN` and no Google key (setup section 7).
 
-## Settings (`packages/infra/cdk.json`)
+## Settings (`packages/infra/terraform/terraform.tfvars`)
 
-- [ ] `appEnv` = `production` and `demoLogins` = `false`. The API refuses `DEMO_LOGINS` with production; synth refuses
-  it too.
-- [ ] If the database ever held demo data (B13c's client demo, Q2), it is a fresh database now, not the demo one.
-- [ ] `webOrigins` and `webUrl` are the real web addresses (https). `WEB_URL` drives texted invite and reset links
+- [ ] `app_env = "production"` and `demo_logins = false`. Terraform refuses `demo_logins` with production; the API
+  refuses it too.
+- [ ] If the database ever held demo data (B13c's client demo), it is a fresh database now, not the demo one.
+- [ ] `web_origins` and `web_url` are the real web addresses (https). `WEB_URL` drives texted invite and reset links
   (B11).
-- [ ] `trustProxyHops` measured (first-time setup, step 10), not left at the default.
-- [ ] `databaseRequireTls` = `true` and `apiDatabaseUser` = `app` (first-time setup, step 7.4): RDS refuses connections
-  without TLS, and the services sign in as `primolar_app` (SELECT, INSERT, UPDATE, DELETE only).
-- [ ] `waf` = `true`: WAF → Web ACLs (Asia Pacific (Singapore)) → `primolar-api` lists the load balancer under
-  Associated AWS resources.
+- [ ] `api_database_user = "app"` (setup section 8): the service signs in as `primolar_app` (SELECT, INSERT, UPDATE,
+  DELETE only).
+- [ ] **`trust_proxy_hops` measured** (setup section 12), not left at the default. Go-live waits for this.
+- [ ] `terraform plan` shows "No changes": what runs is what the files say.
 
 ## Carried from B12
 
-- [ ] **S3 covers `platform/*` as well as `clinics/*`.** Proof: in the operator console, upload the payment QR, then
-  open it. Upload a clinic photo and open it.
+- [ ] **The files bucket covers `platform/*` as well as `clinics/*`.** Proof: in the operator console, upload the
+  payment QR, then open it. Upload a clinic photo and open it.
 - [ ] Sender name **PRIMOLAR** approved by Semaphore (Account → Sender Names shows it approved). Only then store the
-  key (`semaphoreSecretArn`) and set `smsSenderName` = `PRIMOLAR`, in the same deploy. Without an approved sender
-  name Semaphore errors on every send and the driver marks every text refused. Without the key, texts go to the log
-  driver only.
+  key in Secret Manager (`primolar-semaphore`) and set `semaphore_enabled = true` and `sms_sender_name = "PRIMOLAR"`,
+  in the same apply (setup section 14). Without an approved sender name Semaphore errors on every send and the driver
+  marks every text refused. Without the key, texts go to the log driver only.
 - [ ] Send one recall text between 8 AM and 8 PM Manila to your own phone. It must arrive, not just show "Sent":
   Semaphore's "sent" means handed to the network, not delivered.
 - [ ] No text starts with the word "test" (any case): the networks drop those silently. Check clinic templates and
@@ -43,52 +46,63 @@ Tick every line before real clinics' data goes in. Each line names how to check 
 
 ## Health and alerts
 
-- [ ] `https://<apiDomain>/api/health/ready` answers 200 with the `X-Primolar-Origin` header and 403 without it;
-  `http://` answers 301 (first-time setup, step 8).
-- [ ] The web works through its proxy: sign in on the web once (a 403 there means Vercel's `ORIGIN_SECRET` is missing
-  or stale).
-- [ ] The alert email subscription is confirmed (SNS → Subscriptions: not "Pending confirmation").
-- [ ] Each alarm reaches you. For each of `primolar-api-unhandled-errors`, `primolar-api-outbox-stuck` and
-  `primolar-api-no-healthy-task`, run
-  `aws cloudwatch set-alarm-state --alarm-name <name> --state-value ALARM --state-reason "go-live test"`. An email
-  arrives, then an OK email at the next evaluation.
-- [ ] CloudWatch → Metrics → `Primolar/API` shows `Requests`, `UnhandledErrors` and `OutboxOldestSeconds` (B13a's EMF
-  lines arrive).
-- [ ] Logs Insights → Saved queries → "Primolar errors by fingerprint" runs.
-- [ ] The budget (Billing → Budgets → `primolar-monthly`) shows US$100 with two alerts.
+- [ ] The origin lock works (setup section 11): straight to the `run.app` address, `/api/auth/me` answers 403 and
+  `/api/health/ready` answers 200; through `https://app.primolar.ph`, `/api/auth/me` answers 401.
+- [ ] The web works through its proxy: sign in on the web once (a 403 there means Vercel's `ORIGIN_SECRET` is
+  missing or stale).
+- [ ] The alert email reaches `alerts@primolar.ph`: the `primolar-console-sign-in` email arrived after a console
+  sign-in (setup section 13).
+- [ ] The metrics lines arrive: Logs Explorer finds `jsonPayload.Requests` lines every 60 seconds (setup section 13).
+- [ ] Monitoring → Alerting lists the six policies (`primolar-api-unhandled-errors`, `primolar-api-outbox-stuck`,
+  `primolar-api-outbox-silent`, `primolar-api-not-ready`, `primolar-console-sign-in`,
+  `primolar-texts-held-daily-cap`), all enabled, each sending to the "Primolar alerts" email channel.
+- [ ] Monitoring → Uptime checks: `primolar-api-ready` is green from every region.
+- [ ] The errors-by-fingerprint search runs ([deploy](deploy.md), "Errors by fingerprint").
+- [ ] Billing → Budgets & alerts → `primolar-monthly` shows US$80 with two alerts (80% actual, 100% forecast).
 
 ## Data safety
 
-- [ ] RDS: deletion protection on, backups kept 30 days, storage encrypted (RDS → the instance → Configuration and
-  Maintenance & backups).
+- [ ] Cloud SQL `primolar-db`: deletion protection on, 30 daily backups, point-in-time recovery on (Console → SQL →
+  `primolar-db` → Overview and Backups). `gcloud sql backups list --instance primolar-db` lists at least one backup.
 - [ ] A [restore drill](restore-drill.md) passed within the last 30 days, recorded in its table.
-- [ ] Bucket: Block Public Access all on, versioning on (S3 → the bucket → Permissions, Properties).
-- [ ] Logs arrive: the access-log bucket has objects under `alb/` and `s3-files/`, and CloudWatch has
-  `/aws/rds/instance/<id>/error` and `…/slowquery` (90 days each).
-- [ ] Storage encryption uses AWS-managed keys; a customer-managed key requires a new RDS instance (snapshot copy) and
-  is planned after launch. Document this in the Data Privacy Act records.
+- [ ] Files bucket `<project id>-primolar-files`: public access prevention enforced, versioning on (Console → Cloud
+  Storage → the bucket → Configuration and Protection).
+- [ ] The files bucket was proved with a real upload, open, download and delete (setup section 10).
+- [ ] Logs are kept 90 days (Logging → Log storage → `_Default`), and the files bucket's access logs arrive (Logs
+  Explorer, `protoPayload.serviceName="storage.googleapis.com"`).
+- [ ] Storage encryption uses Google-managed keys. A customer-managed key would need a new Cloud SQL instance and is
+  planned after launch. Document this in the Data Privacy Act records.
 
 ## Web and the rest of B13
 
-- [ ] Vercel production: `API_PROXY_TARGET` = `https://<apiDomain>`, and `ORIGIN_SECRET` (Sensitive) = the value of
-  `primolar/origin-secret` (first-time setup, step 9).
-- [ ] Vercel production and preview: `NEXT_PUBLIC_API_MOCKING=disabled` (B13c1: no deployment runs MSW), then redeploy.
-- [ ] `apps/web/e2e/api-demo-script.spec.ts` passes against the deployed demo (`E2E_BASE_URL=https://<demo web>`), right
-  after a reset (B13's "Done when").
+- [ ] Vercel production: `API_PROXY_TARGET` = the `run.app` address (`terraform output -raw api_url`, no trailing
+  slash), and `ORIGIN_SECRET` (Sensitive) = the value of `primolar-origin-secret` (setup section 9).
+- [ ] Vercel production and preview: `NEXT_PUBLIC_API_MOCKING=disabled` (B13c1: no deployment runs MSW), then
+  redeploy.
+- [ ] The legal documents (DPA and privacy notice) name Google Cloud in Singapore as the host, not AWS.
+- [ ] `apps/web/e2e/api-demo-script.spec.ts` passes against the deployed demo (`E2E_BASE_URL=https://<demo web>`),
+  right after a reset (B13's "Done when").
 - [ ] The load test's local run is recorded (B13c1 implementation log), and its accepted misses are understood:
-  the patient list and search slow down from a few hundred patients (p97.5 683–819 ms at ~560, B13c1 tester); at 5,000, Today and booking miss their targets too
-  (B13c1 decisions.md L1), until the "at scale" chunk.
+  the patient list and search slow down from a few hundred patients (p97.5 683 to 819 ms at about 560, B13c1 tester);
+  at 5,000, Today and booking miss their targets too (B13c1 decisions.md L1), until the "at scale" chunk.
 - [ ] B13c2's Data Privacy Act items (export and deletion requests, retention, NPC registration) are done.
-- [ ] The operator's password is strong and stored in a password manager, and the operator is enrolled in two-step sign-in (`first-time-setup.md` step 11): production refuses an operator without it.
-- [ ] The console opens only at `https://ops.primolar.ph` (`OPS_HOST`): `https://app.primolar.ph/operator` answers 404, and signing in to the console emails `alerts@primolar.ph` within a few minutes.
+- [ ] The operator's password is strong and stored in a password manager, and the operator is enrolled in two-step
+  sign-in (setup section 17): production refuses an operator without it.
+- [ ] The console opens only at `https://ops.primolar.ph` (`OPS_HOST`): `https://app.primolar.ph/operator` answers
+  404, and signing in to the console emails `alerts@primolar.ph` within a few minutes (`primolar-console-sign-in`).
 
 ## Known limits at go-live (accepted)
 
-- The release task's migrations (Prisma's schema engine) use TLS to RDS without checking the server's certificate;
-  the API checks it. Both stay inside the VPC.
-- The origin secret is readable by anyone allowed `elasticloadbalancing:DescribeRules` in the account (it sits in the
-  load balancer's rule). Rotation: first-time setup, "Changing the origin secret".
-- Storage encryption (RDS, S3) uses AWS-managed keys, and no field is encrypted by the application. A customer-managed
-  key needs a new RDS instance (snapshot copy): planned after launch.
-- Single-AZ database: an AZ outage means downtime until AWS recovers it (CHUNKS: Multi-AZ when downtime starts to
-  cost).
+- **One API instance** (min 1, max 1). There is no second instance to fail over to. If it crashes, Cloud Run starts
+  a new one.
+- **Cloud SQL `db-f1-micro` is shared-core and has no SLA.** One zone only: a zone outage means downtime until Google
+  recovers it. `db-g1-small` or a high-availability instance when downtime starts to cost.
+- **Point-in-time recovery covers 7 days**, plus 30 daily backups (RDS kept 30 days of point in time).
+- **No WAF** (no Cloud Armor, no load balancer) for one clinic. Every request passes Vercel, the API refuses anything
+  without the origin secret, and its own sign-in limits stay. Look again at three or more clinics.
+- **The origin lock is one layer: the API.** Refused requests still reach the instance. The origin secret is readable
+  by anyone allowed to read Secret Manager in the project, and it is in Terraform's state. Rotation: setup section 15.
+- **The files key is stored** (an HMAC key in Secret Manager and in Terraform's state). Rotation: setup section 16.
+  A native Cloud Storage driver without a stored key is a later plan.
+- Storage encryption (Cloud SQL, Cloud Storage) uses Google-managed keys, and no field is encrypted by the
+  application. A customer-managed key is planned after launch.

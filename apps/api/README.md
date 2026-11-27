@@ -35,27 +35,30 @@ curl localhost:4100/api/health           # {"status":"ok","database":"up"}
 4. **Serve:** `docker run --rm --network host -e DATABASE_URL=… -e COOKIE_SECURE=false primolar-api`, then
    `curl -fsS localhost:4100/api/health/ready`.
 
-The container's health check calls `GET /api/health/live`, which never touches the database. The load balancer calls
-`GET /api/health/ready`, which checks the database with a 2-second limit and answers 503 while the task shuts down.
+The container's health check calls `GET /api/health/live`, which never touches the database. Cloud Run's startup probe and
+the uptime check call `GET /api/health/ready`, which checks the database with a 2-second limit and answers 503 while the task shuts down.
 
-A hosted deployment (B13b) sets these variables:
+A hosted deployment (Cloud Run, `packages/infra/terraform/run.tf`) sets these variables:
 
 | Variable | Source | Value |
 | --- | --- | --- |
-| `DATABASE_URL` | built in the container | from `DB_USER`/`DB_PASSWORD` (Secrets Manager, `primolar/database`) and `DB_HOST`/`DB_PORT`/`DB_NAME` (B13b decisions.md I4) |
+| `DATABASE_URL` | built in the container | `mysql://$DB_USER:$DB_PASSWORD@localhost/$DB_NAME?socket=$DB_SOCKET`: the password from Secret Manager (`primolar-database-app`), the socket `/cloudsql/<connection name>` (I4) |
 | `SEMAPHORE_API_KEY` | secret store | once Semaphore approves the account |
 | `SMS_DAILY_PARTS_MAX` | plain, optional | the most billed text parts all clinics together may send in a Manila day; unset = the automatic cap alone (`dailyTextCap`) |
 | `APP_ENV` | plain | `production`, or `demo` for the hosted demo |
 | `CORS_ORIGIN` | plain | the web's https origins, comma-separated |
 | `WEB_URL` | plain | the web's https address |
-| `S3_BUCKET`, `S3_REGION` | plain | the files bucket, `ap-southeast-1` |
-| `TRUST_PROXY_HOPS` | plain | 2 by default behind Vercel → ALB; measured at go-live (`packages/infra/runbooks/first-time-setup.md` step 10) |
+| `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT`, `S3_FORCE_PATH_STYLE` | plain | the Cloud Storage bucket, `auto`, `https://storage.googleapis.com`, `true` (the S3-compatible XML API) |
+| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | secret store | the files account's HMAC key (`primolar-files-hmac-id`, `-secret`) |
+| `ORIGIN_SECRET` | secret store | `primolar-origin-secret`, the same value as Vercel's `ORIGIN_SECRET` |
+| `TRUST_PROXY_HOPS` | plain | 2 by default behind Vercel → Google's front end; measured at go-live (`packages/infra/runbooks/first-time-setup.md`) |
 | `METRICS_INTERVAL_S` | plain | `60` |
-| `BACKGROUND_WORK` | plain | `true` on exactly one task, `false` on the rest |
+| `BACKGROUND_WORK` | plain | `true`: the one always-on instance runs the jobs and the outbox |
+| `SHUTDOWN_GRACE_MS` | plain | `1000` on Cloud Run (it stops routing before SIGTERM, kills 10 s after); default 12000 |
 | `DEMO_LOGINS` | plain | only with `APP_ENV=demo` |
 
-`STORAGE_LINK_SECRET` is unused with S3. B13b sets these in `packages/infra/src/service-stack.ts`; its settings live in
-`packages/infra/cdk.json`.
+`STORAGE_LINK_SECRET` is unused with a bucket. Terraform sets these in `packages/infra/terraform/run.tf`; its settings
+live in `terraform.tfvars` (from `terraform.tfvars.example`).
 
 ## Load test (B13c1, B14)
 

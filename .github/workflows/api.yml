@@ -105,3 +105,19 @@ jobs:
           curl -fsS http://127.0.0.1:4100/api/health/ready
       - if: failure()
         run: docker logs api || true
+
+  # GCP migration: the Terraform files parse, are formatted, and every reference resolves. Offline from Google
+  # Cloud (-backend=false): no state, no credentials. Applying is the owner's, by hand.
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/infra/terraform
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_wrapper: false
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
