@@ -34,7 +34,7 @@ export function queueMessage(e: MessageEvent): Message | undefined {
   const overLimit =
     composed &&
     textPartsRefusal(composed.kind, textPartsUsed(db, manilaMonthOf(sendAt)), smsSegments(composed.body),
-      textAllowance(currentAccount().tier, topUpPartsIn(currentClinicId(), manilaMonthOf(sendAt))));
+      textAllowance(currentAccount().tier, topUpPartsIn(currentClinicId(), manilaMonthOf(sendAt))), manilaMonthOf(sendAt));
   const failure = unusable || overLimit;
   const message = composed && failure ? { ...composed, status: "failed" as const, failureReason: failure } : composed;
   if (message) db.messages.push(message);

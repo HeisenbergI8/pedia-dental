@@ -48,7 +48,7 @@ export const lastVisitOn = (...args: Parameters<typeof visitDays>): string | und
  * decision 19; a paused clinic, audit #24), so it says nothing about whether the family can be reached. The API's
  * `lastTried` must leave these out too.
  */
-export const CLINIC_SIDE_FAILURES: readonly string[] = [FAILURE.textLimit, FAILURE.clinicPaused];
+export const CLINIC_SIDE_FAILURES: readonly string[] = [FAILURE.textLimit, FAILURE.clinicPaused, FAILURE.dailyCap];
 
 /**
  * An account text (an invite, a reset: B11) goes to one guardian about their login, so it never decides "no contact";

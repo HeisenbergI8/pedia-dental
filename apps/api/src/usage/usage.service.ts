@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { FREE_TEXT_KINDS } from "@pedia/shared";
+import { uncountedKinds } from "@pedia/shared";
 import { addMonths, format, parseISO } from "date-fns";
 import { Prisma } from "../generated/prisma/client.ts";
 import { PrismaService } from "../prisma/prisma.service";
@@ -37,9 +37,9 @@ export class UsageService {
       ["patients", db.$queryRaw<Row[]>`SELECT clinicId, COUNT(*) AS n FROM Patient WHERE clinicId IN (${ids}) GROUP BY clinicId`],
       ["storageBytes", db.$queryRaw<Row[]>`SELECT clinicId, SUM(bytes) AS n FROM StoredFile WHERE clinicId IN (${ids}) GROUP BY clinicId`],
       [
-        // As the send claim counts them (partsIn): template texts and invites; resets and number-change warnings never count.
+        // As the send claim counts them (partsIn): template texts and (from INVITES_COUNT_FROM) invites; never free texts.
         "textParts",
-        db.$queryRaw<Row[]>`SELECT clinicId, SUM(segments) AS n FROM Message WHERE clinicId IN (${ids}) AND dispatchedAt >= ${from} AND dispatchedAt < ${to} AND kind NOT IN (${Prisma.join([...FREE_TEXT_KINDS])}) GROUP BY clinicId`,
+        db.$queryRaw<Row[]>`SELECT clinicId, SUM(segments) AS n FROM Message WHERE clinicId IN (${ids}) AND dispatchedAt >= ${from} AND dispatchedAt < ${to} AND kind NOT IN (${Prisma.join([...uncountedKinds(month)])}) GROUP BY clinicId`,
       ],
       ["textTopUp", db.$queryRaw<Row[]>`SELECT clinicId, SUM(parts) AS n FROM TextTopUp WHERE clinicId IN (${ids}) AND month = ${month} GROUP BY clinicId`],
     ];

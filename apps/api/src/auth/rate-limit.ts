@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { Injectable, type NestMiddleware } from "@nestjs/common";
 import type { NextFunction, Request, Response } from "express";
-import { ACCOUNT_TEXT_LIMITS, RESET_TEXTS_PER_HOUR, SESSION_WRONG_PINS, SIGNUPS_PER_HOUR, lockState, type LockPolicy } from "@pedia/shared";
+import { RESET_TEXTS_PER_HOUR, SESSION_WRONG_PINS, SIGNUPS_PER_HOUR, lockState, type LockPolicy } from "@pedia/shared";
 import { Clock } from "../common/clock";
 import { PrismaService } from "../prisma/prisma.service";
 import { runInTransaction } from "../prisma/transaction";
@@ -27,8 +27,6 @@ export const RATE_LIMITS = {
   // B11 decision 19: reset texts per sign-in value (a number or an email), not per address. Counted by PortalService
   // before it looks the value up, so a refusal says nothing about whether an account exists. A rolling hour (hitRolling).
   reset: { hits: RESET_TEXTS_PER_HOUR, windowSeconds: 3600 },
-  // Text-abuse limits: the same requests per sign-in value over a rolling day (hitRolling), counted after the hour's.
-  resetDay: { hits: ACCOUNT_TEXT_LIMITS.resetsPerLoginPerDay, windowSeconds: 24 * 3600 },
   // B12 decision 14: sign-ups and sign-up receipts per address, a rolling hour, counted by SignupsService before the
   // form is read (every attempt counts, refused ones too).
   signup: { hits: SIGNUPS_PER_HOUR, windowSeconds: 3600 },

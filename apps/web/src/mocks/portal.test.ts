@@ -245,7 +245,7 @@ describe("account text limits (audit #3, #4, #21, #23)", () => {
     expect(db.messages.at(-1)).toMatchObject({ kind: "password_reset", to: "09170000031" });
   });
 
-  it("texts one reset at a time, and takes at most 5 reset requests a day per number (text-abuse limits)", async () => {
+  it("texts one reset at a time while its link works (text-abuse limits)", async () => {
     signIn(FRONT_DESK);
     const kid = await family("Ny", "09170000041");
     await invite(kid.id, "g_m_Ny");
@@ -263,10 +263,6 @@ describe("account text limits (audit #3, #4, #21, #23)", () => {
       vi.setSystemTime(start + PORTAL_LINK_LIFETIME_MS.reset + 60_000);
       await reset("09170000041");
       expect(sent()).toBe(2); // that link lapsed: a new one goes
-      vi.setSystemTime(start + 3 * 3_600_000); // a new hour, the same day: requests 4 and 5 are allowed
-      await reset("09170000041");
-      await reset("09170000041");
-      await expect(reset("09170000041")).rejects.toMatchObject({ status: 429 }); // the day's sixth
     } finally {
       vi.useRealTimers();
     }

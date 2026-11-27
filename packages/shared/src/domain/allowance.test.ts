@@ -19,12 +19,14 @@ describe("plan allowances (B12 decisions 1, 2)", () => {
 
 describe("text allowance (B12 decisions 3, 18, 19)", () => {
   it("never refuses a reset or a number-change warning; refuses a reminder or an invite that would pass the month", () => {
-    expect(textPartsRefusal("password_reset", 3000, 2, 300)).toBeUndefined();
-    expect(textPartsRefusal("sign_in_changed", 3000, 2, 300)).toBeUndefined();
-    expect(textPartsRefusal("portal_invite", 299, 2, 300)).toBe(FAILURE.textLimit); // text-abuse limits: staff send it
-    expect(textPartsRefusal("portal_invite", 298, 2, 300)).toBeUndefined();
-    expect(textPartsRefusal("appointment_reminder", 298, 3, 300)).toBe(FAILURE.textLimit);
-    expect(textPartsRefusal("appointment_reminder", 298, 2, 300)).toBeUndefined();
+    const dec = "2026-12";
+    expect(textPartsRefusal("password_reset", 3000, 2, 300, dec)).toBeUndefined();
+    expect(textPartsRefusal("sign_in_changed", 3000, 2, 300, dec)).toBeUndefined();
+    expect(textPartsRefusal("portal_invite", 299, 2, 300, dec)).toBe(FAILURE.textLimit); // text-abuse limits: staff send it
+    expect(textPartsRefusal("portal_invite", 298, 2, 300, dec)).toBeUndefined();
+    expect(textPartsRefusal("portal_invite", 3000, 2, 300, "2026-11")).toBeUndefined(); // before INVITES_COUNT_FROM
+    expect(textPartsRefusal("appointment_reminder", 298, 3, 300, dec)).toBe(FAILURE.textLimit);
+    expect(textPartsRefusal("appointment_reminder", 298, 2, 300, "2026-11")).toBeUndefined();
   });
   it("warns at 80% and says so at 100%, naming the next month", () => {
     expect(textAllowanceNotice({ inUse: 239, limit: 300 }, "2026-10")).toBeUndefined();

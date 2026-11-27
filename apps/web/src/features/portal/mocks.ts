@@ -2,7 +2,7 @@ import { http, HttpResponse } from "msw";
 import {
   ACCOUNT_TEXT_LIMITS, DemoTexts, PORTAL_LINK_LIFETIME_MS, PasswordLinkInput, PasswordResetInput, RESET_TEXTS_PER_HOUR, SetPasswordInput,
   accountText, inviteLimitMessage, inviteLimitReached, inviteTextsUsedUpMessage, isAccountText, linkPath, maskedNumber, numberChangedText, resetHeld, rolesCan, smsNumber,
-  smsSegments, textAllowance,
+  smsSegments, textAllowance, uncountedKinds,
   type Guardian, type PortalAccess, type PortalAccount, type PortalLinkRecord, type Session,
 } from "@pedia/shared";
 import { DEMO_CLINIC_ID, IPIN_ID, NGITI_ID } from "@pedia/seed";
@@ -174,7 +174,8 @@ export const portalHandlers = [
     // is a deployed one's length, so the parts match what the API would bill.
     const month = manilaMonthOf(stamp());
     const parts = smsSegments(accountText("invite", { clinicName: currentAccount().name, childName: patient.firstName }, `https://app.primolar.ph${linkPath(newToken())}`));
-    if (textPartsUsed(db, month) + parts > textAllowance(currentAccount().tier, topUpPartsIn(currentClinicId(), month))) {
+    const counted = !uncountedKinds(month).includes("portal_invite");
+    if (counted && textPartsUsed(db, month) + parts > textAllowance(currentAccount().tier, topUpPartsIn(currentClinicId(), month))) {
       return new HttpResponse(inviteTextsUsedUpMessage(month), { status: 409 });
     }
     if (!a) db.portalAccounts.push((a = { clinicId: currentClinicId(), guardianId: g.id, state: "invited", links: [] }));
@@ -241,13 +242,9 @@ export const portalHandlers = [
     const parsed = PasswordResetInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
     const { login } = parsed.data;
-    // Per number (or email): RESET_TEXTS_PER_HOUR in any hour and (text-abuse limits) resetsPerLoginPerDay in a day.
-    const today = (resetTexts.get(login) ?? []).filter((t) => t > Date.now() - 86_400_000);
-    const hour = today.filter((t) => t > Date.now() - 3_600_000);
-    if (hour.length >= RESET_TEXTS_PER_HOUR || today.length >= ACCOUNT_TEXT_LIMITS.resetsPerLoginPerDay) {
-      return new HttpResponse("Too many reset texts for this number. Try again later.", { status: 429 });
-    }
-    resetTexts.set(login, [...today, Date.now()]);
+    const recent = (resetTexts.get(login) ?? []).filter((t) => t > Date.now() - 3_600_000);
+    if (recent.length >= RESET_TEXTS_PER_HOUR) return new HttpResponse("Too many reset texts for this number. Try again later.", { status: 429 });
+    resetTexts.set(login, [...recent, Date.now()]);
     for (const m of accountsByLogin(platform, login)) {
       if (!m.account.guardianId) continue; // parents only (decision 6): staff ask their Owner
       selectTenant(m.clinicId);

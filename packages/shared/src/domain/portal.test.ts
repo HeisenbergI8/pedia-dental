@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  ACCOUNT_TEXT_LIMITS, LINK_MARK, PORTAL_LINK_LIFETIME_MS, accountText, inviteLimitReached, isAccountText, isFreeText, linkPath, loginIdOf, maskedNumber, numberChangedText, resetHeld,
+  ACCOUNT_TEXT_LIMITS, LINK_MARK, PORTAL_LINK_LIFETIME_MS, accountText, inviteLimitReached, isAccountText, isFreeText, linkPath, uncountedKinds, loginIdOf, maskedNumber, numberChangedText, resetHeld,
 } from "./portal";
 import { smsSegments } from "./sending";
 
@@ -38,6 +38,11 @@ describe("account texts (E4)", () => {
   });
   it("leaves only resets and number-change warnings free: staff send invites, so the clinic pays (text-abuse limits)", () => {
     expect(["portal_invite", "password_reset", "sign_in_changed", "recall"].map(isFreeText)).toEqual([false, true, true, false]);
+  });
+  it("counts invites only from December 2026, so invites sent while onboarding never use up November", () => {
+    expect(uncountedKinds("2026-11")).toContain("portal_invite");
+    expect(uncountedKinds("2026-12")).not.toContain("portal_invite");
+    expect(uncountedKinds("2027-03")).toEqual(["password_reset", "sign_in_changed"]);
   });
 });
 

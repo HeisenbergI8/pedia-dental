@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupServer } from "msw/node";
 import { z } from "zod";
-import { AccountOverview, ClinicUsage, FAILURE, GB, PortalAccess, inviteTextsUsedUpMessage, storageFullMessage } from "@pedia/shared";
+import { AccountOverview, ClinicUsage, FAILURE, GB, PortalAccess, storageFullMessage } from "@pedia/shared";
 import { manilaMonthOf, textPartsUsed } from "./allowances";
 import { ApiError, api } from "@/lib/api-client";
 import { accountById, platform, selectTenant } from "./db";
@@ -101,34 +101,38 @@ describe("texts (decisions 2, 3, 18, 19)", () => {
     expect([overview.usage.storage, overview.usage.texts]).toEqual([owner.storage, owner.texts]);
   });
 
-  it("sends an invite while the month has room and refuses it once the texts are used (text-abuse limits)", async () => {
-    asStaff(NGITI_OWNER);
-    const kid = ngiti().patients.find((p) => p.guardians.some((g) => /^09\d{9}$/.test(g.phone)))!;
-    const g = kid.guardians.find((x) => /^09\d{9}$/.test(x.phone))!;
-    const account = ngiti().portalAccounts.find((a) => a.guardianId === g.id);
-    if (account) account.state = "off"; // seeded parents are active: invite them again
-    const invite = () => api(`/patients/${kid.id}/guardians/${g.id}/portal-invite`, PortalAccess, { method: "POST" });
-    const month = manilaMonthOf(new Date().toISOString());
-    // Earlier cases may have used the month: a large top-up gives this one room, then goes.
-    platform.textTopUps.push({
-      id: "topup_room", clinicId: "clinic_ngiti", invoiceNo: "PRM-INV-09997", month, packs: 1, parts: 100_000, receiptId: null,
-      amount: 15_000, method: "gcash", paidOn: `${month}-01`, recordedAt: new Date().toISOString(),
-    });
+  it("still sends an invite in November 2026 with the month's texts used, as invites count only from December (text-abuse limits)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-27T10:00:00+08:00")); // before INVITES_COUNT_FROM
     try {
-      await invite();
+      asStaff(NGITI_OWNER);
+      const kid = ngiti().patients.find((p) => p.guardians.some((g) => /^09\d{9}$/.test(g.phone)))!;
+      const g = kid.guardians.find((x) => /^09\d{9}$/.test(x.phone))!;
+      const account = ngiti().portalAccounts.find((a) => a.guardianId === g.id);
+      if (account) account.state = "off"; // seeded parents are active: invite them again
+      ngiti().messages.push({ ...ngiti().messages[0]!, id: "month_used", kind: "recall", status: "sent", sendAt: new Date().toISOString(), body: "x".repeat(153 * 2000) });
+      try {
+        await api(`/patients/${kid.id}/guardians/${g.id}/portal-invite`, PortalAccess, { method: "POST" });
+        expect(ngiti().messages.at(-1)).toMatchObject({ kind: "portal_invite", status: "queued" });
+      } finally {
+        ngiti().messages = ngiti().messages.filter((m) => m.id !== "month_used");
+      }
     } finally {
-      platform.textTopUps = platform.textTopUps.filter((t) => t.id !== "topup_room");
+      vi.useRealTimers();
     }
-    expect(ngiti().messages.at(-1)).toMatchObject({ kind: "portal_invite", status: "queued" });
-    const flood = { ...ngiti().messages.at(-1)!, id: "month_used", kind: "recall" as const, status: "sent" as const, body: "x".repeat(153 * 2000) };
-    ngiti().messages.push(flood);
+  });
+
+  it("never counts or refuses an invite before December 2026, so onboarding invites stay free (text-abuse limits)", () => {
+    const tenant = platform.tenants.clinic_ngiti!;
+    const at = "2026-11-20T10:00:00.000Z";
+    tenant.messages.push({ ...tenant.messages[0]!, id: "nov_invite", kind: "portal_invite", status: "sent", sendAt: at, body: "x".repeat(153 * 50) });
+    tenant.messages.push({ ...tenant.messages[0]!, id: "dec_invite", kind: "portal_invite", status: "sent", sendAt: "2026-12-20T10:00:00.000Z", body: "x".repeat(153 * 50) });
     try {
-      expect(textPartsUsed(ngiti(), month)).toBeGreaterThanOrEqual(2000);
-      const count = ngiti().messages.length;
-      expect(await message(invite())).toBe(inviteTextsUsedUpMessage(month));
-      expect(ngiti().messages.length).toBe(count); // nothing logged, nothing withdrawn
+      const without = (month: string) => textPartsUsed({ ...tenant, messages: tenant.messages.filter((m) => !m.id.endsWith("_invite")) }, month);
+      expect(textPartsUsed(tenant, "2026-11")).toBe(without("2026-11"));
+      expect(textPartsUsed(tenant, "2026-12")).toBe(without("2026-12") + 50);
     } finally {
-      ngiti().messages = ngiti().messages.filter((m) => m.id !== "month_used");
+      tenant.messages = tenant.messages.filter((m) => !m.id.endsWith("_invite"));
     }
   });
 

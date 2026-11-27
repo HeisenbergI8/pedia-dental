@@ -158,12 +158,14 @@ the NestJS API through Next's `/api` rewrite (or, offline in `enabled` mode, an 
   Owner's and the operator's only. The Owner of a clinic paused for non-payment signs in to a billing-only session
   (`SessionUser.billingOnly`, `BILLING_ONLY_ROUTES`). Plans carry storage and text allowances (`TIER_LIMITS`):
   storage is refused at upload (the API checks at its ledger), and a template text past the month's parts fails and is
-  never sent later (the mock checks when it queues, the API when it sends). Text-abuse limits (2026-11-27): an invite
-  counts and is refused like a template text (staff send it; refused at once, 409, when the month can't carry it), while
-  password resets and number-change warnings (`FREE_TEXT_KINDS`) always go and never count. A reset is texted only when
-  the guardian has no live reset link, at most 3 requests an hour and 5 a day per sign-in value. Across every clinic, a
-  Manila day's billed parts stop at `dailyTextCap` (the clinics' months / 30 × 3, at least 500, at most
-  `SMS_DAILY_PARTS_MAX`): past it a non-free text waits for the next 8 AM and the `TextsHeldDailyCap` alarm emails.
+  never sent later (the mock checks when it queues, the API when it sends). Text-abuse limits (2026-11-27): from
+  `INVITES_COUNT_FROM` (December 2026) an invite counts and is refused like a template text (staff send it; refused at
+  once, 409, when the month can't carry it, waiting invites included), while password resets and number-change warnings
+  (`FREE_TEXT_KINDS`) always go and never count. A reset is texted only when the guardian has no live reset link whose
+  text is waiting or sent, at most 3 requests an hour per sign-in value. Across every clinic, a Manila day's billed parts
+  stop at `dailyTextCap` (the clinics' months / 30 × 3, at least 500, at most `SMS_DAILY_PARTS_MAX`): past it a
+  non-free text waits for the next 8 AM (one that would arrive after its appointment fails instead) and the
+  `TextsHeldDailyCap` alarm emails.
 - Tiers (feature 16, revised 2026-11-19): the ids stay `small` / `mid` / `big`; the labels are Starter / Clinic / Pro
   (`TIER_LABEL`). Limits and feature switches are `TIER_LIMITS` (`appointmentRequests`, `customLetterhead`,
   `financeExport`, `designIncluded`); nothing in `NEVER_LIMITED` (patient care) may ever read a tier. A feature follows the

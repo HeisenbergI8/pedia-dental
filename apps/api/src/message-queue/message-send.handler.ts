@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from "@nestjs/common";
-import { FAILURE, FREE_TEXT_KINDS, LINK_MARK, MESSAGE_RETRY_DELAYS_MS, dailyTextCap, isAccountText, isFreeText, textAllowance, manilaMonth, nextSendingTime, smsNumber, smsSegments, textPartsRefusal, type LoggedMessageKind, type Tier } from "@pedia/shared";
+import { FAILURE, FREE_TEXT_KINDS, LINK_MARK, MESSAGE_RETRY_DELAYS_MS, dailyTextCap, isAccountText, isFreeText, textAllowance, manilaMonth, nextSendingTime, smsNumber, smsSegments, textPartsRefusal, uncountedKinds, type LoggedMessageKind, type Tier } from "@pedia/shared";
 import { addDays, addMonths, format, parseISO } from "date-fns";
 import { lockAccount } from "../clinic/account-lock";
 import { Clock } from "../common/clock";
@@ -21,12 +21,12 @@ const nextMonth = (month: string) => format(addMonths(parseISO(`${month}-01`), 1
 
 /**
  * Billed parts this clinic handed to the provider in `month` (decision 18): the claims' `segments`, by `dispatchedAt`.
- * Template texts and invites (text-abuse limits): resets and number-change warnings are never refused, so they never
- * count either, or a stranger asking for resets could use up the clinic's month (audit #3). They stay in the log.
+ * Template texts and, from INVITES_COUNT_FROM, invites (text-abuse limits): resets and number-change warnings are never
+ * refused, so they never count either, or a stranger asking for resets could use up the clinic's month (audit #3).
  */
 export async function partsIn(tx: Tx, month: string): Promise<number> {
   const { _sum } = await tx.message.aggregate({
-    where: { dispatchedAt: { gte: monthStart(month), lt: monthStart(nextMonth(month)) }, kind: { notIn: [...FREE_TEXT_KINDS] } },
+    where: { dispatchedAt: { gte: monthStart(month), lt: monthStart(nextMonth(month)) }, kind: { notIn: [...uncountedKinds(month)] } },
     _sum: { segments: true },
   });
   return _sum.segments ?? 0;
@@ -37,6 +37,9 @@ export async function allowanceIn(tx: Tx, clinicId: string, tier: Tier, month: s
   const bought = (await tx.textTopUp.aggregate({ where: { clinicId, month }, _sum: { parts: true } }))._sum.parts ?? 0;
   return textAllowance(tier, bought);
 }
+
+/** Texts that only make sense before their appointment: one held past its start is failed, not sent late. */
+const BEFORE_VISIT_KINDS: readonly string[] = ["appointment_confirmation", "appointment_reminder", "pre_treatment"];
 
 /**
  * The platform's daily cap (text-abuse limits): billed parts every clinic handed to the provider since Manila midnight,
@@ -92,8 +95,8 @@ export class MessageSendHandler implements OutboxHandler, OnModuleInit {
       // B12 E9: the clinic's account row first, so this clinic's claims run one at a time and the month's count is exact.
       // Then the message (account → Message keeps the global order; B11's Message → PortalLink follows). Raw SQL: name the clinic.
       const clinicId = await lockAccount(tx);
-      const [m] = await tx.$queryRaw<{ status: string; dispatchedAt: Date | null; to: string; body: string; kind: string; linkId: string | null; patientId: string }[]>`
-        SELECT status, dispatchedAt, \`to\`, body, kind, linkId, patientId FROM Message WHERE id = ${messageId} AND clinicId = ${clinicId} FOR UPDATE`;
+      const [m] = await tx.$queryRaw<{ status: string; dispatchedAt: Date | null; to: string; body: string; kind: string; linkId: string | null; patientId: string; appointmentId: string | null }[]>`
+        SELECT status, dispatchedAt, \`to\`, body, kind, linkId, patientId, appointmentId FROM Message WHERE id = ${messageId} AND clinicId = ${clinicId} FOR UPDATE`;
       if (!m || m.status !== "queued") return { skip: true }; // withdrawn, sent or failed already: a redelivery
       // Audit #24: a paused (suspended) clinic's template texts fail at once and are never sent later. Account texts still
       // go: a parent may need a reset while the clinic is paused.
@@ -130,20 +133,31 @@ export class MessageSendHandler implements OutboxHandler, OnModuleInit {
       // confirm takes this same account lock, so a claim sees a top-up whole or not at all.
       const today = this.clock.today();
       const month = manilaMonth(today);
-      const refused = textPartsRefusal(m.kind as LoggedMessageKind, await partsIn(tx, month), parts, await allowanceIn(tx, clinicId, tier, month));
+      const refused = textPartsRefusal(m.kind as LoggedMessageKind, await partsIn(tx, month), parts, await allowanceIn(tx, clinicId, tier, month), month);
       if (refused) {
         await tx.message.update({ where: { id: messageId }, data: { status: "failed", failureReason: refused }, select: { id: true } });
         await this.settled(tx, m);
         return { permanent: refused };
       }
-      // Text-abuse limits: past the platform's daily cap a text waits for the next sending morning (no try spent, nothing
-      // lost) and the alarm fires. Free texts pass, so a parent can still reset a password.
+      // Text-abuse limits: past the platform's daily cap a text waits for the next sending morning (no try spent) and the
+      // alarm fires. Free texts pass, so a parent can still reset a password. A confirmation, reminder or pre-visit text
+      // whose appointment starts by then is failed instead: it would arrive after the visit.
       if (!isFreeText(m.kind)) {
         const { used, cap } = await dailyCapState(tx, today, this.env.SMS_DAILY_PARTS_MAX);
         if (used + parts > cap) {
           this.metrics.countTextHeld();
+          const tomorrow = nextSendingTime(addDays(new Date(`${today}T00:00:00+08:00`), 1));
+          const visit = m.appointmentId && BEFORE_VISIT_KINDS.includes(m.kind)
+            ? await tx.appointment.findFirst({ where: { id: m.appointmentId }, select: { startsAt: true } })
+            : null;
+          if (visit && visit.startsAt <= tomorrow) {
+            this.log.warn(`Daily text cap reached (${used} of ${cap} parts): message ${messageId} failed, its appointment comes first`);
+            await tx.message.update({ where: { id: messageId }, data: { status: "failed", failureReason: FAILURE.dailyCap }, select: { id: true } });
+            await this.settled(tx, m);
+            return { permanent: FAILURE.dailyCap };
+          }
           this.log.warn(`Daily text cap reached (${used} of ${cap} parts): message ${messageId} waits for tomorrow`);
-          return { defer: nextSendingTime(addDays(new Date(`${today}T00:00:00+08:00`), 1)) };
+          return { defer: tomorrow };
         }
       }
       await tx.message.update({ where: { id: messageId }, data: { dispatchedAt: now, segments: parts }, select: { id: true } });

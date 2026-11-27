@@ -1,7 +1,7 @@
 import type { LoggedMessageKind } from "../schemas/message";
 import type { TextPackPrice } from "../schemas/signup";
 import type { Tier } from "../schemas/tenancy";
-import { isFreeText } from "./portal";
+import { uncountedKinds } from "./portal";
 import { FAILURE } from "./sending";
 import { TIER_LABEL, TIER_LIMITS } from "./tenancy";
 
@@ -37,11 +37,11 @@ export const textTopUpQuote = (pack: TextPackPrice, packs: number) => ({ parts: 
 export const manilaMonth = (day: string) => day.slice(0, 7);
 
 /**
- * B12 decisions 3, 19: a clinic's text that would pass the month's parts is logged as not sent. Since the text-abuse
- * limits an invite counts too (staff send it); a password reset or a number-change warning always goes (isFreeText).
+ * B12 decisions 3, 19: a clinic's text that would pass `month`'s parts is logged as not sent. Since the text-abuse
+ * limits an invite counts too (staff send it); a password reset or a number-change warning always goes (uncountedKinds).
  */
-export function textPartsRefusal(kind: LoggedMessageKind, usedParts: number, addingParts: number, limit: number): string | undefined {
-  if (isFreeText(kind)) return undefined;
+export function textPartsRefusal(kind: LoggedMessageKind, usedParts: number, addingParts: number, limit: number, month: string): string | undefined {
+  if (uncountedKinds(month).includes(kind)) return undefined;
   return usedParts + addingParts > limit ? FAILURE.textLimit : undefined;
 }
 

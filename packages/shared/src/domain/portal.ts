@@ -1,3 +1,4 @@
+import type { LoggedMessageKind } from "../schemas/message";
 import { smsNumber } from "./sending";
 
 /** Decisions 5 and 6: how long a link works, from when it was made. Data, not `if` statements. */
@@ -52,6 +53,15 @@ export const isAccountText = (kind: string | undefined) => (ACCOUNT_TEXT_KINDS a
 export const FREE_TEXT_KINDS = ["password_reset", "sign_in_changed"] as const;
 export const isFreeText = (kind: string | undefined) => (FREE_TEXT_KINDS as readonly string[]).includes(kind ?? "");
 
+/**
+ * Text-abuse limits, rollout: invites count toward a clinic's month from this Manila month on, so invites clinics sent
+ * while onboarding before the change never use up the month they were sent in.
+ */
+export const INVITES_COUNT_FROM = "2026-12";
+/** The kinds a Manila month ("yyyy-MM") never counts nor refuses: the free texts, and invites before INVITES_COUNT_FROM. */
+export const uncountedKinds = (month: string): readonly LoggedMessageKind[] =>
+  month < INVITES_COUNT_FROM ? [...FREE_TEXT_KINDS, "portal_invite"] : FREE_TEXT_KINDS;
+
 const DAY_MS = 24 * 60 * 60_000;
 /**
  * Audit #3, #4, #21: what keeps account texts (never refused, never counted) from being a free bulk-SMS service. Rolling
@@ -59,7 +69,6 @@ const DAY_MS = 24 * 60 * 60_000;
  * - `invitesPerGuardian`, `invitesPerClinic`: staff sends; past them the invite is refused (429, `inviteLimitMessage`).
  * - `resetsPerClinic`: reset texts a clinic's parents may be sent; past it a request still answers 202 and sends nothing.
  * - `resetHoldAfterNumberChangeMs`: no reset text for a login whose number changed this recently (202, nothing sent).
- * - `resetsPerLoginPerDay`: reset requests per number (or email) in the day, on top of RESET_TEXTS_PER_HOUR (429).
  */
 export const ACCOUNT_TEXT_LIMITS = {
   windowMs: DAY_MS,
@@ -67,7 +76,6 @@ export const ACCOUNT_TEXT_LIMITS = {
   invitesPerClinic: 200,
   resetsPerClinic: 30,
   resetHoldAfterNumberChangeMs: DAY_MS,
-  resetsPerLoginPerDay: 5,
 } as const;
 
 /** The 429 staff see past an invite limit, in plain words. */

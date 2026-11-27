@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { BadRequestException, ConflictException, GoneException, HttpException, HttpStatus, Inject, Injectable, Logger, NotFoundException, type OnModuleInit } from "@nestjs/common";
 import { DEMO_CLINIC_ID, IPIN_ID, NGITI_ID } from "@pedia/seed";
 import {
-  ACCOUNT_TEXT_LIMITS, LOGIN_PASSWORD_MESSAGE, PORTAL_LINK_LIFETIME_MS, accountText, passwordIsLogin, inviteLimitMessage, inviteLimitReached, inviteTextsUsedUpMessage, linkPath, manilaMonth, maskedNumber, numberChangedText, resetHeld, rolesCan, smsNumber, smsSegments,
+  ACCOUNT_TEXT_LIMITS, LOGIN_PASSWORD_MESSAGE, PORTAL_LINK_LIFETIME_MS, accountText, passwordIsLogin, inviteLimitMessage, inviteLimitReached, inviteTextsUsedUpMessage, linkPath, manilaMonth, maskedNumber, numberChangedText, resetHeld, rolesCan, smsNumber, smsSegments, uncountedKinds,
   type DemoTexts, type PasswordLink, type PasswordLinkInput, type PasswordResetInput, type PortalAccess, type PortalLinkPurpose, type Session, type SetPasswordInput,
 } from "@pedia/shared";
 import { AuditService } from "../audit/audit.service";
@@ -182,12 +182,17 @@ export class PortalService implements OnModuleInit {
    * Text-abuse limits: an invite counts toward the clinic's month (staff send it), so one the month can't carry is
    * refused here, before the older link is cancelled. The sender checks again (the authoritative count), as for any
    * text; this only gives staff the reason at once. The link's length is a real token's (24 bytes, base64url).
+   * Invites still waiting to be sent count too, at this invite's size (two invites back to back can't both pass), except
+   * this guardian's own, which this invite withdraws. Before INVITES_COUNT_FROM, invites don't count at all.
    */
-  private async refuseIfNoTexts(tx: Tx, clinicId: string, childName: string): Promise<void> {
-    const { name: clinicName, tier } = await tx.clinicAccount.findUniqueOrThrow({ where: { id: clinicId }, select: { name: true, tier: true } });
+  private async refuseIfNoTexts(tx: Tx, clinicId: string, guardianId: string, childName: string): Promise<void> {
     const month = manilaMonth(this.clock.today());
+    if (uncountedKinds(month).includes("portal_invite")) return;
+    const { name: clinicName, tier } = await tx.clinicAccount.findUniqueOrThrow({ where: { id: clinicId }, select: { name: true, tier: true } });
     const parts = smsSegments(accountText("invite", { clinicName, childName }, `${this.env.WEB_URL}${linkPath("x".repeat(32))}`));
-    if ((await partsIn(tx, month)) + parts > (await allowanceIn(tx, clinicId, tier, month))) throw new ConflictException(inviteTextsUsedUpMessage(month));
+    const own = (await tx.portalLink.findMany({ where: { clinicId, guardianId, purpose: "invite" }, select: { id: true } })).map((l) => l.id);
+    const waiting = await tx.message.count({ where: { kind: "portal_invite", status: "queued", dispatchedAt: null, NOT: { linkId: { in: own } } } });
+    if ((await partsIn(tx, month)) + (waiting + 1) * parts > (await allowanceIn(tx, clinicId, tier, month))) throw new ConflictException(inviteTextsUsedUpMessage(month));
   }
 
   /** POST …/portal-invite: invite, or resend (decision 5: the older link and its text are withdrawn). */
@@ -203,7 +208,7 @@ export class PortalService implements OnModuleInit {
       // per guardian and per clinic in the last day, counted under the clinic's lock.
       const over = inviteLimitReached(await this.linksSince(tx, "invite", guardianId), await this.linksSince(tx, "invite"));
       if (over) throw new HttpException(inviteLimitMessage(over, g.fullName), HttpStatus.TOO_MANY_REQUESTS);
-      await this.refuseIfNoTexts(tx, clinicId, firstName);
+      await this.refuseIfNoTexts(tx, clinicId, guardianId, firstName);
       await this.cancelLinks(tx, guardianId);
       const now = this.clock.now();
       const invited = { state: "invited" as const, invitedAt: now, invitedBy: viewer.name, turnedOffAt: null };
@@ -381,9 +386,7 @@ export class PortalService implements OnModuleInit {
    */
   async requestReset({ login }: PasswordResetInput): Promise<Record<string, never>> {
     return atLeast(RESET_ANSWER_MS, async () => {
-      // Per number (or email): RESET_TEXTS_PER_HOUR in any hour, and (text-abuse limits) resetsPerLoginPerDay in a day.
-      const allowed = (await this.limits.hitRolling(hashedBucketOf("reset", login), RATE_LIMITS.reset)).allowed
-        && (await this.limits.hitRolling(hashedBucketOf("resetDay", login), RATE_LIMITS.resetDay)).allowed;
+      const { allowed } = await this.limits.hitRolling(hashedBucketOf("reset", login), RATE_LIMITS.reset);
       if (!allowed) throw new HttpException("Too many reset texts for this number. Try again later.", HttpStatus.TOO_MANY_REQUESTS);
       for (const m of await this.identity.loginsBy(login)) {
         if (m.isStaff) continue;
@@ -399,10 +402,11 @@ export class PortalService implements OnModuleInit {
               this.log.warn(`Password reset not sent (${held === "clinic_ceiling" ? "the clinic's daily reset ceiling" : "sign-in number changed in the last day"}): clinic ${clinicId}, guardian ${guardianId}`);
               return;
             }
-            // Text-abuse limits: one live reset link at a time. While the last one still works (30 minutes), asking
-            // again texts nothing: the parent uses the text they have.
-            const live = await tx.portalLink.count({ where: { clinicId, guardianId, purpose: "reset", usedAt: null, cancelledAt: null, expiresAt: { gt: this.clock.now() } } });
-            if (live) return;
+            // Text-abuse limits: one live reset link at a time. While the last one still works (30 minutes) and its text
+            // is waiting or sent, asking again texts nothing: the parent uses the text they have. A link whose text failed
+            // (the provider refused it) doesn't hold the next one back.
+            const live = (await tx.portalLink.findMany({ where: { clinicId, guardianId, purpose: "reset", usedAt: null, cancelledAt: null, expiresAt: { gt: this.clock.now() } }, select: { id: true } })).map((l) => l.id);
+            if (live.length && (await tx.message.count({ where: { linkId: { in: live }, status: { in: ["queued", "sent"] } } }))) return;
             await this.cancelLinks(tx, guardianId, "reset"); // none live; kept so only the newest reset text could ever work
             await this.sendLink(tx, "reset", g, g.firstChildId);
             await this.audit.record("create", "Password reset (requested)", undefined, tx);

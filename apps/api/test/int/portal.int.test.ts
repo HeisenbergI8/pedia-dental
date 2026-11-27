@@ -398,7 +398,7 @@ describe("account text limits (audit #3, #4, #21, #23)", () => {
     }
   });
 
-  it("texts one reset at a time, and takes at most 5 reset requests a day per number (text-abuse limits)", async () => {
+  it("texts one reset at a time while its link works, and again once its text failed (text-abuse limits)", async () => {
     await activeFamily("Oy", "09170000025");
     const texts = () => calls.filter((c) => c.number === "639170000025").length;
     try {
@@ -412,10 +412,13 @@ describe("account text limits (audit #3, #4, #21, #23)", () => {
       expect((await reset("09170000025")).status).toBe(202);
       await drain();
       expect(texts()).toBe(2); // that link lapsed: a new one goes
-      clock.set(new Date(NIGHT.getTime() + 3 * 3_600_000)); // a new hour, the same day: requests 4 and 5 are allowed
+      // The provider refused the latest text: its link is still live, but it holds nothing back.
+      clock.set(new Date(NIGHT.getTime() + 2 * 3_600_000));
       expect((await reset("09170000025")).status).toBe(202);
+      await inClinic("clinic_demo", () => prisma.message.updateMany({ where: { kind: "password_reset", to: "09170000025", status: "queued" }, data: { status: "failed", failureReason: "The SMS provider refused this number" } }));
       expect((await reset("09170000025")).status).toBe(202);
-      expect((await reset("09170000025")).status).toBe(429); // the day's sixth
+      await drain();
+      expect(texts()).toBe(3); // the refused one never reached the provider here; the new one did
     } finally {
       clock.set(NIGHT);
       desk = await signIn("frontdesk@gmail.com");
