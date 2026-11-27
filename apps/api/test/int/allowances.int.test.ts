@@ -3,12 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { INestApplication } from "@nestjs/common";
 import { seedPlatform } from "@pedia/seed";
-import { ClinicUsage, FAILURE, GB, TIER_LIMITS, choiceDeclined, manilaMonth, storageFullMessage } from "@pedia/shared";
+import { ClinicUsage, FAILURE, GB, TIER_LIMITS, choiceDeclined, inviteTextsUsedUpMessage, manilaMonth, storageFullMessage } from "@pedia/shared";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Hasher } from "../../src/auth/hashing";
 import { SessionService } from "../../src/auth/session.service";
 import { FixedClock } from "../../src/common/clock";
+import { dailyCapState } from "../../src/message-queue/message-send.handler";
 import { MESSAGE_SEND } from "../../src/message-queue/message.rows";
 import { OutboxWorker } from "../../src/outbox/outbox.worker";
 import { PrismaService } from "../../src/prisma/prisma.service";
@@ -138,7 +139,7 @@ describe("texts (decisions 2, 3, 18, 19, E9)", () => {
     await inClinic(NGITI, () => prisma.message.updateMany({ where: { dispatchedAt: { not: null } }, data: { dispatchedAt: null, segments: null } }));
   });
 
-  it("sends one of two reminders at 499 of 500 parts and fails the other; an invite still goes", async () => {
+  it("sends one of two reminders at 499 of 500 parts and fails the other, and an invite after them (text-abuse limits)", async () => {
     await dispatched(TIER_LIMITS.small.textParts - 1, new Date(`${month}-01T09:00:00+08:00`));
     await queued("reminder_a", "appointment_reminder");
     await queued("reminder_b", "appointment_reminder");
@@ -149,7 +150,9 @@ describe("texts (decisions 2, 3, 18, 19, E9)", () => {
     expect(failed.failureReason).toBe(FAILURE.textLimit);
     await queued("invite_c", "portal_invite");
     await app.get(OutboxWorker).drain();
-    expect(await statusOf("invite_c")).toBe("sent"); // account texts always go (decision 3)
+    // Text-abuse limits: staff send invites, so the clinic's month carries them like any template text.
+    const invite = await inClinic(NGITI, () => prisma.message.findUniqueOrThrow({ where: { id: "invite_c" } }));
+    expect([invite.status, invite.failureReason]).toEqual(["failed", FAILURE.textLimit]);
   });
 
   it("sends a template text again once a confirmed top-up raises the month's limit (feature 16, revised)", async () => {
@@ -173,22 +176,38 @@ describe("texts (decisions 2, 3, 18, 19, E9)", () => {
     expect(await statusOf("reminder_d")).toBe("sent");
   });
 
-  it("never refuses an invite for the limit (decision 3)", async () => {
+  it("refuses an invite at once when the month's texts are used, until a top-up makes room (text-abuse limits)", async () => {
     await dispatched(TIER_LIMITS.small.textParts, new Date(`${month}-01T09:00:00+08:00`)); // the month's parts all used
     const kid = ngiti.patients.find((p) => p.guardians.some((g) => /^09\d{9}$/.test(g.phone)))!;
     const g = kid.guardians.find((x) => /^09\d{9}$/.test(x.phone))!;
     // Seeded parents are active: turn the login off so it can be invited again.
     await inClinic(NGITI, () => prisma.portalAccount.updateMany({ where: { guardianId: g.id }, data: { state: "off" } }));
-    const invites = () => inClinic(NGITI, () => prisma.message.findMany({ where: { patientId: kid.id, kind: "portal_invite" }, select: { id: true, status: true } }));
-    const before = new Set((await invites()).map((m) => m.id));
+    const before = await inClinic(NGITI, () => prisma.message.count({ where: { kind: "portal_invite" } }));
     const res = await http().post(`/api/patients/${kid.id}/guardians/${g.id}/portal-invite`).set("Cookie", await owner());
-    expect(res.status).toBe(200);
-    await app.get(OutboxWorker).drain();
-    const sent = (await invites()).filter((m) => !before.has(m.id));
-    expect(sent.map((m) => m.status)).toEqual(["sent"]); // account texts always go (decision 3)
+    expect([res.status, res.text]).toEqual([409, inviteTextsUsedUpMessage(month)]);
+    expect(await inClinic(NGITI, () => prisma.message.count({ where: { kind: "portal_invite" } }))).toBe(before);
+    await prisma.textTopUp.create({
+      data: { clinicId: NGITI, month, packs: 1, parts: 100, invoiceNo: "PRM-INV-09996", method: "gcash", paidOn: new Date(`${month}-01T00:00:00Z`), amount: 15_000, recordedAt: clock.now() },
+    });
+    expect((await http().post(`/api/patients/${kid.id}/guardians/${g.id}/portal-invite`).set("Cookie", await owner())).status).toBe(200); // a top-up makes room
   });
 
-  it("counts template texts only toward the month, never invites or resets (audit #3)", async () => {
+  it("counts invites toward the month on the Plan, never resets (audit #3, text-abuse limits)", async () => {
+    const usage = async () => ClinicUsage.parse((await http().get("/api/clinic/usage").set("Cookie", await owner())).body).texts.inUse;
+    const before = await usage();
+    const at = new Date(`${month}-01T10:00:00+08:00`);
+    await inClinic(NGITI, () =>
+      prisma.message.create({
+        data: {
+          clinicId: NGITI, patientId: child.id, kind: "portal_invite", to: child.guardians[0]!.phone, recipientName: "x", body: "x",
+          status: "sent", sendAt: at, createdAt: at, dispatchedAt: at, sentAt: at, segments: 2,
+        },
+      }),
+    );
+    expect(await usage()).toBe(before + 2);
+  });
+
+  it("never counts resets toward the month (audit #3)", async () => {
     await dispatched(TIER_LIMITS.small.textParts - 1, new Date(`${month}-01T09:00:00+08:00`));
     const before = ClinicUsage.parse((await http().get("/api/clinic/usage").set("Cookie", await owner())).body).texts.inUse;
     const at = new Date(`${month}-01T10:00:00+08:00`);
@@ -217,6 +236,36 @@ describe("texts (decisions 2, 3, 18, 19, E9)", () => {
     await prisma.clinicAccount.update({ where: { id: NGITI }, data: { status: "active" } });
     await app.get(OutboxWorker).drain();
     expect(await statusOf("reminder_h")).toBe("failed"); // never sent later
+  });
+
+  it("holds a text for the next morning past the platform's daily cap, and still sends a reset (text-abuse limits)", async () => {
+    const DEMO = "clinic_demo";
+    const other = platform.tenants[DEMO]!.patients[0]!;
+    const { used, cap } = await dailyCapState(prisma, day, undefined);
+    // Another clinic's texts fill the day, so this clinic's own month still has room.
+    const at = new Date(`${day}T08:30:00+08:00`);
+    await inClinic(DEMO, () =>
+      prisma.message.create({
+        data: {
+          id: "day_filler", clinicId: DEMO, patientId: other.id, kind: "recall", to: other.guardians[0]!.phone, recipientName: "x", body: "x",
+          status: "sent", sendAt: at, createdAt: at, dispatchedAt: at, sentAt: at, segments: cap - used,
+        },
+      }),
+    );
+    await queued("reminder_cap", "appointment_reminder");
+    await app.get(OutboxWorker).drain();
+    expect(await statusOf("reminder_cap")).toBe("queued"); // not failed: it waits
+    const row = await prisma.outboxMessage.findFirstOrThrow({ where: { kind: MESSAGE_SEND, payload: { equals: { messageId: "reminder_cap" } } } });
+    const tomorrow = new Date(new Date(`${day}T00:00:00+08:00`).getTime() + 24 * 3_600_000);
+    expect(row.availableAt).toEqual(new Date(tomorrow.getTime() + 8 * 3_600_000)); // the next sending morning, 8 AM Manila
+    await inClinic(NGITI, () =>
+      prisma.message.create({
+        data: { id: "reset_cap", clinicId: NGITI, patientId: child.id, kind: "password_reset", to: child.guardians[0]!.phone, recipientName: "x", body: "Reset.", status: "queued", sendAt: clock.now(), createdAt: clock.now() },
+      }),
+    );
+    await prisma.outboxMessage.create({ data: { kind: MESSAGE_SEND, payload: { messageId: "reset_cap" }, clinicId: NGITI, availableAt: clock.now(), createdAt: clock.now() } });
+    await app.get(OutboxWorker).drain();
+    expect(await statusOf("reset_cap")).toBe("sent"); // free texts pass the cap
   });
 
   it("shows the same storage and texts on the Plan and in the console", async () => {

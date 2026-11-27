@@ -273,6 +273,17 @@ export class ServiceStack extends Stack {
       evaluationPeriods: 1,
       treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
     }).addAlarmAction(notify);
+    // Text-abuse limits: the platform's daily text cap held a text back. Texts wait for the next morning until the
+    // cause is found (a bug, an abused login) or SMS_DAILY_PARTS_MAX is raised. Emails when it turns on, as above.
+    new cloudwatch.Alarm(this, "TextsHeldDailyCap", {
+      alarmName: "primolar-texts-held-daily-cap",
+      alarmDescription: "Texts reached Primolar's daily cap across all clinics and are waiting for tomorrow. Check the message log for a clinic sending far more than usual.",
+      metric: apiMetric("TextsHeldDailyCap", "Sum"),
+      threshold: 0,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+      evaluationPeriods: 1,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    }).addAlarmAction(notify);
     // B13a E7: errors grouped by their stable fingerprint.
     new logs.QueryDefinition(this, "ErrorsByFingerprint", {
       queryDefinitionName: "Primolar errors by fingerprint",

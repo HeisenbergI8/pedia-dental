@@ -39,9 +39,18 @@ export function accountText(purpose: PortalLinkPurpose, v: { clinicName: string;
 export const numberChangedText = (clinicName: string) =>
   `Your Primolar sign-in number for ${clinicName} was changed. If this wasn't you, call the clinic.`;
 
-/** Fixed-word texts about a parent's portal account: sent at any hour, never refused, never counted toward the cap. */
+/** Fixed-word texts about a parent's portal account: sent at any hour, and never deciding a child's "no contact". */
 export const ACCOUNT_TEXT_KINDS = ["portal_invite", "password_reset", "sign_in_changed"] as const;
 export const isAccountText = (kind: string | undefined) => (ACCOUNT_TEXT_KINDS as readonly string[]).includes(kind ?? "");
+
+/**
+ * Text-abuse limits (2026-11-27): the account texts a clinic never pays for, because a parent or a stranger asks for
+ * them (audit #3: a stranger asking for resets must not use up the clinic's month). They never count toward the month's
+ * texts, are never refused for it, and pass the platform's daily cap. An invite is sent by the clinic's staff, so it
+ * counts and is refused like a template text.
+ */
+export const FREE_TEXT_KINDS = ["password_reset", "sign_in_changed"] as const;
+export const isFreeText = (kind: string | undefined) => (FREE_TEXT_KINDS as readonly string[]).includes(kind ?? "");
 
 const DAY_MS = 24 * 60 * 60_000;
 /**
@@ -50,6 +59,7 @@ const DAY_MS = 24 * 60 * 60_000;
  * - `invitesPerGuardian`, `invitesPerClinic`: staff sends; past them the invite is refused (429, `inviteLimitMessage`).
  * - `resetsPerClinic`: reset texts a clinic's parents may be sent; past it a request still answers 202 and sends nothing.
  * - `resetHoldAfterNumberChangeMs`: no reset text for a login whose number changed this recently (202, nothing sent).
+ * - `resetsPerLoginPerDay`: reset requests per number (or email) in the day, on top of RESET_TEXTS_PER_HOUR (429).
  */
 export const ACCOUNT_TEXT_LIMITS = {
   windowMs: DAY_MS,
@@ -57,6 +67,7 @@ export const ACCOUNT_TEXT_LIMITS = {
   invitesPerClinic: 200,
   resetsPerClinic: 30,
   resetHoldAfterNumberChangeMs: DAY_MS,
+  resetsPerLoginPerDay: 5,
 } as const;
 
 /** The 429 staff see past an invite limit, in plain words. */

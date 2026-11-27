@@ -1,7 +1,8 @@
 import { http, HttpResponse } from "msw";
 import {
   ACCOUNT_TEXT_LIMITS, DemoTexts, PORTAL_LINK_LIFETIME_MS, PasswordLinkInput, PasswordResetInput, RESET_TEXTS_PER_HOUR, SetPasswordInput,
-  accountText, inviteLimitMessage, inviteLimitReached, isAccountText, linkPath, maskedNumber, numberChangedText, resetHeld, rolesCan, smsNumber,
+  accountText, inviteLimitMessage, inviteLimitReached, inviteTextsUsedUpMessage, isAccountText, linkPath, maskedNumber, numberChangedText, resetHeld, rolesCan, smsNumber,
+  smsSegments, textAllowance,
   type Guardian, type PortalAccess, type PortalAccount, type PortalLinkRecord, type Session,
 } from "@pedia/shared";
 import { DEMO_CLINIC_ID, IPIN_ID, NGITI_ID } from "@pedia/seed";
@@ -10,6 +11,8 @@ import { userOf } from "@/features/auth/mocks";
 import { recordAudit, sessionOf } from "@/mocks/access";
 import { currentAccount, currentClinicId, db, persist, platform, selectTenant } from "@/mocks/db";
 import { accountsByLogin, allAccounts, emailTaken, portalAccountOf, tokenFor } from "@/mocks/demo-accounts";
+import { manilaMonthOf, textPartsUsed } from "@/mocks/allowances";
+import { topUpPartsIn } from "@/mocks/text-topups";
 
 const url = (p: string) => `${env.apiUrl}${p}`;
 /** Audit #23: the seeded demo clinics, the only ones whose texted links are listed. */
@@ -167,6 +170,13 @@ export const portalHandlers = [
     // Audit #4: invites per guardian and per clinic in the last day.
     const over = inviteLimitReached(linksSince("invite", g.id), linksSince("invite"));
     if (over) return new HttpResponse(inviteLimitMessage(over, g.fullName), { status: 429 });
+    // Text-abuse limits: an invite counts toward the clinic's month (staff send it), as the API refuses it. The link
+    // is a deployed one's length, so the parts match what the API would bill.
+    const month = manilaMonthOf(stamp());
+    const parts = smsSegments(accountText("invite", { clinicName: currentAccount().name, childName: patient.firstName }, `https://app.primolar.ph${linkPath(newToken())}`));
+    if (textPartsUsed(db, month) + parts > textAllowance(currentAccount().tier, topUpPartsIn(currentClinicId(), month))) {
+      return new HttpResponse(inviteTextsUsedUpMessage(month), { status: 409 });
+    }
     if (!a) db.portalAccounts.push((a = { clinicId: currentClinicId(), guardianId: g.id, state: "invited", links: [] }));
     Object.assign(a, { state: "invited", invitedAt: stamp(), invitedBy: sessionOf(request)!.name, turnedOffAt: undefined });
     withdrawTexts(g);
@@ -231,9 +241,13 @@ export const portalHandlers = [
     const parsed = PasswordResetInput.safeParse(await request.json());
     if (!parsed.success) return HttpResponse.json(parsed.error.issues, { status: 400 });
     const { login } = parsed.data;
-    const recent = (resetTexts.get(login) ?? []).filter((t) => t > Date.now() - 3_600_000);
-    if (recent.length >= RESET_TEXTS_PER_HOUR) return new HttpResponse("Too many reset texts for this number. Try again later.", { status: 429 });
-    resetTexts.set(login, [...recent, Date.now()]);
+    // Per number (or email): RESET_TEXTS_PER_HOUR in any hour and (text-abuse limits) resetsPerLoginPerDay in a day.
+    const today = (resetTexts.get(login) ?? []).filter((t) => t > Date.now() - 86_400_000);
+    const hour = today.filter((t) => t > Date.now() - 3_600_000);
+    if (hour.length >= RESET_TEXTS_PER_HOUR || today.length >= ACCOUNT_TEXT_LIMITS.resetsPerLoginPerDay) {
+      return new HttpResponse("Too many reset texts for this number. Try again later.", { status: 429 });
+    }
+    resetTexts.set(login, [...today, Date.now()]);
     for (const m of accountsByLogin(platform, login)) {
       if (!m.account.guardianId) continue; // parents only (decision 6): staff ask their Owner
       selectTenant(m.clinicId);
@@ -242,6 +256,8 @@ export const portalHandlers = [
       if (!smsNumber(g.phone)) continue;
       // Audit #3, #21: past the clinic's daily ceiling, or a day after a number change, nothing is sent (still 202).
       if (resetHeld(linksSince("reset"), a.numberChangedAt ? new Date(a.numberChangedAt) : undefined, new Date())) continue;
+      // Text-abuse limits: one live reset link at a time; while it works, asking again texts nothing.
+      if (a.links.some((l) => l.purpose === "reset" && liveLink(l))) continue;
       withdrawTexts(g); // only the newest reset text matters
       newLink(a, "reset");
       logAccountText("password_reset", g, db.patients.find((p) => p.guardians.some((x) => x.id === g.id))!.id);

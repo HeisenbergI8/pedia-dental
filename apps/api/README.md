@@ -44,6 +44,7 @@ A hosted deployment (B13b) sets these variables:
 | --- | --- | --- |
 | `DATABASE_URL` | built in the container | from `DB_USER`/`DB_PASSWORD` (Secrets Manager, `primolar/database`) and `DB_HOST`/`DB_PORT`/`DB_NAME` (B13b decisions.md I4) |
 | `SEMAPHORE_API_KEY` | secret store | once Semaphore approves the account |
+| `SMS_DAILY_PARTS_MAX` | plain, optional | the most billed text parts all clinics together may send in a Manila day; unset = the automatic cap alone (`dailyTextCap`) |
 | `APP_ENV` | plain | `production`, or `demo` for the hosted demo |
 | `CORS_ORIGIN` | plain | the web's https origins, comma-separated |
 | `WEB_URL` | plain | the web's https address |

@@ -1,4 +1,4 @@
-import { TIER_LIMITS, accountUsage, isAccountText, limitTier, smsSegments, storageRefusal, textAllowance, type ClinicAccount, type ClinicUsage } from "@pedia/shared";
+import { TIER_LIMITS, accountUsage, isFreeText, limitTier, smsSegments, storageRefusal, textAllowance, type ClinicAccount, type ClinicUsage } from "@pedia/shared";
 import type { Db, StoredFileRecord } from "@pedia/seed";
 import { subscriptionOf } from "./subscriptions";
 import { topUpPartsIn } from "./text-topups";
@@ -32,12 +32,12 @@ export const manilaMonthOf = (iso: string) => new Date(Date.parse(iso) + 8 * 3_6
 
 /**
  * Billed parts of the texts in `month` (decision 18). The mock never sends, so it counts what it queued or marked
- * sent; the API counts what it handed to the provider (B12 E9). Template texts only (audit #3): account texts are never
- * refused, so they never count toward the cap; they stay in the log.
+ * sent; the API counts what it handed to the provider (B12 E9). Template texts and invites (text-abuse limits): resets
+ * and number-change warnings are never refused, so they never count (audit #3); they stay in the log.
  */
 export const textPartsUsed = (tenant: Db, month: string) =>
   tenant.messages
-    .filter((m) => (m.status === "queued" || m.status === "sent") && !isAccountText(m.kind) && manilaMonthOf(m.sendAt) === month)
+    .filter((m) => (m.status === "queued" || m.status === "sent") && !isFreeText(m.kind) && manilaMonthOf(m.sendAt) === month)
     .reduce((n, m) => n + smsSegments(m.body), 0);
 
 /** GET /clinic/usage and the console's overview (decision 17). */

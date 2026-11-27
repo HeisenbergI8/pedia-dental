@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  ACCOUNT_TEXT_LIMITS, LINK_MARK, PORTAL_LINK_LIFETIME_MS, accountText, inviteLimitReached, isAccountText, linkPath, loginIdOf, maskedNumber, numberChangedText, resetHeld,
+  ACCOUNT_TEXT_LIMITS, LINK_MARK, PORTAL_LINK_LIFETIME_MS, accountText, inviteLimitReached, isAccountText, isFreeText, linkPath, loginIdOf, maskedNumber, numberChangedText, resetHeld,
 } from "./portal";
 import { smsSegments } from "./sending";
 
@@ -35,6 +35,9 @@ describe("account texts (E4)", () => {
   });
   it("tells account texts from parent messages", () => {
     expect([isAccountText("portal_invite"), isAccountText("password_reset"), isAccountText("recall")]).toEqual([true, true, false]);
+  });
+  it("leaves only resets and number-change warnings free: staff send invites, so the clinic pays (text-abuse limits)", () => {
+    expect(["portal_invite", "password_reset", "sign_in_changed", "recall"].map(isFreeText)).toEqual([false, true, true, false]);
   });
 });
 

@@ -1,7 +1,7 @@
 import type { INestApplication } from "@nestjs/common";
 import { DEMO_PASSWORD, seedPlatform } from "@pedia/seed";
 import {
-  ACCOUNT_TEXT_LIMITS, DemoTexts, Message, PasswordLink, Patient, PatientPage, PortalAccess, Session, inviteLimitMessage, numberChangedText, type RegisterPatientInput,
+  ACCOUNT_TEXT_LIMITS, DemoTexts, Message, PORTAL_LINK_LIFETIME_MS, PasswordLink, Patient, PatientPage, PortalAccess, Session, inviteLimitMessage, numberChangedText, type RegisterPatientInput,
 } from "@pedia/shared";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -392,6 +392,30 @@ describe("account text limits (audit #3, #4, #21, #23)", () => {
       expect((await reset("09170000034")).status).toBe(202);
       await drain();
       expect(calls.filter((c) => c.number === "639170000034")).toHaveLength(1); // a day later it goes (others' due texts may too)
+    } finally {
+      clock.set(NIGHT);
+      desk = await signIn("frontdesk@gmail.com");
+    }
+  });
+
+  it("texts one reset at a time, and takes at most 5 reset requests a day per number (text-abuse limits)", async () => {
+    await activeFamily("Oy", "09170000025");
+    const texts = () => calls.filter((c) => c.number === "639170000025").length;
+    try {
+      clock.set(new Date(NIGHT.getTime() + 60_000));
+      calls.length = 0;
+      expect((await reset("09170000025")).status).toBe(202);
+      expect((await reset("0917 000 0025")).status).toBe(202);
+      await drain();
+      expect(texts()).toBe(1); // the first link still works: no second text
+      clock.set(new Date(NIGHT.getTime() + PORTAL_LINK_LIFETIME_MS.reset + 2 * 60_000));
+      expect((await reset("09170000025")).status).toBe(202);
+      await drain();
+      expect(texts()).toBe(2); // that link lapsed: a new one goes
+      clock.set(new Date(NIGHT.getTime() + 3 * 3_600_000)); // a new hour, the same day: requests 4 and 5 are allowed
+      expect((await reset("09170000025")).status).toBe(202);
+      expect((await reset("09170000025")).status).toBe(202);
+      expect((await reset("09170000025")).status).toBe(429); // the day's sixth
     } finally {
       clock.set(NIGHT);
       desk = await signIn("frontdesk@gmail.com");

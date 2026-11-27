@@ -24,6 +24,7 @@ export class MetricsService implements OnModuleDestroy {
   private serverErrors = 0;
   private unhandled = 0;
   private consoleSignIns = 0;
+  private textsHeld = 0;
   private samples = new Map<string, { seen: number; values: number[] }>();
   private timer?: NodeJS.Timeout;
 
@@ -58,6 +59,11 @@ export class MetricsService implements OnModuleDestroy {
     this.consoleSignIns += 1;
   }
 
+  /** Text-abuse limits: a text held back by the platform's daily cap. An alarm emails the alert address (service-stack.ts). */
+  countTextHeld(): void {
+    this.textsHeld += 1;
+  }
+
   /** Main.ts only, from METRICS_INTERVAL_S. Tests call flush() themselves. */
   start(intervalS: number): void {
     if (intervalS > 0) this.timer = setInterval(() => void this.flush(), intervalS * 1000).unref();
@@ -70,11 +76,11 @@ export class MetricsService implements OnModuleDestroy {
 
   /** Writes the interval's lines and starts a new interval. Returns them for tests. */
   async flush(now = new Date()): Promise<Record<string, unknown>[]> {
-    const totals: Record<string, number> = { Requests: this.requests, ServerErrors: this.serverErrors, UnhandledErrors: this.unhandled, ConsoleSignIns: this.consoleSignIns };
+    const totals: Record<string, number> = { Requests: this.requests, ServerErrors: this.serverErrors, UnhandledErrors: this.unhandled, ConsoleSignIns: this.consoleSignIns, TextsHeldDailyCap: this.textsHeld };
     if (this.background) Object.assign(totals, await this.outboxBacklog(now));
     const lines = [emf(now, ["Service"], { Service: "api" }, totals)];
     for (const [route, s] of this.samples) lines.push(emf(now, ["Service", "Route"], { Service: "api", Route: route }, { LatencyMs: s.values }));
-    this.requests = this.serverErrors = this.unhandled = this.consoleSignIns = 0;
+    this.requests = this.serverErrors = this.unhandled = this.consoleSignIns = this.textsHeld = 0;
     this.samples = new Map();
     for (const line of lines) this.log.log(line, "metrics");
     return lines;

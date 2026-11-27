@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupServer } from "msw/node";
 import { z } from "zod";
-import { AccountOverview, ClinicUsage, FAILURE, GB, PortalAccess, storageFullMessage } from "@pedia/shared";
+import { AccountOverview, ClinicUsage, FAILURE, GB, PortalAccess, inviteTextsUsedUpMessage, storageFullMessage } from "@pedia/shared";
 import { manilaMonthOf, textPartsUsed } from "./allowances";
 import { ApiError, api } from "@/lib/api-client";
 import { accountById, platform, selectTenant } from "./db";
@@ -51,7 +51,7 @@ describe("storage (decisions 1, 16)", () => {
 });
 
 describe("texts (decisions 2, 3, 18, 19)", () => {
-  it("logs a template text past the month's parts as not sent, and still queues a portal invite", async () => {
+  it("logs a template text past the month's parts as not sent", async () => {
     selectTenant("clinic_ngiti");
     const kid = ngiti().patients.find((p) => !p.privacyChoices?.some((c) => !c.reminders))!;
     const now = new Date().toISOString();
@@ -101,17 +101,38 @@ describe("texts (decisions 2, 3, 18, 19)", () => {
     expect([overview.usage.storage, overview.usage.texts]).toEqual([owner.storage, owner.texts]);
   });
 
-  it("never refuses an invite for the limit (decision 3)", async () => {
+  it("sends an invite while the month has room and refuses it once the texts are used (text-abuse limits)", async () => {
     asStaff(NGITI_OWNER);
     const kid = ngiti().patients.find((p) => p.guardians.some((g) => /^09\d{9}$/.test(g.phone)))!;
     const g = kid.guardians.find((x) => /^09\d{9}$/.test(x.phone))!;
     const account = ngiti().portalAccounts.find((a) => a.guardianId === g.id);
     if (account) account.state = "off"; // seeded parents are active: invite them again
-    await api(`/patients/${kid.id}/guardians/${g.id}/portal-invite`, PortalAccess, { method: "POST" });
+    const invite = () => api(`/patients/${kid.id}/guardians/${g.id}/portal-invite`, PortalAccess, { method: "POST" });
+    const month = manilaMonthOf(new Date().toISOString());
+    // Earlier cases may have used the month: a large top-up gives this one room, then goes.
+    platform.textTopUps.push({
+      id: "topup_room", clinicId: "clinic_ngiti", invoiceNo: "PRM-INV-09997", month, packs: 1, parts: 100_000, receiptId: null,
+      amount: 15_000, method: "gcash", paidOn: `${month}-01`, recordedAt: new Date().toISOString(),
+    });
+    try {
+      await invite();
+    } finally {
+      platform.textTopUps = platform.textTopUps.filter((t) => t.id !== "topup_room");
+    }
     expect(ngiti().messages.at(-1)).toMatchObject({ kind: "portal_invite", status: "queued" });
+    const flood = { ...ngiti().messages.at(-1)!, id: "month_used", kind: "recall" as const, status: "sent" as const, body: "x".repeat(153 * 2000) };
+    ngiti().messages.push(flood);
+    try {
+      expect(textPartsUsed(ngiti(), month)).toBeGreaterThanOrEqual(2000);
+      const count = ngiti().messages.length;
+      expect(await message(invite())).toBe(inviteTextsUsedUpMessage(month));
+      expect(ngiti().messages.length).toBe(count); // nothing logged, nothing withdrawn
+    } finally {
+      ngiti().messages = ngiti().messages.filter((m) => m.id !== "month_used");
+    }
   });
 
-  it("counts template texts only toward the month, never invites or resets (audit #3)", async () => {
+  it("never counts resets toward the month (audit #3)", async () => {
     asStaff(BULILIT_ADMIN);
     const tenant = platform.tenants.clinic_demo!;
     const month = manilaMonthOf(new Date().toISOString());

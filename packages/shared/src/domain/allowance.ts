@@ -1,7 +1,7 @@
 import type { LoggedMessageKind } from "../schemas/message";
 import type { TextPackPrice } from "../schemas/signup";
 import type { Tier } from "../schemas/tenancy";
-import { isAccountText } from "./portal";
+import { isFreeText } from "./portal";
 import { FAILURE } from "./sending";
 import { TIER_LABEL, TIER_LIMITS } from "./tenancy";
 
@@ -37,11 +37,11 @@ export const textTopUpQuote = (pack: TextPackPrice, packs: number) => ({ parts: 
 export const manilaMonth = (day: string) => day.slice(0, 7);
 
 /**
- * B12 decisions 3, 19: a clinic's template text that would pass the month's parts is logged as not sent. An invite or a
- * password reset (B11) always goes.
+ * B12 decisions 3, 19: a clinic's text that would pass the month's parts is logged as not sent. Since the text-abuse
+ * limits an invite counts too (staff send it); a password reset or a number-change warning always goes (isFreeText).
  */
 export function textPartsRefusal(kind: LoggedMessageKind, usedParts: number, addingParts: number, limit: number): string | undefined {
-  if (isAccountText(kind)) return undefined;
+  if (isFreeText(kind)) return undefined;
   return usedParts + addingParts > limit ? FAILURE.textLimit : undefined;
 }
 
@@ -64,14 +64,30 @@ export function textAllowanceNotice(texts: { inUse: number; limit: number | null
     const used = inUse >= limit ? `You've used all ${limit} texts ${forMonth}` : `You've used ${inUse} of your ${limit} texts ${forMonth}, too few for another reminder`;
     return {
       level: "limit",
-      text: `${used}. Automatic reminders are not sent until 1 ${nextMonthName(month)} or until you buy more; portal invites and password resets still go. Buy more texts, or contact Primolar to upgrade.`,
+      text: `${used}. Automatic reminders and portal invites are not sent until 1 ${nextMonthName(month)} or until you buy more; password resets still go. Buy more texts, or contact Primolar to upgrade.`,
     };
   }
   if (inUse >= limit * 0.8) {
     return {
       level: "warning",
-      text: `You've used ${inUse} of your ${limit} texts this month. At ${limit}, automatic reminders stop until 1 ${nextMonthName(month)}. Buy more texts, or contact Primolar to upgrade.`,
+      text: `You've used ${inUse} of your ${limit} texts this month. At ${limit}, automatic reminders and portal invites stop until 1 ${nextMonthName(month)}. Buy more texts, or contact Primolar to upgrade.`,
     };
   }
   return undefined;
+}
+
+/** The invite refused before it is queued, when this month's texts can't carry it (staff send invites: they count). */
+export const inviteTextsUsedUpMessage = (month: string) =>
+  `Your clinic has used this month's texts, so the invite can't be sent. Buy more texts under Settings → Plan, or invite again on 1 ${nextMonthName(month)}.`;
+
+/**
+ * The platform's daily ceiling on billed parts across every clinic (text-abuse limits, 2026-11-27): a safety net for a
+ * bug or an abused login, never the normal limit (each clinic's month is). Every active clinic's month spread over 30
+ * days, times 3 for a busy day, and never below DAILY_TEXT_PARTS_FLOOR; `max` (SMS_DAILY_PARTS_MAX) caps it.
+ */
+export const DAILY_TEXT_PARTS_FLOOR = 500;
+export function dailyTextCap(monthlyAllowances: readonly number[], max?: number): number {
+  const total = monthlyAllowances.reduce((n, a) => n + a, 0);
+  const cap = Math.max(DAILY_TEXT_PARTS_FLOOR, Math.ceil((total / 30) * 3));
+  return max === undefined ? cap : Math.min(cap, max);
 }

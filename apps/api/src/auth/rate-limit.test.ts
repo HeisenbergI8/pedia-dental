@@ -22,6 +22,7 @@ describe("rate-limit policy", () => {
 
   it("allows 3 reset texts per sign-in value per hour, never routed by path (B11 decision 19)", () => {
     expect(RATE_LIMITS.reset).toEqual({ hits: 3, windowSeconds: 3600 });
+    expect(RATE_LIMITS.resetDay).toEqual({ hits: 5, windowSeconds: 86_400 });
     expect(groupOf("POST", "/auth/password-reset")).toBe("auth"); // the address limit still applies; the per-number one is PortalService's
   });
 

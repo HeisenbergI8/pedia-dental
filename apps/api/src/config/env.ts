@@ -60,6 +60,9 @@ const Env = z.object({
   // "PRIMOLAR" (decision 18); unset until Semaphore approves it, which sends with Semaphore's own default name.
   SMS_SENDER_NAME: z.string().min(1).max(11).optional(),
   SEMAPHORE_URL: z.url().default("https://api.semaphore.co/api/v4/messages"),
+  // Text-abuse limits: the most billed parts every clinic together may send in a Manila day. Unset = the automatic cap
+  // alone (dailyTextCap: the clinics' months over 30 days, times 3, at least 500); set, the smaller of the two.
+  SMS_DAILY_PARTS_MAX: z.coerce.number().int().min(1).optional(),
   // B11: the web app's address, which texted invite and reset links open. Set it in production (the default is dev's).
   WEB_URL: z.url().default("http://localhost:3000"),
   // #2: the origin lock. Every request but the health probes must carry it in X-Primolar-Origin (origin-check.ts),

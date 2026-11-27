@@ -222,6 +222,15 @@ describe("PrimolarService", () => {
     expect(alarm?.Properties.OKActions).toBeUndefined();
   });
 
+  it("emails the alert topic when the platform's daily text cap holds a text back (text-abuse limits)", () => {
+    const [alarm] = Object.values(template.findResources("AWS::CloudWatch::Alarm", { Properties: { MetricName: "TextsHeldDailyCap" } }));
+    expect(alarm?.Properties).toMatchObject({
+      AlarmName: "primolar-texts-held-daily-cap", Namespace: "Primolar/API", Statistic: "Sum", Threshold: 0,
+      ComparisonOperator: "GreaterThanThreshold", TreatMissingData: "notBreaching",
+    });
+    expect(alarm?.Properties.AlarmActions).toHaveLength(1);
+  });
+
   it("gives each task an environment the API's own loadEnv accepts at start-up (APP_ENV=production)", async () => {
     const { loadEnv } = await import("../../../apps/api/src/config/env");
     for (const family of ["primolar-api", "primolar-api-web"]) {

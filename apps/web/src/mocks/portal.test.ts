@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setupServer } from "msw/node";
 import { z } from "zod";
 import {
-  ACCOUNT_TEXT_LIMITS, DemoTexts, LoginResult, Message, PasswordLink, Patient, PortalAccess, Session, IDEMPOTENCY_HEADER,
+  ACCOUNT_TEXT_LIMITS, DemoTexts, LoginResult, Message, PORTAL_LINK_LIFETIME_MS, PasswordLink, Patient, PortalAccess, Session, IDEMPOTENCY_HEADER,
   inviteLimitMessage, numberChangedText, type RegisterPatientInput,
 } from "@pedia/shared";
 import { DEMO_PASSWORD } from "@pedia/seed";
@@ -243,6 +243,33 @@ describe("account text limits (audit #3, #4, #21, #23)", () => {
     db.portalAccounts.find((a) => a.guardianId === "g_m_Ha")!.numberChangedAt = new Date(Date.now() - ACCOUNT_TEXT_LIMITS.resetHoldAfterNumberChangeMs - 1000).toISOString();
     await reset("0917 000 0031");
     expect(db.messages.at(-1)).toMatchObject({ kind: "password_reset", to: "09170000031" });
+  });
+
+  it("texts one reset at a time, and takes at most 5 reset requests a day per number (text-abuse limits)", async () => {
+    signIn(FRONT_DESK);
+    const kid = await family("Ny", "09170000041");
+    await invite(kid.id, "g_m_Ny");
+    const invited = await tokenOf("Rosa Ny");
+    signIn(null);
+    await accept(invited, pw(8));
+    const sent = () => db.messages.filter((m) => m.kind === "password_reset" && m.to === "09170000041").length;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const start = Date.now() + 25 * 3_600_000; // past every earlier request's day
+      vi.setSystemTime(start);
+      await reset("09170000041");
+      await reset("0917 000 0041");
+      expect(sent()).toBe(1); // the first link still works: no second text
+      vi.setSystemTime(start + PORTAL_LINK_LIFETIME_MS.reset + 60_000);
+      await reset("09170000041");
+      expect(sent()).toBe(2); // that link lapsed: a new one goes
+      vi.setSystemTime(start + 3 * 3_600_000); // a new hour, the same day: requests 4 and 5 are allowed
+      await reset("09170000041");
+      await reset("09170000041");
+      await expect(reset("09170000041")).rejects.toMatchObject({ status: 429 }); // the day's sixth
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("lists the demo clinic's texts signed out and to staff with portal.manage, never to other staff or parents", async () => {

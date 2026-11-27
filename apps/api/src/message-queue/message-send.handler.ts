@@ -1,12 +1,14 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from "@nestjs/common";
-import { ACCOUNT_TEXT_KINDS, FAILURE, LINK_MARK, MESSAGE_RETRY_DELAYS_MS, isAccountText, textAllowance, manilaMonth, nextSendingTime, smsNumber, smsSegments, textPartsRefusal, type LoggedMessageKind } from "@pedia/shared";
-import { addMonths, format, parseISO } from "date-fns";
+import { FAILURE, FREE_TEXT_KINDS, LINK_MARK, MESSAGE_RETRY_DELAYS_MS, dailyTextCap, isAccountText, isFreeText, textAllowance, manilaMonth, nextSendingTime, smsNumber, smsSegments, textPartsRefusal, type LoggedMessageKind, type Tier } from "@pedia/shared";
+import { addDays, addMonths, format, parseISO } from "date-fns";
 import { lockAccount } from "../clinic/account-lock";
 import { Clock } from "../common/clock";
+import { ENV, type Env } from "../config/env";
+import { MetricsService } from "../metrics/metrics.service";
 import { OutboxDefer, type OutboxEnvelope, type OutboxHandler, OutboxHandlers, OutboxPermanent } from "../outbox/outbox.handlers";
 import { OutboxService } from "../outbox/outbox.service";
 import { STANDING_REFRESH } from "../patients/standing-refresh";
-import type { Prisma } from "../generated/prisma/client.ts";
+import { Prisma } from "../generated/prisma/client.ts";
 import { PrismaService } from "../prisma/prisma.service";
 import { runInTransaction, type Tx } from "../prisma/transaction";
 import { AccountLinks } from "./account-links";
@@ -19,15 +21,38 @@ const nextMonth = (month: string) => format(addMonths(parseISO(`${month}-01`), 1
 
 /**
  * Billed parts this clinic handed to the provider in `month` (decision 18): the claims' `segments`, by `dispatchedAt`.
- * Template texts only (audit #3): account texts (invites, resets) are never refused, so they never count toward the cap
- * either, or a stranger asking for resets could use up the clinic's month. They stay in the message log.
+ * Template texts and invites (text-abuse limits): resets and number-change warnings are never refused, so they never
+ * count either, or a stranger asking for resets could use up the clinic's month (audit #3). They stay in the log.
  */
 export async function partsIn(tx: Tx, month: string): Promise<number> {
   const { _sum } = await tx.message.aggregate({
-    where: { dispatchedAt: { gte: monthStart(month), lt: monthStart(nextMonth(month)) }, kind: { notIn: [...ACCOUNT_TEXT_KINDS] } },
+    where: { dispatchedAt: { gte: monthStart(month), lt: monthStart(nextMonth(month)) }, kind: { notIn: [...FREE_TEXT_KINDS] } },
     _sum: { segments: true },
   });
   return _sum.segments ?? 0;
+}
+
+/** This clinic's month's allowance: its plan's parts plus that month's confirmed top-ups (textAllowance). */
+export async function allowanceIn(tx: Tx, clinicId: string, tier: Tier, month: string): Promise<number> {
+  const bought = (await tx.textTopUp.aggregate({ where: { clinicId, month }, _sum: { parts: true } }))._sum.parts ?? 0;
+  return textAllowance(tier, bought);
+}
+
+/**
+ * The platform's daily cap (text-abuse limits): billed parts every clinic handed to the provider since Manila midnight,
+ * free texts left out as they pass it, against dailyTextCap. Raw SQL across clinics on purpose. Each claim holds only
+ * its own clinic's lock, so clinics claiming at the same instant may pass it by a batch: a safety net, not a bill.
+ */
+export async function dailyCapState(tx: Tx, today: string, max: number | undefined): Promise<{ used: number; cap: number }> {
+  const since = new Date(`${today}T00:00:00+08:00`);
+  const free = Prisma.join([...FREE_TEXT_KINDS]);
+  const [row] = await tx.$queryRaw<{ n: bigint | number | string | null }[]>`
+    SELECT SUM(segments) AS n FROM Message WHERE dispatchedAt >= ${since} AND kind NOT IN (${free})`;
+  const month = manilaMonth(today);
+  const clinics = await tx.$queryRaw<{ tier: Tier; bought: bigint | number | string | null }[]>`
+    SELECT a.tier, (SELECT SUM(t.parts) FROM TextTopUp t WHERE t.clinicId = a.id AND t.month = ${month}) AS bought
+    FROM ClinicAccount a WHERE a.status = 'active'`;
+  return { used: Number(row?.n ?? 0), cap: dailyTextCap(clinics.map((c) => textAllowance(c.tier, Number(c.bought ?? 0))), max) };
 }
 
 type Claim = { send: { number: string; body: string; dispatchedAt: Date; patientId: string; kind: string } } | { skip: true } | { permanent: string } | { defer: Date };
@@ -49,6 +74,8 @@ export class MessageSendHandler implements OutboxHandler, OnModuleInit {
     private readonly links: AccountLinks,
     @Inject(SMS_PROVIDER) private readonly sms: SmsProvider,
     private readonly outbox: OutboxService,
+    private readonly metrics: MetricsService,
+    @Inject(ENV) private readonly env: Pick<Env, "SMS_DAILY_PARTS_MAX">,
   ) {}
 
   onModuleInit() {
@@ -101,13 +128,23 @@ export class MessageSendHandler implements OutboxHandler, OnModuleInit {
       // B12 decisions 2, 3, 19: past the month's parts a template text fails and is never sent later; account texts always go.
       // Feature 16 (revised): the month's parts are the plan's plus that month's confirmed top-ups (textAllowance). A
       // confirm takes this same account lock, so a claim sees a top-up whole or not at all.
-      const month = manilaMonth(this.clock.today());
-      const bought = (await tx.textTopUp.aggregate({ where: { clinicId, month }, _sum: { parts: true } }))._sum.parts ?? 0;
-      const refused = textPartsRefusal(m.kind as LoggedMessageKind, await partsIn(tx, month), parts, textAllowance(tier, bought));
+      const today = this.clock.today();
+      const month = manilaMonth(today);
+      const refused = textPartsRefusal(m.kind as LoggedMessageKind, await partsIn(tx, month), parts, await allowanceIn(tx, clinicId, tier, month));
       if (refused) {
         await tx.message.update({ where: { id: messageId }, data: { status: "failed", failureReason: refused }, select: { id: true } });
         await this.settled(tx, m);
         return { permanent: refused };
+      }
+      // Text-abuse limits: past the platform's daily cap a text waits for the next sending morning (no try spent, nothing
+      // lost) and the alarm fires. Free texts pass, so a parent can still reset a password.
+      if (!isFreeText(m.kind)) {
+        const { used, cap } = await dailyCapState(tx, today, this.env.SMS_DAILY_PARTS_MAX);
+        if (used + parts > cap) {
+          this.metrics.countTextHeld();
+          this.log.warn(`Daily text cap reached (${used} of ${cap} parts): message ${messageId} waits for tomorrow`);
+          return { defer: nextSendingTime(addDays(new Date(`${today}T00:00:00+08:00`), 1)) };
+        }
       }
       await tx.message.update({ where: { id: messageId }, data: { dispatchedAt: now, segments: parts }, select: { id: true } });
       return { send: { number, body, dispatchedAt: now, patientId: m.patientId, kind: m.kind } };
