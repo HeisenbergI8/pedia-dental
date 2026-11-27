@@ -59,18 +59,22 @@ export const TEXT_PARTS_NEARLY_GONE = 5;
 export function textAllowanceNotice(texts: { inUse: number; limit: number | null }, month: string): { level: "warning" | "limit"; text: string } | undefined {
   const { inUse, limit } = texts;
   if (!limit) return undefined;
+  // Text-abuse limits: invites stop with reminders only once they count (INVITES_COUNT_FROM); before that they still go.
+  const invitesCount = !uncountedKinds(month).includes("portal_invite");
   if (limit - inUse < TEXT_PARTS_NEARLY_GONE) {
     const forMonth = `for ${monthName(month)} ${month.slice(0, 4)}`;
     const used = inUse >= limit ? `You've used all ${limit} texts ${forMonth}` : `You've used ${inUse} of your ${limit} texts ${forMonth}, too few for another reminder`;
     return {
       level: "limit",
-      text: `${used}. Automatic reminders and portal invites are not sent until 1 ${nextMonthName(month)} or until you buy more; password resets still go. Buy more texts, or contact Primolar to upgrade.`,
+      text: invitesCount
+        ? `${used}. Automatic reminders and portal invites are not sent until 1 ${nextMonthName(month)} or until you buy more; password resets still go. Buy more texts, or contact Primolar to upgrade.`
+        : `${used}. Automatic reminders are not sent until 1 ${nextMonthName(month)} or until you buy more; portal invites and password resets still go. Buy more texts, or contact Primolar to upgrade.`,
     };
   }
   if (inUse >= limit * 0.8) {
     return {
       level: "warning",
-      text: `You've used ${inUse} of your ${limit} texts this month. At ${limit}, automatic reminders and portal invites stop until 1 ${nextMonthName(month)}. Buy more texts, or contact Primolar to upgrade.`,
+      text: `You've used ${inUse} of your ${limit} texts this month. At ${limit}, automatic reminders${invitesCount ? " and portal invites" : ""} stop until 1 ${nextMonthName(month)}. Buy more texts, or contact Primolar to upgrade.`,
     };
   }
   return undefined;
